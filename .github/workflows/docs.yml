@@ -1,0 +1,55 @@
+name: Documentation checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  documentation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out the exact revision
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Create documentation validation environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/emailmonitor-docs-venv"
+          "$RUNNER_TEMP/emailmonitor-docs-venv/bin/python" -m pip install -r scripts/requirements-docs.txt
+      - name: Validate documents, contracts, examples and fixture consistency
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/emailmonitor-docs-venv/bin/python" -m py_compile scripts/validate_docs.py
+          "$RUNNER_TEMP/emailmonitor-docs-venv/bin/python" scripts/validate_docs.py | tee "$RUNNER_TEMP/documentation-validation.txt"
+      - name: Archive this documentation snapshot
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          git archive --format=zip --prefix=EmailMonitor/ --output="$RUNNER_TEMP/EmailMonitor-documentation.zip" HEAD
+      - name: Retain validation output and snapshot
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: emailmonitor-documentation-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/documentation-validation.txt
+            ${{ runner.temp }}/EmailMonitor-documentation.zip
+          retention-days: 7
+          if-no-files-found: error
+
+# This workflow checks documentation only. It does not crawl external sources,
+# send email, use customer data, deploy the application or certify extraction quality.
