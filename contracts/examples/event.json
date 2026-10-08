@@ -1,0 +1,17 @@
+{
+  "schema_version": "1.0",
+  "event_id": "00000000-0000-4000-8000-000000000401",
+  "event_type": "job.queued",
+  "occurred_at": "2026-10-08T00:00:00Z",
+  "organization_id": "00000000-0000-4000-8000-000000000001",
+  "aggregate_type": "job",
+  "aggregate_id": "00000000-0000-4000-8000-000000000501",
+  "aggregate_version": 1,
+  "correlation_id": "00000000-0000-4000-8000-000000000601",
+  "causation_id": null,
+  "payload": {
+    "job_id": "00000000-0000-4000-8000-000000000501",
+    "state": "queued",
+    "counts": {"articles_discovered": 0}
+  }
+}

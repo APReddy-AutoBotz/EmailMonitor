@@ -1,0 +1,37 @@
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+/secrets/
+
+# Dependencies and build output
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+node_modules/
+dist/
+build/
+coverage/
+.coverage
+*.egg-info/
+
+# Private/runtime data: never commit harvested contacts or licensed documents
+/data/
+/downloads/
+/exports/
+/artifacts/
+/fixtures/private/
+/reports/private/
+*.sqlite
+*.sqlite3
+
+# Local tools/editor files
+.DS_Store
+.idea/
+.vscode/

@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Synthetic myocardial infarction tooltip study</title></head><body><main>
+<h1>Synthetic myocardial infarction tooltip study</h1><ol class="authors"><li>Elena Park <sup>*</sup><span class="affiliation">Example University</span></li></ol>
+<div id="correspondence"><p>* Corresponding author: Elena Park</p><button type="button" id="contact-reveal" aria-describedby="contact-tooltip">Show professional contact</button></div>
+</main><script>
+const button = document.getElementById('contact-reveal');
+function reveal() {
+  if (document.getElementById('contact-tooltip')) return;
+  const tip = document.createElement('span');
+  tip.id = 'contact-tooltip';
+  tip.setAttribute('role', 'tooltip');
+  tip.textContent = 'elena.park@example.org';
+  document.getElementById('correspondence').appendChild(tip);
+}
+button.addEventListener('mouseenter', reveal);
+button.addEventListener('focus', reveal);
+</script></body></html>

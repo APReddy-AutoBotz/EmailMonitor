@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0",
+  "organization_id": "00000000-0000-4000-8000-000000000001",
+  "source_id": "synthetic-publisher",
+  "version": 1,
+  "state": "approved",
+  "execution_mode": "fixture",
+  "purpose": "academic_contact_research",
+  "allowed_hosts": ["publisher.example.org"],
+  "allowed_operations": ["search", "fetch_html", "browser", "fetch_pdf", "extract_contacts", "retain_excerpt", "export_contacts"],
+  "permission_reference": "synthetic-fixtures-only-no-live-access",
+  "reviewed_by": "synthetic-fixture-steward",
+  "approved_at": "2026-10-08T00:00:00Z",
+  "valid_until": "2026-12-31T23:59:59Z",
+  "limits": {"max_concurrent_requests": 1, "min_request_interval_seconds": 5, "max_articles_per_job": 500},
+  "retention": {"raw_hours": 24, "excerpt_days": 30, "contact_days": 90},
+  "export_contacts_allowed": true
+}

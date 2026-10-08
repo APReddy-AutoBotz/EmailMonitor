@@ -1,0 +1,14 @@
+{
+  "fixture_version": "1.0",
+  "source_id": "synthetic-publisher",
+  "source_reported_entries": 5,
+  "expected_unique_articles": 4,
+  "expected_corresponding_email_pairs": 4,
+  "excluded_addresses": ["support@example.org"],
+  "articles": [
+    {"path": "article-a.html", "first_author": "Mira Rao", "corresponding_authors": [{"name": "Alex Chen", "email": "alex.chen@example.org"}], "route": "html", "outcome": "succeeded"},
+    {"path": "article-b.html", "first_author": "Ravi Das", "corresponding_authors": [{"name": "Ravi Das", "email": "ravi.das@example.org"}, {"name": "Noor Ibrahim", "email": "noor.ibrahim@example.org"}], "route": "html", "outcome": "succeeded"},
+    {"path": "tooltip.html", "first_author": "Elena Park", "corresponding_authors": [{"name": "Elena Park", "email": "elena.park@example.org"}], "route": "browser_tooltip", "outcome": "succeeded"},
+    {"path": "no-contact.html", "first_author": "Leena Shah", "corresponding_authors": [], "route": "html", "outcome": "no_contact"}
+  ]
+}

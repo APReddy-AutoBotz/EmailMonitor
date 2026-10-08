@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0",
+  "input": {
+    "type": "keyword",
+    "source_id": "synthetic-publisher",
+    "original_query": "Myocardial Infarction"
+  },
+  "purpose": "academic_contact_research",
+  "filters": {"publication_from": "2026-01-01", "publication_to": "2026-10-08"},
+  "options": {
+    "max_articles": 500,
+    "max_search_pages": 100,
+    "max_link_depth": 2,
+    "author_target": "both",
+    "allow_pdf": true,
+    "allow_browser": true,
+    "allow_ocr": false,
+    "allow_wider_web": false
+  }
+}

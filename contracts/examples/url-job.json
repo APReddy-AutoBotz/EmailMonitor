@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0",
+  "input": {
+    "type": "url",
+    "url": "https://publisher.example.org/search-page-1.html",
+    "source_id": "synthetic-publisher"
+  },
+  "purpose": "academic_contact_research",
+  "options": {
+    "max_articles": 100,
+    "max_search_pages": 10,
+    "author_target": "both",
+    "allow_pdf": true,
+    "allow_browser": true,
+    "allow_ocr": false,
+    "allow_wider_web": false
+  }
+}

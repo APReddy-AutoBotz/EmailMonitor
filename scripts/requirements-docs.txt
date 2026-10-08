@@ -1,0 +1,3 @@
+# Documentation/schema validation dependency, verified in the preparation environment.
+# Implementation dependency and transitive lockfiles are a separate EM-001 task.
+jsonschema==4.26.0

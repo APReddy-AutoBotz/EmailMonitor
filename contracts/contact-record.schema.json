@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.org/emailmonitor/schemas/contact-record.schema.json",
+  "title": "EmailMonitor author-email association read model",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "organization_id", "association_id", "article", "author", "email", "association", "evidence", "export_eligibility", "outreach_status"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "organization_id": {"type": "string", "format": "uuid"},
+    "association_id": {"type": "string", "format": "uuid"},
+    "article": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "title", "doi", "journal", "publication_date", "source_url"],
+      "properties": {
+        "id": {"type": "string", "format": "uuid"},
+        "title": {"type": ["string", "null"], "maxLength": 5000},
+        "doi": {"type": ["string", "null"], "maxLength": 500},
+        "journal": {"type": ["string", "null"], "maxLength": 1000},
+        "publication_date": {"type": ["string", "null"], "format": "date"},
+        "source_url": {"type": "string", "format": "uri", "pattern": "^https?://"}
+      }
+    },
+    "author": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "display_name", "author_order", "roles", "affiliations"],
+      "properties": {
+        "id": {"type": "string", "format": "uuid"},
+        "display_name": {"type": "string", "minLength": 1, "maxLength": 1000},
+        "author_order": {"type": ["integer", "null"], "minimum": 1},
+        "roles": {"type": "array", "uniqueItems": true, "items": {"enum": ["first", "corresponding", "group", "unknown"]}},
+        "affiliations": {"type": "array", "items": {"type": "string", "maxLength": 2000}}
+      }
+    },
+    "email": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["raw_address", "normalized_address", "syntax_status", "domain_status", "delivery_status"],
+          "properties": {
+            "raw_address": {"type": "string", "minLength": 1, "maxLength": 1000},
+            "normalized_address": {"type": "string", "minLength": 1, "maxLength": 1000},
+            "syntax_status": {"enum": ["valid", "invalid", "unsupported", "unknown"]},
+            "domain_status": {"enum": ["mx_present", "address_fallback", "null_mx", "nxdomain", "temporary_error", "not_checked"]},
+            "delivery_status": {"const": "unverified"}
+          }
+        }
+      ]
+    },
+    "association": {
+      "type": "object", "additionalProperties": false,
+      "required": ["state", "evidence_strength", "heuristic_score", "calibrated_probability", "reasons", "rule_version", "revision"],
+      "properties": {
+        "state": {"enum": ["unmatched", "needs_review", "accepted", "rejected", "suppressed"]},
+        "evidence_strength": {"enum": ["explicit", "supported", "ambiguous", "none"]},
+        "heuristic_score": {"type": ["number", "null"], "minimum": 0, "maximum": 100},
+        "calibrated_probability": {"type": "null", "description": "No calibrated model is included in the core baseline."},
+        "reasons": {"type": "array", "minItems": 1, "items": {"type": "string", "maxLength": 2000}},
+        "rule_version": {"type": "string", "minLength": 1},
+        "revision": {"type": "integer", "minimum": 1}
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["source_id", "source_url", "observed_at", "method", "excerpt", "locator", "content_sha256", "connector_version", "policy_version"],
+        "properties": {
+          "source_id": {"type": "string", "minLength": 1},
+          "source_url": {"type": "string", "format": "uri", "pattern": "^https?://"},
+          "observed_at": {"type": "string", "format": "date-time"},
+          "method": {"enum": ["structured_metadata", "html_text", "mailto", "dom_attribute", "browser_tooltip", "browser_reveal", "pdf_text", "pdf_layout", "ocr", "institutional_profile"]},
+          "excerpt": {"type": ["string", "null"], "maxLength": 2000},
+          "locator": {"type": "string", "minLength": 1, "maxLength": 2000},
+          "content_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "connector_version": {"type": "string", "minLength": 1},
+          "policy_version": {"type": "integer", "minimum": 1}
+        }
+      }
+    },
+    "export_eligibility": {"enum": ["eligible", "review_required", "blocked"]},
+    "outreach_status": {"enum": ["not_assessed", "blocked"]}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"association": {"properties": {"state": {"const": "accepted"}}, "required": ["state"]}}},
+      "then": {
+        "properties": {
+          "email": {"type": "object"},
+          "evidence": {"minItems": 1},
+          "association": {"properties": {"evidence_strength": {"enum": ["explicit", "supported"]}}}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"association": {"properties": {"state": {"const": "suppressed"}}, "required": ["state"]}}},
+      "then": {"properties": {"export_eligibility": {"const": "blocked"}, "outreach_status": {"const": "blocked"}}}
+    }
+  ]
+}

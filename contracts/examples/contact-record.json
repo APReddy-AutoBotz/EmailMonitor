@@ -1,0 +1,49 @@
+{
+  "schema_version": "1.0",
+  "organization_id": "00000000-0000-4000-8000-000000000001",
+  "association_id": "00000000-0000-4000-8000-000000000101",
+  "article": {
+    "id": "00000000-0000-4000-8000-000000000201",
+    "title": "Synthetic myocardial infarction study A",
+    "doi": null,
+    "journal": "Example Research Journal",
+    "publication_date": "2026-01-15",
+    "source_url": "https://publisher.example.org/article-a.html"
+  },
+  "author": {
+    "id": "00000000-0000-4000-8000-000000000301",
+    "display_name": "Alex Chen",
+    "author_order": 2,
+    "roles": ["corresponding"],
+    "affiliations": ["Example University"]
+  },
+  "email": {
+    "raw_address": "alex.chen@example.org",
+    "normalized_address": "alex.chen@example.org",
+    "syntax_status": "valid",
+    "domain_status": "not_checked",
+    "delivery_status": "unverified"
+  },
+  "association": {
+    "state": "accepted",
+    "evidence_strength": "explicit",
+    "heuristic_score": null,
+    "calibrated_probability": null,
+    "reasons": ["Synthetic fixture explicitly labels Alex Chen as corresponding author next to the address."],
+    "rule_version": "fixture-rules-1",
+    "revision": 1
+  },
+  "evidence": [{
+    "source_id": "synthetic-publisher",
+    "source_url": "https://publisher.example.org/article-a.html",
+    "observed_at": "2026-10-08T00:00:00Z",
+    "method": "mailto",
+    "excerpt": "* Corresponding author: Alex Chen. alex.chen@example.org",
+    "locator": "#correspondence",
+    "content_sha256": "33c3bddb62834da34acb300b7c0bd7bb4c8728fb57e5ece43b8fc4e81920c3f0",
+    "connector_version": "synthetic-1.0",
+    "policy_version": 1
+  }],
+  "export_eligibility": "eligible",
+  "outreach_status": "not_assessed"
+}

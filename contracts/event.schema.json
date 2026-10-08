@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.org/emailmonitor/schemas/event.schema.json",
+  "title": "EmailMonitor internal event envelope",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "event_id", "event_type", "occurred_at", "organization_id", "aggregate_type", "aggregate_id", "aggregate_version", "correlation_id", "causation_id", "payload"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "event_id": {"type": "string", "format": "uuid"},
+    "event_type": {"enum": ["job.created", "job.queued", "job.discovery_progress", "job.item_terminal", "job.paused", "job.cancelled", "job.finished", "association.reviewed", "export.ready", "export.revoked", "source.policy_changed", "organization.suspended", "data.deletion_requested", "data.deletion_completed"]},
+    "occurred_at": {"type": "string", "format": "date-time"},
+    "organization_id": {"type": "string", "format": "uuid"},
+    "aggregate_type": {"enum": ["job", "association", "export", "source_policy", "organization", "deletion"]},
+    "aggregate_id": {"type": "string", "format": "uuid"},
+    "aggregate_version": {"type": "integer", "minimum": 1},
+    "correlation_id": {"type": "string", "format": "uuid"},
+    "causation_id": {"type": ["string", "null"], "format": "uuid"},
+    "payload": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "job_id": {"type": "string", "format": "uuid"},
+        "item_id": {"type": "string", "format": "uuid"},
+        "association_id": {"type": "string", "format": "uuid"},
+        "export_id": {"type": "string", "format": "uuid"},
+        "source_id": {"type": "string", "maxLength": 100},
+        "state": {"type": "string", "maxLength": 50},
+        "reason_codes": {"type": "array", "maxItems": 30, "items": {"type": "string", "pattern": "^[a-z0-9_]+$", "maxLength": 100}},
+        "counts": {"type": "object", "maxProperties": 30, "additionalProperties": {"type": "integer", "minimum": 0}}
+      }
+    }
+  }
+}
