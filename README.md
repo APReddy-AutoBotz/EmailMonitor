@@ -4,7 +4,7 @@
 
 A user enters a keyword and a publisher/source, or pastes a search-results, article, or PDF URL. EmailMonitor discovers the eligible articles, follows pagination, opens article pages and permitted full text, and returns author names, author roles, professional email addresses, affiliations, and evidence.
 
-> **Status: design baseline v0.1 — 2026-10-08.** This repository contains implementation documentation, proposed contracts, and synthetic fixtures. There is no working application, live connector certification, deployment, or measured extraction benchmark yet. Requirements and targets are not claims of achieved capability.
+> **Status: EM-001 scaffold under review — 2026-10-10.** The repository now includes a runnable metadata-only FastAPI API, a React UI with extraction visibly unavailable, locked dependencies, contract tests and a test-only offline fixture transport. Contact extraction, tenant identity/database isolation, live connectors, exports and deployment remain unimplemented. Requirements and targets are not claims of achieved capability. See the [status ledger](docs/22-implementation-status.md).
 
 ## Start here
 
@@ -50,7 +50,18 @@ The documentation check is available now:
 python scripts/validate_docs.py
 ```
 
-Application commands will be introduced and tested by EM-001; none are implied by this README.
+The tested scaffold setup requires Python 3.12, Node 24.19.0, uv 0.12.23 and pnpm 11.25.0:
+
+```sh
+uv sync --project services/backend --locked
+pnpm --dir apps/web install --frozen-lockfile --strict-peer-dependencies
+scripts/check.sh
+# Separate terminals:
+uv run --project services/backend uvicorn emailmonitor.api:app --app-dir services/backend/src --host 127.0.0.1 --port 8000
+pnpm --dir apps/web dev
+```
+
+Open the loopback URL printed by Vite. The API exposes `/healthz`, `/api/v1/capabilities` and `/openapi.json`; it exposes no contact or tenant-data endpoints. Read the [development runbook](docs/25-development-runbook.md) for configuration, dependency/license obligations and limitations. Dependency installation downloads official registry packages; fixture checks make no publisher requests.
 
 ## Public repository and licensing
 

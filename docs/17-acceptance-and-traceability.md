@@ -97,3 +97,11 @@ Business mapping: BR-01 → FR-004/005; BR-02 → FR-007/009/021; BR-03 → FR-0
 ## Acceptance evidence rule
 
 A feature's UAT screenshot is not its security/contract test. Each completed requirement needs actual test artifact or human acceptance reference, code/connector version and date. Real customer contact evidence stays in private approved storage; repository reports use synthetic/redacted examples. Release cannot be marked complete while its required task is only scaffolded or mocked.
+
+## EM-001 delivered test boundary (2026-10-10)
+
+REL-ARTIFACT: `scripts/check_inventory.py` verifies both lock digests, exact inventory membership and reviewed declared-license set. Local frozen clean installs and frontend build are in [EM-001 evidence](../reports/em001-validation.md). This is dependency/scaffold evidence, not signed release or vulnerability certification.
+
+OFFLINE-E2E: `tests/test_fixture_transport.py` checks all six committed fixture byte payloads through an in-memory allowlisted transport while socket/DNS functions are denied; hostile host, scheme, port, credentials, query and path cases have no network fallback. `tests/test_contracts.py` validates five examples; the documentation validator independently checks fixture links/counts and twelve negative cases. These tests do not run extraction or the core UAT workflow.
+
+Configuration/metadata: `services/backend/tests/test_scaffold.py` verifies real FastAPI handlers/OpenAPI, unavailable tenant endpoints for two forged tenant headers, strict configuration and production-entrypoint rejection of fixture/identity-stub modes. This is not an RLS or authentication test. `apps/web/src/App.test.tsx` renders the actual component and checks disabled inputs plus honest empty/unavailable status; browser accessibility/UAT remains EM-012.

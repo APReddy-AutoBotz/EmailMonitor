@@ -1,6 +1,6 @@
 # 22 — Implementation status and evidence ledger
 
-**Baseline date:** 2026-10-08. **Product state:** design/documentation baseline; no application implementation or deployment.
+**Baseline date:** 2026-10-08. **Updated:** 2026-10-10. **Product state:** metadata-only API/UI scaffold under review; extraction and deployment unavailable.
 
 ## Documentation deliverables
 
@@ -12,7 +12,7 @@ The repository documentation validator checks local Markdown targets, JSON synta
 
 | Task | Status | Evidence / next dependency |
 |---|---|---|
-| EM-001 | READY — not started | Documentation baseline available; no app scaffold yet |
+| EM-001 | IMPLEMENTED — review/remote CI pending | [Local validation evidence](../reports/em001-validation.md); [runbook](25-development-runbook.md) |
 | EM-002 | NOT STARTED | EM-001 |
 | EM-003 | NOT STARTED | EM-002 |
 | EM-004 | NOT STARTED | EM-003 |
@@ -41,3 +41,9 @@ No real researcher emails collected; no source search executed; no live source c
 For each task add: state (Ready/In progress/Blocked/Partial/Done), PR and commit, implementation boundary, exact commands and observed results, relevant requirement/test IDs, migrations, remaining gaps and next ready task. Link to sanitized reports; keep real data and signed source/customer agreements outside this public repository.
 
 Do not compute an arbitrary project completion percentage from number of documents or files. Report accepted task/milestone completion and pending critical gates instead.
+
+## EM-001 implementation boundary
+
+FastAPI metadata endpoints, React/TypeScript/Vite unavailable-extraction screen, strict fail-closed configuration, test-only in-memory fixture transport, Python/pnpm lockfiles, full declared-license inventory and offline inventory parity gate are implemented. Source fixture bytes and expected observations remain unchanged. No accepted contact is generated. No identity, tenant database, persistent job, protected egress, queue, extraction or export implementation is claimed.
+
+Local checks are recorded in [EM-001 validation](../reports/em001-validation.md). Independent review and GitHub CI at the exact published head are pending. EM-001 is not marked Done yet; EM-002 is the next task after acceptance. No migration/deployment impact; rollback is removing the scaffold commit and local dependency/build environments. Existing documentation contracts are unchanged.

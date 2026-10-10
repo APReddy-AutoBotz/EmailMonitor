@@ -1,6 +1,6 @@
 # 16 — Dependency-ordered delivery backlog
 
-**Baseline:** 2026-10-08. All implementation tasks are unstarted. Only EM-001 is initially READY. Complexity labels are relative planning estimates, not calendar commitments. One reviewable PR per task or smaller accepted slice.
+**Baseline:** 2026-10-08. EM-001 has a scaffold under review; later tasks remain unstarted. EM-002 becomes READY only after the EM-001 gates are accepted. Complexity labels are relative planning estimates, not calendar commitments. One reviewable PR per task or smaller accepted slice.
 
 ## Core tasks
 
