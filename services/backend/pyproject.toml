@@ -1,0 +1,26 @@
+[project]
+name = "emailmonitor-backend"
+version = "0.1.0"
+requires-python = ">=3.12,<3.14"
+dependencies = ["fastapi==0.143.0", "uvicorn==0.54.0"]
+
+[dependency-groups]
+dev = ["httpx==0.28.1", "pytest==9.1.1", "ruff==0.17.0", "mypy==1.20.2", "jsonschema==4.26.0", "types-jsonschema==4.26.0.20261006"]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+pythonpath = ["src", "../../tests"]
+testpaths = ["tests", "../../tests"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.mypy]
+strict = true
+mypy_path = "services/backend/src:tests"
+files = ["src", "tests", "../../tests"]

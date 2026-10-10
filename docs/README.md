@@ -1,6 +1,6 @@
 # Documentation map
 
-**Design baseline v0.1 — 2026-10-08.** All application capabilities below are specified, not implemented. [Status ledger](22-implementation-status.md) is the authority for delivery progress.
+**Design baseline v0.1 — 2026-10-08.** Core extraction capabilities below remain specified, not implemented; EM-001 scaffold evidence is in the status ledger. [Status ledger](22-implementation-status.md) is the authority for delivery progress.
 
 | Document | Purpose |
 |---|---|
@@ -27,6 +27,7 @@
 | [20 References](20-references.md) | Primary sources checked for this baseline and limitations |
 | [21 Configuration catalog](21-configuration-catalog.md) | Safe defaults, allowed settings and override precedence |
 | [22 Implementation status](22-implementation-status.md) | Honest progress ledger and evidence requirements |
+| [25 Development runbook](25-development-runbook.md) | Tested EM-001 setup, version/license matrix and rollback |
 | [23 Source onboarding playbook](23-source-onboarding-playbook.md) | Site certification procedure and candidate-source register |
 
 Architecture decisions are in [ADR-0001](adr/0001-architecture-and-stack.md), [ADR-0002](adr/0002-isolation-and-deployment.md), [ADR-0003](adr/0003-evidence-and-network-policy.md), [ADR-0004](adr/0004-durable-execution.md), and [ADR-0005](adr/0005-ai-and-dependency-licensing.md).
