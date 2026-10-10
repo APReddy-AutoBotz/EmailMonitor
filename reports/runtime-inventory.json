@@ -1,0 +1,13 @@
+{
+  "verified_date": "2026-10-10",
+  "postgresql": {
+    "version": "17.11",
+    "license": "PostgreSQL",
+    "source": "https://ftp.postgresql.org/pub/source/v17.11/postgresql-17.11.tar.bz2",
+    "source_sha256": "dd27f2b3c59e73ed14aa3324901242bf69a032a6347805f274e6260322d42979",
+    "license_reference": "https://www.postgresql.org/about/licence/",
+    "ci_image": "postgres:17.11-bookworm@sha256:3645570cccdfa447589da9f57dd740faa29b30938e861289a5574b6ca6b03826",
+    "image_metadata_source": "https://hub.docker.com/v2/repositories/library/postgres/tags/17.11-bookworm"
+  },
+  "scope": "PostgreSQL source and immutable official CI image reference. Full container SBOM/base-system attribution and vulnerability certification remain release gates; no container is distributed by this patch."
+}

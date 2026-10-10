@@ -12,8 +12,8 @@ The repository documentation validator checks local Markdown targets, JSON synta
 
 | Task | Status | Evidence / next dependency |
 |---|---|---|
-| EM-001 | IMPLEMENTED — review/remote CI pending | [Local validation evidence](../reports/em001-validation.md); [runbook](25-development-runbook.md) |
-| EM-002 | NOT STARTED | EM-001 |
+| EM-001 | VERIFIED IN DRAFT PR — unmerged | [PR #1](https://github.com/APReddy-AutoBotz/EmailMonitor/pull/1), head 88e34a7; independent review + [application CI](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/38025740451) + [docs CI](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/38025740436) passed |
+| EM-002 | IMPLEMENTED OFFLINE — review/remote CI pending | [Validation](../reports/em002-validation.md); [foundation runbook](26-tenant-foundation-runbook.md); production provider unavailable |
 | EM-003 | NOT STARTED | EM-002 |
 | EM-004 | NOT STARTED | EM-003 |
 | EM-005 | NOT STARTED | EM-002/003 |
@@ -46,4 +46,8 @@ Do not compute an arbitrary project completion percentage from number of documen
 
 FastAPI metadata endpoints, React/TypeScript/Vite unavailable-extraction screen, strict fail-closed configuration, test-only in-memory fixture transport, Python/pnpm lockfiles, full declared-license inventory and offline inventory parity gate are implemented. Source fixture bytes and expected observations remain unchanged. No accepted contact is generated. No identity, tenant database, persistent job, protected egress, queue, extraction or export implementation is claimed.
 
-Local checks are recorded in [EM-001 validation](../reports/em001-validation.md). Independent review and GitHub CI at the exact published head are pending. EM-001 is not marked Done yet; EM-002 is the next task after acceptance. No migration/deployment impact; rollback is removing the scaffold commit and local dependency/build environments. Existing documentation contracts are unchanged.
+Local checks are recorded in [EM-001 validation](../reports/em001-validation.md). Independent review and GitHub CI passed for EM-001 head 88e34a7 and exact tree 09fdfab. PR #1 remains Draft/unmerged; EM-002 is developed as a separate stacked offline task. No migration/deployment impact; rollback is removing the scaffold commit and local dependency/build environments. Existing documentation contracts are unchanged.
+
+## EM-002 implementation boundary
+
+Offline OIDC/session, membership/RBAC/lifecycle and real PostgreSQL RLS foundation are implemented and locally tested with synthetic identities. See the validation report and runbook. No real provider/access grant, production activation, extraction or source network is introduced. Fresh independent review and remote CI are required before acceptance. EM-003 is next after this task's gates.

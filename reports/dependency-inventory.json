@@ -1116,9 +1116,18 @@
   ],
   "lock_sha256": {
     "apps/web/pnpm-lock.yaml": "3280fc900f8bfbcfa707f9c20e7a62a861790f32accb0413170ea2bc13005dc2",
-    "services/backend/uv.lock": "b6f3ad1ca6adf0263d2053fb82aaf14f366761b13726f477d2ca1af7b6954a0a"
+    "services/backend/uv.lock": "69ebacaca477b7a7a7272d3789d1c81d4ec10eec1132aa5e55455eaa96905cff"
   },
   "python": [
+    {
+      "license": "MIT",
+      "license_files": [
+        "LICENSE"
+      ],
+      "name": "alembic",
+      "source": "https://pypi.org/project/alembic/1.20.0/",
+      "version": "1.20.0"
+    },
     {
       "license": "MIT",
       "license_files": [
@@ -1148,6 +1157,13 @@
     },
     {
       "license": "MIT",
+      "license_files": [],
+      "name": "asn1crypto",
+      "source": "https://pypi.org/project/asn1crypto/1.5.1/",
+      "version": "1.5.1"
+    },
+    {
+      "license": "MIT",
       "license_files": [
         "LICENSE"
       ],
@@ -1165,6 +1181,15 @@
       "version": "2026.7.22"
     },
     {
+      "license": "MIT-0",
+      "license_files": [
+        "LICENSE"
+      ],
+      "name": "cffi",
+      "source": "https://pypi.org/project/cffi/2.1.1/",
+      "version": "2.1.1"
+    },
+    {
       "license": "BSD-3-Clause",
       "license_files": [
         "LICENSE.txt"
@@ -1179,6 +1204,17 @@
       "name": "colorama",
       "source": "https://pypi.org/project/colorama/0.4.6/",
       "version": "0.4.6"
+    },
+    {
+      "license": "Apache-2.0 OR BSD-3-Clause",
+      "license_files": [
+        "LICENSE",
+        "LICENSE.APACHE",
+        "LICENSE.BSD"
+      ],
+      "name": "cryptography",
+      "source": "https://pypi.org/project/cryptography/50.0.2/",
+      "version": "50.0.2"
     },
     {
       "license": "MIT",
@@ -1262,6 +1298,24 @@
     {
       "license": "MIT",
       "license_files": [
+        "LICENSE"
+      ],
+      "name": "mako",
+      "source": "https://pypi.org/project/mako/1.4.3/",
+      "version": "1.4.3"
+    },
+    {
+      "license": "BSD-3-Clause",
+      "license_files": [
+        "LICENSE.txt"
+      ],
+      "name": "markupsafe",
+      "source": "https://pypi.org/project/markupsafe/3.0.4/",
+      "version": "3.0.4"
+    },
+    {
+      "license": "MIT",
+      "license_files": [
         "LICENSE",
         "mypy/typeshed/LICENSE"
       ],
@@ -1308,6 +1362,15 @@
       "version": "1.1.1"
     },
     {
+      "license": "BSD-3-Clause",
+      "license_files": [
+        "LICENSE"
+      ],
+      "name": "pg8000",
+      "source": "https://pypi.org/project/pg8000/1.31.5/",
+      "version": "1.31.5"
+    },
+    {
       "license": "MIT",
       "license_files": [
         "LICENSE"
@@ -1315,6 +1378,15 @@
       "name": "pluggy",
       "source": "https://pypi.org/project/pluggy/1.6.0/",
       "version": "1.6.0"
+    },
+    {
+      "license": "BSD-3-Clause",
+      "license_files": [
+        "LICENSE"
+      ],
+      "name": "pycparser",
+      "source": "https://pypi.org/project/pycparser/3.11/",
+      "version": "3.11"
     },
     {
       "license": "MIT",
@@ -1347,11 +1419,30 @@
     {
       "license": "MIT",
       "license_files": [
+        "LICENSE",
+        "AUTHORS.rst"
+      ],
+      "name": "pyjwt",
+      "source": "https://pypi.org/project/pyjwt/2.15.1/",
+      "version": "2.15.1"
+    },
+    {
+      "license": "MIT",
+      "license_files": [
         "LICENSE"
       ],
       "name": "pytest",
       "source": "https://pypi.org/project/pytest/9.1.1/",
       "version": "9.1.1"
+    },
+    {
+      "license": "Apache-2.0 OR BSD-3-Clause",
+      "license_files": [
+        "LICENSE"
+      ],
+      "name": "python-dateutil",
+      "source": "https://pypi.org/project/python-dateutil/2.9.0.post0/",
+      "version": "2.9.0.post0"
     },
     {
       "license": "MIT",
@@ -1379,6 +1470,44 @@
       "name": "ruff",
       "source": "https://pypi.org/project/ruff/0.17.0/",
       "version": "0.17.0"
+    },
+    {
+      "license": "MIT-0",
+      "license_files": [
+        "LICENSE"
+      ],
+      "name": "scramp",
+      "source": "https://pypi.org/project/scramp/1.4.17/",
+      "version": "1.4.17"
+    },
+    {
+      "license": "MIT",
+      "license_files": [
+        "LICENSE"
+      ],
+      "name": "six",
+      "source": "https://pypi.org/project/six/1.17.0/",
+      "version": "1.17.0"
+    },
+    {
+      "license": "MIT",
+      "license_files": [
+        "LICENSE",
+        "AUTHORS"
+      ],
+      "name": "sqlalchemy",
+      "source": "https://pypi.org/project/sqlalchemy/2.1.4/",
+      "version": "2.1.4"
+    },
+    {
+      "license": "BSD-3-Clause",
+      "license_files": [
+        "AUTHORS",
+        "LICENSE"
+      ],
+      "name": "sqlparse",
+      "source": "https://pypi.org/project/sqlparse/0.6.0/",
+      "version": "0.6.0"
     },
     {
       "license": "BSD-3-Clause",

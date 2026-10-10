@@ -1,6 +1,6 @@
 # Codex implementation handoff
 
-**Baseline:** 2026-10-08. **Current phase:** EM-001 scaffold implemented locally; independent review and exact-head CI verification pending. Check the [status ledger](docs/22-implementation-status.md) before starting another task.
+**Baseline:** 2026-10-08. **Current phase:** EM-001 reviewed/CI-verified in Draft PR #1; EM-002 offline tenant foundation under review. Check the [status ledger](docs/22-implementation-status.md) before starting another task.
 
 ## Read order
 

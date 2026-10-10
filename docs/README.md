@@ -27,6 +27,7 @@
 | [20 References](20-references.md) | Primary sources checked for this baseline and limitations |
 | [21 Configuration catalog](21-configuration-catalog.md) | Safe defaults, allowed settings and override precedence |
 | [22 Implementation status](22-implementation-status.md) | Honest progress ledger and evidence requirements |
+| [26 Tenant foundation runbook](26-tenant-foundation-runbook.md) | Offline OIDC/session/RBAC/RLS proof, migration and production gates |
 | [25 Development runbook](25-development-runbook.md) | Tested EM-001 setup, version/license matrix and rollback |
 | [23 Source onboarding playbook](23-source-onboarding-playbook.md) | Site certification procedure and candidate-source register |
 

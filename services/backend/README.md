@@ -7,3 +7,5 @@ The API exposes only `/healthz`, `/api/v1/capabilities` and generated `/openapi.
 Configuration is parsed from `EMAILMONITOR_` variables. Unknown keys and ambiguous booleans fail startup. The default environment is production, with all outbound capabilities unavailable. Fixture/identity-stub switches require the explicit test environment; test transport lives outside the runtime package. This is not production authentication or an enforced network sandbox. EM-002–004 establish those boundaries before any contact-processing feature.
 
 No database migration, worker, queue, fetch client, parser or email/AI integration is introduced by EM-001. The lock includes development tools; `uv sync --project services/backend --locked --no-dev` installs only runtime dependencies.
+
+EM-002 adds an explicitly test-only identity/tenant assembly and a real PostgreSQL migration; see [the foundation runbook](../../docs/26-tenant-foundation-runbook.md). The default CLI does not activate that assembly or run migrations.

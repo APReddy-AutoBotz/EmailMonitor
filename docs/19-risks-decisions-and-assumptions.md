@@ -67,3 +67,7 @@ A-06: optional organization branding is useful; white-label/resale rights are no
 | Sending countries, provider, templates and mailboxes | EM-EXT-04 | Sending off |
 
 Do not ask the product owner to reapprove already specified core input modes or multi-organization scope. Surface only actual implementation/production blockers; continue independent offline work.
+
+## EM-002 offline privilege separation decision
+
+The authentication verifier and tenant SQL runtime are separate database principals and pools. Only the verifier principal may execute login-flow/session-creation functions; tenant runtime has no role-membership or SET ROLE path to it or the owner. This corrects the initial unshipped shared-role grant identified in independent review. Defensive catalog checks and normal synthetic login regressions cover the correction. A verifier-process compromise and production credential/process isolation remain staging security-review requirements; the test-only single-process assembly is not a deployment certification. No external authentication grant or production role was created.

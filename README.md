@@ -4,7 +4,7 @@
 
 A user enters a keyword and a publisher/source, or pastes a search-results, article, or PDF URL. EmailMonitor discovers the eligible articles, follows pagination, opens article pages and permitted full text, and returns author names, author roles, professional email addresses, affiliations, and evidence.
 
-> **Status: EM-001 scaffold under review — 2026-10-10.** The repository now includes a runnable metadata-only FastAPI API, a React UI with extraction visibly unavailable, locked dependencies, contract tests and a test-only offline fixture transport. Contact extraction, tenant identity/database isolation, live connectors, exports and deployment remain unimplemented. Requirements and targets are not claims of achieved capability. See the [status ledger](docs/22-implementation-status.md).
+> **Status: EM-002 offline tenant foundation under review — 2026-10-10.** The repository now includes a runnable metadata-only FastAPI API, a React UI with extraction visibly unavailable, locked dependencies, contract tests and a test-only offline fixture transport. Synthetic OIDC/session/RBAC and real PostgreSQL tenant tests are now implemented in an explicitly test-only assembly. Production identity/database activation, contact extraction, live connectors, exports and deployment remain unavailable. See the [foundation runbook](docs/26-tenant-foundation-runbook.md). Requirements and targets are not claims of achieved capability. See the [status ledger](docs/22-implementation-status.md).
 
 ## Start here
 
