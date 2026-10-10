@@ -14,8 +14,8 @@ The repository documentation validator checks local Markdown targets, JSON synta
 |---|---|---|
 | EM-001 | VERIFIED IN DRAFT PR — unmerged | [PR #1](https://github.com/APReddy-AutoBotz/EmailMonitor/pull/1), head 88e34a7; independent review + [application CI](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/38025740451) + [docs CI](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/38025740436) passed |
 | EM-002 | VERIFIED IN DRAFT PR — unmerged | [PR #2](https://github.com/APReddy-AutoBotz/EmailMonitor/pull/2), head bed184b; corrected privilege-boundary review + [application CI](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/38027802453) + [docs CI](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/38027802418) passed; production provider unavailable |
-| EM-003 | IMPLEMENTED OFFLINE — review/remote CI pending | [Validation](../reports/em003-validation.md); [source-policy runbook](27-source-policy-runbook.md); no live approval/execution |
-| EM-004 | NOT STARTED | EM-003 |
+| EM-003 | VERIFIED IN DRAFT PR — unmerged | [PR #3](https://github.com/APReddy-AutoBotz/EmailMonitor/pull/3), head 0800137; corrected exact-tree review + [application CI](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/38028911796) + [docs CI](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/38028911825) passed; no live approval/execution |
+| EM-004 | PARTIAL — EM-004a offline slice under review | [Evidence](../reports/em004a-validation.md); [runbook](28-offline-fetch-runbook.md); actual socket/egress/browser/parser isolation gates unmet |
 | EM-005 | NOT STARTED | EM-002/003 |
 | EM-006 | NOT STARTED | EM-004/005 |
 | EM-007 | NOT STARTED | EM-006 |
@@ -54,4 +54,8 @@ Offline OIDC/session, membership/RBAC/lifecycle and real PostgreSQL RLS foundati
 
 ## EM-003 implementation boundary
 
-Synthetic read-only source catalog/support matrix; versioned tenant source policies; owner/data-steward approval/suspension/revocation; time-derived expiry, monotonic current version and platform disable gate; strict fixture-only configuration ceilings, opaque permission reference and null synthetic credentials reference are implemented. No acquisition/extraction or secret retrieval occurs. Real credentials/provider manifests and documentary authorization remain future source-onboarding decisions. See the runbook/evidence; independent review and published-head CI are pending. EM-004 is next after acceptance.
+Synthetic read-only source catalog/support matrix; versioned tenant source policies; owner/data-steward approval/suspension/revocation; time-derived expiry, monotonic current version and platform disable gate; strict fixture-only configuration ceilings, opaque permission reference and null synthetic credentials reference are implemented. No acquisition/extraction or secret retrieval occurs. Real credentials/provider manifests and documentary authorization remain future source-onboarding decisions. Corrected review and exact-head CI passed for 0800137/tree 63efdc10. PR #3 remains Draft/unmerged; EM-004a follows as an explicitly partial offline slice.
+
+## EM-004a partial boundary
+
+Strict fixture URL/public-address/pinning validation primitives, bounded in-memory fixture byte gateway and current tenant policy authorization before each hop/release are implemented. Live and browser entrypoints always reject. A disposable bubblewrap network isolation probe failed with Operation not permitted and that route was stopped without retry/alternate isolation route or host security changes. No actual socket connector, enforced HTTP/browser egress or parser process isolation is claimed; EM-004 full acceptance remains unmet even if this partial slice's checks pass. EM-005 may progress independently on its EM-002/003 dependencies, but network-dependent discovery remains gated.

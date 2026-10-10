@@ -42,3 +42,5 @@ The user-approved priority is contact extraction from keyword/source or URL inpu
 Versioning: documents use Git history; public API uses `/api/v1`; event/schema revisions use a `schema_version`; connectors and source policies have independent versions. Every result stores the extraction, association and policy versions used. Dates are ISO 8601; persisted times are UTC; UI renders the user's selected timezone.
 
 - [27 — Offline source-policy runbook](27-source-policy-runbook.md)
+
+- [28 — Partial offline fetch runbook](28-offline-fetch-runbook.md)

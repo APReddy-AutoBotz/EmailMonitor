@@ -10,6 +10,7 @@ from sqlalchemy import Connection, text
 
 from emailmonitor.organizations.database import Database, TenantContext
 from emailmonitor.organizations.roles import Capability
+from emailmonitor.sources.access import current_policy, policy_decision
 from emailmonitor.sources.policy import (
     Evaluation,
     PolicyProposal,
@@ -27,23 +28,7 @@ def source_router(
 ) -> APIRouter:
     router = APIRouter()
 
-    def current(connection: Connection, organization: UUID, source: str) -> dict[str, object]:
-        row = (
-            connection.execute(
-                text("""
-SELECT p.*,s.enabled,s.support FROM emailmonitor.source_policies p
-JOIN emailmonitor.source_policy_heads h USING(organization_id,source_id)
-JOIN emailmonitor.source_catalog s USING(source_id)
-WHERE p.organization_id=:org AND p.source_id=:source AND p.version=h.current_version
-"""),
-                {"org": organization, "source": source},
-            )
-            .mappings()
-            .first()
-        )
-        if row is None:
-            raise HTTPException(404, "Policy unavailable")
-        return dict(row)
+    current = current_policy
 
     def lock(connection: Connection, organization: UUID, source: str) -> int:
         exists = connection.execute(
@@ -207,21 +192,7 @@ WHERE organization_id=:org AND source_id=:source AND version=:version
             _,
         ):
             row = current(c, organization_id, source_id)
-            policy = PolicyProposal.model_validate(row["policy"])
-            support = row["support"]
-            routes = support.get("routes_by_operation", {}) if isinstance(support, dict) else {}
-            route_allowed = isinstance(routes, dict) and body.path in routes.get(body.operation, [])
-            approved = (
-                route_allowed
-                and row["version"] == body.expected_version
-                and row["enabled"] is True
-                and row["state"] == "approved"
-                and policy.valid_until > datetime.now(UTC)
-                and body.execution_mode == "fixture"
-                and body.host in policy.allowed_hosts
-                and body.operation in policy.allowed_operations
-                and (body.operation != "export_contacts" or policy.export_contacts_allowed)
-            )
+            approved = policy_decision(row, body, datetime.now(UTC))
             return {
                 "policy_authorized": approved,
                 "version": row["version"],

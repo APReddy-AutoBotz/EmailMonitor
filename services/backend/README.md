@@ -11,3 +11,5 @@ No database migration, worker, queue, fetch client, parser or email/AI integrati
 EM-002 adds an explicitly test-only identity/tenant assembly and a real PostgreSQL migration; see [the foundation runbook](../../docs/26-tenant-foundation-runbook.md). The default CLI does not activate that assembly or run migrations.
 
 EM-003 extends only the explicit test foundation assembly with synthetic source policy governance. See [source-policy runbook](../../docs/27-source-policy-runbook.md); evaluation never performs acquisition.
+
+EM-004a provides a test-only bounded fixture byte service, not a live fetcher or browser. See [partial runbook](../../docs/28-offline-fetch-runbook.md); normal CLI remains metadata-only and full EM-004 acceptance is unmet.

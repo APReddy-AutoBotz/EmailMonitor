@@ -14,6 +14,7 @@ class Capability(StrEnum):
     READ_ORGANIZATION = "organization.read"
     MANAGE_MEMBERS = "membership.manage"
     TRANSFER_OWNER = "owner.transfer"
+    ACQUIRE_SOURCE = "source.acquire"
     MANAGE_SOURCE_POLICY = "source.policy.manage"
     MANAGE_LIFECYCLE = "organization.lifecycle"
 
@@ -30,6 +31,9 @@ ROLE_CAPABILITIES[Role.OWNER] |= {
 }
 
 ROLE_CAPABILITIES[Role.DATA_STEWARD] |= {Capability.MANAGE_SOURCE_POLICY}
+
+for permitted_role in (Role.OWNER, Role.ADMIN, Role.DATA_STEWARD, Role.OPERATOR):
+    ROLE_CAPABILITIES[permitted_role] |= {Capability.ACQUIRE_SOURCE}
 
 LIFECYCLE_TRANSITIONS: dict[str, frozenset[str]] = {
     "provisioning": frozenset({"active", "offboarding"}),
