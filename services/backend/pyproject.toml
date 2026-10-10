@@ -2,7 +2,7 @@
 name = "emailmonitor-backend"
 version = "0.1.0"
 requires-python = ">=3.12,<3.14"
-dependencies = ["fastapi==0.143.0", "uvicorn==0.54.0"]
+dependencies = ["fastapi==0.143.0", "uvicorn==0.54.0", "sqlalchemy==2.1.4", "alembic==1.20.0", "sqlparse==0.6.0", "pg8000==1.31.5", "pyjwt[crypto]==2.15.1"]
 
 [dependency-groups]
 dev = ["httpx==0.28.1", "pytest==9.1.1", "ruff==0.17.0", "mypy==1.20.2", "jsonschema==4.26.0", "types-jsonschema==4.26.0.20261006"]

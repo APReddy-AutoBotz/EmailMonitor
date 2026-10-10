@@ -9,6 +9,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 ALLOWED_LICENSES = {
     "MIT",
+    "MIT-0",
+    "Apache-2.0 OR BSD-3-Clause",
     "Apache-2.0",
     "BSD-2-Clause",
     "BSD-3-Clause",
@@ -56,6 +58,10 @@ def main() -> None:
         key = str(path.relative_to(ROOT))
         if report["lock_sha256"][key] != hashlib.sha256(path.read_bytes()).hexdigest():
             raise ValueError(f"Lock changed without inventory review: {key}")
+    runtime = json.loads((ROOT / "reports/runtime-inventory.json").read_text())
+    image = runtime["postgresql"]["ci_image"]
+    if image not in (ROOT / ".github/workflows/application.yml").read_text():
+        raise ValueError("CI image differs from reviewed immutable runtime inventory")
     print(
         f"PASS: license inventory covers {len(python_packages)} Python and "
         f"{len(node_packages)} JavaScript locked packages"
