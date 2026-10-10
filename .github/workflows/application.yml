@@ -45,7 +45,6 @@ jobs:
       EM_REQUIRE_REAL_BROKER: "true"
       EM_TEST_DISPOSABLE_BROKER: "true"
       EM_TEST_BROKER_URL: pyamqp://em_fixture:emailmonitor-ci-broker-only@127.0.0.1:5672//
-      EM_TEST_BROKER_CONTAINER: ${{ job.services.rabbitmq.id }}
       EM_TEST_ADMIN_DATABASE_URL: postgresql+pg8000://postgres:emailmonitor-ci-only@127.0.0.1:5432/postgres
       EM_TEST_AUTH_DATABASE_URL: postgresql+pg8000://em_ci_authenticator:emailmonitor-ci-auth-only@127.0.0.1:5432/postgres
       EM_TEST_DATABASE_URL: postgresql+pg8000://em_ci_runtime:emailmonitor-ci-runtime-only@127.0.0.1:5432/postgres
@@ -68,4 +67,6 @@ jobs:
           EM_MIGRATION_DATABASE_URL="$EM_TEST_ADMIN_DATABASE_URL" uv run --project services/backend alembic -c services/backend/alembic.ini upgrade head
           uv run --project services/backend python scripts/create_ci_runtime.py
       - name: Execute offline scaffold and real tenant SQL/API checks
+        env:
+          EM_TEST_BROKER_CONTAINER: ${{ job.services.rabbitmq.id }}
         run: scripts/check_tenant_foundation.sh

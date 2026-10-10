@@ -121,3 +121,15 @@ def test_dates_and_null_input_contract_boundary() -> None:
     body["input"] = {"type": "url", "url": "http://"}
     with pytest.raises(ValidationError):
         JobRequest.model_validate(body)
+
+
+def test_disposable_container_context_is_only_used_in_runner_step() -> None:
+    workflow = (ROOT / ".github/workflows/application.yml").read_text()
+    before_steps, steps = workflow.split("    steps:", 1)
+    assert "${{ job." not in before_steps
+    test_step = steps.split("- name: Execute offline scaffold and real tenant SQL/API checks", 1)[1]
+    assert (
+        "        env:\n          EM_TEST_BROKER_CONTAINER: ${{ job.services.rabbitmq.id }}"
+        in test_step
+    )
+    assert 'EM_REQUIRE_REAL_BROKER: "true"' in before_steps
