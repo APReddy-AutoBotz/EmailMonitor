@@ -59,9 +59,10 @@ def main() -> None:
         if report["lock_sha256"][key] != hashlib.sha256(path.read_bytes()).hexdigest():
             raise ValueError(f"Lock changed without inventory review: {key}")
     runtime = json.loads((ROOT / "reports/runtime-inventory.json").read_text())
-    image = runtime["postgresql"]["ci_image"]
-    if image not in (ROOT / ".github/workflows/application.yml").read_text():
-        raise ValueError("CI image differs from reviewed immutable runtime inventory")
+    for dependency in ("postgresql", "rabbitmq"):
+        image = runtime[dependency]["ci_image"]
+        if image not in (ROOT / ".github/workflows/application.yml").read_text():
+            raise ValueError("CI image differs from reviewed immutable runtime inventory")
     print(
         f"PASS: license inventory covers {len(python_packages)} Python and "
         f"{len(node_packages)} JavaScript locked packages"

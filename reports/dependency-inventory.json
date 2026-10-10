@@ -1116,7 +1116,7 @@
   ],
   "lock_sha256": {
     "apps/web/pnpm-lock.yaml": "3280fc900f8bfbcfa707f9c20e7a62a861790f32accb0413170ea2bc13005dc2",
-    "services/backend/uv.lock": "69ebacaca477b7a7a7272d3789d1c81d4ec10eec1132aa5e55455eaa96905cff"
+    "services/backend/uv.lock": "26e00c64fa7ed0c2cd42d703ebd0f03ad2b238b86c6e2893e1d3c18b8a6f8335"
   },
   "python": [
     {
@@ -1127,6 +1127,15 @@
       "name": "alembic",
       "source": "https://pypi.org/project/alembic/1.20.0/",
       "version": "1.20.0"
+    },
+    {
+      "license": "BSD-3-Clause",
+      "license_files": [
+        "licenses/LICENSE"
+      ],
+      "name": "amqp",
+      "source": "https://pypi.org/project/amqp/5.4.1/",
+      "version": "5.4.1"
     },
     {
       "license": "MIT",
@@ -1172,6 +1181,24 @@
       "version": "26.1.0"
     },
     {
+      "license": "BSD-3-Clause",
+      "license_files": [
+        "licenses/LICENSE.txt"
+      ],
+      "name": "billiard",
+      "source": "https://pypi.org/project/billiard/4.3.1/",
+      "version": "4.3.1"
+    },
+    {
+      "license": "BSD-3-Clause",
+      "license_files": [
+        "licenses/LICENSE"
+      ],
+      "name": "celery",
+      "source": "https://pypi.org/project/celery/5.6.3/",
+      "version": "5.6.3"
+    },
+    {
       "license": "MPL-2.0",
       "license_files": [
         "LICENSE"
@@ -1197,6 +1224,34 @@
       "name": "click",
       "source": "https://pypi.org/project/click/8.5.0/",
       "version": "8.5.0"
+    },
+    {
+      "license": "MIT",
+      "license_files": [
+        "LICENSE"
+      ],
+      "name": "click-didyoumean",
+      "source": "https://pypi.org/project/click-didyoumean/0.3.1/",
+      "version": "0.3.1"
+    },
+    {
+      "license": "BSD-3-Clause",
+      "license_files": [
+        "licenses/AUTHORS.txt",
+        "licenses/LICENSE.txt"
+      ],
+      "name": "click-plugins",
+      "source": "https://pypi.org/project/click-plugins/1.1.1.2/",
+      "version": "1.1.1.2"
+    },
+    {
+      "license": "MIT",
+      "license_files": [
+        "licenses/LICENSE"
+      ],
+      "name": "click-repl",
+      "source": "https://pypi.org/project/click-repl/0.4.1/",
+      "version": "0.4.1"
     },
     {
       "license": "BSD-3-Clause",
@@ -1285,6 +1340,15 @@
       "name": "jsonschema-specifications",
       "source": "https://pypi.org/project/jsonschema-specifications/2025.9.1/",
       "version": "2025.9.1"
+    },
+    {
+      "license": "BSD-3-Clause",
+      "license_files": [
+        "licenses/LICENSE"
+      ],
+      "name": "kombu",
+      "source": "https://pypi.org/project/kombu/5.6.2/",
+      "version": "5.6.2"
     },
     {
       "license": "MIT",
@@ -1378,6 +1442,16 @@
       "name": "pluggy",
       "source": "https://pypi.org/project/pluggy/1.6.0/",
       "version": "1.6.0"
+    },
+    {
+      "license": "BSD-3-Clause",
+      "license_files": [
+        "licenses/AUTHORS.rst",
+        "licenses/LICENSE"
+      ],
+      "name": "prompt-toolkit",
+      "source": "https://pypi.org/project/prompt-toolkit/3.0.53/",
+      "version": "3.0.53"
     },
     {
       "license": "BSD-3-Clause",
@@ -1546,6 +1620,25 @@
       "version": "0.4.4"
     },
     {
+      "license": "Apache-2.0",
+      "license_files": [
+        "licenses/LICENSE",
+        "licenses/licenses/LICENSE_APACHE"
+      ],
+      "name": "tzdata",
+      "source": "https://pypi.org/project/tzdata/2026.5/",
+      "version": "2026.5"
+    },
+    {
+      "license": "MIT",
+      "license_files": [
+        "licenses/LICENSE.txt"
+      ],
+      "name": "tzlocal",
+      "source": "https://pypi.org/project/tzlocal/5.4.4/",
+      "version": "5.4.4"
+    },
+    {
       "license": "BSD-3-Clause",
       "license_files": [
         "LICENSE.md"
@@ -1553,6 +1646,24 @@
       "name": "uvicorn",
       "source": "https://pypi.org/project/uvicorn/0.54.0/",
       "version": "0.54.0"
+    },
+    {
+      "license": "BSD-3-Clause",
+      "license_files": [
+        "LICENSE"
+      ],
+      "name": "vine",
+      "source": "https://pypi.org/project/vine/5.1.0/",
+      "version": "5.1.0"
+    },
+    {
+      "license": "MIT",
+      "license_files": [
+        "licenses/LICENSE"
+      ],
+      "name": "wcwidth",
+      "source": "https://pypi.org/project/wcwidth/0.9.2/",
+      "version": "0.9.2"
     }
   ],
   "schema_version": "1.0",

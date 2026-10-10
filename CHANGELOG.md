@@ -28,3 +28,5 @@ No application, live source connector, actual email collection, deployment, send
 - EM-003: synthetic source catalog/support matrix and tenant policy versions, owner/steward lifecycle, strict platform ceilings, current expiry/revocation/disable checks and real PostgreSQL/API regressions. Permission references remain opaque; synthetic credentials are null. No live execution introduced.
 
 - EM-004a partial: bounded tenant-authorized in-memory fixture acquisition and URL/IP/pinning-contract tests. Live/browser execution remains unavailable; actual OS/socket/browser/parser isolation gate is unmet. No host security settings changed.
+
+- EM-005 offline foundation: draft original-input requests, durable synthetic job/item/outbox/effect/usage records, tenant RLS, bounded reservations, generation/lease recovery and test-only Celery with pinned disposable RabbitMQ CI failure tests. Broker/review acceptance pending; no source acquisition or production worker activation.

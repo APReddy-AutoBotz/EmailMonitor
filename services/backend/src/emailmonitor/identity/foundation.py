@@ -14,6 +14,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from emailmonitor.config import Settings
 from emailmonitor.identity.oidc import AuthenticationDenied, OIDCProvider
+from emailmonitor.jobs.api import job_router
 from emailmonitor.organizations.database import (
     AuthenticationDatabase,
     AuthorizationDenied,
@@ -413,4 +414,5 @@ AND identity_id=:actor
                 return {"status": body.status, "row_version": body.expected_revision + 1}
 
         router.include_router(source_router(self.database, token, csrf, audit))
+        router.include_router(job_router(self.database, token, csrf, settings))
         return router
