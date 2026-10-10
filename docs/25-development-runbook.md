@@ -61,3 +61,5 @@ When changing dependencies: update exact direct pins, regenerate locks through o
 ## Migration and rollback
 
 No database migration or deployment. Stop local servers with Ctrl-C. Remove local virtualenv/node_modules/dist directories if resetting installation; these contain reproducible development artifacts, not customer data. Revert the scaffold commit to roll back the application changes while preserving baseline documentation. Next task is EM-002 after EM-001 review/CI acceptance.
+
+EM-005 pins Celery 5.6.3 (BSD-3-Clause) and official RabbitMQ 4.3.6 (MPL-2.0 software, immutable CI image). Exact lock inventory is 60 Python / 159 JavaScript packages. Full image attribution/vulnerability review remains a release gate; see [durability runbook](29-durable-offline-jobs-runbook.md).

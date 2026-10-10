@@ -44,3 +44,5 @@ Versioning: documents use Git history; public API uses `/api/v1`; event/schema r
 - [27 — Offline source-policy runbook](27-source-policy-runbook.md)
 
 - [28 — Partial offline fetch runbook](28-offline-fetch-runbook.md)
+
+- [Durable offline jobs runbook](29-durable-offline-jobs-runbook.md)

@@ -2,7 +2,7 @@
 
 From the repository root, install the locked environment with `uv sync --project services/backend --locked`.
 Run `uv run --project services/backend uvicorn emailmonitor.api:app --app-dir services/backend/src --host 127.0.0.1 --port 8000`.
-The API exposes only `/healthz`, `/api/v1/capabilities` and generated `/openapi.json`. No tenant-data endpoint exists. A healthy response means this process responds, not that a database, broker or extraction system is ready.
+The API exposes only `/healthz`, `/api/v1/capabilities` and generated `/openapi.json`. No tenant-data endpoint is enabled by the default CLI; the explicit synthetic foundation is described below. A healthy response means this process responds, not that a database, broker or extraction system is ready.
 
 Configuration is parsed from `EMAILMONITOR_` variables. Unknown keys and ambiguous booleans fail startup. The default environment is production, with all outbound capabilities unavailable. Fixture/identity-stub switches require the explicit test environment; test transport lives outside the runtime package. This is not production authentication or an enforced network sandbox. EM-002–004 establish those boundaries before any contact-processing feature.
 
@@ -13,3 +13,5 @@ EM-002 adds an explicitly test-only identity/tenant assembly and a real PostgreS
 EM-003 extends only the explicit test foundation assembly with synthetic source policy governance. See [source-policy runbook](../../docs/27-source-policy-runbook.md); evaluation never performs acquisition.
 
 EM-004a provides a test-only bounded fixture byte service, not a live fetcher or browser. See [partial runbook](../../docs/28-offline-fetch-runbook.md); normal CLI remains metadata-only and full EM-004 acceptance is unmet.
+
+EM-005 adds draft original-input requests to the explicit test foundation and a synthetic loopback-only Celery diagnostic harness. Default CLI/UI extraction remains unavailable. See [durable jobs runbook](../../docs/29-durable-offline-jobs-runbook.md); actual broker acceptance is pending.

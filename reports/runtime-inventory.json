@@ -9,5 +9,13 @@
     "ci_image": "postgres:17.11-bookworm@sha256:3645570cccdfa447589da9f57dd740faa29b30938e861289a5574b6ca6b03826",
     "image_metadata_source": "https://hub.docker.com/v2/repositories/library/postgres/tags/17.11-bookworm"
   },
-  "scope": "PostgreSQL source and immutable official CI image reference. Full container SBOM/base-system attribution and vulnerability certification remain release gates; no container is distributed by this patch."
+  "scope": "PostgreSQL source and immutable official PostgreSQL/RabbitMQ CI images. Full image SBOM/base-system attribution and vulnerability certification remain release gates; no container is distributed by this change.",
+  "rabbitmq": {
+    "version": "4.3.6",
+    "license": "MPL-2.0",
+    "license_reference": "https://www.rabbitmq.com/mpl.html",
+    "ci_image": "rabbitmq:4.3.6@sha256:42b190dffdd0cdb656f989f5404c30e1049d6b7d9c987089669b1905e5e3a1a6",
+    "image_metadata_source": "https://hub.docker.com/v2/repositories/library/rabbitmq/tags/4.3.6",
+    "purpose": "Disposable synthetic CI broker only; no persistent service provisioned"
+  }
 }
