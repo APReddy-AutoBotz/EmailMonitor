@@ -46,3 +46,5 @@ Versioning: documents use Git history; public API uses `/api/v1`; event/schema r
 - [28 — Partial offline fetch runbook](28-offline-fetch-runbook.md)
 
 - [Durable offline jobs runbook](29-durable-offline-jobs-runbook.md)
+
+[30 Isolated fixture diagnostics](30-isolated-fixture-runbook.md) documents partial real-TLS/parser work and the unmet browser gate.

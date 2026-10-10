@@ -1,0 +1,13 @@
+**
+!services/
+!services/backend/
+!services/backend/pyproject.toml
+!services/backend/uv.lock
+!services/backend/src/
+!services/backend/src/**
+!scripts/
+!scripts/isolation/
+!scripts/isolation/Dockerfile.parser
+!scripts/isolation/parser_acceptance.py
+**/__pycache__
+**/*.pyc
