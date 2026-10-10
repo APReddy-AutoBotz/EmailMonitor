@@ -1,6 +1,6 @@
 # 16 — Dependency-ordered delivery backlog
 
-**Baseline:** 2026-10-08. EM-001 is reviewed/CI-verified in an unmerged draft PR. EM-002 is reviewed/CI-verified in an unmerged draft PR; EM-003 is reviewed/CI-verified in an unmerged draft PR. EM-004a is a reviewed/CI-verified offline partial slice in Draft PR #4; full EM-004 network/browser/parser isolation remains unmet. EM-005 is independently IN PROGRESS on its EM-002/003 dependencies; network-dependent tasks remain gated. Complexity labels are relative planning estimates, not calendar commitments. One reviewable PR per task or smaller accepted slice.
+**Baseline:** 2026-10-08. EM-001 is reviewed/CI-verified in an unmerged draft PR. EM-002 is reviewed/CI-verified in an unmerged draft PR; EM-003 is reviewed/CI-verified in an unmerged draft PR. EM-004a is a reviewed/CI-verified offline partial slice in Draft PR #4; full EM-004 network/browser/parser isolation remains unmet. EM-005 is reviewed/CI-verified as an offline foundation in Draft PR #5 on its EM-002/003 dependencies; EM-004b real synthetic TLS/parser diagnostics are under review; network-dependent tasks remain gated. Complexity labels are relative planning estimates, not calendar commitments. One reviewable PR per task or smaller accepted slice.
 
 ## Core tasks
 

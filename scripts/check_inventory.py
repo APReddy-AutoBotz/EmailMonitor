@@ -63,6 +63,10 @@ def main() -> None:
         image = runtime[dependency]["ci_image"]
         if image not in (ROOT / ".github/workflows/application.yml").read_text():
             raise ValueError("CI image differs from reviewed immutable runtime inventory")
+    parser_image = runtime["python_parser"]["ci_image"]
+    parser_dockerfile = (ROOT / "scripts/isolation/Dockerfile.parser").read_text()
+    if "FROM " + parser_image + "\n" not in parser_dockerfile:
+        raise ValueError("Parser image differs from reviewed immutable runtime inventory")
     print(
         f"PASS: license inventory covers {len(python_packages)} Python and "
         f"{len(node_packages)} JavaScript locked packages"

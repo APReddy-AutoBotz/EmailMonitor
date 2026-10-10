@@ -130,3 +130,57 @@ def test_gateway_readonly_roles_cannot_acquire(scenario: Scenario, role: str) ->
                 FixtureByteTransport(SETTINGS, {URL: ByteResponse(200, (b"fixture",))}),
                 authorize,
             ).fetch(URL)
+
+
+def test_actual_tls_gateway_uses_current_tenant_policy(scenario: Scenario, tmp_path: Path) -> None:
+    from emailmonitor.fetching.tls_fixture import TLSFixtureGateway
+    from test_tls_fixture import Response, server
+
+    with scenario.client() as client:
+        csrf = scenario.login(client, "owner")
+        headers = {"Origin": ORIGIN, "X-CSRF-Token": csrf}
+        path = source_path(scenario)
+        assert (
+            client.post(
+                path + "/policies",
+                headers=headers,
+                json={"expected_version": 0, "policy": policy_body()},
+            ).status_code
+            == 201
+        )
+        assert (
+            client.post(
+                path + "/policy-state",
+                headers=headers,
+                json={"expected_version": 1, "expected_revision": 1, "state": "approved"},
+            ).status_code
+            == 200
+        )
+        token = str(client.cookies[COOKIE])
+        authorize = TenantFixtureAuthorization(
+            scenario.foundation.database, token, scenario.organizations[0], "synthetic-publisher", 1
+        )
+        with server(tmp_path, {"/article-a.html": Response()}) as (endpoint, calls):
+            gateway = TLSFixtureGateway(SETTINGS, endpoint, authorize)
+            assert gateway.fetch(URL) == b"<p>synthetic observation</p>"
+            denied = TenantFixtureAuthorization(
+                scenario.foundation.database,
+                token,
+                scenario.organizations[1],
+                "synthetic-publisher",
+                1,
+            )
+            with pytest.raises(FetchDenied):
+                TLSFixtureGateway(SETTINGS, endpoint, denied).fetch(URL)
+            assert len(calls) == 1
+            assert (
+                client.post(
+                    path + "/policy-state",
+                    headers=headers,
+                    json={"expected_version": 1, "expected_revision": 2, "state": "revoked"},
+                ).status_code
+                == 200
+            )
+            with pytest.raises(FetchDenied):
+                gateway.fetch(URL)
+            assert len(calls) == 1
