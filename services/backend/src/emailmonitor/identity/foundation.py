@@ -22,6 +22,7 @@ from emailmonitor.organizations.database import (
     digest,
 )
 from emailmonitor.organizations.roles import LIFECYCLE_TRANSITIONS, Capability, Role
+from emailmonitor.sources.api import source_router
 
 COOKIE = "__Host-emailmonitor_session"
 FLOW_COOKIE = "__Host-emailmonitor_login"
@@ -411,4 +412,5 @@ AND identity_id=:actor
                 )
                 return {"status": body.status, "row_version": body.expected_revision + 1}
 
+        router.include_router(source_router(self.database, token, csrf, audit))
         return router

@@ -22,7 +22,7 @@ class Health(BaseModel):
 class Capabilities(BaseModel):
     model_config = ConfigDict(extra="forbid")
     schema_version: Literal["1.0"] = "1.0"
-    implementation_stage: Literal["scaffold", "tenant_foundation"] = "scaffold"
+    implementation_stage: Literal["scaffold", "tenant_foundation", "source_policy"] = "scaffold"
     extraction_implemented: Literal[False] = False
     live_sources_enabled: Literal[False] = False
     outbound_email_enabled: Literal[False] = False
@@ -42,7 +42,7 @@ def create_app(settings: Settings | None = None, foundation: Foundation | None =
     @application.get("/api/v1/capabilities", response_model=Capabilities)
     def capabilities() -> Capabilities:
         return Capabilities(
-            implementation_stage="tenant_foundation" if foundation else "scaffold",
+            implementation_stage="source_policy" if foundation else "scaffold",
             tenant_data_api_available=foundation is not None,
         )
 

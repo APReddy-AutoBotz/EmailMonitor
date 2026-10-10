@@ -1,0 +1,15 @@
+# EM-003 offline source-policy validation
+
+Date: 2026-10-10. Stacked baseline: remote EM-002 `bed184b516040c74fed40180eefcc52474e686d4`, reviewed tree `cbe453d1d42bd48b9808a7d248ff8cf7d4706e41`. Draft PR #1 and its cancelled body update remain untouched; PR #2 stays Draft/unmerged. All identities, policies, permission references, source hosts and database state are synthetic.
+
+## Actual scope and checks
+
+Server-owned synthetic catalog, tenant policy version/head relations, owner/steward governance, expiry/revocation/current-version/platform-disable checks, strict policy ceilings and contract alignment. No new packages/licenses, secret retrieval, real credential reference, live route approval, fetching, extraction, export, customer data or deployment.
+
+`test_source_policy.py`: 13 pure validation/approval regressions reject live mode, unsupported host/operation/region, unknown fields, duplicate operations, weaker limits/retention, naive expiry and secret-like URL references/any synthetic credential. `test_source_foundation.py`: 10 real PostgreSQL/API regressions cover owner/steward successful governance, four-role denial, two-tenant RLS/pool reset, current-version/revocation/suspension/expiry, missing permission, CSRF, concurrent proposals through distinct runtime pools, platform disable, fixture-catalog parity and actual contract responses. Previous scaffold/OIDC/RLS/membership tests remain included.
+
+Final local/from-empty aggregate passed 88 Python tests with no warnings/skips, strict mypy, Ruff, documentation/schema/fixtures, inventory parity (48 Python/159 JavaScript), frontend peers/type/lint/1 test/build. A fresh source copy without virtualenv/node_modules/build outputs passed the same complete gates, with 88 Python tests and no warnings/skips; both migrations upgraded from empty, then repeated upgrade succeeded. Initial independent review reproduced all gates and identified one medium schema/API parity gap for synthetic credential references. The corrected schema now explicitly requires null for synthetic-publisher, with a committed negative fixture checked by both pytest and the docs validator. Corrected full aggregate and a fresh clean-install/from-empty migration run passed all gates with 88 Python tests, no warnings/skips, and 13 negative contract cases. Fresh exact-tree review and published-head CI remain pending. No acceptance is claimed from pending checks.
+
+## Limits
+
+This is offline policy governance, not source permission/legal review, real connector certification or production security certification. Credential-reference vocabulary is present but the synthetic manifest requires null; real credentialed sources and secret resolution remain gated. Evaluation is a current point-in-time decision with execution unavailable; future jobs must reauthorize when they act. History API is bounded to the latest 100 versions; no pagination/UI is claimed. Destructive downgrade is not supported. See [runbook](../docs/27-source-policy-runbook.md).
