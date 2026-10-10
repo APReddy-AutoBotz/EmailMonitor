@@ -12,3 +12,5 @@ JSON Schema validates shape, not source permission, tenant membership, reachable
 All examples are synthetic. Reserved example domains do not authorize a live request; fixture transport is offline/test-only. The contact example's digest refers to the committed synthetic article-a HTML, not a collected real article. A sample timestamp is fixture metadata, not a claim that a live job ran.
 
 The event schema intentionally has a bounded payload field set. Add event-specific semantics/tests when endpoints exist. Generate and test OpenAPI from real backend handlers; do not pretend these four schemas define every completed endpoint.
+
+`negative/source-policy-credential.json` is deliberately invalid: the fixture source requires an explicit null credential reference. It is tested as rejection evidence, never a valid policy example. Generic future source-reference vocabulary does not enable real credential use.

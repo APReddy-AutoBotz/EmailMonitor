@@ -9,3 +9,5 @@ Configuration is parsed from `EMAILMONITOR_` variables. Unknown keys and ambiguo
 No database migration, worker, queue, fetch client, parser or email/AI integration is introduced by EM-001. The lock includes development tools; `uv sync --project services/backend --locked --no-dev` installs only runtime dependencies.
 
 EM-002 adds an explicitly test-only identity/tenant assembly and a real PostgreSQL migration; see [the foundation runbook](../../docs/26-tenant-foundation-runbook.md). The default CLI does not activate that assembly or run migrations.
+
+EM-003 extends only the explicit test foundation assembly with synthetic source policy governance. See [source-policy runbook](../../docs/27-source-policy-runbook.md); evaluation never performs acquisition.

@@ -139,6 +139,9 @@ def main() -> int:
     bad = copy.deepcopy(loaded['event.json']); bad['payload']['email'] = 'private@example.org'
     rejects('event.schema.json', bad, 'PII field in event payload')
 
+    bad = json.loads((ROOT / 'contracts/negative/source-policy-credential.json').read_text())
+    rejects('source-policy.schema.json', bad, 'synthetic source cannot carry a credential reference')
+
     prd = (ROOT / 'docs/02-product-requirements.md').read_text(encoding='utf-8')
     trace = (ROOT / 'docs/17-acceptance-and-traceability.md').read_text(encoding='utf-8')
     requirement_counts = {}

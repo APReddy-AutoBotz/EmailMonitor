@@ -24,3 +24,5 @@ Added 18 core implementation tasks and five deferred extensions, requirement/tes
 No application, live source connector, actual email collection, deployment, sending, AI integration or production benchmark is included. Repository visibility and project license remain unchanged/unselected respectively.
 
 - EM-002 review correction: separate trusted authentication and tenant runtime database principals; defensive bootstrap-grant/inheritance checks and normal-login regression tests. Production activation remains unavailable.
+
+- EM-003: synthetic source catalog/support matrix and tenant policy versions, owner/steward lifecycle, strict platform ceilings, current expiry/revocation/disable checks and real PostgreSQL/API regressions. Permission references remain opaque; synthetic credentials are null. No live execution introduced.

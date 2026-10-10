@@ -1,6 +1,6 @@
 # 16 — Dependency-ordered delivery backlog
 
-**Baseline:** 2026-10-08. EM-001 is reviewed/CI-verified in an unmerged draft PR. EM-002 has an offline foundation under review; later tasks remain unstarted. EM-003 becomes READY after EM-002 acceptance. Complexity labels are relative planning estimates, not calendar commitments. One reviewable PR per task or smaller accepted slice.
+**Baseline:** 2026-10-08. EM-001 is reviewed/CI-verified in an unmerged draft PR. EM-002 is reviewed/CI-verified in an unmerged draft PR; EM-003 has an offline source policy implementation under review. Later tasks remain unstarted. EM-004 becomes READY after EM-003 acceptance. Complexity labels are relative planning estimates, not calendar commitments. One reviewable PR per task or smaller accepted slice.
 
 ## Core tasks
 

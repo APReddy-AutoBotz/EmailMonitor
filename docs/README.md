@@ -40,3 +40,5 @@ Machine-readable proposal contracts are in `contracts/`; examples are in `contra
 The user-approved priority is contact extraction from keyword/source or URL input, for many organizations. The rest of this pack supplies implementation decisions and explicit hypotheses. Treat security/source restrictions as invariants; treat throughput, pricing and coverage as targets to test. Change incompatible contracts and requirements together in a reviewed PR, add an ADR for architectural changes, and never overwrite measured results with design targets.
 
 Versioning: documents use Git history; public API uses `/api/v1`; event/schema revisions use a `schema_version`; connectors and source policies have independent versions. Every result stores the extraction, association and policy versions used. Dates are ISO 8601; persisted times are UTC; UI renders the user's selected timezone.
+
+- [27 — Offline source-policy runbook](27-source-policy-runbook.md)
