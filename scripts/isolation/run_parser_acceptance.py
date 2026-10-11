@@ -64,7 +64,17 @@ def run(command: list[str], *, expected_oom: bool = False) -> dict[str, object]:
         after = json.loads(docker("inspect", identifier).stdout)[0]["State"]
         if expected_oom:
             if not after["OOMKilled"] or after["ExitCode"] != 137:
-                raise RuntimeError("Actual memory enforcement not established")
+                raise RuntimeError(
+                    "Actual memory enforcement not established: "
+                    + json.dumps(
+                        {
+                            "oom_killed": after["OOMKilled"],
+                            "exit_code": after["ExitCode"],
+                            "engine_error": str(after.get("Error", ""))[:1024],
+                            "stderr": started.stderr[:1024],
+                        }
+                    )
+                )
         elif started.returncode or after["ExitCode"] or after["OOMKilled"]:
             raise RuntimeError("Parser diagnostic failed: " + started.stderr[:300])
         else:
