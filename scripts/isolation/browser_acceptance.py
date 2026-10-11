@@ -1,0 +1,216 @@
+"""Approved synthetic-only guest. Network-none OS boundary is mandatory."""
+
+import base64
+import errno
+import json
+import os
+import re
+import socket
+import sys
+from pathlib import Path
+
+from playwright.sync_api import Error, Route, WebSocketRoute, sync_playwright
+
+URL = "https://synthetic.publisher.example/tooltip.html"
+
+
+def sandbox_status(text: str) -> dict[str, bool]:
+    normalized = " ".join(text.lower().split())
+    result = {
+        name: bool(re.search(pattern, normalized))
+        for name, pattern in (
+            ("namespace", r"namespace sandbox\s+yes"),
+            ("seccomp_bpf", r"seccomp-bpf sandbox\s+yes"),
+        )
+    }
+    if not all(result.values()):
+        raise RuntimeError("Chromium's own sandbox evidence is missing")
+    return result
+
+
+def main() -> None:
+    if os.environ.get("EM_ISOLATION_DIAGNOSTIC") != "synthetic-browser-only":
+        raise RuntimeError("Explicit browser diagnostic required")
+    if os.geteuid() == 0 or any(
+        os.environ.get(k) for k in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY")
+    ):
+        raise RuntimeError("Nonroot, proxy-free browser required")
+    interfaces = sorted(p.name for p in Path("/sys/class/net").iterdir())
+    if interfaces != ["lo"]:
+        raise RuntimeError("Network-none namespace required")
+    status = dict(
+        line.split(":", 1)
+        for line in Path("/proc/self/status").read_text().splitlines()
+        if ":" in line
+    )
+    if int(status["CapEff"].strip(), 16) or status["NoNewPrivs"].strip() != "1":
+        raise RuntimeError("Zero capabilities and no-new-privileges required")
+    if status["Seccomp"].strip() != "2":
+        raise RuntimeError("Approved seccomp boundary required")
+    network: list[int] = []
+    for family, target in (
+        (socket.AF_INET, ("192.0.2.1", 443)),
+        (socket.AF_INET6, ("2001:db8::1", 443)),
+    ):
+        with socket.socket(family, socket.SOCK_STREAM) as stream:
+            stream.settimeout(0.2)
+            result = stream.connect_ex(target)
+            if result != errno.ENETUNREACH:
+                raise RuntimeError("Actual namespace network denial not established")
+            network.append(result)
+    requests = 0
+    denied: list[str] = []
+    allowed = 0
+    popup_count = 0
+    download_count = 0
+
+    def request(url: str, method: str, resource: str) -> dict[str, object]:
+        nonlocal requests
+        requests += 1
+        if requests > 64:
+            raise RuntimeError("Diagnostic request cap exceeded")
+        message = {
+            "kind": "request",
+            "identifier": requests,
+            "url": url,
+            "method": method,
+            "resource": resource,
+        }
+        print(json.dumps(message), flush=True)
+        raw = sys.stdin.buffer.readline(65537)
+        if not raw.endswith(b"\n") or len(raw) > 65536:
+            raise RuntimeError("Bounded gateway reply missing")
+        reply: dict[str, object] = json.loads(raw)
+        return reply
+
+    def route_request(route: Route) -> None:
+        nonlocal allowed
+        incoming = route.request
+        reply = request(incoming.url, incoming.method, incoming.resource_type)
+        if reply.get("status") != "ok":
+            denied.append(incoming.resource_type)
+            route.abort("blockedbyclient")
+            return
+        encoded = reply.get("body")
+        if not isinstance(encoded, str) or reply.get("type") != "text/html":
+            raise RuntimeError("Unexpected synthetic gateway payload")
+        body = base64.b64decode(encoded, validate=True)
+        if len(body) > 32768:
+            raise RuntimeError("Gateway byte cap exceeded")
+        allowed += 1
+        # No source response headers, cookies, credentials or redirects are relayed.
+        route.fulfill(status=200, content_type="text/html", body=body)
+
+    def websocket(route: WebSocketRoute) -> None:
+        reply = request(route.url, "GET", "websocket")
+        if reply.get("status") != "denied":
+            raise RuntimeError("WebSocket must be denied")
+        denied.append("websocket")
+        route.close(code=1008, reason="synthetic boundary")
+
+    with sync_playwright() as playwright:
+        # Explicit True: the API otherwise defaults to disabling Chromium sandbox.
+        browser = playwright.chromium.launch(
+            channel="chromium", headless=True, chromium_sandbox=True, args=["--enable-automation"]
+        )
+        if browser.version != "153.0.8010.12":
+            raise RuntimeError("Pinned Chromium version mismatch")
+        context = browser.new_context(
+            service_workers="block",
+            accept_downloads=False,
+            extra_http_headers={"Authorization": "synthetic-diagnostic-only"},
+        )
+        context.add_cookies([{"name": "diagnostic", "value": "synthetic-only", "url": URL}])
+        page = context.new_page()
+        page.goto("chrome://sandbox", wait_until="domcontentloaded")
+        own_sandbox = sandbox_status(page.locator("body").inner_text())
+        command = context.new_cdp_session(page).send("Browser.getBrowserCommandLine")
+        arguments = command["arguments"]
+        if any(x in arguments for x in ("--no-sandbox", "--disable-setuid-sandbox")):
+            raise RuntimeError("Sandbox disabling flag present")
+        try:
+            # No interception yet: actual Chromium network path must fail inside
+            # the network-none namespace. Reserved documentation address only.
+            page.goto("http://192.0.2.1:443/", timeout=5000)
+        except Error as error:
+            if not any(
+                reason in str(error)
+                for reason in ("ERR_ADDRESS_UNREACHABLE", "ERR_NETWORK_UNREACHABLE")
+            ):
+                raise RuntimeError("Browser network-level rejection not established") from error
+        else:
+            raise RuntimeError("Browser escaped network-none namespace")
+        context.route("**/*", route_request)
+        context.route_web_socket("**/*", websocket)
+
+        def popup(child: object) -> None:
+            nonlocal popup_count
+            popup_count += 1
+            # Close even an about:blank popup; no navigation/fallback grant.
+            from playwright.sync_api import Page
+
+            if not isinstance(child, Page):
+                raise RuntimeError("Unexpected popup")
+            child.close()
+
+        def download(item: object) -> None:
+            nonlocal download_count
+            download_count += 1
+            from playwright.sync_api import Download
+
+            if not isinstance(item, Download):
+                raise RuntimeError("Unexpected download")
+            item.cancel()
+
+        page.on("popup", popup)
+        page.on("download", download)
+        page.goto(URL, wait_until="domcontentloaded")
+        page.locator("#reveal").click()
+        page.wait_for_function("globalThis.boundaryReady === true", timeout=10000)
+        page.wait_for_timeout(300)
+        if page.locator("#marker").inner_text() != "synthetic marker revealed":
+            raise RuntimeError("Approved synthetic browser interaction failed")
+        state = page.evaluate("globalThis.boundaryState")
+        required = {"image", "stylesheet", "script", "iframe", "fetch", "xhr", "websocket"}
+        # iframe resources are reported as document by Playwright.
+        observed = set(denied)
+        if not (required - {"iframe"}).issubset(observed) or "document" not in observed:
+            raise RuntimeError("Required browser subresource denial not observed")
+        registrations = page.evaluate(
+            "navigator.serviceWorker.getRegistrations().then(r=>r.length)"
+        )
+        if registrations != 0 or not state["worker_blocked"]:
+            raise RuntimeError("Service worker registration was not blocked")
+        if not state["fetch_denied"] or not state["post_denied"]:
+            raise RuntimeError("Worker/method/fetch refusal missing")
+        if not state["allowed_fetch"] or not popup_count or not download_count:
+            raise RuntimeError("Positive gateway/popup/download evidence missing")
+        if context.service_workers or len(context.pages) != 1:
+            raise RuntimeError("Service worker or popup remained active")
+        context.close()
+        browser.close()
+    print(
+        json.dumps(
+            {
+                "kind": "result",
+                "diagnostic": "synthetic-browser-boundary",
+                "sandbox": own_sandbox,
+                "chromium_version": "153.0.8010.12",
+                "network_errno": network,
+                "interfaces": interfaces,
+                "requests": requests,
+                "allowed": allowed,
+                "denied_resources": sorted(observed),
+                "popup_closed": popup_count,
+                "downloads_cancelled": download_count,
+                "service_workers": 0,
+                "service_worker_registrations": registrations,
+                "contact_extraction": False,
+            }
+        ),
+        flush=True,
+    )
+
+
+if __name__ == "__main__":
+    main()

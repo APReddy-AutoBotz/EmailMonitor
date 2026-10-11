@@ -48,3 +48,5 @@ Versioning: documents use Git history; public API uses `/api/v1`; event/schema r
 - [Durable offline jobs runbook](29-durable-offline-jobs-runbook.md)
 
 [30 Isolated fixture diagnostics](30-isolated-fixture-runbook.md) documents partial real-TLS/parser work and the unmet browser gate.
+
+[31 Synthetic browser diagnostics](31-synthetic-browser-boundary.md) records the approved temporary profile, actual acceptance requirements and remaining release gates.

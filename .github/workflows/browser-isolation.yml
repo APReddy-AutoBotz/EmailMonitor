@@ -1,0 +1,33 @@
+name: Synthetic browser isolation checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: browser-isolation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Install pinned tooling and locked diagnostic dependencies
+        run: |
+          python3 -m venv "$RUNNER_TEMP/tooling"
+          "$RUNNER_TEMP/tooling/bin/python" -m pip install uv==0.12.23
+          echo "$RUNNER_TEMP/tooling/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/tooling/bin/uv" sync --project services/backend --locked
+      - name: Actual sandboxed browser and mediated synthetic gateway checks
+        env:
+          PYTHONPATH: services/backend/src:tests
+        run: uv run --project services/backend python scripts/isolation/run_browser_acceptance.py

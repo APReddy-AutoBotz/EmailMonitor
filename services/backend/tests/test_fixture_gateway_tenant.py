@@ -134,7 +134,7 @@ def test_gateway_readonly_roles_cannot_acquire(scenario: Scenario, role: str) ->
 
 def test_actual_tls_gateway_uses_current_tenant_policy(scenario: Scenario, tmp_path: Path) -> None:
     from emailmonitor.fetching.tls_fixture import TLSFixtureGateway
-    from test_tls_fixture import Response, server
+    from tls_fixture_server import Response, server
 
     with scenario.client() as client:
         csrf = scenario.login(client, "owner")

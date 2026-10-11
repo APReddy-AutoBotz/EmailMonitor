@@ -1,0 +1,7 @@
+# Synthetic browser diagnostic attribution and limits
+
+The unmodified seccomp-default.json is Apache-2.0 software from moby/profiles commit 2ceae35d351c156cb5a8efc0fdc4a08cf94569d8. Its license is preserved in moby-profiles-LICENSE. seccomp-browser.json is modified: one additional allow rule names clone, setns and unshare, without argument filters. All baseline fields/rules, including clone3 ENOSYS and absence of io_uring permission, are preserved. The profile applies only to the explicitly approved temporary diagnostic container.
+
+Playwright 1.63.0 is Apache-2.0, pyee 13.0.1 MIT, greenlet 3.5.6 MIT AND PSF-2.0. Locked installs preserve their wheel licenses and Playwright driver/package LICENSE, NOTICE, ThirdPartyNotices.txt and .LICENSE sidecars, including Node, WebP and MIT/ISC/BSD/BlueOak components. The proxy-agent-negotiate 1.1.0 bundled entry declares MIT but lacks its complete text; this is a release-license gap. The official image also includes browser/system/FFmpeg components; a Python package declaration does not certify that image. Whole-image notices/SBOM and vulnerability/license clearance remain release gates. No image is deployed or distributed by this fixture CI change.
+
+Primary sources: https://github.com/moby/profiles/blob/2ceae35d351c156cb5a8efc0fdc4a08cf94569d8/LICENSE and https://github.com/microsoft/playwright/blob/1b025d7e20a026371cd5f98ba0cdce48892737c8/packages/playwright-core/ThirdPartyNotices.txt
