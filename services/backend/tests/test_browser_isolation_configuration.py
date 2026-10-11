@@ -7,7 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[3]
 
 
-def test_only_three_namespace_syscalls_are_added_to_pinned_current_profile() -> None:
+def test_only_approved_namespace_and_chroot_syscalls_are_added_to_pinned_current_profile() -> None:
     directory = ROOT / "scripts/isolation"
     raw = (directory / "seccomp-default.json").read_bytes()
     assert (
@@ -16,6 +16,15 @@ def test_only_three_namespace_syscalls_are_added_to_pinned_current_profile() -> 
     )
     base = json.loads(raw)
     derived = json.loads((directory / "seccomp-browser.json").read_text())
+    assert derived["syscalls"][-1] == {
+        "names": ["chroot"],
+        "action": "SCMP_ACT_ALLOW",
+        "comment": (
+            "Modified for separately approved synthetic browser CI: "
+            "allow chroot for namespace filesystem isolation."
+        ),
+    }
+    derived["syscalls"].pop()
     assert derived["syscalls"][-1] == {
         "names": ["clone", "setns", "unshare"],
         "action": "SCMP_ACT_ALLOW",

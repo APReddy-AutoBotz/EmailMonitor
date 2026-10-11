@@ -1230,6 +1230,13 @@
       ],
       "action": "SCMP_ACT_ALLOW",
       "comment": "Modified for approved synthetic browser CI: allow clone, setns, unshare."
+    },
+    {
+      "names": [
+        "chroot"
+      ],
+      "action": "SCMP_ACT_ALLOW",
+      "comment": "Modified for separately approved synthetic browser CI: allow chroot for namespace filesystem isolation."
     }
   ]
 }

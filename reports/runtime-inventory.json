@@ -46,8 +46,8 @@
     "source": "https://raw.githubusercontent.com/moby/profiles/2ceae35d351c156cb5a8efc0fdc4a08cf94569d8/seccomp/default.json",
     "source_license": "Apache-2.0",
     "source_sha256": "6416b47770785a41ac59073cdc77d9fe98517df2799dc83ef207e622de3053f6",
-    "derived_sha256": "e730754c1b3724707b20fe5011dd25bdf2146aa9c2939b91d450711b92385aa0",
-    "delta": "One argument-unfiltered allow block for clone,setns,unshare; all current baseline fields/rules preserved",
+    "derived_sha256": "298a3da8bde69390ca36e26ee2bd9b2bd3db193f406d223895a84f06f2e9d0f5",
+    "delta": "Two argument-unfiltered allow blocks: clone,setns,unshare and separately approved chroot; all current baseline fields/rules preserved",
     "scope": "Only the temporary synthetic browser container; no host configuration change"
   }
 }
