@@ -41,6 +41,9 @@ def test_browser_launch_is_explicitly_sandboxed_and_network_mediation_is_present
     assert 'interfaces != ["lo"]' in guest
     assert '"192.0.2.1"' in guest and '"2001:db8::1"' in guest
     assert "169.254.169.254" not in guest
+    assert "os.environ.get(name) != expected" in guest
+    for directory in ("/tmp/browser-home", "/tmp/browser-config", "/tmp/browser-cache"):
+        assert directory in guest
 
 
 def test_approved_browser_container_has_no_host_or_service_access() -> None:
@@ -56,6 +59,10 @@ def test_approved_browser_container_has_no_host_or_service_access() -> None:
         "--memory-swap=512m",
         "--pids-limit=128",
         "--shm-size=128m",
+        "--env=HOME=/tmp/browser-home",
+        "--env=XDG_CONFIG_HOME=/tmp/browser-config",
+        "--env=CHROME_CONFIG_HOME=/tmp/browser-config",
+        "--env=XDG_CACHE_HOME=/tmp/browser-cache",
     ):
         assert required in host
     for forbidden in (

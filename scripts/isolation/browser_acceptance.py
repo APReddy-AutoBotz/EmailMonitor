@@ -35,6 +35,17 @@ def main() -> None:
         os.environ.get(k) for k in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY")
     ):
         raise RuntimeError("Nonroot, proxy-free browser required")
+    # Browser profile/cache/crash diagnostics must stay in the existing bounded
+    # disposable tmpfs; the image root and original user home remain read-only.
+    for name, expected in (
+        ("HOME", "/tmp/browser-home"),
+        ("XDG_CONFIG_HOME", "/tmp/browser-config"),
+        ("CHROME_CONFIG_HOME", "/tmp/browser-config"),
+        ("XDG_CACHE_HOME", "/tmp/browser-cache"),
+    ):
+        if os.environ.get(name) != expected:
+            raise RuntimeError("Bounded disposable browser data paths required")
+        Path(expected).mkdir(mode=0o700, exist_ok=True)
     interfaces = sorted(p.name for p in Path("/sys/class/net").iterdir())
     if interfaces != ["lo"]:
         raise RuntimeError("Network-none namespace required")
