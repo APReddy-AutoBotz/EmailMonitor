@@ -72,6 +72,7 @@ def test_approved_browser_container_has_no_host_or_service_access() -> None:
     ):
         assert forbidden not in host
     assert "8192" in host and "262144" in host and "16384" in host
+    assert 'errors.decode(errors="replace")' in host and "[:1000]" not in host
     assert "process.kill()" in host and 'docker("rm", "--force", identifier)' in host
     workflow = (ROOT / ".github/workflows/browser-isolation.yml").read_text()
     assert "contents: read" in workflow and "persist-credentials: false" in workflow

@@ -97,8 +97,7 @@ def conversation(identifier: str, mediator: BrowserFixtureMediator) -> dict[str,
                         selector.unregister(key.fileobj)
                         if not selector.get_map():
                             raise RuntimeError(
-                                "Browser exited before evidence: "
-                                + errors.decode(errors="replace")[:1000]
+                                "Browser exited before evidence: " + errors.decode(errors="replace")
                             )
                         continue
                     total += len(chunk)
