@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-12 — EM-006 synthetic/offline foundation verified in Draft
+
+- Independently reconcile actual543/no-skip application including SQL/RabbitMQ discovery recovery and two-page network-none parser evidence
+- Verify controlled12 and browser/docs on the reviewed exact tree; preserve initial failed-run history and warning caveats
+- Enable bounded offline EM-007 only after this documentation checkpoint passes its own CI; retain live/production refusal
+
 ## 2026-10-12 — EM-006 offline discovery candidate
 
 - Add explicit synthetic query/URL preflight, bounded two-page parsing and truthful dedup/cap/completeness state

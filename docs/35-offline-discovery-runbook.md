@@ -31,3 +31,7 @@ Migration `0004_discovery` adds forced-RLS discovery and identifier-only discove
 ## Limits
 
 This is synthetic offline discovery, not live-source certification. Fixture reads create no publisher requests; no claim of production source-wide network throttling or quota enforcement follows from them. No acquired untrusted HTML is parsed in the API. Production identity/worker provisioning, live gateway composition, PDF/DOI resolution and source-specific filtering require their documented later gates. The UI continues to state extraction is unavailable. EM-007 can follow only after independent review and actual required CI verify this scoped slice.
+
+## Verified Draft checkpoint (2026-10-12)
+
+Independent exact-tree source and evidence review cleared head3bc8f234/tree80431dfb against document16/document06. Actual application543/no skips/no pytest warnings includes all17 discovery tenant tests and RabbitMQ restart/duplicate recovery; parser executes the same two pages under network-none and proves4 unique/5 entries/1 duplicate. Controlled12/browser/docs pass. [Evidence](../reports/em006-validation.md). The initial failures and local skipped-service runs remain historical evidence. The documentation checkpoint needs its own exact-head CI before bounded offline EM-007 proceeds; production/live enabling is not implied.
