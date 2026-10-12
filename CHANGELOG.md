@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-12 — EM-008 synthetic/offline foundation verified in Draft
+
+- Independently reconcile reviewed tree, five actual run/job logs and authoritative PDF acceptance criteria
+- Verify 664/no-skip application and actual nine-PDF page/correspondence/refusal/resource/network/OOM checks; controlled 12/browser/docs pass
+- Preserve conservative text-state refusal, unresolved identity and coarse-region/layout limitations, dependency notices and historical evidence
+- Enable bounded offline EM-009 after this documentation checkpoint passes its own CI; no live/production activation
+
 ## 2026-10-12 — EM-008 bounded offline PDF candidate
 
 - Add exact pypdf 6.20.1 without extras; retain BSD/Unicode glyph-data and distinct source notices in the effective inventory
