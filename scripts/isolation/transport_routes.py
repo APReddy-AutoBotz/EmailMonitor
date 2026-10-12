@@ -1,5 +1,6 @@
 """Read-only complete Linux route/rule netlink dumps; no configuration commands."""
 
+import errno
 import ipaddress
 import json
 import os
@@ -9,7 +10,7 @@ import struct
 from pathlib import Path
 from typing import Any
 
-from transport_manifest import ENDPOINTS, V4_SUBNET, V6_SUBNET
+from transport_manifest import ENDPOINTS, IPAM_GATEWAYS, V4_SUBNET, V6_SUBNET
 
 
 def attributes(payload: bytes) -> dict[int, bytes]:
@@ -251,6 +252,8 @@ def evidence(role: str) -> dict[str, Any]:
         raise RuntimeError("Unexpected route output interface")
     return {
         "role": role,
+        "host_ifindex": int(Path("/sys/class/net/eth0/iflink").read_text()),
+        "guest_ifindex": socket.if_nametoindex("eth0"),
         "interfaces": interfaces,
         "routes": routes,
         "rules": rules,
@@ -264,3 +267,52 @@ def evidence(role: str) -> dict[str, Any]:
 
 if __name__ == "__main__":
     print(json.dumps(evidence(os.environ["EM_TRANSPORT_ROLE"])))
+
+
+def escape_evidence(role: str, peer: object) -> dict[str, Any]:
+    """Fixed synthetic negative connects after fresh complete route validation."""
+    current = evidence(role)
+    if (
+        type(peer) is not str
+        or str(ipaddress.IPv6Address(peer)) != peer
+        or not ipaddress.IPv6Address(peer).is_link_local
+    ):
+        raise RuntimeError("Invalid owned host-peer target")
+    results: list[dict[str, Any]] = []
+    targets = [
+        (IPAM_GATEWAYS[0], False),
+        (IPAM_GATEWAYS[1], False),
+        ("192.0.2.1", True),
+        ("2001:db8::1", True),
+        (peer, False),
+    ]
+    for target, external in targets:
+        family = socket.AF_INET6 if ":" in target else socket.AF_INET
+        endpoint = (
+            (target, 443, 0, socket.if_nametoindex("eth0"))
+            if target == peer
+            else ((target, 443, 0, 0) if family == socket.AF_INET6 else (target, 443))
+        )
+        with socket.socket(family, socket.SOCK_STREAM) as stream:
+            stream.settimeout(0.25)
+            try:
+                stream.connect(endpoint)
+            except OSError as error:
+                if external and error.errno != errno.ENETUNREACH:
+                    raise RuntimeError("External no-route denial not established") from error
+                if not external and not (
+                    isinstance(error, TimeoutError)
+                    or error.errno in (errno.ENETUNREACH, errno.EHOSTUNREACH)
+                ):
+                    raise RuntimeError("Host/gateway isolation denial not established") from error
+                results.append(
+                    {
+                        "target": target,
+                        "port": 443,
+                        "errno": error.errno,
+                        "timeout": isinstance(error, TimeoutError),
+                    }
+                )
+            else:
+                raise RuntimeError("Unexpected host/gateway/external connection")
+    return {"role": role, "denials": results, "host_ifindex": current["host_ifindex"]}

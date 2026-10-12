@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from transport_manifest import ENDPOINTS
-from transport_routes import evidence
+from transport_routes import escape_evidence, evidence
 
 # Both family answers in each snapshot; every redirect gets fresh A+AAAA queries.
 # The first two queries select fixture A; subsequent pairs select fixture B.
@@ -221,6 +221,17 @@ def main() -> None:
             if len(raw) > 1024 or not raw.endswith(b"\n"):
                 raise RuntimeError("Invalid fixture control frame")
             frame = json.loads(raw)
+            if type(frame) is dict and set(frame) == {"kind", "peer"} and frame["kind"] == "escape":
+                print(
+                    json.dumps(
+                        {
+                            "kind": "escape",
+                            "evidence": escape_evidence(role, frame["peer"]),
+                        }
+                    ),
+                    flush=True,
+                )
+                continue
             with lock:
                 reply, finished = fixture_command(
                     frame, state, calls, queries, failures, lambda: evidence(role)

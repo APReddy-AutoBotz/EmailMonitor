@@ -21,6 +21,7 @@ from cryptography.x509.oid import NameOID
 from initialize_ci_ipv6 import initialize, require_disposable_ci
 from run_browser_acceptance import PAGE
 from tls_fixture_server import certificate
+from transport_host import validate_owned_host
 from transport_manifest import ENDPOINTS, IPAM_GATEWAYS, V4_SUBNET, V6_SUBNET
 from transport_rpc import OwnedProcess
 
@@ -137,7 +138,10 @@ def baseline_diagnostic(before: dict[str, object], after: dict[str, object]) -> 
             continue
         left = Counter(json.dumps(row, sort_keys=True) for row in original)
         right = Counter(json.dumps(row, sort_keys=True) for row in current)
-        removed, added = list((left - right).elements()), list((right - left).elements())
+        removed, added = (
+            list((left - right).elements()),
+            list((right - left).elements()),
+        )
         sections[key] = {
             "before_count": len(original),
             "after_count": len(current),
@@ -215,7 +219,11 @@ def validate_network(value: dict[str, Any], name: str, bridge: str, identifiers:
 
 
 def validate_container(value: dict[str, Any], name: str, role: str, running: bool) -> None:
-    host, config, network = value["HostConfig"], value["Config"], value["NetworkSettings"]
+    host, config, network = (
+        value["HostConfig"],
+        value["Config"],
+        value["NetworkSettings"],
+    )
     attached = network["Networks"]
     if set(attached) != {name}:
         raise RuntimeError("Unexpected network attachment")
@@ -293,6 +301,8 @@ class Topology:
         self.name, self.bridge = "em-fetch-" + suffix, "em" + suffix
         self.identifiers: dict[str, str] = {}
         self.processes: dict[str, OwnedProcess] = {}
+        self.peer_evidence: dict[str, dict[str, int]] = {}
+        self.owned_targets: dict[str, str] = {}
         self.images: list[str] = []
         self.image_provenance: dict[str, dict[str, str]] = {}
         self.container_names: dict[str, str] = {}
@@ -545,8 +555,26 @@ class Topology:
                 or ready["evidence"].get("role") != role
             ):
                 raise RuntimeError("Missing actual route/security evidence")
+            self.peer_evidence[role] = {
+                "host_ifindex": ready["evidence"]["host_ifindex"],
+                "guest_ifindex": ready["evidence"]["guest_ifindex"],
+            }
             print(json.dumps(ready), flush=True)
         self.inspect()
+        for role, process in self.processes.items():
+            deadline = time.monotonic() + 3
+            process.send({"kind": "escape", "peer": self.owned_targets[role]}, deadline)
+            denied = process.receive(deadline)
+            if (
+                set(denied) != {"kind", "evidence"}
+                or denied["kind"] != "escape"
+                or denied["evidence"].get("role") != role
+                or denied["evidence"].get("host_ifindex")
+                != self.peer_evidence[role]["host_ifindex"]
+                or len(denied["evidence"].get("denials", [])) != 5
+            ):
+                raise RuntimeError("Missing actual host/gateway escape denial evidence")
+            print(json.dumps(denied), flush=True)
 
     def browser(self) -> str:
         from emailmonitor.fetching.browser_fixture import validate_applied_profile
@@ -618,13 +646,24 @@ class Topology:
         bridge = ip("address", "show", "dev", self.bridge)
         if len(bridge) != 1 or bridge[0].get("addr_info"):
             raise RuntimeError("Isolated bridge has a host address")
+        check_host_ipv6_forwarding()
         current = host_baseline()
-        if (
-            current["rules"] != self.baseline["rules"]
-            or current["routes"] != self.baseline["routes"]
-        ):
+        try:
+            owned_targets = validate_owned_host(
+                self.baseline,
+                current,
+                ip("-details", "link", "show"),
+                self.bridge,
+                self.peer_evidence if running else {},
+                Path(f"/proc/sys/net/ipv6/conf/{self.bridge}/disable_ipv6").read_text(
+                    encoding="ascii"
+                ),
+            )
+        except (OSError, UnicodeError, RuntimeError):
             print(baseline_diagnostic(self.baseline, current), flush=True)
-            raise RuntimeError("Isolated topology changed host routes/rules")
+            raise
+        self.owned_targets = owned_targets
+        print(json.dumps({"owned_host_link_local": owned_targets}), flush=True)
         for role, identifier in self.identifiers.items():
             metadata = json.loads(docker("inspect", identifier).stdout)[0]
             require_owner("container", metadata, self.owner)

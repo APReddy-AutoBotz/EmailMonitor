@@ -17,7 +17,7 @@ from emailmonitor.fetching.protected import (
 from emailmonitor.fetching.safety import FetchDenied, SafeURL
 from emailmonitor.sources.policy import Operation
 from transport_manifest import ENDPOINTS, HOST
-from transport_routes import evidence
+from transport_routes import escape_evidence, evidence
 
 
 def read_frame() -> dict[str, object]:
@@ -55,6 +55,14 @@ def main() -> None:
     resolver = SnapshotResolver(settings, ResolverRoute(ENDPOINTS["fixture-a"][0]))
     for _ in range(64):
         frame = read_frame()
+        if set(frame) == {"kind", "peer"} and frame["kind"] == "escape":
+            emit(
+                {
+                    "kind": "escape",
+                    "evidence": escape_evidence("gateway", frame["peer"]),
+                }
+            )
+            continue
         if frame == {"kind": "inspect"}:
             emit({"kind": "inspected", "evidence": evidence("gateway")})
             continue
