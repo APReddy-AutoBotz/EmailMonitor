@@ -1,5 +1,6 @@
 """Approved synthetic-only guest. Network-none OS boundary is mandatory."""
 
+import asyncio
 import base64
 import errno
 import json
@@ -7,8 +8,9 @@ import os
 import socket
 import sys
 from pathlib import Path
+from typing import BinaryIO, TextIO
 
-from playwright.sync_api import Error, Route, WebSocketRoute, sync_playwright
+from playwright.async_api import Error, Route, WebSocketRoute, async_playwright
 
 URL = "https://synthetic.publisher.example/tooltip.html"
 NETWORK_DIAGNOSTIC_URL = "http://192.0.2.1:443/"
@@ -64,7 +66,61 @@ def trace_stage(name: str) -> None:
     print("synthetic-browser-stage:" + name, file=sys.stderr, flush=True)
 
 
-def main() -> None:
+class FixtureChannel:
+    """Serialize bounded exchanges; keep stdin reads off the Playwright loop."""
+
+    def __init__(self, reader: BinaryIO, writer: TextIO) -> None:
+        self.reader = reader
+        self.writer = writer
+        self.requests = 0
+        self.lock = asyncio.Lock()
+        self.failed = False
+
+    async def request(self, url: str, method: str, resource: str) -> dict[str, object]:
+        async with self.lock:
+            if self.failed:
+                raise RuntimeError("Gateway channel cannot be reused after failure")
+            if self.requests >= 64:
+                raise RuntimeError("Diagnostic request cap exceeded")
+            self.requests += 1
+            message = {
+                "kind": "request",
+                "identifier": self.requests,
+                "url": url,
+                "method": method,
+                "resource": resource,
+            }
+            try:
+                print(json.dumps(message), file=self.writer, flush=True)
+                trace_stage(f"request_sent:{self.requests}:{resource[:32]}")
+                raw = await asyncio.to_thread(self.reader.readline, 65537)
+                if not raw.endswith(b"\n") or len(raw) > 65536:
+                    raise RuntimeError("Bounded gateway reply missing")
+                reply = json.loads(raw)
+                if not isinstance(reply, dict):
+                    raise RuntimeError("Gateway reply must be an object")
+                trace_stage(f"reply_received:{self.requests}")
+                return reply
+            except BaseException:
+                # Cancellation does not stop a threaded read. Poison the channel
+                # so no subsequent exchange can consume that in-flight reply.
+                self.failed = True
+                raise
+
+
+async def refuse_websocket(
+    route: WebSocketRoute, channel: FixtureChannel, denied: list[str]
+) -> None:
+    reply = await channel.request(route.url, "GET", "websocket")
+    if reply.get("status") != "denied":
+        raise RuntimeError("WebSocket must be denied")
+    denied.append("websocket")
+    trace_stage("websocket_close_start")
+    await route.close(code=1008, reason="synthetic boundary")
+    trace_stage("websocket_close_complete")
+
+
+async def main() -> None:
     if os.environ.get("EM_ISOLATION_DIAGNOSTIC") != "synthetic-browser-only":
         raise RuntimeError("Explicit browser diagnostic required")
     if os.geteuid() == 0 or any(
@@ -106,38 +162,19 @@ def main() -> None:
                 raise RuntimeError("Actual namespace network denial not established")
             network.append(result)
     trace_stage("os_verified")
-    requests = 0
+    channel = FixtureChannel(sys.stdin.buffer, sys.stdout)
     denied: list[str] = []
     allowed = 0
     popup_count = 0
     download_count = 0
 
-    def request(url: str, method: str, resource: str) -> dict[str, object]:
-        nonlocal requests
-        requests += 1
-        if requests > 64:
-            raise RuntimeError("Diagnostic request cap exceeded")
-        message = {
-            "kind": "request",
-            "identifier": requests,
-            "url": url,
-            "method": method,
-            "resource": resource,
-        }
-        print(json.dumps(message), flush=True)
-        raw = sys.stdin.buffer.readline(65537)
-        if not raw.endswith(b"\n") or len(raw) > 65536:
-            raise RuntimeError("Bounded gateway reply missing")
-        reply: dict[str, object] = json.loads(raw)
-        return reply
-
-    def route_request(route: Route) -> None:
+    async def route_request(route: Route) -> None:
         nonlocal allowed
         incoming = route.request
-        reply = request(incoming.url, incoming.method, incoming.resource_type)
+        reply = await channel.request(incoming.url, incoming.method, incoming.resource_type)
         if reply.get("status") != "ok":
             denied.append(incoming.resource_type)
-            route.abort("blockedbyclient")
+            await route.abort("blockedbyclient")
             return
         encoded = reply.get("body")
         if not isinstance(encoded, str) or reply.get("type") != "text/html":
@@ -147,35 +184,32 @@ def main() -> None:
             raise RuntimeError("Gateway byte cap exceeded")
         allowed += 1
         # No source response headers, cookies, credentials or redirects are relayed.
-        route.fulfill(status=200, content_type="text/html", body=body)
+        await route.fulfill(status=200, content_type="text/html", body=body)
 
-    def websocket(route: WebSocketRoute) -> None:
-        reply = request(route.url, "GET", "websocket")
-        if reply.get("status") != "denied":
-            raise RuntimeError("WebSocket must be denied")
-        denied.append("websocket")
-        route.close(code=1008, reason="synthetic boundary")
+    async def websocket(route: WebSocketRoute) -> None:
+        await refuse_websocket(route, channel, denied)
 
-    with sync_playwright() as playwright:
+    async with async_playwright() as playwright:
         # Explicit True: the API otherwise defaults to disabling Chromium sandbox.
-        browser = playwright.chromium.launch(
+        browser = await playwright.chromium.launch(
             channel="chromium", headless=True, chromium_sandbox=True, args=["--enable-automation"]
         )
         trace_stage("browser_launched")
         if browser.version != "153.0.8010.12":
             raise RuntimeError("Pinned Chromium version mismatch")
-        context = browser.new_context(
+        context = await browser.new_context(
             service_workers="block",
             accept_downloads=False,
             extra_http_headers={"Authorization": "synthetic-diagnostic-only"},
         )
-        context.add_cookies([{"name": "diagnostic", "value": "synthetic-only", "url": URL}])
-        page = context.new_page()
-        page.goto("chrome://sandbox", wait_until="domcontentloaded")
-        sandbox_text = page.locator("#sandbox-status").inner_text()
-        sandbox_evaluation = page.locator("#evaluation").inner_text()
+        await context.add_cookies([{"name": "diagnostic", "value": "synthetic-only", "url": URL}])
+        page = await context.new_page()
+        await page.goto("chrome://sandbox", wait_until="domcontentloaded")
+        sandbox_text = await page.locator("#sandbox-status").inner_text()
+        sandbox_evaluation = await page.locator("#evaluation").inner_text()
         own_sandbox = sandbox_status(sandbox_text, sandbox_evaluation)
-        command = context.new_cdp_session(page).send("Browser.getBrowserCommandLine")
+        cdp = await context.new_cdp_session(page)
+        command = await cdp.send("Browser.getBrowserCommandLine")
         arguments = command["arguments"]
         if any(x in arguments for x in ("--no-sandbox", "--disable-setuid-sandbox")):
             raise RuntimeError("Sandbox disabling flag present")
@@ -184,7 +218,7 @@ def main() -> None:
             # No interception yet: actual Chromium navigation must fail. The
             # independent sockets above establish observed kernel ENETUNREACH.
             # Reserved documentation address only; no offline emulation.
-            page.goto(NETWORK_DIAGNOSTIC_URL, timeout=5000)
+            await page.goto(NETWORK_DIAGNOSTIC_URL, timeout=5000)
         except Error as error:
             try:
                 browser_network_error = classify_browser_network_error(str(error))
@@ -193,48 +227,48 @@ def main() -> None:
         else:
             raise RuntimeError("Browser escaped network-none namespace")
         trace_stage("direct_network_rejected")
-        context.route("**/*", route_request)
-        context.route_web_socket("**/*", websocket)
+        await context.route("**/*", route_request)
+        await context.route_web_socket("**/*", websocket)
 
-        def popup(child: object) -> None:
+        async def popup(child: object) -> None:
             nonlocal popup_count
             popup_count += 1
             # Close even an about:blank popup; no navigation/fallback grant.
-            from playwright.sync_api import Page
+            from playwright.async_api import Page
 
             if not isinstance(child, Page):
                 raise RuntimeError("Unexpected popup")
-            child.close()
+            await child.close()
 
-        def download(item: object) -> None:
+        async def download(item: object) -> None:
             nonlocal download_count
             download_count += 1
-            from playwright.sync_api import Download
+            from playwright.async_api import Download
 
             if not isinstance(item, Download):
                 raise RuntimeError("Unexpected download")
-            item.cancel()
+            await item.cancel()
 
         page.on("popup", popup)
         page.on("download", download)
         trace_stage("routes_registered")
-        page.goto(URL, wait_until="domcontentloaded")
+        await page.goto(URL, wait_until="domcontentloaded")
         trace_stage("fixture_loaded")
         trace_stage("click_start")
-        page.locator("#reveal").click()
+        await page.locator("#reveal").click()
         trace_stage("click_complete")
-        page.wait_for_function("globalThis.boundaryReady === true", timeout=10000)
+        await page.wait_for_function("globalThis.boundaryReady === true", timeout=10000)
         trace_stage("boundary_ready")
-        page.wait_for_timeout(300)
-        if page.locator("#marker").inner_text() != "synthetic marker revealed":
+        await page.wait_for_timeout(300)
+        if await page.locator("#marker").inner_text() != "synthetic marker revealed":
             raise RuntimeError("Approved synthetic browser interaction failed")
-        state = page.evaluate("globalThis.boundaryState")
+        state = await page.evaluate("globalThis.boundaryState")
         required = {"image", "stylesheet", "script", "iframe", "fetch", "xhr", "websocket"}
         # iframe resources are reported as document by Playwright.
         observed = set(denied)
         if not (required - {"iframe"}).issubset(observed) or "document" not in observed:
             raise RuntimeError("Required browser subresource denial not observed")
-        registrations = page.evaluate(
+        registrations = await page.evaluate(
             "navigator.serviceWorker.getRegistrations().then(r=>r.length)"
         )
         if registrations != 0 or not state["worker_blocked"]:
@@ -246,8 +280,8 @@ def main() -> None:
         if context.service_workers or len(context.pages) != 1:
             raise RuntimeError("Service worker or popup remained active")
         trace_stage("checks_complete")
-        context.close()
-        browser.close()
+        await context.close()
+        await browser.close()
         trace_stage("browser_closed")
     print(
         json.dumps(
@@ -261,7 +295,7 @@ def main() -> None:
                 "network_errno": network,
                 "browser_network_error": browser_network_error,
                 "interfaces": interfaces,
-                "requests": requests,
+                "requests": channel.requests,
                 "allowed": allowed,
                 "denied_resources": sorted(observed),
                 "popup_closed": popup_count,
@@ -276,4 +310,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

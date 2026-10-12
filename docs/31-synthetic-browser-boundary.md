@@ -44,3 +44,8 @@ The Chromium 153 Linux table reports Layer 1 Sandbox=Namespace, not Namespace sa
 ### Browser versus kernel network evidence
 
 The un-intercepted fixed documentation-address navigation must fail with the exact pinned Chromium ERR_ADDRESS_UNREACHABLE or ERR_INTERNET_DISCONNECTED code, never timeout/unknown error/HTTP success. Chromium can rewrite an unreachable socket error to its offline error when only loopback is present. This browser outcome does not prove which connect syscall or kernel errno it used; the independent actual IPv4/IPv6 socket checks establish ENETUNREACH. Both browser rejection and namespace/kernel evidence remain mandatory, and browser offline emulation is prohibited. Routine classification fixes preserve the approved security configuration.
+
+
+### Serialized async fixture channel
+
+The guest uses the public async Playwright API so its WebSocket refusal awaits close without re-entering the synchronous dispatcher fiber. A lock serializes each complete capped JSON request/reply exchange; only the owned stdin read runs in a thread. Cancellation or invalid input poisons the channel permanently, preventing reuse while an underlying read may still be pending. The host's absolute deadline and cleanup remain authoritative. Coroutine/owned-stream tests do not replace actual synthetic browser CI or establish production isolation.

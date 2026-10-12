@@ -272,3 +272,124 @@ def test_timeout_context_never_increases_deadline_or_unbounds_guest_output() -> 
     guest = (ROOT / "scripts/isolation/browser_acceptance.py").read_text()
     assert "deadline = time.monotonic() + 60" in host and "len(errors) > 16384" in host
     assert "synthetic-browser-stage:" in guest and "file=sys.stderr, flush=True" in guest
+
+
+def async_guest_namespace() -> dict[str, object]:
+    import runpy
+
+    return runpy.run_path(str(ROOT / "scripts/isolation/browser_acceptance.py"))
+
+
+def test_async_fixture_exchanges_are_serialized_and_numbered() -> None:
+    import asyncio
+    import io
+    from typing import Any, cast
+
+    channel_type = cast(Any, async_guest_namespace()["FixtureChannel"])
+    writer = io.StringIO()
+    channel = channel_type(io.BytesIO(b'{"status":"denied"}\n' * 3), writer)
+
+    async def exercise() -> None:
+        replies = await asyncio.gather(
+            *(channel.request("https://denied.fixture.example/", "GET", "image") for _ in range(3))
+        )
+        assert all(reply == {"status": "denied"} for reply in replies)
+
+    asyncio.run(exercise())
+    assert [json.loads(line)["identifier"] for line in writer.getvalue().splitlines()] == [1, 2, 3]
+    assert channel.requests == 3
+
+
+def test_async_fixture_channel_preserves_request_reply_caps_and_failure_refusal() -> None:
+    import asyncio
+    import io
+    from typing import Any, cast
+
+    import pytest
+
+    channel_type = cast(Any, async_guest_namespace()["FixtureChannel"])
+
+    async def exercise() -> None:
+        channel = channel_type(io.BytesIO(b'{"status":"denied"}\n' * 64), io.StringIO())
+        for _ in range(64):
+            await channel.request("https://denied.fixture.example/", "GET", "image")
+        with pytest.raises(RuntimeError, match="cap exceeded"):
+            await channel.request("https://denied.fixture.example/", "GET", "image")
+        assert channel.requests == 64
+        for raw in (b"", b"x" * 65536 + b"\n", b"[]\n", b"{}"):
+            invalid = channel_type(io.BytesIO(raw), io.StringIO())
+            with pytest.raises(RuntimeError):
+                await invalid.request("https://denied.fixture.example/", "GET", "image")
+            with pytest.raises(RuntimeError, match="cannot be reused"):
+                await invalid.request("https://denied.fixture.example/", "GET", "image")
+
+    asyncio.run(exercise())
+
+
+def test_async_websocket_refusal_awaits_close_without_a_sync_dispatcher() -> None:
+    import asyncio
+    import io
+    from collections.abc import Callable
+    from typing import Any, cast
+
+    from playwright.async_api import WebSocketRoute
+
+    namespace = async_guest_namespace()
+    channel_type = cast(Any, namespace["FixtureChannel"])
+    refuse = cast(Callable[..., Any], namespace["refuse_websocket"])
+
+    class FakeSocket:
+        url = "wss://denied.fixture.example/socket"
+        closed: tuple[int, str] | None = None
+
+        async def close(self, *, code: int, reason: str) -> None:
+            await asyncio.sleep(0)
+            self.closed = (code, reason)
+
+    socket = FakeSocket()
+    denied: list[str] = []
+    channel = channel_type(io.BytesIO(b'{"status":"denied"}\n'), io.StringIO())
+    asyncio.run(refuse(cast(WebSocketRoute, socket), channel, denied))
+    assert socket.closed == (1008, "synthetic boundary") and denied == ["websocket"]
+    guest = (ROOT / "scripts/isolation/browser_acceptance.py").read_text()
+    assert "async with async_playwright()" in guest
+    assert "from playwright.sync_api" not in guest
+
+
+def test_cancelled_threaded_read_poisons_channel_before_another_exchange() -> None:
+    import asyncio
+    import io
+    import threading
+    from typing import Any, BinaryIO, cast
+
+    import pytest
+
+    channel_type = cast(Any, async_guest_namespace()["FixtureChannel"])
+    entered = threading.Event()
+    release = threading.Event()
+
+    class OwnedReader:
+        def readline(self, size: int) -> bytes:
+            assert size == 65537
+            entered.set()
+            release.wait(2)
+            return b'{"status":"denied"}\n'
+
+    channel = channel_type(cast(BinaryIO, OwnedReader()), io.StringIO())
+
+    async def exercise() -> None:
+        task = asyncio.create_task(
+            channel.request("https://denied.fixture.example/", "GET", "image")
+        )
+        try:
+            assert await asyncio.to_thread(entered.wait, 1)
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+            with pytest.raises(RuntimeError, match="cannot be reused"):
+                await channel.request("https://denied.fixture.example/", "GET", "image")
+            assert channel.requests == 1
+        finally:
+            release.set()
+
+    asyncio.run(exercise())
