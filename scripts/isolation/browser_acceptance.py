@@ -11,6 +11,7 @@ from pathlib import Path
 from playwright.sync_api import Error, Route, WebSocketRoute, sync_playwright
 
 URL = "https://synthetic.publisher.example/tooltip.html"
+NETWORK_DIAGNOSTIC_URL = "http://192.0.2.1:443/"
 
 
 def sandbox_status(text: str, evaluation: str) -> dict[str, bool]:
@@ -48,6 +49,15 @@ def sandbox_status(text: str, evaluation: str) -> dict[str, bool]:
     if not all(result.values()):
         raise RuntimeError("Chromium's own sandbox evidence is missing: " + diagnostic)
     return result
+
+
+def classify_browser_network_error(text: str) -> str:
+    """Exact pinned navigation error only; independent OS evidence is mandatory."""
+    first_line = text.split("\n", 1)[0]
+    for code in ("ERR_ADDRESS_UNREACHABLE", "ERR_INTERNET_DISCONNECTED"):
+        if first_line == f"Page.goto: net::{code} at {NETWORK_DIAGNOSTIC_URL}":
+            return code
+    raise RuntimeError("Browser network rejection code not established: " + text[:1024])
 
 
 def main() -> None:
@@ -164,15 +174,15 @@ def main() -> None:
         if any(x in arguments for x in ("--no-sandbox", "--disable-setuid-sandbox")):
             raise RuntimeError("Sandbox disabling flag present")
         try:
-            # No interception yet: actual Chromium network path must fail inside
-            # the network-none namespace. Reserved documentation address only.
-            page.goto("http://192.0.2.1:443/", timeout=5000)
+            # No interception yet: actual Chromium navigation must fail. The
+            # independent sockets above establish observed kernel ENETUNREACH.
+            # Reserved documentation address only; no offline emulation.
+            page.goto(NETWORK_DIAGNOSTIC_URL, timeout=5000)
         except Error as error:
-            if not any(
-                reason in str(error)
-                for reason in ("ERR_ADDRESS_UNREACHABLE", "ERR_NETWORK_UNREACHABLE")
-            ):
-                raise RuntimeError("Browser network-level rejection not established") from error
+            try:
+                browser_network_error = classify_browser_network_error(str(error))
+            except RuntimeError as invalid:
+                raise invalid from error
         else:
             raise RuntimeError("Browser escaped network-none namespace")
         context.route("**/*", route_request)
@@ -234,6 +244,7 @@ def main() -> None:
                 "sandbox_evaluation": sandbox_evaluation,
                 "chromium_version": "153.0.8010.12",
                 "network_errno": network,
+                "browser_network_error": browser_network_error,
                 "interfaces": interfaces,
                 "requests": requests,
                 "allowed": allowed,

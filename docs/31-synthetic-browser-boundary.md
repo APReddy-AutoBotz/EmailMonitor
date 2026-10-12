@@ -40,3 +40,7 @@ Primary sources: [Playwright Docker](https://playwright.dev/python/docs/docker),
 ### Pinned own-status assertion
 
 The Chromium 153 Linux table reports Layer 1 Sandbox=Namespace, not Namespace sandbox=Yes. Diagnostic parsing requires the complete seven pinned name/value rows without duplicates/unknown values, affirmative PID/network namespaces and Chromium Seccomp-BPF, and Chromium’s own adequate-sandbox evaluation. Missing or negative status fails closed with bounded table/evaluation evidence. This UI describes Chromium’s expected renderer sandbox status; it does not replace the separately required OS namespace/network evidence or establish production isolation. An assertion-only correction after the consumed chroot attempt cannot trigger another expanded-profile run without fresh authorization.
+
+### Browser versus kernel network evidence
+
+The un-intercepted fixed documentation-address navigation must fail with the exact pinned Chromium ERR_ADDRESS_UNREACHABLE or ERR_INTERNET_DISCONNECTED code, never timeout/unknown error/HTTP success. Chromium can rewrite an unreachable socket error to its offline error when only loopback is present. This browser outcome does not prove which connect syscall or kernel errno it used; the independent actual IPv4/IPv6 socket checks establish ENETUNREACH. Both browser rejection and namespace/kernel evidence remain mandatory, and browser offline emulation is prohibited. Routine classification fixes preserve the approved security configuration.

@@ -194,3 +194,48 @@ def test_sandbox_failure_evidence_is_bounded_and_preserves_negative_status() -> 
     with pytest.raises(RuntimeError, match="NOT adequately") as error:
         check_sandbox_text("x" * 10000, "You are NOT adequately sandboxed.")
     assert len(str(error.value)) < 4500
+
+
+def classify_network_text(text: str) -> str:
+    import runpy
+    from collections.abc import Callable
+    from typing import cast
+
+    namespace = runpy.run_path(str(ROOT / "scripts/isolation/browser_acceptance.py"))
+    classifier = cast(Callable[[str], str], namespace["classify_browser_network_error"])
+    return classifier(text)
+
+
+def test_browser_network_error_accepts_only_exact_pinned_navigation_denials() -> None:
+    for code in ("ERR_ADDRESS_UNREACHABLE", "ERR_INTERNET_DISCONNECTED"):
+        assert (
+            classify_network_text(
+                f"Page.goto: net::{code} at http://192.0.2.1:443/\nCall log:\n - navigating"
+            )
+            == code
+        )
+
+
+def test_browser_network_error_rejects_timeout_unknown_success_and_other_destinations() -> None:
+    import pytest
+
+    for message in (
+        "Page.goto: Timeout 5000ms exceeded.",
+        "Page.goto: net::ERR_TIMED_OUT at http://192.0.2.1:443/",
+        "Page.goto: net::ERR_FAILED at http://192.0.2.1:443/",
+        "Page.goto: net::ERR_NETWORK_UNREACHABLE at http://192.0.2.1:443/",
+        "Page.goto: HTTP 200 at http://192.0.2.1:443/",
+        "Page.goto: net::ERR_INTERNET_DISCONNECTED at https://denied.fixture.example/",
+        "Unexpected error mentioning ERR_INTERNET_DISCONNECTED",
+        "Page.goto: net::ERR_INTERNET_DISCONNECTED at http://192.0.2.1:443/evil",
+        "",
+    ):
+        with pytest.raises(RuntimeError):
+            classify_network_text(message)
+
+
+def test_browser_denial_keeps_independent_kernel_interface_evidence_and_success_refusal() -> None:
+    guest = (ROOT / "scripts/isolation/browser_acceptance.py").read_text()
+    assert "result != errno.ENETUNREACH" in guest and 'interfaces != ["lo"]' in guest
+    assert 'raise RuntimeError("Browser escaped network-none namespace")' in guest
+    assert "set_offline" not in guest and "offline=True" not in guest
