@@ -12,6 +12,8 @@ from kombu import Exchange, Queue
 from pydantic import Field, model_validator
 
 from emailmonitor.config import Settings
+from emailmonitor.discovery.broker import process as discover_process
+from emailmonitor.discovery.service import Discovery
 from emailmonitor.jobs.ledger import Ledger, Work
 from emailmonitor.jobs.models import StrictModel
 from emailmonitor.organizations.database import Database
@@ -99,6 +101,11 @@ def create_worker(config: FixtureWorkerConfig) -> tuple[Any, Ledger]:
             # Explicit disposable fixture failure injection, unavailable in production.
             os._exit(73)
 
+    def discover(body: dict[str, object]) -> None:
+        discovery = Discovery(ledger.database, config.session_token, ledger.settings)
+        discover_process(discovery, UUID(config.organization), body)
+
+    application.task(name="emailmonitor.fixture.discover", typing=False)(discover)
     application.task(name="emailmonitor.fixture.persist", typing=False)(persist)
     return application, ledger
 

@@ -4,6 +4,7 @@ WORKDIR /app
 COPY services/backend/pyproject.toml services/backend/uv.lock ./
 RUN python -m pip install --no-cache-dir uv==0.12.23 && uv sync --locked --no-dev
 COPY services/backend/src ./src
+COPY fixtures/html/search-page-1.html fixtures/html/search-page-2.html ./fixtures/
 COPY scripts/isolation/parser_acceptance.py ./parser_acceptance.py
 ENV PATH="/app/.venv/bin:$PATH" PYTHONPATH="/app/src" PYTHONDONTWRITEBYTECODE=1
 USER 65532:65532

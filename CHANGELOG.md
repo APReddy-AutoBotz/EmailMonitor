@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-10-12 — EM-006 offline discovery candidate
+
+- Add explicit synthetic query/URL preflight, bounded two-page parsing and truthful dedup/cap/completeness state
+- Add forced-RLS durable discovery checkpoints and identifier-only successor outbox with current tenant/source/deletion/revision fences
+- Add test-only planning/status/page API and existing Celery discovery task; real SQL/broker/parser acceptance pending
+- Preserve production/live/extraction refusal and unchanged container security settings
+
+
 ## 2026-10-12 — EM-004 synthetic/offline foundation verified in Draft
 
 - Verify exact-head477/no-skip application and12/no-skip/no-warning controlled DNS/TCP/TLS/browser-policy cases plus actual browser/parser/docs CI
