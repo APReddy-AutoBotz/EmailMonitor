@@ -1,6 +1,6 @@
 # 34 — Controlled synthetic protected transport acceptance
 
-EM-004f wires the shared hop planner into an actual DNS/literal-socket/TLS transport and a separate disposable CI acceptance topology. This remains an explicit test-only assembly; production/default entrypoints refuse acquisition. Full EM-004 stays PARTIAL and EM-006 gated until the reviewed exact-head acceptance evidence is obtained and assessed. No real-source onboarding, extraction, mail, external AI or deployment occurs.
+EM-004f wires the shared hop planner into an actual DNS/literal-socket/TLS transport and a separate disposable CI acceptance topology. This remains an explicit test-only assembly; production/default entrypoints refuse acquisition. The synthetic/offline EM-004 foundation is verified in an unmerged Draft by independently reconciled exact-head acceptance evidence; live-source/production enablement remains unavailable. Its documentation-only checkpoint requires exact-head CI before bounded offline EM-006 begins. No real-source onboarding, extraction, mail, external AI or deployment occurs.
 
 ## Transport boundary
 
@@ -38,3 +38,8 @@ Parser memory acceptance observes stopped daemon state for a bounded window afte
 ### Published controlled acceptance and successful browser receipts
 
 Head7b4fb2ab/tree d5d1f2f passed12 actual controlled cases and all existing CI as recorded in the [validation report](../reports/em004f-validation.md). Each guest reported two external ENETUNREACH errors and three bounded synthetic gateway/owned-host-peer timeouts, interpreted together with the complete strict routes and ownership evidence. Parser state was affirmatively stopped/OOMKilled=true/137. Application475 had no skips and one disclosed field-alias warning. The browser mediator now retains immutable copied receipts only after successful byte release; later denied requests cannot erase or fabricate them. Actual controlled browser acceptance must assert exactly two selected fixture-A IPv4:443/original-host peers, alongside two source HTTPS/four DNS receipts, before new-head acceptance is claimed. All current isolation, routing, authorization and cleanup gates remain unchanged.
+
+
+### Verified document16 boundary
+
+Corrected head2c29a8ad/tree3cd450db passed all five jobs, including actual controlled12 with both successful browser-selected peers and application477/no skips (one disclosed organization_id alias warning). Independent evidence reconciliation verified exact head/merge tree and parents, full run/job logs and document16 criteria. The declared synthetic/offline protected-fetch and sandbox foundation is verified in Draft; unsupported recursive DNS/source families and production entrypoints still refuse. No new release prerequisites are inferred. [Criteria and exact evidence](../reports/em004f-validation.md) remain the authority; this documentation-only checkpoint needs its own CI.
