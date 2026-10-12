@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-12 — EM-007 synthetic/offline foundation verified in Draft
+
+- Independently reconcile actual 599/no-skip application and eleven new runtime SQL cases against authoritative acceptance criteria
+- Verify actual authored tooltip persistence/replay in controlled 12 plus browser, four-article network-none parser/OOM and docs on the reviewed tree
+- Preserve failed-run history, warning caveats and separate association/validation/outreach states
+- Enable bounded offline EM-008 after this documentation checkpoint passes its own CI; keep live/production/UI activation unavailable
+
 ## 2026-10-12 — EM-007 offline HTML/browser observation candidate
 
 - Add bounded inert metadata, author/role/contact evidence and scoped follow-up observations; preserve separate identity/validation/outreach states
