@@ -12,6 +12,7 @@ from pathlib import Path
 from emailmonitor.config import Settings
 from emailmonitor.discovery.search import parse_search
 from emailmonitor.discovery.state import DiscoveryState, advance
+from emailmonitor.extraction.html import parse_article
 from emailmonitor.parsing.fixture import observe_fixture
 
 
@@ -65,6 +66,35 @@ def main() -> None:
         or state.raw_entries != 5
     ):
         raise RuntimeError("Actual network-none discovery parser failed")
+    articles = {
+        name: parse_article(
+            settings,
+            "https://synthetic.publisher.example/" + name,
+            Path("/app/fixtures", name).read_bytes(),
+        )
+        for name in ("article-a.html", "article-b.html", "tooltip.html", "no-contact.html")
+    }
+    if [(a.first, a.corresponding) for a in articles["article-a.html"].authors] != [
+        (True, None),
+        (False, True),
+    ] or [c.raw_address for c in articles["article-a.html"].candidates] != [
+        "alex.chen@example.org"
+    ]:
+        raise RuntimeError("Actual isolated article-A observations failed")
+    if [(a.first, a.corresponding) for a in articles["article-b.html"].authors] != [
+        (True, True),
+        (False, True),
+    ] or [c.raw_address for c in articles["article-b.html"].candidates] != [
+        "ravi.das@example.org",
+        "noor.ibrahim@example.org",
+    ]:
+        raise RuntimeError("Actual isolated article-B observations failed")
+    if (
+        articles["tooltip.html"].status != "requires_browser"
+        or articles["tooltip.html"].candidates
+        or articles["no-contact.html"].status != "no_contact"
+    ):
+        raise RuntimeError("Unresolved/absent contact was fabricated")
     print(
         json.dumps(
             {
@@ -72,7 +102,16 @@ def main() -> None:
                 "network_errno": outcomes,
                 "interfaces": interfaces,
                 "digest": observed.digest,
-                "contact_extraction": False,
+                "contact_extraction": True,
+                "article_observations": {
+                    name: {
+                        "status": value.status,
+                        "authors": len(value.authors),
+                        "candidates": len(value.candidates),
+                        "digest": value.content_digest,
+                    }
+                    for name, value in articles.items()
+                },
                 "discovery": state.model_dump(),
             }
         )

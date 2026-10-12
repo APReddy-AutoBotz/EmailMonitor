@@ -1,6 +1,7 @@
 """Draft extraction requests and authorized durable controls; planning remains gated."""
 
 from collections.abc import Callable
+from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Request
@@ -10,6 +11,7 @@ from sqlalchemy import text
 from emailmonitor.config import Settings
 from emailmonitor.discovery.fixture import step_fixture
 from emailmonitor.discovery.service import Discovery
+from emailmonitor.extraction.service import Extraction
 from emailmonitor.jobs.ledger import Ledger
 from emailmonitor.jobs.models import JobRequest, StrictModel
 from emailmonitor.organizations.database import AuthorizationDenied, Database
@@ -18,6 +20,15 @@ from emailmonitor.organizations.roles import Capability
 
 class Revision(StrictModel):
     expected_revision: int = Field(ge=1)
+
+
+class ArticleRequest(Revision):
+    article_url: Literal[
+        "https://synthetic.publisher.example/article-a.html",
+        "https://synthetic.publisher.example/article-b.html",
+        "https://synthetic.publisher.example/tooltip.html",
+        "https://synthetic.publisher.example/no-contact.html",
+    ]
 
 
 def job_router(
@@ -129,6 +140,24 @@ WHERE organization_id=:org AND job_id=:job ORDER BY id LIMIT 100"""),
         if not settings.fixture_mode:
             raise HTTPException(409, "Synthetic fixture planning requires explicit test mode")
         return Discovery(database, token(request), settings).read(organization_id, job_id)
+
+    @router.post("/organizations/{organization_id}/jobs/{job_id}/extract-fixture-article")
+    def extract_article(
+        request: Request, organization_id: UUID, job_id: UUID, body: ArticleRequest
+    ) -> dict[str, object]:
+        if not settings.fixture_mode:
+            raise HTTPException(409, "Authored fixture extraction requires explicit test mode")
+        return Extraction(database, csrf(request), settings).fixture(
+            organization_id, job_id, body.article_url, body.expected_revision
+        )
+
+    @router.get("/organizations/{organization_id}/jobs/{job_id}/article-observations")
+    def article_observations(
+        request: Request, organization_id: UUID, job_id: UUID
+    ) -> list[dict[str, object]]:
+        if not settings.fixture_mode:
+            raise HTTPException(409, "Authored fixture extraction requires explicit test mode")
+        return Extraction(database, token(request), settings).read(organization_id, job_id)
 
     @router.post("/organizations/{organization_id}/jobs/{job_id}/{action}")
     def control(

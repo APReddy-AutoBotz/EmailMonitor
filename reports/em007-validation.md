@@ -1,0 +1,31 @@
+# EM-007 — Synthetic HTML/browser observations
+
+## Candidate scope
+
+Bounded inert HTML observations, structured metadata precedence/conflicts/nulls, ordered author/role facts, scoped mailto/public-attribute candidates, fixed ordinary tooltip reveal, safe depth-budgeted follow-up candidates and hostile-content controls. Tenant storage/API are idempotent and current-source/job/deletion fenced, with separate collection/excerpt permission, bounded retention and forced RLS. No accepted associations, technical email validation, outreach, live connector or production activation. Dependencies and security/network/workflow settings remain unchanged. [Runbook](../docs/36-offline-html-observation-runbook.md).
+
+## Verified predecessor
+
+EM-006 documentation checkpoint headf4e5db8fcecf9723f6903cfbe45ecccc51091d54/tree243b281c4a6f3b52d5a256e776061ceea29a4494 and mergefed05fe4c10850aa335c515a76ccff411988fd51 have the same independently reviewed tree and exact c5844ecf/f4e5db8f parents. Its own five required gates passed: [application](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/38293901277), job114960256410,543 passed/no skips/no pytest warnings in120.20s; [controlled transport](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/38293901295), job114960256766,12 passed/no skips/no pytest warnings54.87s; actual [browser](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/38293901151), [parser](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/38293901154) and [docs](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/38293901144) passed. PR11 is Draft/unmerged. Prior EM-WARN-01 remains tracked; a warning-free pytest run is not a demonstrated cause fix.
+
+## Acceptance mapping and pending gates
+
+- Article A: Mira is first, Alex corresponding; only observed Alex address with actual DOM/mailto locator, no footer support mailbox
+- Article B: two distinct corresponding-author observations and addresses; first/corresponding remains separate
+- Tooltip: static parser emits requires_browser/no address, never reads JavaScript strings as contact evidence; actual sandboxed hover/DOM observation plus current-tenant SQL persistence/replay required in controlled CI
+- No-contact: ordered author retained, no correspondence assertion or fabricated address
+- Negative cases: support/reference/form/hidden/script content, mailto query/encoded body, negation/name substrings, ambiguous same-name authors, malformed/large/deep/duplicate-attribute HTML, unknown routes, unapproved follow-ups and depth budgets
+- SQL: two tenants/viewer/operator, immutable observation replay/audit counts, current source/job/deletion, collection/purpose/excerpt retention, no catalog write/observation delete grant, current-source/expiry read predicates
+- Contracts: actual parser example, unavailable accepted/sending claims, strict unknown fields, numeric false, status/candidate/first-author/source/browser-route consistency
+
+Initial local validation passed: focused HTML/contract tests43 passed without skips; normal aggregate514 passed/83 explicit unavailable-service skips in39.29s, and reset fresh-empty locked installation514/83 in31.10s. Both passed docs/contracts, Ruff lint/format99 files, strict mypy97 source files, inventory63 Python/159 JavaScript, frontend type/lint/one React test/build. All23 changed source/test/contract/context files were byte-identical to the successful fresh copy. An initial fresh installation exhausted temporary space and left an incomplete venv; reproducible dependencies from completed test copies were reclaimed, the incomplete venv was reset to empty, and the successful full run above is the evidence. Independent exact-tree review remains pending. Required actual application 599/no skips, all 11 new runtime SQL cases, controlled 12 including actual tooltip observation persistence, unchanged browser/parser isolation and docs CI must pass before acceptance. No actual local PostgreSQL, browser, container, topology, privileged initialization or sysctl execution occurred. The declared source-fixture, acquisition and parsed-snapshot digests are distinct; expected/results.json remains a manually authored test specification, never an extractor input.
+
+## Bounded review correction
+
+The initial independent source review identified a missing conditional required browser_plan in the JSON Schema. The schema now requires it for requires_browser, with a missing-field parity regression. The runbook distinguishes structural schema checks from stronger trusted-worker cross-field semantics for author references and observed metadata. A separately confirmed real-SQL test setup defect is corrected only in the new extraction tests: their synthetic approval explicitly grants extract_contacts, while shared source-policy defaults remain unchanged; a pure regression checks that distinction. Runtime permission checks were not weakened.
+
+Corrected focused tests45 passed/11 explicit unavailable-PostgreSQL skips. Corrected normal aggregate516 passed/83 explicit unavailable-service skips in25.28s; a new fresh-empty locked installation516/83 in29.78s. Both completed all documentation/contracts, Ruff lint/format99 files, strict mypy97 source files, inventory63 Python/159 JavaScript, frontend type/lint/one React test/build gates. All23 changed source/test/contract/context files are byte-identical to the successful new fresh copy. Corrected exact-tree re-review and actual published-head599/no-skip application, eleven SQL cases, controlled12 actual tooltip persistence, browser/parser/docs remain pending. No runtime, dependency, security or workflow change was made in this correction.
+
+## Limits
+
+No universal-site/parser coverage, source certification, held-out benchmark, SMTP/MX call, accepted identity mapping, production browser/worker provisioning, retention purge or contact export is claimed. Only authored synthetic fixtures are acquired in API tests; acquired publisher bytes need the protected worker assembly and separate live-source permission. The default UI remains disconnected/disabled, with a corrected honest explanation of test-only functionality. EM-008 follows only after this slice's reviewed actual CI; no additional release prerequisite is invented.

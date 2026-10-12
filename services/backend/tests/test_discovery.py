@@ -325,6 +325,10 @@ def test_parser_build_context_only_adds_authored_search_fixtures() -> None:
         "!fixtures/html/",
         "!fixtures/html/search-page-1.html",
         "!fixtures/html/search-page-2.html",
+        "!fixtures/html/article-a.html",
+        "!fixtures/html/article-b.html",
+        "!fixtures/html/tooltip.html",
+        "!fixtures/html/no-contact.html",
     ]
     # Docker matches both each path and its parents; admitting a parent alone
     # includes every descendant. Model the exact/** fixture rule subset with
@@ -351,6 +355,10 @@ def test_parser_build_context_only_adds_authored_search_fixtures() -> None:
     expected = {
         "fixtures/html/search-page-1.html",
         "fixtures/html/search-page-2.html",
+        "fixtures/html/article-a.html",
+        "fixtures/html/article-b.html",
+        "fixtures/html/tooltip.html",
+        "fixtures/html/no-contact.html",
     }
     files = {str(p.relative_to(ROOT)) for p in (ROOT / "fixtures").rglob("*") if p.is_file()}
     assert {path for path in files if included(path, rules)} == expected

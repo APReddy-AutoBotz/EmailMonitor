@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-12 — EM-007 offline HTML/browser observation candidate
+
+- Add bounded inert metadata, author/role/contact evidence and scoped follow-up observations; preserve separate identity/validation/outreach states
+- Add forced-RLS idempotent test-only persistence with current source/purpose/retention fences and observed browser-upgrade guard
+- Add actual authored tooltip/parser CI assertions within unchanged isolation; independent review/actual CI pending
+- Correct disabled UI wording without exposing or fabricating product results
+
 ## 2026-10-12 — EM-006 synthetic/offline foundation verified in Draft
 
 - Independently reconcile actual543/no-skip application including SQL/RabbitMQ discovery recovery and two-page network-none parser evidence

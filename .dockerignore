@@ -19,3 +19,7 @@ fixtures/**
 fixtures/html/**
 !fixtures/html/search-page-1.html
 !fixtures/html/search-page-2.html
+!fixtures/html/article-a.html
+!fixtures/html/article-b.html
+!fixtures/html/tooltip.html
+!fixtures/html/no-contact.html

@@ -3,6 +3,7 @@
 import asyncio
 import base64
 import errno
+import hashlib
 import json
 import os
 import socket
@@ -10,6 +11,8 @@ import sys
 from pathlib import Path
 from typing import BinaryIO, TextIO
 
+from emailmonitor.config import Settings
+from emailmonitor.extraction.html import parse_article
 from playwright.async_api import Error, Route, WebSocketRoute, async_playwright
 
 URL = "https://synthetic.publisher.example/tooltip.html"
@@ -199,13 +202,14 @@ async def main() -> None:
     channel = FixtureChannel(sys.stdin.buffer, sys.stdout)
     denied: list[str] = []
     allowed = 0
+    acquisition_digest: str | None = None
     popup_count = 0
     download_count = 0
     popup_closed = asyncio.Event()
     download_cancelled = asyncio.Event()
 
     async def route_request(route: Route) -> None:
-        nonlocal allowed
+        nonlocal allowed, acquisition_digest
         incoming = route.request
         reply = await channel.request(incoming.url, incoming.method, incoming.resource_type)
         if reply.get("status") != "ok":
@@ -218,6 +222,8 @@ async def main() -> None:
         body = base64.b64decode(encoded, validate=True)
         if len(body) > 32768:
             raise RuntimeError("Gateway byte cap exceeded")
+        if incoming.resource_type == "document" and incoming.url == URL:
+            acquisition_digest = hashlib.sha256(body).hexdigest()
         allowed += 1
         # No source response headers, cookies, credentials or redirects are relayed.
         await route.fulfill(status=200, content_type="text/html", body=body)
@@ -228,7 +234,10 @@ async def main() -> None:
     async with async_playwright() as playwright:
         # Explicit True: the API otherwise defaults to disabling Chromium sandbox.
         browser = await playwright.chromium.launch(
-            channel="chromium", headless=True, chromium_sandbox=True, args=["--enable-automation"]
+            channel="chromium",
+            headless=True,
+            chromium_sandbox=True,
+            args=["--enable-automation"],
         )
         trace_stage("browser_launched")
         if browser.version != "153.0.8010.12":
@@ -327,7 +336,15 @@ async def main() -> None:
         if await page.locator("#marker").inner_text() != "synthetic marker revealed":
             raise RuntimeError("Approved synthetic browser interaction failed")
         state = await page.evaluate("globalThis.boundaryState")
-        required = {"image", "stylesheet", "script", "iframe", "fetch", "xhr", "websocket"}
+        required = {
+            "image",
+            "stylesheet",
+            "script",
+            "iframe",
+            "fetch",
+            "xhr",
+            "websocket",
+        }
         # iframe resources are reported as document by Playwright.
         observed = set(denied)
         if not (required - {"iframe"}).issubset(observed) or "document" not in observed:
@@ -354,6 +371,27 @@ async def main() -> None:
             )
         if context.service_workers or len(context.pages) != 1:
             raise RuntimeError("Service worker or popup remained active")
+        # Server-owned, fixed ordinary public hover only. Never click mailto,
+        # submit forms or evaluate instructions from source text.
+        await page.locator("#contact-reveal").hover(timeout=2000)
+        await page.locator("#contact-tooltip").wait_for(state="visible", timeout=2000)
+        if acquisition_digest is None:
+            raise RuntimeError("Acquired tooltip document digest missing")
+        rendered = await asyncio.wait_for(page.content(), timeout=2)
+        article = parse_article(
+            Settings(environment="test", fixture_mode=True),
+            URL,
+            rendered.encode("utf-8"),
+            browser_dom=True,
+            acquisition_digest=acquisition_digest,
+        )
+        if (
+            article.status != "observed"
+            or len(article.candidates) != 1
+            or article.candidates[0].raw_address != "elena.park@example.org"
+            or article.candidates[0].evidence.kind != "browser_dom"
+        ):
+            raise RuntimeError("Actual tooltip reveal did not yield scoped observed evidence")
         trace_stage("checks_complete")
         await context.close()
         await browser.close()
@@ -377,7 +415,8 @@ async def main() -> None:
                 "downloads_cancelled": download_count,
                 "service_workers": 0,
                 "service_worker_registrations": registrations,
-                "contact_extraction": False,
+                "contact_extraction": True,
+                "article_observation": article.model_dump(),
             }
         ),
         flush=True,
