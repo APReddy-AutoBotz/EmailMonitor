@@ -184,3 +184,80 @@ def test_actual_tls_gateway_uses_current_tenant_policy(scenario: Scenario, tmp_p
             with pytest.raises(FetchDenied):
                 gateway.fetch(URL)
             assert len(calls) == 1
+
+
+def test_actual_dns_browser_mediation_obeys_current_tenant_policy(
+    scenario: Scenario, tmp_path: Path
+) -> None:
+    import json
+
+    from dns_fixture_server import server as dns_server
+    from emailmonitor.fetching.browser_fixture import BrowserFixtureMediator
+    from emailmonitor.fetching.dns_fixture import DNSFixtureResolver
+    from emailmonitor.fetching.tls_fixture import TLSFixtureGateway
+    from tls_fixture_server import Response, server
+
+    with scenario.client() as client:
+        csrf = scenario.login(client, "owner")
+        headers = {"Origin": ORIGIN, "X-CSRF-Token": csrf}
+        path = source_path(scenario)
+        policy = policy_body(allowed_operations=["browser", "retain_excerpt", "export_contacts"])
+        assert (
+            client.post(
+                path + "/policies", headers=headers, json={"expected_version": 0, "policy": policy}
+            ).status_code
+            == 201
+        )
+        assert (
+            client.post(
+                path + "/policy-state",
+                headers=headers,
+                json={"expected_version": 1, "expected_revision": 1, "state": "approved"},
+            ).status_code
+            == 200
+        )
+        token = str(client.cookies[COOKIE])
+        authorize = TenantFixtureAuthorization(
+            scenario.foundation.database, token, scenario.organizations[0], "synthetic-publisher", 1
+        )
+        raw = json.dumps(
+            {
+                "kind": "request",
+                "identifier": 1,
+                "url": "https://synthetic.publisher.example/tooltip.html",
+                "method": "GET",
+                "resource": "document",
+            }
+        ).encode()
+        with (
+            server(tmp_path, {"/tooltip.html": Response()}) as (endpoint, calls),
+            dns_server() as (route, queries),
+        ):
+            resolver = DNSFixtureResolver(SETTINGS, route)
+            mediator = BrowserFixtureMediator(
+                SETTINGS, TLSFixtureGateway(SETTINGS, endpoint, authorize, resolver=resolver)
+            )
+            assert json.loads(mediator.reply(raw))["status"] == "ok"
+            assert len(calls) == 1 and len(queries) == 2
+            denied = TenantFixtureAuthorization(
+                scenario.foundation.database,
+                token,
+                scenario.organizations[1],
+                "synthetic-publisher",
+                1,
+            )
+            other = BrowserFixtureMediator(
+                SETTINGS, TLSFixtureGateway(SETTINGS, endpoint, denied, resolver=resolver)
+            )
+            assert json.loads(other.reply(raw))["status"] == "denied"
+            assert len(calls) == 1 and len(queries) == 2
+            assert (
+                client.post(
+                    path + "/policy-state",
+                    headers=headers,
+                    json={"expected_version": 1, "expected_revision": 2, "state": "revoked"},
+                ).status_code
+                == 200
+            )
+            assert json.loads(mediator.reply(raw))["status"] == "denied"
+            assert len(calls) == 1 and len(queries) == 2

@@ -15,6 +15,7 @@ from pathlib import Path
 from urllib.parse import urljoin
 
 from emailmonitor.config import Settings
+from emailmonitor.fetching.dns_fixture import DNSFixtureResolver
 from emailmonitor.fetching.fixture import HOSTS, FetchLimits, require_fixture
 from emailmonitor.fetching.safety import FetchDenied, SafeURL, classify_url
 from emailmonitor.sources.policy import Operation
@@ -38,7 +39,7 @@ class SyntheticEndpoint:
 
 
 class TLSFixtureGateway:
-    """No caller headers, proxies, cookies, DNS lookup, retries or arbitrary target."""
+    """No caller headers, proxies, cookies, external DNS, retries or arbitrary target."""
 
     def __init__(
         self,
@@ -46,8 +47,12 @@ class TLSFixtureGateway:
         endpoint: SyntheticEndpoint,
         authorize: Callable[[SafeURL, Operation], None],
         limits: FetchLimits | None = None,
+        resolver: DNSFixtureResolver | None = None,
     ) -> None:
         require_fixture(settings)
+        if resolver is not None and type(resolver) is not DNSFixtureResolver:
+            raise FetchDenied("dns_fixture_resolver_type_denied")
+        self._resolver = resolver
         self._endpoint, self._authorize = endpoint, authorize
         self._limits = limits or FetchLimits()
         self._context = ssl.create_default_context(cafile=str(endpoint.ca_file))
@@ -60,10 +65,17 @@ class TLSFixtureGateway:
             raise FetchDenied("total_deadline_exceeded")
         return remaining
 
-    def _request(self, url: SafeURL, deadline: float) -> tuple[int, dict[str, str], bytes]:
+    def _request(
+        self, url: SafeURL, deadline: float, operation: Operation
+    ) -> tuple[int, dict[str, str], bytes]:
         endpoint = self._endpoint
         if url.path not in endpoint.paths:
             raise FetchDenied("fixture_route_unavailable")
+        if self._resolver is not None:
+            snapshot = self._resolver.resolve(url.host, deadline)
+            if snapshot != frozenset({endpoint.address}):
+                raise FetchDenied("dns_fixture_manifest_denied")
+            self._authorize(url, operation)
         if self._context.verify_mode != ssl.CERT_REQUIRED or not self._context.check_hostname:
             raise FetchDenied("tls_verification_required")
         # Literal connect avoids re-resolution between validation and connection.
@@ -147,7 +159,7 @@ class TLSFixtureGateway:
                 raise FetchDenied("redirect_loop_denied")
             seen.add(url.normalized)
             self._authorize(url, operation)
-            status, headers, body = self._request(url, deadline)
+            status, headers, body = self._request(url, deadline, operation)
             if status in (301, 302, 303, 307, 308):
                 if hop == self._limits.max_redirects or not headers.get("location"):
                     raise FetchDenied("redirect_limit_denied")
