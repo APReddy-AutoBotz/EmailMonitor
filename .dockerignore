@@ -13,3 +13,9 @@
 **/*.pyc
 !scripts/isolation/Dockerfile.browser
 !scripts/isolation/browser_acceptance.py
+!fixtures/
+fixtures/**
+!fixtures/html/
+fixtures/html/**
+!fixtures/html/search-page-1.html
+!fixtures/html/search-page-2.html

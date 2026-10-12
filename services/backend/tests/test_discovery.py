@@ -315,3 +315,58 @@ def test_only_exact_policy_sql_fence_is_classified_as_denial(
     original = importlib.import_module("pg8000.dbapi").ProgrammingError({"C": code, "M": message})
     error = DBAPIError(None, None, original, False)
     assert policy_fence_denied(error) is denied
+
+
+def test_parser_build_context_only_adds_authored_search_fixtures() -> None:
+    lines = (ROOT / ".dockerignore").read_text().splitlines()
+    assert lines[0] == "**"
+    assert [line for line in lines if line.startswith("!fixtures")] == [
+        "!fixtures/",
+        "!fixtures/html/",
+        "!fixtures/html/search-page-1.html",
+        "!fixtures/html/search-page-2.html",
+    ]
+    # Docker matches both each path and its parents; admitting a parent alone
+    # includes every descendant. Model the exact/** fixture rule subset with
+    # ordered last-match semantics (moby/patternmatcher MatchesOrParentMatches).
+    rules = [line for line in lines if line == "**" or "fixtures" in line]
+
+    def included(path: str, patterns: list[str]) -> bool:
+        excluded = False
+        candidates = [path, *[str(p) for p in Path(path).parents if str(p) != "."]]
+        for raw in patterns:
+            admit = raw.startswith("!")
+            pattern = raw.removeprefix("!").rstrip("/")
+            assert "*" not in pattern or pattern == "**" or pattern.endswith("/**")
+            match = any(
+                pattern == "**"
+                or candidate == pattern
+                or (pattern.endswith("/**") and candidate.startswith(pattern[:-2]))
+                for candidate in candidates
+            )
+            if match:
+                excluded = not admit
+        return not excluded
+
+    expected = {
+        "fixtures/html/search-page-1.html",
+        "fixtures/html/search-page-2.html",
+    }
+    files = {str(p.relative_to(ROOT)) for p in (ROOT / "fixtures").rglob("*") if p.is_file()}
+    assert {path for path in files if included(path, rules)} == expected
+    for unexpected in (
+        "fixtures/expected/new-secret.json",
+        "fixtures/html/new-article.html",
+        "fixtures/pdf/new.pdf",
+        "fixtures/html/nested/search-page-1.html",
+    ):
+        assert not included(unexpected, rules)
+    # Regression sensitivity: the prior parent admits must be shown to leak.
+    prior_rules = [rule for rule in rules if rule not in {"fixtures/**", "fixtures/html/**"}]
+    assert included("fixtures/expected/new-secret.json", prior_rules)
+    assert included("fixtures/html/new-article.html", prior_rules)
+    dockerfile = (ROOT / "scripts/isolation/Dockerfile.parser").read_text()
+    assert (
+        "COPY fixtures/html/search-page-1.html fixtures/html/search-page-2.html ./fixtures/"
+        in dockerfile
+    )

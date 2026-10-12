@@ -271,7 +271,14 @@ ON CONFLICT DO NOTHING"""),
                     text("""SELECT o.* FROM emailmonitor.discovery_outbox o
 JOIN emailmonitor.jobs j ON (j.organization_id,j.id)=(o.organization_id,o.job_id)
 JOIN emailmonitor.discovery d ON (d.organization_id,d.job_id)=(o.organization_id,o.job_id)
-WHERE o.organization_id=:org AND j.state='draft'
+JOIN emailmonitor.source_policy_heads h
+ON (h.organization_id,h.source_id)=(d.organization_id,d.source_id)
+JOIN emailmonitor.source_policies p
+ON (p.organization_id,p.source_id,p.version)=(d.organization_id,d.source_id,d.policy_version)
+JOIN emailmonitor.source_catalog s ON s.source_id=d.source_id
+WHERE h.current_version=d.policy_version AND p.state='approved' AND p.valid_until>clock_timestamp()
+AND s.enabled AND p.policy->'allowed_operations' ? 'fetch_html'
+AND p.policy->'allowed_operations' ? 'search' AND o.organization_id=:org AND j.state='draft'
 AND o.generation=j.generation AND o.revision=d.revision
 AND d.checkpoint->>'status'='pending' AND emailmonitor.job_write_allowed(o.organization_id,o.job_id)
 ORDER BY o.event_id LIMIT 100"""),

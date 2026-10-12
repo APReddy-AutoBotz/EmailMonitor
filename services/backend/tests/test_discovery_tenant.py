@@ -153,6 +153,8 @@ def test_real_current_policy_and_deletion_barrier(scenario: Scenario, change: st
         assert response.status_code in (200, 201), response.text
     with pytest.raises((AuthorizationDenied, HTTPException)):
         discovery.commit(org, job, 1, page(1))
+    if change != "delete":
+        assert discovery.pending(org) == []
 
 
 def test_real_api_plans_and_advances_only_fixed_authored_fixtures(scenario: Scenario) -> None:
@@ -310,6 +312,7 @@ def test_real_expiry_after_plan_prevents_page_commit(scenario: Scenario) -> None
     with pytest.raises(AuthorizationDenied):
         discovery.commit(org, job, 1, page(1))
     assert discovery.read(org, job)["revision"] == 1
+    assert discovery.pending(org) == []
 
 
 def test_real_discovery_catalog_permission_assertions(scenario: Scenario) -> None:
