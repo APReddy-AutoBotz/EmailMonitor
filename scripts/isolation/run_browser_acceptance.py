@@ -11,6 +11,8 @@ from typing import Protocol
 
 from dns_fixture_server import server as dns_server
 from emailmonitor.config import Settings
+from emailmonitor.extraction.fixture import article_bytes
+from emailmonitor.extraction.html import ArticleObservation
 from emailmonitor.fetching.browser_fixture import (
     BrowserFixtureMediator,
     validate_applied_profile,
@@ -24,7 +26,7 @@ from emailmonitor.sources.policy import Operation
 from tls_fixture_server import Response, server
 
 IMAGE = "emailmonitor-browser-diagnostic:local"
-PAGE = b"""<!doctype html><html><body><p id="marker">synthetic marker</p>
+BOUNDARY_PAGE = b"""<!doctype html><html><body><p id="marker">synthetic marker</p>
 <button id="reveal">Reveal synthetic marker</button><script>
 globalThis.boundaryState = {worker_blocked:false,fetch_denied:false,
                            post_denied:false,allowed_fetch:false};
@@ -65,9 +67,40 @@ document.querySelector('#reveal').onclick = async () => {
 </script></body></html>"""
 
 
+# Actual authored tooltip DOM/script, followed by the existing hostile-boundary
+# controls outside its author/correspondence blocks. No expected results read.
+PAGE = article_bytes("tooltip.html").replace(
+    b"</body>",
+    BOUNDARY_PAGE.removeprefix(b"<!doctype html><html><body>").removesuffix(b"</body></html>")
+    + b"</body>",
+)
+
+
+def extraction_evidence(result: dict[str, object]) -> dict[str, object]:
+    observation = ArticleObservation.model_validate(result.get("article_observation"))
+    if (
+        observation.route != "browser_dom"
+        or observation.url != "https://synthetic.publisher.example/tooltip.html"
+        or observation.status != "observed"
+        or len(observation.authors) != 1
+        or len(observation.candidates) != 1
+    ):
+        raise RuntimeError("Actual authored tooltip observation missing")
+    return {
+        "article_observation_digest": observation.content_digest,
+        "observed_authors": len(observation.authors),
+        "observed_candidates": len(observation.candidates),
+        "association_accepted": False,
+    }
+
+
 def docker(*arguments: str, timeout: float = 120) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        ["docker", *arguments], check=True, capture_output=True, text=True, timeout=timeout
+        ["docker", *arguments],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
     )
 
 
@@ -77,7 +110,11 @@ def authorize(url: SafeURL, operation: Operation) -> None:
 
 
 def timeout_evidence(
-    requests: int, accepted: int, denied: int, last_request: dict[str, str], stderr: bytes
+    requests: int,
+    accepted: int,
+    denied: int,
+    last_request: dict[str, str],
+    stderr: bytes,
 ) -> str:
     """Bounded failure context only; never weakens the deadline or pass gates."""
     summary = {
@@ -161,7 +198,9 @@ def conversation(identifier: str, mediator: BrowserMediator) -> dict[str, object
                             if str(message.get("url", "")).endswith("/worker.js"):
                                 raise RuntimeError("Blocked service worker reached gateway")
                             write_bounded_reply(
-                                process.stdin.fileno(), mediator.reply(bytes(raw)), deadline
+                                process.stdin.fileno(),
+                                mediator.reply(bytes(raw)),
+                                deadline,
                             )
                         elif message.get("kind") == "result":
                             result = message
@@ -294,7 +333,12 @@ def main() -> None:
                 print(
                     json.dumps(
                         {
-                            **evidence,
+                            **{
+                                key: value
+                                for key, value in evidence.items()
+                                if key != "article_observation"
+                            },
+                            **extraction_evidence(evidence),
                             "source_requests": len(calls),
                             "credentials_forwarded": False,
                             "synthetic_dns_queries": len(dns_queries),

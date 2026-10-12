@@ -1,0 +1,2236 @@
+{
+  "$defs": {
+    "AuthorFact": {
+      "additionalProperties": false,
+      "properties": {
+        "position": {
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Position",
+          "type": "integer"
+        },
+        "display_name": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Display Name",
+          "type": "string"
+        },
+        "affiliations": {
+          "items": {
+            "maxLength": 1000,
+            "type": "string"
+          },
+          "maxItems": 20,
+          "title": "Affiliations",
+          "type": "array"
+        },
+        "orcid": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9]{4}-[0-9]{4}-[0-9]{4}-[0-9]{3}[0-9X]$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Orcid"
+        },
+        "author_kind": {
+          "default": "unknown",
+          "enum": [
+            "person",
+            "group",
+            "unknown"
+          ],
+          "title": "Author Kind",
+          "type": "string"
+        },
+        "first": {
+          "title": "First",
+          "type": "boolean"
+        },
+        "corresponding": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Corresponding"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/Evidence"
+          },
+          "maxItems": 20,
+          "minItems": 1,
+          "title": "Evidence",
+          "type": "array"
+        }
+      },
+      "required": [
+        "position",
+        "display_name",
+        "affiliations",
+        "first",
+        "corresponding",
+        "evidence"
+      ],
+      "title": "AuthorFact",
+      "type": "object"
+    },
+    "CandidateFact": {
+      "additionalProperties": false,
+      "properties": {
+        "raw_address": {
+          "maxLength": 320,
+          "minLength": 1,
+          "title": "Raw Address",
+          "type": "string"
+        },
+        "author_positions": {
+          "items": {
+            "maximum": 100,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "maxItems": 100,
+          "title": "Author Positions",
+          "type": "array",
+          "uniqueItems": true
+        },
+        "association_status": {
+          "enum": [
+            "unmatched",
+            "needs_review"
+          ],
+          "title": "Association Status",
+          "type": "string"
+        },
+        "technical_status": {
+          "const": "not_checked",
+          "default": "not_checked",
+          "title": "Technical Status",
+          "type": "string"
+        },
+        "delivery_status": {
+          "const": "unverified",
+          "default": "unverified",
+          "title": "Delivery Status",
+          "type": "string"
+        },
+        "outreach_eligibility": {
+          "const": "not_assessed",
+          "default": "not_assessed",
+          "title": "Outreach Eligibility",
+          "type": "string"
+        },
+        "evidence": {
+          "$ref": "#/$defs/Evidence"
+        }
+      },
+      "required": [
+        "raw_address",
+        "author_positions",
+        "association_status",
+        "evidence"
+      ],
+      "title": "CandidateFact",
+      "type": "object",
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "association_status": {
+                "const": "unmatched"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "author_positions": {
+                "maxItems": 0
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "author_positions": {
+                "minItems": 1
+              }
+            }
+          }
+        }
+      ]
+    },
+    "Evidence": {
+      "additionalProperties": false,
+      "properties": {
+        "locator": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Locator",
+          "type": "string"
+        },
+        "excerpt": {
+          "maxLength": 300,
+          "title": "Excerpt",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "structured_metadata",
+            "article_dom",
+            "mailto",
+            "public_attribute",
+            "browser_dom"
+          ],
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "locator",
+        "excerpt",
+        "kind"
+      ],
+      "title": "Evidence",
+      "type": "object"
+    },
+    "FollowUpFact": {
+      "additionalProperties": false,
+      "properties": {
+        "url": {
+          "maxLength": 2048,
+          "title": "Url",
+          "type": "string"
+        },
+        "depth": {
+          "maximum": 2,
+          "minimum": 1,
+          "title": "Depth",
+          "type": "integer"
+        },
+        "scheduled": {
+          "const": false,
+          "default": false,
+          "title": "Scheduled",
+          "type": "boolean"
+        },
+        "evidence": {
+          "$ref": "#/$defs/Evidence"
+        }
+      },
+      "required": [
+        "url",
+        "depth",
+        "evidence"
+      ],
+      "title": "FollowUpFact",
+      "type": "object"
+    },
+    "MetadataFact": {
+      "additionalProperties": false,
+      "properties": {
+        "field": {
+          "enum": [
+            "title",
+            "journal",
+            "publication_date",
+            "doi"
+          ],
+          "title": "Field",
+          "type": "string"
+        },
+        "value": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Value",
+          "type": "string"
+        },
+        "date_type": {
+          "default": "unspecified",
+          "enum": [
+            "published",
+            "unspecified"
+          ],
+          "title": "Date Type",
+          "type": "string"
+        },
+        "evidence": {
+          "$ref": "#/$defs/Evidence"
+        }
+      },
+      "required": [
+        "field",
+        "value",
+        "evidence"
+      ],
+      "title": "MetadataFact",
+      "type": "object"
+    },
+    "MetadataValues": {
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Title"
+        },
+        "journal": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Journal"
+        },
+        "publication_date": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Publication Date"
+        },
+        "doi": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Doi"
+        }
+      },
+      "title": "MetadataValues",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "url": {
+      "maxLength": 2048,
+      "title": "Url",
+      "type": "string",
+      "enum": [
+        "https://synthetic.publisher.example/article-a.html",
+        "https://synthetic.publisher.example/article-b.html",
+        "https://synthetic.publisher.example/tooltip.html",
+        "https://synthetic.publisher.example/no-contact.html"
+      ]
+    },
+    "content_digest": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Content Digest",
+      "type": "string"
+    },
+    "acquisition_digest": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Acquisition Digest",
+      "type": "string"
+    },
+    "parser_version": {
+      "const": "synthetic-html-v1",
+      "default": "synthetic-html-v1",
+      "title": "Parser Version",
+      "type": "string"
+    },
+    "route": {
+      "enum": [
+        "html",
+        "browser_dom"
+      ],
+      "title": "Route",
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "observed",
+        "no_contact",
+        "requires_browser"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "metadata": {
+      "items": {
+        "$ref": "#/$defs/MetadataFact"
+      },
+      "maxItems": 100,
+      "title": "Metadata",
+      "type": "array"
+    },
+    "preferred_metadata": {
+      "$ref": "#/$defs/MetadataValues"
+    },
+    "authors": {
+      "items": false,
+      "maxItems": 100,
+      "title": "Authors",
+      "type": "array",
+      "prefixItems": [
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 1
+                },
+                "first": {
+                  "const": true
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 2
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 3
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 4
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 5
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 6
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 7
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 8
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 9
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 10
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 11
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 12
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 13
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 14
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 15
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 16
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 17
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 18
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 19
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 20
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 21
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 22
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 23
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 24
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 25
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 26
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 27
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 28
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 29
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 30
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 31
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 32
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 33
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 34
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 35
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 36
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 37
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 38
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 39
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 40
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 41
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 42
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 43
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 44
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 45
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 46
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 47
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 48
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 49
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 50
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 51
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 52
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 53
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 54
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 55
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 56
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 57
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 58
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 59
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 60
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 61
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 62
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 63
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 64
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 65
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 66
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 67
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 68
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 69
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 70
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 71
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 72
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 73
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 74
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 75
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 76
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 77
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 78
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 79
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 80
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 81
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 82
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 83
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 84
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 85
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 86
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 87
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 88
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 89
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 90
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 91
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 92
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 93
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 94
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 95
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 96
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 97
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 98
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 99
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AuthorFact"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 100
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "minItems": 1
+    },
+    "candidates": {
+      "items": {
+        "$ref": "#/$defs/CandidateFact"
+      },
+      "maxItems": 100,
+      "title": "Candidates",
+      "type": "array"
+    },
+    "follow_up": {
+      "items": {
+        "$ref": "#/$defs/FollowUpFact"
+      },
+      "maxItems": 20,
+      "title": "Follow Up",
+      "type": "array"
+    },
+    "browser_plan": {
+      "anyOf": [
+        {
+          "const": "synthetic-tooltip-v1",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Browser Plan"
+    },
+    "identity_association_implemented": {
+      "const": false,
+      "default": false,
+      "title": "Identity Association Implemented",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "url",
+    "content_digest",
+    "acquisition_digest",
+    "route",
+    "status",
+    "metadata",
+    "preferred_metadata",
+    "authors",
+    "candidates",
+    "follow_up"
+  ],
+  "title": "ArticleObservation",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://emailmonitor.example/contracts/article-observation.schema.json",
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "observed"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "candidates": {
+            "minItems": 1
+          },
+          "browser_plan": {
+            "type": "null"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "candidates": {
+            "maxItems": 0
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "requires_browser"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "url": {
+            "const": "https://synthetic.publisher.example/tooltip.html"
+          },
+          "route": {
+            "const": "html"
+          },
+          "browser_plan": {
+            "const": "synthetic-tooltip-v1"
+          }
+        },
+        "required": [
+          "browser_plan"
+        ]
+      },
+      "else": {
+        "properties": {
+          "browser_plan": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "route": {
+            "const": "browser_dom"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "url": {
+            "const": "https://synthetic.publisher.example/tooltip.html"
+          }
+        }
+      }
+    }
+  ]
+}

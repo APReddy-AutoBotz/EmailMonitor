@@ -1,0 +1,120 @@
+{
+  "schema_version": "1.0",
+  "url": "https://synthetic.publisher.example/article-a.html",
+  "content_digest": "33c3bddb62834da34acb300b7c0bd7bb4c8728fb57e5ece43b8fc4e81920c3f0",
+  "acquisition_digest": "33c3bddb62834da34acb300b7c0bd7bb4c8728fb57e5ece43b8fc4e81920c3f0",
+  "parser_version": "synthetic-html-v1",
+  "route": "html",
+  "status": "observed",
+  "metadata": [
+    {
+      "field": "title",
+      "value": "Synthetic myocardial infarction study A",
+      "date_type": "unspecified",
+      "evidence": {
+        "locator": "root/html[1]/head[1]/meta[2]",
+        "excerpt": "Synthetic myocardial infarction study A",
+        "kind": "structured_metadata"
+      }
+    },
+    {
+      "field": "title",
+      "value": "Synthetic myocardial infarction study A",
+      "date_type": "unspecified",
+      "evidence": {
+        "locator": "root/html[1]/body[1]/main[1]/h1[1]",
+        "excerpt": "Synthetic myocardial infarction study A",
+        "kind": "article_dom"
+      }
+    },
+    {
+      "field": "journal",
+      "value": "Example Research Journal",
+      "date_type": "unspecified",
+      "evidence": {
+        "locator": "root/html[1]/body[1]/main[1]/p[1]",
+        "excerpt": "Example Research Journal",
+        "kind": "article_dom"
+      }
+    },
+    {
+      "field": "publication_date",
+      "value": "2026-01-15",
+      "date_type": "published",
+      "evidence": {
+        "locator": "root/html[1]/body[1]/main[1]/time[1]",
+        "excerpt": "2026-01-15",
+        "kind": "article_dom"
+      }
+    }
+  ],
+  "preferred_metadata": {
+    "title": "Synthetic myocardial infarction study A",
+    "journal": "Example Research Journal",
+    "publication_date": "2026-01-15",
+    "doi": null
+  },
+  "authors": [
+    {
+      "position": 1,
+      "display_name": "Mira Rao",
+      "affiliations": [
+        "Example University"
+      ],
+      "orcid": null,
+      "author_kind": "unknown",
+      "first": true,
+      "corresponding": null,
+      "evidence": [
+        {
+          "locator": "root/html[1]/body[1]/main[1]/ol[1]/li[1]",
+          "excerpt": "Mira Rao Example University",
+          "kind": "article_dom"
+        }
+      ]
+    },
+    {
+      "position": 2,
+      "display_name": "Alex Chen",
+      "affiliations": [
+        "Example University"
+      ],
+      "orcid": null,
+      "author_kind": "unknown",
+      "first": false,
+      "corresponding": true,
+      "evidence": [
+        {
+          "locator": "root/html[1]/body[1]/main[1]/ol[1]/li[2]",
+          "excerpt": "Alex Chen * Example University",
+          "kind": "article_dom"
+        },
+        {
+          "locator": "root/html[1]/body[1]/main[1]/p[2]",
+          "excerpt": "* Corresponding author: Alex Chen. alex.chen@example.org",
+          "kind": "article_dom"
+        }
+      ]
+    }
+  ],
+  "candidates": [
+    {
+      "raw_address": "alex.chen@example.org",
+      "author_positions": [
+        2
+      ],
+      "association_status": "needs_review",
+      "technical_status": "not_checked",
+      "delivery_status": "unverified",
+      "outreach_eligibility": "not_assessed",
+      "evidence": {
+        "locator": "root/html[1]/body[1]/main[1]/p[2]/a[1]",
+        "excerpt": "alex.chen@example.org",
+        "kind": "mailto"
+      }
+    }
+  ],
+  "follow_up": [],
+  "browser_plan": null,
+  "identity_association_implemented": false
+}

@@ -5,13 +5,21 @@ import os
 import time
 from collections.abc import Iterator
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
+from emailmonitor.config import Settings
+from emailmonitor.discovery.fixture import step_fixture
+from emailmonitor.discovery.service import Discovery
+from emailmonitor.extraction.fixture import DIGESTS
+from emailmonitor.extraction.html import ArticleObservation
+from emailmonitor.extraction.service import Extraction
 from emailmonitor.fetching.fixture import HOSTS, TenantFixtureAuthorization
 from emailmonitor.fetching.plan import PlanScope
 from emailmonitor.fetching.safety import FetchDenied, SafeURL
 from emailmonitor.identity.foundation import COOKIE
+from emailmonitor.jobs.ledger import Ledger
+from emailmonitor.jobs.models import JobRequest
 from emailmonitor.sources.policy import Operation
 from run_browser_acceptance import conversation
 from test_source_foundation import policy_body, source_path
@@ -190,7 +198,14 @@ def test_actual_browser_gateway_current_tenant_policy(
         headers = {"Origin": ORIGIN, "X-CSRF-Token": csrf}
         path = source_path(scenario)
         body = policy_body(
-            allowed_operations=["fetch_html", "browser", "retain_excerpt", "export_contacts"]
+            allowed_operations=[
+                "fetch_html",
+                "browser",
+                "retain_excerpt",
+                "export_contacts",
+                "search",
+                "extract_contacts",
+            ]
         )
         assert (
             client.post(
@@ -207,12 +222,54 @@ def test_actual_browser_gateway_current_tenant_policy(
             == 200
         )
         token = str(client.cookies[COOKIE])
+        from test_job_contracts import request_body
+
+        request = request_body()
+        request["input"] = {
+            "type": "keyword",
+            "source_id": "synthetic-publisher",
+            "original_query": "Myocardial Infarction",
+        }
+        request["options"] = {"max_articles": 500, "max_search_pages": 2, "author_target": "both"}
+        settings = Settings(environment="test", fixture_mode=True)
+        org = scenario.organizations[0]
+        ledger = Ledger(scenario.foundation.database, token, settings)
+        job = ledger.create(org, JobRequest.model_validate(request), str(uuid4()))
+        discovery = Discovery(ledger.database, token, settings)
+        discovery.plan(org, job, 1)
+        step_fixture(discovery, org, job, 1)
+        step_fixture(discovery, org, job, 2)
+        extraction = Extraction(ledger.database, token, settings)
+        pending = extraction.fixture(org, job, f"https://{HOST}/tooltip.html", 3)
+        assert (
+            ArticleObservation.model_validate(pending["observation"]).status == "requires_browser"
+        )
+        extraction.prepare(org, job, f"https://{HOST}/tooltip.html", browser=True)
         allow = TenantFixtureAuthorization(
             scenario.foundation.database, token, scenario.organizations[0], "synthetic-publisher", 1
         )
         target = proxy(topology, scenario.organizations[0], allow)
         mediator = BrowserProxyMediator(target)
         evidence = conversation(browser, mediator)
+        article = ArticleObservation.model_validate(evidence.pop("article_observation"))
+        assert article.authors[0].display_name == "Elena Park"
+        assert article.authors[0].first and article.authors[0].corresponding
+        assert article.candidates[0].raw_address == "elena.park@example.org"
+        assert article.candidates[0].author_positions == [1]
+        saved = extraction.commit(
+            org, job, article, expected_revision=3, source_digest=DIGESTS["tooltip.html"]
+        )
+        assert saved["revision"] == 2
+        assert ArticleObservation.model_validate(saved["observation"]).status == "observed"
+        assert (
+            extraction.commit(
+                org, job, article, expected_revision=3, source_digest=DIGESTS["tooltip.html"]
+            )["revision"]
+            == 2
+        )
+        evidence["observed_authors"] = len(article.authors)
+        evidence["observed_candidates"] = len(article.candidates)
+        evidence["observation_persisted"] = True
         actual_browser_peers = [list(peer) for peer in mediator.selected_peers]
         assert actual_browser_peers == [[ENDPOINTS["fixture-a"][0], 443, HOST]] * 2
         observations = snapshot(topology)

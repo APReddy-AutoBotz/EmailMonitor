@@ -5,7 +5,7 @@ import App from './App'
 describe('truthful scaffold', () => {
   it('renders the real application with explicit unavailable extraction', () => {
     const html = renderToStaticMarkup(<App />)
-    expect(html).toContain('Extraction is not implemented')
+    expect(html).toContain('Extraction is unavailable in this UI')
     expect(html).toContain('No contact records are shown')
     expect(html).toContain('<fieldset disabled=""')
     expect(html).toContain('Start extraction (unavailable)')
