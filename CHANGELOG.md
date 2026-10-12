@@ -1,6 +1,6 @@
 # Changelog
 
-## 2026-10-12 — EM-004e shared per-hop planner under review
+## 2026-10-12 — EM-004e shared per-hop planner verified as preparation in Draft PR
 
 - Add unused network-free immutable scope/URL/public snapshot/selected-peer/deadline/redirect planning core
 - Add pure scope, DNS/IP, peer, deadline, callback and redirect invariants; no actual acquisition/security acceptance claim
