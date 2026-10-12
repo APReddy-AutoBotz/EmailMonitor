@@ -105,10 +105,39 @@ def test_forwarding_is_rechecked_after_build_before_network_creation(
     monkeypatch.setattr(topology_module, "check_host_ipv6_forwarding", preflight)
     monkeypatch.setattr(Topology, "_build", built)
     monkeypatch.setattr(topology_module, "docker", unexpected)
+    monkeypatch.setattr(topology_module, "host_baseline", lambda: {})
     try:
         with pytest.raises(RuntimeError, match="changed while building"):
             value.start()
         assert calls == ["preflight", "build", "preflight"] and not value.network_created
+    finally:
+        value.directory.cleanup()
+
+
+@pytest.mark.parametrize("section", ["addresses", "routes", "rules"])
+def test_after_build_checkpoint_refuses_before_any_topology_creation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    section: str,
+) -> None:
+    value = shell(tmp_path)
+    value.baseline = {section: []}
+    monkeypatch.setattr(topology_module, "check_host_ipv6_forwarding", lambda: None)
+    monkeypatch.setattr(Topology, "_build", lambda *args: None)
+    monkeypatch.setattr(topology_module, "host_baseline", lambda: {section: [{"synthetic": True}]})
+
+    def unexpected(*args: object, **kwargs: object) -> object:
+        pytest.fail("Topology creation attempted after build changed host baseline")
+
+    monkeypatch.setattr(topology_module, "docker", unexpected)
+    try:
+        with pytest.raises(RuntimeError, match="Image build changed host baseline"):
+            value.start()
+        assert not value.network_created
+        evidence = capsys.readouterr().out
+        assert "after_image_build_before_network" in evidence
+        assert section in evidence and "synthetic" in evidence
     finally:
         value.directory.cleanup()
 

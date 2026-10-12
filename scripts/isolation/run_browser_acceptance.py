@@ -30,26 +30,33 @@ globalThis.boundaryState = {worker_blocked:false,fetch_denied:false,
                            post_denied:false,allowed_fetch:false};
 document.querySelector('#reveal').onclick = async () => {
  const state = globalThis.boundaryState, pending = [], denied = 'https://denied.fixture.example';
+ globalThis.boundaryPending = {};
+ const track = (label, promise) => {
+  globalThis.boundaryPending[label] = 'pending';
+  pending.push(promise.then(value => {globalThis.boundaryPending[label]='fulfilled';return value;},
+                           error => {globalThis.boundaryPending[label]='rejected';throw error;}));
+ };
  document.querySelector('#marker').textContent = 'synthetic marker revealed';
  for (const [tag, attr, path] of [['img','src','image'],['link','href','stylesheet'],
                                   ['script','src','script'],['iframe','src','iframe']]) {
-  pending.push(new Promise(resolve => {
+  track(path, new Promise(resolve => {
    const node = document.createElement(tag); if(tag==='link') node.rel='stylesheet';
    node.onload = node.onerror = resolve; node[attr] = denied + '/' + path;
    document.body.append(node);
   }));
  }
- pending.push(fetch(denied+'/fetch').then(()=>{},()=>{state.fetch_denied=true;}));
- pending.push(fetch(location.href).then(r=>r.text()).then(t=>{
+ track('fetch_denied', fetch(denied+'/fetch').then(()=>{},()=>{state.fetch_denied=true;}));
+ track('fetch_allowed', fetch(location.href).then(r=>r.text()).then(t=>{
   state.allowed_fetch=t.includes('synthetic marker');
  }));
- pending.push(fetch(location.href,{method:'POST',body:'synthetic'}).then(()=>{},()=>{state.post_denied=true;}));
- pending.push(new Promise(resolve=>{const xhr=new XMLHttpRequest();xhr.onload=xhr.onerror=resolve;
+ track('post_denied', fetch(location.href,{method:'POST',body:'synthetic'}).then(
+  ()=>{},()=>{state.post_denied=true;}));
+ track('xhr', new Promise(resolve=>{const xhr=new XMLHttpRequest();xhr.onload=xhr.onerror=resolve;
                                   xhr.open('GET',denied+'/xhr');xhr.send();}));
- pending.push(new Promise(resolve=>{const ws=new WebSocket('wss://denied.fixture.example/socket');
+ track('websocket', new Promise(resolve=>{const ws=new WebSocket('wss://denied.fixture.example/socket');
                                    ws.onerror=ws.onclose=resolve;}));
- pending.push(navigator.serviceWorker.register('/worker.js').then(reg=>{state.worker_blocked=!reg;},
-                                                                          ()=>{state.worker_blocked=true;}));
+ track('service_worker', navigator.serviceWorker.register('/worker.js').then(
+  reg=>{state.worker_blocked=!reg;},()=>{state.worker_blocked=true;}));
  window.open(denied+'/popup','_blank');
  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['synthetic diagnostic']));
  a.download='synthetic-only.txt';document.body.append(a);a.click();

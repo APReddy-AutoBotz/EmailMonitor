@@ -421,6 +421,14 @@ class Topology:
     def start(self) -> None:
         check_host_ipv6_forwarding()
         self._build(self.root, Path(self.directory.name), self.suffix)
+        built_state = host_baseline()
+        if built_state != self.baseline:
+            print(
+                json.dumps({"host_state_checkpoint": "after_image_build_before_network"}),
+                flush=True,
+            )
+            print(baseline_diagnostic(self.baseline, built_state), flush=True)
+            raise RuntimeError("Image build changed host baseline; no topology creation permitted")
         check_host_ipv6_forwarding()
         self.network_created = True
         docker(

@@ -66,6 +66,29 @@ def trace_stage(name: str) -> None:
     print("synthetic-browser-stage:" + name, file=sys.stderr, flush=True)
 
 
+def pending_task_evidence(value: object) -> str:
+    labels = {
+        "image",
+        "stylesheet",
+        "script",
+        "iframe",
+        "fetch_denied",
+        "fetch_allowed",
+        "post_denied",
+        "xhr",
+        "websocket",
+        "service_worker",
+    }
+    if type(value) is not dict or not value or len(value) > len(labels):
+        return '{"pending_task_evidence":"unavailable"}'
+    if any(
+        label not in labels or status not in ("pending", "fulfilled", "rejected")
+        for label, status in value.items()
+    ):
+        return '{"pending_task_evidence":"unavailable"}'
+    return json.dumps({"pending_task_evidence": value}, sort_keys=True)
+
+
 class FixtureChannel:
     """Serialize bounded exchanges; keep stdin reads off the Playwright loop."""
 
@@ -257,7 +280,17 @@ async def main() -> None:
         trace_stage("click_start")
         await page.locator("#reveal").click()
         trace_stage("click_complete")
-        await page.wait_for_function("globalThis.boundaryReady === true", timeout=10000)
+        try:
+            await page.wait_for_function("globalThis.boundaryReady === true", timeout=10000)
+        except Error:
+            try:
+                pending = await asyncio.wait_for(
+                    page.evaluate("globalThis.boundaryPending"), timeout=1
+                )
+            except Exception:
+                pending = None
+            trace_stage(pending_task_evidence(pending))
+            raise
         trace_stage("boundary_ready")
         await page.wait_for_timeout(300)
         if await page.locator("#marker").inner_text() != "synthetic marker revealed":
