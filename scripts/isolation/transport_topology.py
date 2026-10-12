@@ -25,6 +25,20 @@ from transport_rpc import OwnedProcess
 SUBNETS = (ipaddress.ip_network(V4_SUBNET), ipaddress.ip_network(V6_SUBNET))
 
 
+def check_host_ipv6_forwarding() -> None:
+    """Refuse before creation if Docker could initialize host-wide forwarding."""
+    for name in ("all", "default"):
+        try:
+            value = Path(f"/proc/sys/net/ipv6/conf/{name}/forwarding").read_text(encoding="ascii")
+        except (OSError, UnicodeError) as error:
+            raise RuntimeError("Existing host IPv6 forwarding cannot be verified") from error
+        if value not in ("1", "1\n"):
+            raise RuntimeError(
+                "Unsupported runner: host IPv6 all/default forwarding must already be 1; "
+                "no network creation or host configuration is permitted"
+            )
+
+
 def docker(
     *arguments: str, timeout: float = 120, check: bool = True
 ) -> subprocess.CompletedProcess[str]:
@@ -269,6 +283,7 @@ class Topology:
     def __init__(self) -> None:
         if os.environ.get("GITHUB_ACTIONS") != "true":
             raise RuntimeError("Reviewed disposable CI environment required")
+        check_host_ipv6_forwarding()
         self.version = check_daemon()
         self.baseline = host_baseline()
         suffix = secrets.token_hex(5)
@@ -404,7 +419,9 @@ class Topology:
         return result
 
     def start(self) -> None:
+        check_host_ipv6_forwarding()
         self._build(self.root, Path(self.directory.name), self.suffix)
+        check_host_ipv6_forwarding()
         self.network_created = True
         docker(
             "network",

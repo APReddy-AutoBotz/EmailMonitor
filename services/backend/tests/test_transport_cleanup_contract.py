@@ -9,7 +9,108 @@ from typing import Any
 import pytest
 import transport_topology as topology_module
 from transport_fixture import State, fixture_command
-from transport_topology import OWNER_LABEL, Topology, baseline_diagnostic, remove_owned
+from transport_topology import (
+    OWNER_LABEL,
+    Topology,
+    baseline_diagnostic,
+    check_host_ipv6_forwarding,
+    remove_owned,
+)
+
+
+@pytest.mark.parametrize("name", ["all", "default"])
+@pytest.mark.parametrize("invalid", ["0\n", "2\n", "", "unknown", "1\n0\n"])
+def test_existing_forwarding_requires_both_exact_enabled_values(
+    monkeypatch: pytest.MonkeyPatch, name: str, invalid: str
+) -> None:
+    def read(path: Path, **kwargs: object) -> str:
+        assert str(path) in {
+            "/proc/sys/net/ipv6/conf/all/forwarding",
+            "/proc/sys/net/ipv6/conf/default/forwarding",
+        }
+        return invalid if path.parent.name == name else "1\n"
+
+    monkeypatch.setattr(Path, "read_text", read)
+    with pytest.raises(RuntimeError, match="Unsupported runner"):
+        check_host_ipv6_forwarding()
+
+
+def test_existing_forwarding_is_read_only_and_missing_evidence_refuses(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    reads: list[str] = []
+
+    def read(path: Path, **kwargs: object) -> str:
+        reads.append(str(path))
+        return "1\n"
+
+    monkeypatch.setattr(Path, "read_text", read)
+    check_host_ipv6_forwarding()
+    assert reads == [
+        "/proc/sys/net/ipv6/conf/all/forwarding",
+        "/proc/sys/net/ipv6/conf/default/forwarding",
+    ]
+
+    def missing(path: Path, **kwargs: object) -> str:
+        raise OSError("Synthetic missing evidence")
+
+    monkeypatch.setattr(Path, "read_text", missing)
+    with pytest.raises(RuntimeError, match="cannot be verified"):
+        check_host_ipv6_forwarding()
+
+
+def test_preflight_refuses_before_any_daemon_or_build_call(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def refuse() -> None:
+        raise RuntimeError("Synthetic unsupported forwarding")
+
+    def unexpected(*args: object, **kwargs: object) -> object:
+        pytest.fail("Daemon/build called before forwarding preflight")
+
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.setattr(topology_module, "check_host_ipv6_forwarding", refuse)
+    monkeypatch.setattr(topology_module, "check_daemon", unexpected)
+    monkeypatch.setattr(topology_module, "docker", unexpected)
+    monkeypatch.setattr(Topology, "_build", unexpected)
+    with pytest.raises(RuntimeError, match="Synthetic unsupported"):
+        Topology()
+    value = shell(tmp_path)
+    try:
+        with pytest.raises(RuntimeError, match="Synthetic unsupported"):
+            value.start()
+        assert not value.network_created
+    finally:
+        value.directory.cleanup()
+
+
+def test_forwarding_is_rechecked_after_build_before_network_creation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    value = shell(tmp_path)
+    calls: list[str] = []
+
+    def preflight() -> None:
+        calls.append("preflight")
+        if len(calls) > 1:
+            raise RuntimeError("Synthetic forwarding changed while building")
+
+    def built(*args: object) -> None:
+        calls.append("build")
+
+    def unexpected(*args: object, **kwargs: object) -> object:
+        pytest.fail("Network created after unsupported forwarding")
+
+    monkeypatch.setattr(topology_module, "check_host_ipv6_forwarding", preflight)
+    monkeypatch.setattr(Topology, "_build", built)
+    monkeypatch.setattr(topology_module, "docker", unexpected)
+    try:
+        with pytest.raises(RuntimeError, match="changed while building"):
+            value.start()
+        assert calls == ["preflight", "build", "preflight"] and not value.network_created
+    finally:
+        value.directory.cleanup()
 
 
 def test_baseline_diagnostic_distinguishes_order_and_actual_field_changes() -> None:
@@ -144,6 +245,7 @@ def test_creation_timeout_reconciles_only_exact_owned_resource(
     daemon = Daemon(value.owner, failure)
     monkeypatch.setattr(topology_module, "docker", daemon.call)
     monkeypatch.setattr(topology_module, "host_baseline", lambda: {})
+    monkeypatch.setattr(topology_module, "check_host_ipv6_forwarding", lambda: None)
 
     def built(self: Topology, root: Path, directory: Path, suffix: str) -> None:
         self.images = ["fixture", "gateway"]
