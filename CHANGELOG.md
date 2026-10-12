@@ -1,6 +1,6 @@
 # Changelog
 
-## 2026-10-12 — EM-004d synthetic DNS/pinning under review
+## 2026-10-12 — EM-004d synthetic DNS/pinning verified in Draft PR
 
 - Add fixed test-only DNS-wire validation before immutable literal TLS dial, with shared deadline and current-policy recheck
 - Add owned loopback DNS/TLS and tenant/browser mediation regressions; preserve all sandbox/profile/workflow controls

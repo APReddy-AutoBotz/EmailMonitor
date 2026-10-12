@@ -19,3 +19,8 @@ Ordinary tests use owned disposable loopback DNS/TLS servers. They cover no OS n
 Run scripts/check.sh for aggregate gates and the existing synthetic browser/parser workflows for actual isolation evidence. Unavailable local PostgreSQL/broker tests must be disclosed as skips; fresh independent exact-tree review and actual no-skip CI are mandatory before the slice is verified. See [validation](../reports/em004d-validation.md).
 
 Rollback removes the diagnostic resolver/helper and optional TLS hook, preserving the earlier verified literal TLS/browser diagnostic. There are no migrations or deployments. Generalized public-DNS/rebinding/connection-time approved-domain HTTP/browser egress and production configuration still require a separately bounded implementation and actual evidence; EM-006 must not start from this partial slice alone.
+
+
+## Verified CI checkpoint
+
+Independent exact-tree review passed code tree 4df3ca05 / PR #8 head 046fc6db. Application CI 38200690403 passed 291 tests without skips, including actual tenant/browser policy; browser CI 38200690352 recorded 4 DNS queries/two verified TLS receipts with every prior actual isolation gate intact; parser CI 38200690478 and docs CI 38200690366 passed. Exact checkout merge tree/parents were verified. See [full evidence](../reports/em004d-validation.md#verified-exact-head-synthetic-diagnostic). This supersedes prior pending acceptance only for the declared synthetic code tree; full EM-004 remains PARTIAL, EM-006 gated and PR #8 Draft/unmerged.
