@@ -63,3 +63,7 @@ Strict fixture URL/public-address/pinning validation primitives, bounded in-memo
 ## EM-005 offline durability boundary
 
 Draft original-input requests, synthetic diagnostic job/item ledger, forced tenant RLS, deterministic effects, transactional outbox, leases/attempt bounds, quota reservations/settlement, recovery, pause/cancel and organization deletion epochs are implemented for testing. Celery and immutable official disposable RabbitMQ CI are pinned. Local and clean-install/from-empty aggregate passed 191 Python tests and all other gates, with four explicitly pending actual-broker tests. Independent review and required real-broker/published-head CI remain pending. No extraction result or production worker identity is claimed; EM-006 remains gated by full EM-004.
+
+## EM-004f controlled transport candidate (2026-10-12)
+
+IN PROGRESS, full EM-004 PARTIAL: shared planner-backed actual DNS/literal socket/TLS transport and a separately constrained disposable dual-stack CI topology with owned-pipe current SQL tenant/browser mediation. No local network/container execution, production/live activation, dependencies or database migration. Exact-tree review and actual new-head application394/no-skip plus 12 controlled-network cases/browser/parser/docs gates remain pending. [Runbook](34-controlled-transport-acceptance.md) / [evidence](../reports/em004f-validation.md). EM-006 remains gated while acceptance is unmet.

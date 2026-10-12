@@ -7,6 +7,7 @@ import subprocess
 import tempfile
 import time
 from pathlib import Path
+from typing import Protocol
 
 from dns_fixture_server import server as dns_server
 from emailmonitor.config import Settings
@@ -85,7 +86,15 @@ def timeout_evidence(
     return ("Browser diagnostic deadline exceeded: " + json.dumps(summary))[:16384]
 
 
-def conversation(identifier: str, mediator: BrowserFixtureMediator) -> dict[str, object]:
+class BrowserMediator(Protocol):
+    requests: int
+    accepted: int
+    denied: int
+
+    def reply(self, raw: bytes) -> bytes: ...
+
+
+def conversation(identifier: str, mediator: BrowserMediator) -> dict[str, object]:
     process = subprocess.Popen(
         ["docker", "start", "--attach", "--interactive", identifier],
         stdin=subprocess.PIPE,
