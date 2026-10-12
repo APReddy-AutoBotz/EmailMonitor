@@ -10,9 +10,22 @@ IMAGE = "emailmonitor-parser-diagnostic:local"
 
 
 def docker(*arguments: str, timeout: float = 180) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        ["docker", *arguments], capture_output=True, text=True, check=True, timeout=timeout
-    )
+    try:
+        return subprocess.run(
+            ["docker", *arguments], capture_output=True, text=True, check=True, timeout=timeout
+        )
+    except subprocess.CalledProcessError as error:
+        raise RuntimeError(
+            "Parser Docker command failed: "
+            + json.dumps(
+                {
+                    "operation": arguments[0] if arguments else "unknown",
+                    "returncode": error.returncode,
+                    "stdout": (error.stdout or "")[-4096:],
+                    "stderr": (error.stderr or "")[-4096:],
+                }
+            )
+        ) from error
 
 
 def settled_oom(identifier: str, state: dict[str, object]) -> dict[str, object]:

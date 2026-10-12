@@ -10,6 +10,8 @@ import socket
 from pathlib import Path
 
 from emailmonitor.config import Settings
+from emailmonitor.discovery.search import parse_search
+from emailmonitor.discovery.state import DiscoveryState, advance
 from emailmonitor.parsing.fixture import observe_fixture
 
 
@@ -44,6 +46,25 @@ def main() -> None:
     observed = observe_fixture(Settings(environment="test", fixture_mode=True), payload)
     if observed.visible_text != "synthetic parser observation":
         raise RuntimeError("Inert byte observation failed")
+    settings = Settings(environment="test", fixture_mode=True)
+    state = DiscoveryState(
+        status="pending",
+        reason="first_page",
+        next_url="https://synthetic.publisher.example/search-page-1.html",
+    )
+    for number in (1, 2):
+        url = f"https://synthetic.publisher.example/search-page-{number}.html"
+        page = parse_search(
+            settings, url, Path(f"/app/fixtures/search-page-{number}.html").read_bytes()
+        )
+        state = advance(state, page, 2, 500)
+    if (
+        not state.discovery_complete
+        or len(state.articles) != 4
+        or state.duplicates != 1
+        or state.raw_entries != 5
+    ):
+        raise RuntimeError("Actual network-none discovery parser failed")
     print(
         json.dumps(
             {
@@ -52,6 +73,7 @@ def main() -> None:
                 "interfaces": interfaces,
                 "digest": observed.digest,
                 "contact_extraction": False,
+                "discovery": state.model_dump(),
             }
         )
     )

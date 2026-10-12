@@ -143,6 +143,17 @@ async def refuse_websocket(
     trace_stage("websocket_close_complete")
 
 
+async def wait_artifact_completion(
+    popup_closed: asyncio.Event, download_cancelled: asyncio.Event, timeout: float = 3
+) -> None:
+    """Both independent callbacks must actually finish; missing evidence times out."""
+    if not 0 < timeout <= 3:
+        raise ValueError("Artifact observation cannot extend the three-second ceiling")
+    await asyncio.wait_for(
+        asyncio.gather(popup_closed.wait(), download_cancelled.wait()), timeout=timeout
+    )
+
+
 async def main() -> None:
     if os.environ.get("EM_ISOLATION_DIAGNOSTIC") != "synthetic-browser-only":
         raise RuntimeError("Explicit browser diagnostic required")
@@ -190,6 +201,8 @@ async def main() -> None:
     allowed = 0
     popup_count = 0
     download_count = 0
+    popup_closed = asyncio.Event()
+    download_cancelled = asyncio.Event()
 
     async def route_request(route: Route) -> None:
         nonlocal allowed
@@ -262,6 +275,7 @@ async def main() -> None:
             if not isinstance(child, Page):
                 raise RuntimeError("Unexpected popup")
             await child.close()
+            popup_closed.set()
 
         async def download(item: object) -> None:
             nonlocal download_count
@@ -271,6 +285,7 @@ async def main() -> None:
             if not isinstance(item, Download):
                 raise RuntimeError("Unexpected download")
             await item.cancel()
+            download_cancelled.set()
 
         page.on("popup", popup)
         page.on("download", download)
@@ -292,7 +307,23 @@ async def main() -> None:
             trace_stage(pending_task_evidence(pending))
             raise
         trace_stage("boundary_ready")
-        await page.wait_for_timeout(300)
+        # JavaScript's boundaryReady does not await Playwright's independent
+        # popup/download callbacks. Require their actual close/cancel completion
+        # within a fixed deadline, rather than a timing-dependent 300ms sleep.
+        try:
+            await wait_artifact_completion(popup_closed, download_cancelled)
+        except TimeoutError as error:
+            raise RuntimeError(
+                "Popup/download completion missing: "
+                + json.dumps(
+                    {
+                        "popup_closed": popup_closed.is_set(),
+                        "download_cancelled": download_cancelled.is_set(),
+                        "popup_count": popup_count,
+                        "download_count": download_count,
+                    }
+                )
+            ) from error
         if await page.locator("#marker").inner_text() != "synthetic marker revealed":
             raise RuntimeError("Approved synthetic browser interaction failed")
         state = await page.evaluate("globalThis.boundaryState")
@@ -309,7 +340,18 @@ async def main() -> None:
         if not state["fetch_denied"] or not state["post_denied"]:
             raise RuntimeError("Worker/method/fetch refusal missing")
         if not state["allowed_fetch"] or not popup_count or not download_count:
-            raise RuntimeError("Positive gateway/popup/download evidence missing")
+            raise RuntimeError(
+                "Positive gateway/popup/download evidence missing: "
+                + json.dumps(
+                    {
+                        "allowed_fetch": state.get("allowed_fetch") is True,
+                        "popup_count": popup_count,
+                        "download_count": download_count,
+                        "popup_closed": popup_closed.is_set(),
+                        "download_cancelled": download_cancelled.is_set(),
+                    }
+                )
+            )
         if context.service_workers or len(context.pages) != 1:
             raise RuntimeError("Service worker or popup remained active")
         trace_stage("checks_complete")

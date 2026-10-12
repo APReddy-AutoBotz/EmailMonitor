@@ -8,6 +8,8 @@ from pydantic import Field
 from sqlalchemy import text
 
 from emailmonitor.config import Settings
+from emailmonitor.discovery.fixture import step_fixture
+from emailmonitor.discovery.service import Discovery
 from emailmonitor.jobs.ledger import Ledger
 from emailmonitor.jobs.models import JobRequest, StrictModel
 from emailmonitor.organizations.database import AuthorizationDenied, Database
@@ -36,7 +38,7 @@ def job_router(
         return {
             "id": str(job),
             "state": "draft",
-            "planning_available": False,
+            "planning_available": settings.environment == "test" and settings.fixture_mode,
             "extraction_implemented": False,
         }
 
@@ -96,13 +98,46 @@ WHERE organization_id=:org AND job_id=:job ORDER BY id LIMIT 100"""),
             ).mappings()
             return [dict(r) for r in rows]
 
+    @router.post("/organizations/{organization_id}/jobs/{job_id}/plan")
+    def plan(
+        request: Request, organization_id: UUID, job_id: UUID, body: Revision
+    ) -> dict[str, object]:
+        if not settings.fixture_mode:
+            raise HTTPException(409, "Synthetic fixture planning requires explicit test mode")
+        return Discovery(database, csrf(request), settings).plan(
+            organization_id, job_id, body.expected_revision
+        )
+
+    @router.post("/organizations/{organization_id}/jobs/{job_id}/discover-fixture-page")
+    def discover_page(
+        request: Request, organization_id: UUID, job_id: UUID, body: Revision
+    ) -> dict[str, object]:
+        if not settings.fixture_mode:
+            raise HTTPException(409, "Synthetic fixture discovery requires explicit test mode")
+        try:
+            return step_fixture(
+                Discovery(database, csrf(request), settings),
+                organization_id,
+                job_id,
+                body.expected_revision,
+            )
+        except ValueError as error:
+            raise HTTPException(409, "Discovery revision conflict or stopped") from error
+
+    @router.get("/organizations/{organization_id}/jobs/{job_id}/discovery")
+    def discovery(request: Request, organization_id: UUID, job_id: UUID) -> dict[str, object]:
+        if not settings.fixture_mode:
+            raise HTTPException(409, "Synthetic fixture planning requires explicit test mode")
+        return Discovery(database, token(request), settings).read(organization_id, job_id)
+
     @router.post("/organizations/{organization_id}/jobs/{job_id}/{action}")
     def control(
         request: Request, organization_id: UUID, job_id: UUID, action: str, body: Revision
     ) -> dict[str, bool]:
         if action not in {"pause", "resume", "cancel"}:
             raise HTTPException(
-                409, "Planning, start and continuation are unavailable until EM-006"
+                409,
+                "Extraction start and continuation are unavailable until extraction is implemented",
             )
         Ledger(database, csrf(request), settings).control(
             organization_id, job_id, action, body.expected_revision
