@@ -8,12 +8,14 @@ import tempfile
 import time
 from pathlib import Path
 
+from dns_fixture_server import server as dns_server
 from emailmonitor.config import Settings
 from emailmonitor.fetching.browser_fixture import (
     BrowserFixtureMediator,
     validate_applied_profile,
     write_bounded_reply,
 )
+from emailmonitor.fetching.dns_fixture import DNSFixtureResolver
 from emailmonitor.fetching.fixture import FetchLimits
 from emailmonitor.fetching.safety import FetchDenied, SafeURL
 from emailmonitor.fetching.tls_fixture import TLSFixtureGateway
@@ -249,27 +251,39 @@ def main() -> None:
             raise RuntimeError("Approved browser restrictions not present")
         validate_applied_profile(host["SecurityOpt"], json.loads(profile.read_text()))
         with tempfile.TemporaryDirectory(prefix="em-browser-tls-") as directory:
-            with server(Path(directory), {"/tooltip.html": Response(body=PAGE)}) as (
-                endpoint,
-                calls,
+            with (
+                server(Path(directory), {"/tooltip.html": Response(body=PAGE)}) as (
+                    endpoint,
+                    calls,
+                ),
+                dns_server() as (dns_route, dns_queries),
             ):
                 gateway = TLSFixtureGateway(
                     Settings(environment="test", fixture_mode=True),
                     endpoint,
                     authorize,
                     FetchLimits(max_bytes=32768, total_seconds=5),
+                    DNSFixtureResolver(Settings(environment="test", fixture_mode=True), dns_route),
                 )
                 mediator = BrowserFixtureMediator(
                     Settings(environment="test", fixture_mode=True), gateway
                 )
                 evidence = conversation(identifier, mediator)
+                if len(dns_queries) != 2 * mediator.accepted:
+                    raise RuntimeError("DNS snapshot/gateway counters disagree")
                 if len(calls) != mediator.accepted or any(
                     set(headers) != {"Host", "Accept", "Connection"} for headers in calls
                 ):
                     raise RuntimeError("Credential forwarding or gateway counter mismatch")
                 print(
                     json.dumps(
-                        {**evidence, "source_requests": len(calls), "credentials_forwarded": False}
+                        {
+                            **evidence,
+                            "source_requests": len(calls),
+                            "credentials_forwarded": False,
+                            "synthetic_dns_queries": len(dns_queries),
+                            "dns_selected_destination": False,
+                        }
                     )
                 )
         state = json.loads(docker("inspect", identifier).stdout)[0]["State"]
