@@ -130,3 +130,12 @@ def test_production_api_refuses_before_database_and_openapi_is_actual() -> None:
     ]["responses"]["200"]["content"]["application/json"]["schema"]
     assert response["$ref"].endswith("/Bundle")
     assert "raw_address" not in schema["components"]["schemas"]["ReviewInput"]["properties"]
+
+
+def test_deletion_fence_uses_actual_retained_observation_and_organization_schema() -> None:
+    migration = (ROOT / "services/backend/migrations/versions/0006_associations.sql").read_text()
+    assert "a.deletion_generation<>o.deletion_generation" in migration
+    assert "a.deletion_generation=b.deletion_generation" in migration
+    assert "o.deletion_generation=b.deletion_generation" in migration
+    # The existing jobs schema has a lifecycle generation, not a deletion epoch.
+    assert "j.deletion_generation" not in migration

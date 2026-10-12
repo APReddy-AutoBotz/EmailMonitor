@@ -33,7 +33,7 @@ BEGIN
  IF o.status IS DISTINCT FROM 'active' OR j.id IS NULL OR a.article_url IS NULL
  OR j.kind<>'extraction' OR j.state NOT IN ('draft','cancelled')
  OR (p_write AND (j.state<>'draft' OR j.generation<>a.generation))
- OR a.deletion_generation<>o.deletion_generation OR j.deletion_generation<>o.deletion_generation
+ OR a.deletion_generation<>o.deletion_generation
  OR a.revision<>p_revision OR a.expires_at<=clock_timestamp()
  OR NOT COALESCE(s.enabled,false) OR p.state IS DISTINCT FROM 'approved'
  OR p.valid_until<=clock_timestamp() OR p.version<>a.policy_version
