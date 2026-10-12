@@ -195,6 +195,11 @@ class BrowserProxyMediator:
     def __init__(self, proxy: GatewayProxy) -> None:
         self.proxy = proxy
         self.requests = self.accepted = self.denied = 0
+        self._selected_peers: tuple[tuple[object, ...], ...] = ()
+
+    @property
+    def selected_peers(self) -> tuple[tuple[object, ...], ...]:
+        return self._selected_peers
 
     def reply(self, raw: bytes) -> bytes:
         self.requests += 1
@@ -207,4 +212,7 @@ class BrowserProxyMediator:
             self.denied += 1
             return b'{"status":"denied"}\n'
         self.accepted += 1
+        # A denied later request clears proxy-local receipts. Preserve only
+        # successful byte-release observations as independent copied records.
+        self._selected_peers += tuple(tuple(peer) for peer in self.proxy.peers)
         return b'{"status":"ok","body":"' + base64.b64encode(body) + b'","type":"text/html"}\n'

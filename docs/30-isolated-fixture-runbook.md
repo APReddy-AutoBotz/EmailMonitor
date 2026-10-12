@@ -1,6 +1,6 @@
 # 30 — Partial real TLS and isolated parser diagnostics
 
-## Scope and task boundary
+## Historical EM-004b scope and task boundary
 
 EM-004b continues EM-004 on the verified EM-005 stack. It introduces a test-only actual TLS/socket fixture route and a separately reviewed disposable network-none parser diagnostic. It is not full EM-004: browser network/subresource controls and browser sandbox acceptance remain absent. EM-006 and dependent extraction tasks remain gated. Default API/CLI/UI, live fetch and browser entrypoints are still unavailable. No migrations, credentials/grants, paid services, source approvals or deployment are introduced.
 
@@ -37,8 +37,13 @@ Run pure/TLS tests with the normal aggregate `scripts/check.sh`. The separate pa
 
 [Parser CI 38047608171](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/38047608171) recorded loopback-only interfaces, IPv4/IPv6 kernel ENETUNREACH `[101, 101]`, inert synthetic byte observation and actual container memory-limit `OOMKilled=true`, exit 137. Owned test containers were cleaned up. This establishes the scoped diagnostic network/OOM boundary, not CPU/PID enforcement benchmarks, full PDF/browser isolation or production certification. Full EM-004 remains PARTIAL and PR #6 remains unmerged.
 
-## Browser hold and release gates
+## Historical EM-004b browser hold and release gates
 
 Browser code and security profile are deliberately absent. Official [Playwright Docker guidance](https://playwright.dev/python/docs/docker) requires extra user-namespace syscalls for its supported Chromium sandbox route; [Docker default seccomp](https://docs.docker.com/engine/security/seccomp/) does not supply that route with dropped capabilities. No custom/unconfined profile, added capability, root browser, host IPC or no-sandbox fallback was used. A separately approved and independently reviewed browser environment is needed before implementation/execution.
 
 Python's [PSF license](https://docs.python.org/3/license.html) and immutable image metadata are recorded in runtime inventory. Image-wide SBOM/system attribution/vulnerability review remain release gates; no image is distributed or deployed. See [validation evidence](../reports/em004b-validation.md) and [status ledger](22-implementation-status.md).
+
+
+## Current synthetic acceptance checkpoint (2026-10-12)
+
+The absent-browser statements above describe the preserved EM-004b snapshot, not the current stack. Reviewed EM-004f head7b4fb2ab/tree d5d1f2f passed [application475/no-skip](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/38282248083) with one disclosed Pydantic alias-body warning, [controlled12/no-skip/no-warning](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/38282248247), [browser](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/38282248046), [parser](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/38282248047) and [docs](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/38282248062). Actual parser evidence requires stopped+OOMKilled=true+137; exit137 alone never passes. The browser remains nonroot/network-none with its approved restrictive profile and Chromium sandbox enabled. The controlled transport additionally verifies actual DNS/literal IPv4/IPv6 TLS pinning, current tenant policy and strict topology cleanup. Its final browser selected-peer diagnostic requires a bounded successful-receipt correction and exact-head revalidation; full EM-004 remains PARTIAL/EM-006 gated meanwhile. See [current topology runbook](34-controlled-transport-acceptance.md) and [exact evidence](../reports/em004f-validation.md). No live-source or production activation is inferred.

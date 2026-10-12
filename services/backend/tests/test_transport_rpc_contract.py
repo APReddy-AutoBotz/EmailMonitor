@@ -119,3 +119,40 @@ def test_off_domain_browser_frame_never_reaches_the_gateway() -> None:
         == b'{"status":"denied"}\n'
     )
     assert channel.sent == []
+
+
+def test_successful_browser_peer_receipts_survive_later_denial_and_mutation() -> None:
+    channel = Stub()
+    target = GatewayProxy(cast(OwnedProcess, channel), scope, lambda bound, url: None)
+    mediator = BrowserProxyMediator(target)
+    frame = b'{"kind":"request","identifier":1,"url":"https://synthetic.publisher.example/tooltip.html","method":"GET","resource":"document"}'
+    assert b'"status":"ok"' in mediator.reply(frame)
+    original = target.peers
+    original[0][0] = "mutated"
+    assert mediator.selected_peers == (("8.8.8.3", 443, HOST),)
+    assert (
+        mediator.reply(frame.replace(HOST.encode(), b"denied.fixture.example"))
+        == b'{"status":"denied"}\n'
+    )
+    assert target.peers == []
+    assert mediator.selected_peers == (("8.8.8.3", 443, HOST),)
+    assert (mediator.accepted, mediator.denied) == (1, 1)
+
+
+def test_denied_release_never_fabricates_successful_browser_peer_receipt() -> None:
+    channel = Stub()
+    calls = 0
+
+    def authorize(bound: PlanScope, url: object) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 3:
+            raise FetchDenied("revoked_before_release")
+
+    target = GatewayProxy(cast(OwnedProcess, channel), scope, authorize)
+    mediator = BrowserProxyMediator(target)
+    frame = b'{"kind":"request","identifier":1,"url":"https://synthetic.publisher.example/tooltip.html","method":"GET","resource":"document"}'
+    assert mediator.reply(frame) == b'{"status":"denied"}\n'
+    assert target.peers == [["8.8.8.3", 443, HOST]]
+    assert mediator.selected_peers == ()
+    assert (mediator.accepted, mediator.denied) == (0, 1)

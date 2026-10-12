@@ -213,7 +213,8 @@ def test_actual_browser_gateway_current_tenant_policy(
         target = proxy(topology, scenario.organizations[0], allow)
         mediator = BrowserProxyMediator(target)
         evidence = conversation(browser, mediator)
-        actual_browser_peers = list(target.peers)
+        actual_browser_peers = [list(peer) for peer in mediator.selected_peers]
+        assert actual_browser_peers == [[ENDPOINTS["fixture-a"][0], 443, HOST]] * 2
         observations = snapshot(topology)
         assert len(observations["calls"]) == 2 and len(observations["queries"]) == 4
         assert all(
