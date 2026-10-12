@@ -25,6 +25,7 @@ ALLOWED_LICENSES = {
     "(MIT OR CC0-1.0)",
     "(MIT AND Zlib)",
     "MIT AND Zlib",
+    "MIT AND PSF-2.0",
     "Python-2.0",
     "Unlicense",
 }
@@ -67,6 +68,21 @@ def main() -> None:
     parser_dockerfile = (ROOT / "scripts/isolation/Dockerfile.parser").read_text()
     if "FROM " + parser_image + "\n" not in parser_dockerfile:
         raise ValueError("Parser image differs from reviewed immutable runtime inventory")
+    browser_image = runtime["playwright_browser"]["image"]
+    if (
+        "FROM --platform=linux/amd64 " + browser_image + "\n"
+        not in (ROOT / "scripts/isolation/Dockerfile.browser").read_text()
+    ):
+        raise ValueError("Browser image differs from reviewed immutable runtime inventory")
+    for name, key in (
+        ("seccomp-default.json", "source_sha256"),
+        ("seccomp-browser.json", "derived_sha256"),
+    ):
+        if (
+            hashlib.sha256((ROOT / "scripts/isolation" / name).read_bytes()).hexdigest()
+            != runtime["browser_seccomp"][key]
+        ):
+            raise ValueError("Browser profile differs from reviewed inventory")
     print(
         f"PASS: license inventory covers {len(python_packages)} Python and "
         f"{len(node_packages)} JavaScript locked packages"

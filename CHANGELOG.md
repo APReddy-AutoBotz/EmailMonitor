@@ -32,3 +32,5 @@ No application, live source connector, actual email collection, deployment, send
 - EM-005 offline foundation: draft original-input requests, durable synthetic job/item/outbox/effect/usage records, tenant RLS, bounded reservations, generation/lease recovery and test-only Celery with pinned disposable RabbitMQ CI failure tests. Corrected independent review and exact-head 196-test actual PostgreSQL/broker CI passed; no source acquisition or production worker activation.
 
 - EM-004b partial under review: actual test-only verified/pinned loopback TLS, inert bounded HTML observations and restrictive parser-only network-none/OOM CI diagnostics. Parser actual isolation evidence pending; browser profile/code absent, full EM-004 remains partial. No migration or production activation.
+
+- EM004c synthetic browser boundary under review: owner-approved scoped container profile, pinned current default plus three namespace syscall names, locked dev-only Playwright and bounded credential-free fixture IPC. Actual browser/sandbox CI pending; full EM004 partial, EM006 gated, production/live extraction unchanged.

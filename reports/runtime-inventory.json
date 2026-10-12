@@ -1,5 +1,5 @@
 {
-  "verified_date": "2026-10-10",
+  "verified_date": "2026-10-11",
   "postgresql": {
     "version": "17.11",
     "license": "PostgreSQL",
@@ -9,7 +9,7 @@
     "ci_image": "postgres:17.11-bookworm@sha256:3645570cccdfa447589da9f57dd740faa29b30938e861289a5574b6ca6b03826",
     "image_metadata_source": "https://hub.docker.com/v2/repositories/library/postgres/tags/17.11-bookworm"
   },
-  "scope": "Immutable official PostgreSQL/RabbitMQ/Python diagnostic CI images. Full image SBOM/base-system attribution and vulnerability certification remain release gates; no container is distributed by this change.",
+  "scope": "Official immutable disposable PostgreSQL/RabbitMQ/Python/Playwright CI images and scoped approved browser profile. Whole-image attribution/SBOM/vulnerability certification remains a release gate; no production distribution.",
   "rabbitmq": {
     "version": "4.3.6",
     "license": "MPL-2.0",
@@ -26,5 +26,28 @@
     "image_metadata_source": "https://hub.docker.com/v2/repositories/library/python/tags/3.12.13-slim-bookworm",
     "linux_amd64_digest": "sha256:6e13e65c55e33adf203d77ee371cf8bf5d81bd4902ef07565721f46bf44917af",
     "purpose": "Disposable diagnostic network-none parser CI only; no production distribution"
+  },
+  "playwright_browser": {
+    "version": "1.63.0",
+    "license": "Apache-2.0",
+    "image": "mcr.microsoft.com/playwright/python:v1.63.0-noble@sha256:96b39581c89131729a7ecb8d532314af54c7f9bcc7a61fe15c7a9e77602acf59",
+    "platform": "linux/amd64",
+    "index_digest": "sha256:72bd171a9ffc2b4b59532aaa6210e21014d07093120dc25528870c0b840da1f0",
+    "config_digest": "sha256:59fe35832a79d1324e778b737760b2afc11cffcbaeba325012f96cabae832a75",
+    "image_metadata_source": "https://mcr.microsoft.com/v2/playwright/python/manifests/v1.63.0-noble",
+    "image_config_default_user": "root; diagnostic explicitly selects uid1000",
+    "purpose": "Approved synthetic-only network-none browser CI, no production image distribution",
+    "release_gaps": [
+      "Whole-image SBOM/system/browser/FFmpeg notices and vulnerabilities not certified",
+      "proxy-agent-negotiate bundled MIT entry lacks license text"
+    ]
+  },
+  "browser_seccomp": {
+    "source": "https://raw.githubusercontent.com/moby/profiles/2ceae35d351c156cb5a8efc0fdc4a08cf94569d8/seccomp/default.json",
+    "source_license": "Apache-2.0",
+    "source_sha256": "6416b47770785a41ac59073cdc77d9fe98517df2799dc83ef207e622de3053f6",
+    "derived_sha256": "298a3da8bde69390ca36e26ee2bd9b2bd3db193f406d223895a84f06f2e9d0f5",
+    "delta": "Two argument-unfiltered allow blocks: clone,setns,unshare and separately approved chroot; all current baseline fields/rules preserved",
+    "scope": "Only the temporary synthetic browser container; no host configuration change"
   }
 }

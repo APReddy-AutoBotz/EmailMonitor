@@ -43,6 +43,8 @@ def test_container_runner_only_restricts_default_capabilities_and_network() -> N
     ):
         assert forbidden not in runner
     assert 'after["OOMKilled"]' in runner
+    assert '"Actual memory enforcement not established: "' in runner
+    assert '"stderr": started.stderr[:1024]' in runner
     assert 'os.environ.get("GITHUB_ACTIONS") != "true"' in runner
 
 

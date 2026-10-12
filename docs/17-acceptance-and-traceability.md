@@ -129,3 +129,7 @@ AT-05/UAT-07/SEC-TENANT/FR-025: `test_durable_jobs.py` uses actual non-owner Pos
 ## EM-004b partial diagnostic boundary (2026-10-10)
 
 SEC-EGRESS/LIMITS: test_tls_fixture.py exercises actual pinned loopback TLS, verified CA/hostname, redirect/release authorization, credential-free requests and bounded deadline/header/body framing. This explicit test-only endpoint is not production DNS/public-egress certification. test_fixture_parser.py covers inert bounded UTF-8 HTML observations only; no contact/PDF extraction. test_isolation_configuration.py statically checks the restrictive container/CI definition. Actual parser network/OOM acceptance requires the separate exact-head parser job, currently pending; browser isolation is absent and full EM-004 remains partial. [Runbook](30-isolated-fixture-runbook.md) and [evidence](../reports/em004b-validation.md).
+
+## EM-004c approved browser diagnostic boundary (2026-10-11)
+
+SEC-EGRESS/LIMITS: bounded test-only browser IPC and profile semantic-delta tests pass without browser execution. Eighteen new protocol/configuration cases include one actual TLS mediation case; actual Chromium namespace/seccomp sandbox, network-path/subresource/WebSocket/service-worker/popup/download and credential-forwarding acceptance requires the separately reviewed browser workflow. Production/live entrypoints remain unavailable, full EM004 PARTIAL and EM006 gated. [Runbook](31-synthetic-browser-boundary.md) / [evidence](../reports/em004c-validation.md).

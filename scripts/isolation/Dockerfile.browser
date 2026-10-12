@@ -1,0 +1,8 @@
+# Approved synthetic diagnostic only; immutable official amd64 browser image.
+FROM --platform=linux/amd64 mcr.microsoft.com/playwright/python:v1.63.0-noble@sha256:96b39581c89131729a7ecb8d532314af54c7f9bcc7a61fe15c7a9e77602acf59
+WORKDIR /app
+COPY services/backend/pyproject.toml services/backend/uv.lock ./
+RUN python -m pip install --no-cache-dir uv==0.12.23 && uv sync --locked
+COPY scripts/isolation/browser_acceptance.py ./browser_acceptance.py
+ENV PATH="/app/.venv/bin:$PATH" PYTHONDONTWRITEBYTECODE=1
+USER 1000:1000

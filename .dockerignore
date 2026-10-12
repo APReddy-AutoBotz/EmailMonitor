@@ -11,3 +11,5 @@
 !scripts/isolation/parser_acceptance.py
 **/__pycache__
 **/*.pyc
+!scripts/isolation/Dockerfile.browser
+!scripts/isolation/browser_acceptance.py

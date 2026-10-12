@@ -1116,7 +1116,7 @@
   ],
   "lock_sha256": {
     "apps/web/pnpm-lock.yaml": "3280fc900f8bfbcfa707f9c20e7a62a861790f32accb0413170ea2bc13005dc2",
-    "services/backend/uv.lock": "26e00c64fa7ed0c2cd42d703ebd0f03ad2b238b86c6e2893e1d3c18b8a6f8335"
+    "services/backend/uv.lock": "13f125e4c62a5edea114ed7b0cb537bf18e74117ece77dbaa69247338e36850e"
   },
   "python": [
     {
@@ -1281,6 +1281,17 @@
       "version": "0.143.0"
     },
     {
+      "name": "greenlet",
+      "version": "3.5.6",
+      "license": "MIT AND PSF-2.0",
+      "source": "https://pypi.org/project/greenlet/3.5.6/",
+      "installed_on_test_platform": true,
+      "license_files": [
+        "greenlet-3.5.6.dist-info/licenses/LICENSE",
+        "greenlet-3.5.6.dist-info/licenses/LICENSE.PSF"
+      ]
+    },
+    {
       "license": "MIT",
       "license_files": [
         "LICENSE.txt"
@@ -1435,6 +1446,21 @@
       "version": "1.31.5"
     },
     {
+      "name": "playwright",
+      "version": "1.63.0",
+      "license": "Apache-2.0",
+      "source": "https://pypi.org/project/playwright/1.63.0/",
+      "installed_on_test_platform": true,
+      "license_files": [
+        "playwright-1.63.0.dist-info/licenses/LICENSE",
+        "playwright/driver/LICENSE",
+        "playwright/driver/package/LICENSE",
+        "playwright/driver/package/lib/serverRegistry.js.LICENSE",
+        "playwright/driver/package/lib/utilsBundle.js.LICENSE",
+        "playwright/driver/package/lib/webp_codec.LICENSE"
+      ]
+    },
+    {
       "license": "MIT",
       "license_files": [
         "LICENSE"
@@ -1479,6 +1505,16 @@
       "name": "pydantic-core",
       "source": "https://pypi.org/project/pydantic-core/2.50.0/",
       "version": "2.50.0"
+    },
+    {
+      "name": "pyee",
+      "version": "13.0.1",
+      "license": "MIT",
+      "source": "https://pypi.org/project/pyee/13.0.1/",
+      "installed_on_test_platform": true,
+      "license_files": [
+        "pyee-13.0.1.dist-info/licenses/LICENSE"
+      ]
     },
     {
       "license": "BSD-2-Clause",
@@ -1668,5 +1704,5 @@
   ],
   "schema_version": "1.0",
   "scope": "All locked Python and pnpm packages including optional platform packages. Metadata declarations, not legal clearance or vulnerability certification.",
-  "verified_date": "2026-10-10"
+  "verified_date": "2026-10-11"
 }
