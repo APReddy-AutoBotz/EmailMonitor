@@ -255,7 +255,32 @@ def test_real_current_job_source_deletion_fence_before_commit(
         csrf = scenario.login(client, "owner")
         headers = {"Origin": ORIGIN, "X-CSRF-Token": csrf}
         if action == "cancel":
-            Ledger(extraction.database, extraction.token, SETTINGS).control(org, job, "cancel", 1)
+            with extraction.database.tenant(
+                extraction.token, org, Capability.READ_ORGANIZATION
+            ) as (c, _):
+                revision: int = c.execute(
+                    text(
+                        "SELECT row_version FROM emailmonitor.jobs "
+                        "WHERE organization_id=:org AND id=:job"
+                    ),
+                    {"org": org, "job": job},
+                ).scalar_one()
+            Ledger(extraction.database, extraction.token, SETTINGS).control(
+                org, job, "cancel", int(revision)
+            )
+            with extraction.database.tenant(
+                extraction.token, org, Capability.READ_ORGANIZATION
+            ) as (c, _):
+                assert (
+                    c.execute(
+                        text(
+                            "SELECT state FROM emailmonitor.jobs "
+                            "WHERE organization_id=:org AND id=:job"
+                        ),
+                        {"org": org, "job": job},
+                    ).scalar_one()
+                    == "cancelled"
+                )
         elif action == "revoke":
             assert (
                 client.post(
