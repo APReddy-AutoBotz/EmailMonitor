@@ -1,5 +1,6 @@
 """Owned disposable Docker topology; inspect fail-closed before any guest I/O."""
 
+import hashlib
 import ipaddress
 import json
 import os
@@ -17,6 +18,7 @@ from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
+from initialize_ci_ipv6 import initialize, require_disposable_ci
 from run_browser_acceptance import PAGE
 from tls_fixture_server import certificate
 from transport_manifest import ENDPOINTS, IPAM_GATEWAYS, V4_SUBNET, V6_SUBNET
@@ -283,14 +285,16 @@ class Topology:
     def __init__(self) -> None:
         if os.environ.get("GITHUB_ACTIONS") != "true":
             raise RuntimeError("Reviewed disposable CI environment required")
-        check_host_ipv6_forwarding()
+        require_disposable_ci()
         self.version = check_daemon()
-        self.baseline = host_baseline()
+        self.preparation_baseline = host_baseline()
+        self.baseline: dict[str, object] | None = None
         suffix = secrets.token_hex(5)
         self.name, self.bridge = "em-fetch-" + suffix, "em" + suffix
         self.identifiers: dict[str, str] = {}
         self.processes: dict[str, OwnedProcess] = {}
         self.images: list[str] = []
+        self.image_provenance: dict[str, dict[str, str]] = {}
         self.container_names: dict[str, str] = {}
         self.owner = secrets.token_hex(16)
         self.network_created = False
@@ -377,6 +381,11 @@ class Topology:
         for role, context in (("fixture", fixture), ("gateway", gateway)):
             image = "emailmonitor-" + role + ":" + suffix
             self._build_image(image, context)
+        self._build_image(
+            "emailmonitor-controlled-browser:" + suffix,
+            root,
+            root / "scripts/isolation/Dockerfile.browser",
+        )
 
     def _build_image(self, image: str, context: Path, dockerfile: Path | None = None) -> None:
         self._register_image(image)
@@ -394,6 +403,41 @@ class Topology:
         if metadata is None:
             raise RuntimeError("Missing owned image")
         require_owner("image", metadata, self.owner)
+        identifier = metadata.get("Id", "")
+        if not re.fullmatch(r"sha256:[0-9a-f]{64}", identifier):
+            raise RuntimeError("Missing immutable owned image identity")
+        recipe = (dockerfile or context / "Dockerfile").read_bytes()
+        self.image_provenance[image] = {
+            "image_id": identifier,
+            "dockerfile_sha256": hashlib.sha256(recipe).hexdigest(),
+            "pinned_base": next(
+                line for line in recipe.decode().splitlines() if line.startswith("FROM ")
+            ),
+        }
+
+    def _prepared_image(self, image: str) -> str:
+        expected = self.image_provenance.get(image)
+        metadata = resource("image", image)
+        if expected is None or metadata is None or metadata.get("Id") != expected["image_id"]:
+            raise RuntimeError("Prepared owned image changed or is missing")
+        require_owner("image", metadata, self.owner)
+        return expected["image_id"]
+
+    def _capture_baseline(self) -> None:
+        if self.baseline is not None or self.network_created:
+            raise RuntimeError("Protected baseline cannot be recaptured")
+        check_host_ipv6_forwarding()
+        self.baseline = host_baseline()
+        print(
+            json.dumps(
+                {
+                    "protected_baseline_digest": hashlib.sha256(
+                        json.dumps(self.baseline, sort_keys=True).encode()
+                    ).hexdigest()
+                }
+            ),
+            flush=True,
+        )
 
     def _register_image(self, image: str) -> None:
         if resource("image", image) is not None:
@@ -419,17 +463,27 @@ class Topology:
         return result
 
     def start(self) -> None:
-        check_host_ipv6_forwarding()
+        require_disposable_ci()
+        if self.baseline is not None or self.network_created:
+            raise RuntimeError("Protected phase already started")
         self._build(self.root, Path(self.directory.name), self.suffix)
-        built_state = host_baseline()
-        if built_state != self.baseline:
-            print(
-                json.dumps({"host_state_checkpoint": "after_image_build_before_network"}),
-                flush=True,
-            )
-            print(baseline_diagnostic(self.baseline, built_state), flush=True)
-            raise RuntimeError("Image build changed host baseline; no topology creation permitted")
-        check_host_ipv6_forwarding()
+        prepared = host_baseline()
+        print(
+            json.dumps(
+                {"host_state_checkpoint": "trusted_image_preparation_before_initialization"}
+            ),
+            flush=True,
+        )
+        print(baseline_diagnostic(self.preparation_baseline, prepared), flush=True)
+        for image in self.images:
+            self._prepared_image(image)
+        if len(self.images) != 3 or len(self.image_provenance) != 3:
+            raise RuntimeError("Incomplete prepared image manifest")
+        print(
+            json.dumps({"owned_prepared_images": self.image_provenance}, sort_keys=True), flush=True
+        )
+        initialize()
+        self._capture_baseline()
         self.network_created = True
         docker(
             "network",
@@ -475,7 +529,7 @@ class Topology:
             ]
             if role.startswith("fixture-"):
                 args += ["--sysctl=net.ipv4.ip_unprivileged_port_start=443"]
-            args += [self.images[1 if role == "gateway" else 0]]
+            args += [self._prepared_image(self.images[1 if role == "gateway" else 0])]
             identifier = self._container_id(name, docker(*args).stdout.strip())
             self.identifiers[role] = identifier
         self.inspect(running=False)
@@ -499,7 +553,7 @@ class Topology:
 
         profile = self.root / "scripts/isolation/seccomp-browser.json"
         image = "emailmonitor-controlled-browser:" + self.suffix
-        self._build_image(image, self.root, self.root / "scripts/isolation/Dockerfile.browser")
+        image_id = self._prepared_image(image)
         name = self._register_container("browser")
         identifier = docker(
             "create",
@@ -525,12 +579,15 @@ class Topology:
             "--env=XDG_CONFIG_HOME=/tmp/browser-config",
             "--env=CHROME_CONFIG_HOME=/tmp/browser-config",
             "--env=XDG_CACHE_HOME=/tmp/browser-cache",
-            image,
+            image_id,
             "python",
             "/app/browser_acceptance.py",
         ).stdout.strip()
         self.browser_identifier = self._container_id(name, identifier)
-        host = json.loads(docker("inspect", identifier).stdout)[0]["HostConfig"]
+        browser_metadata = json.loads(docker("inspect", identifier).stdout)[0]
+        if browser_metadata.get("Image") != image_id:
+            raise RuntimeError("Browser image differs from prepared identity")
+        host = browser_metadata["HostConfig"]
         if (
             host["NetworkMode"] != "none"
             or host["Privileged"]
@@ -551,6 +608,8 @@ class Topology:
         return identifier
 
     def inspect(self, running: bool = True) -> None:
+        if self.baseline is None:
+            raise RuntimeError("Protected baseline missing")
         network = json.loads(docker("network", "inspect", self.name).stdout)[0]
         require_owner("network", network, self.owner)
         validate_network(
@@ -569,6 +628,9 @@ class Topology:
         for role, identifier in self.identifiers.items():
             metadata = json.loads(docker("inspect", identifier).stdout)[0]
             require_owner("container", metadata, self.owner)
+            expected_image = self.images[1 if role == "gateway" else 0]
+            if metadata.get("Image") != self.image_provenance[expected_image]["image_id"]:
+                raise RuntimeError("Runtime image differs from prepared identity")
             validate_container(metadata, self.name, role, running)
             if running:
                 endpoint = metadata["NetworkSettings"]["Networks"][self.name]
@@ -600,12 +662,20 @@ class Topology:
         for image in self.images:
             try:
                 remove_owned("image", image, self.owner)
+                provenance = self.image_provenance.get(image)
+                if provenance is not None and resource("image", provenance["image_id"]) is not None:
+                    raise RuntimeError("Prepared owned image identity remains after cleanup")
             except Exception:
                 failures.append("image_cleanup")
         self.directory.cleanup()
         current = host_baseline()
-        if current != self.baseline:
-            print(baseline_diagnostic(self.baseline, current), flush=True)
-            failures.append("baseline_cleanup")
+        if self.baseline is not None:
+            if current != self.baseline:
+                print(baseline_diagnostic(self.baseline, current), flush=True)
+                failures.append("baseline_cleanup")
+        elif self.network_created:
+            failures.append("missing_baseline_cleanup")
+        else:
+            print(json.dumps({"preparation_cleanup_without_protected_phase": True}), flush=True)
         if failures:
             raise RuntimeError("Owned cleanup failed: " + ",".join(failures))

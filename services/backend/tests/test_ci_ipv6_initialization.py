@@ -102,8 +102,16 @@ def test_value_reader_has_fixed_paths_and_rejects_malformed_evidence(
 
 def test_workflow_initializes_before_strict_acceptance_only() -> None:
     workflow = Path(".github/workflows/transport-isolation.yml").read_text()
-    assert workflow.count("python scripts/isolation/initialize_ci_ipv6.py") == 1
-    assert workflow.index("initialize_ci_ipv6.py") < workflow.index("test_transport_acceptance.py")
+    assert "Trusted image preparation, approved initialization" in workflow
+    topology = Path("scripts/isolation/transport_topology.py").read_text()
+    start = topology.split("    def start(self) -> None:", 1)[1].split("    def browser", 1)[0]
+    assert (
+        start.index("self._build(")
+        < start.index("initialize()")
+        < start.index("self._capture_baseline()")
+        < start.index("self.network_created = True")
+    )
+    assert start.count("initialize()") == 1
     assert "12 passed" in workflow and "[0-9]+ skipped|[0-9]+ warnings?" in workflow
 
 

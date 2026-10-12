@@ -39,7 +39,7 @@ def state_digest() -> str:
     return hashlib.sha256(json.dumps(records, sort_keys=True).encode()).hexdigest()
 
 
-def initialize() -> None:
+def require_disposable_ci() -> None:
     if (
         os.environ.get("GITHUB_ACTIONS") != "true"
         or os.environ.get("RUNNER_ENVIRONMENT") != "github-hosted"
@@ -47,6 +47,10 @@ def initialize() -> None:
         or os.environ.get("EM_REQUIRE_CONTROLLED_NETWORK") != "true"
     ):
         raise RuntimeError("Approved disposable GitHub-hosted Linux transport job required")
+
+
+def initialize() -> None:
+    require_disposable_ci()
     before, before_state = values(), state_digest()
     print(
         json.dumps({"ipv6_initialization_before": before, "host_state_digest": before_state}),

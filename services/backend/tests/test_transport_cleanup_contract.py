@@ -70,7 +70,7 @@ def test_preflight_refuses_before_any_daemon_or_build_call(
         pytest.fail("Daemon/build called before forwarding preflight")
 
     monkeypatch.setenv("GITHUB_ACTIONS", "true")
-    monkeypatch.setattr(topology_module, "check_host_ipv6_forwarding", refuse)
+    monkeypatch.setattr(topology_module, "require_disposable_ci", refuse)
     monkeypatch.setattr(topology_module, "check_daemon", unexpected)
     monkeypatch.setattr(topology_module, "docker", unexpected)
     monkeypatch.setattr(Topology, "_build", unexpected)
@@ -85,59 +85,44 @@ def test_preflight_refuses_before_any_daemon_or_build_call(
         value.directory.cleanup()
 
 
-def test_forwarding_is_rechecked_after_build_before_network_creation(
+def test_forwarding_verification_fails_before_capture_or_network_creation(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     value = shell(tmp_path)
     calls: list[str] = []
 
-    def preflight() -> None:
-        calls.append("preflight")
-        if len(calls) > 1:
-            raise RuntimeError("Synthetic forwarding changed while building")
+    def refuse() -> None:
+        calls.append("verified")
+        raise RuntimeError("Synthetic forwarding not established")
 
-    def built(*args: object) -> None:
-        calls.append("build")
-
-    def unexpected(*args: object, **kwargs: object) -> object:
-        pytest.fail("Network created after unsupported forwarding")
-
-    monkeypatch.setattr(topology_module, "check_host_ipv6_forwarding", preflight)
-    monkeypatch.setattr(Topology, "_build", built)
-    monkeypatch.setattr(topology_module, "docker", unexpected)
-    monkeypatch.setattr(topology_module, "host_baseline", lambda: {})
+    monkeypatch.setattr(topology_module, "check_host_ipv6_forwarding", refuse)
+    monkeypatch.setattr(topology_module, "host_baseline", lambda: pytest.fail("Premature capture"))
     try:
-        with pytest.raises(RuntimeError, match="changed while building"):
-            value.start()
-        assert calls == ["preflight", "build", "preflight"] and not value.network_created
+        with pytest.raises(RuntimeError, match="not established"):
+            value._capture_baseline()
+        assert value.baseline is None and not value.network_created and calls == ["verified"]
     finally:
         value.directory.cleanup()
 
 
 @pytest.mark.parametrize("section", ["addresses", "routes", "rules"])
-def test_after_build_checkpoint_refuses_before_any_topology_creation(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-    section: str,
+def test_protected_baseline_is_captured_only_once_and_repeated_start_refuses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, section: str
 ) -> None:
     value = shell(tmp_path)
-    value.baseline = {section: []}
+    expected: dict[str, object] = {section: [{"synthetic": True}]}
     monkeypatch.setattr(topology_module, "check_host_ipv6_forwarding", lambda: None)
-    monkeypatch.setattr(Topology, "_build", lambda *args: None)
-    monkeypatch.setattr(topology_module, "host_baseline", lambda: {section: [{"synthetic": True}]})
-
-    def unexpected(*args: object, **kwargs: object) -> object:
-        pytest.fail("Topology creation attempted after build changed host baseline")
-
-    monkeypatch.setattr(topology_module, "docker", unexpected)
+    monkeypatch.setattr(topology_module, "require_disposable_ci", lambda: None)
+    monkeypatch.setattr(topology_module, "host_baseline", lambda: expected)
+    monkeypatch.setattr(Topology, "_build", lambda *args: pytest.fail("Repeated preparation"))
     try:
-        with pytest.raises(RuntimeError, match="Image build changed host baseline"):
+        value._capture_baseline()
+        assert value.baseline == expected
+        with pytest.raises(RuntimeError, match="cannot be recaptured"):
+            value._capture_baseline()
+        with pytest.raises(RuntimeError, match="already started"):
             value.start()
-        assert not value.network_created
-        evidence = capsys.readouterr().out
-        assert "after_image_build_before_network" in evidence
-        assert section in evidence and "synthetic" in evidence
+        assert value.baseline == expected and not value.network_created
     finally:
         value.directory.cleanup()
 
@@ -258,11 +243,13 @@ def shell(tmp_path: Path) -> Topology:
     value.name, value.bridge, value.suffix = "owned", "owned0", "unit"
     value.identifiers, value.processes, value.container_names = {}, {}, {}
     value.images = []
+    value.image_provenance = {}
     value.network_created = False
     value.browser_identifier = None
     value.directory = tempfile.TemporaryDirectory(dir=tmp_path)
     value.root = tmp_path
-    value.baseline = {}
+    value.preparation_baseline = {}
+    value.baseline = None
     return value
 
 
@@ -275,11 +262,17 @@ def test_creation_timeout_reconciles_only_exact_owned_resource(
     monkeypatch.setattr(topology_module, "docker", daemon.call)
     monkeypatch.setattr(topology_module, "host_baseline", lambda: {})
     monkeypatch.setattr(topology_module, "check_host_ipv6_forwarding", lambda: None)
+    monkeypatch.setattr(topology_module, "require_disposable_ci", lambda: None)
+    monkeypatch.setattr(topology_module, "initialize", lambda: None)
 
     def built(self: Topology, root: Path, directory: Path, suffix: str) -> None:
-        self.images = ["fixture", "gateway"]
+        self.images = ["fixture", "gateway", "browser"]
         for image in self.images:
-            daemon.values[("image", image)] = {"Config": {"Labels": {OWNER_LABEL: self.owner}}}
+            daemon.values[("image", image)] = {
+                "Id": "sha256:" + "c" * 64,
+                "Config": {"Labels": {OWNER_LABEL: self.owner}},
+            }
+            self.image_provenance[image] = {"image_id": "sha256:" + "c" * 64}
 
     monkeypatch.setattr(Topology, "_build", built)
     with pytest.raises(subprocess.TimeoutExpired):
@@ -311,3 +304,117 @@ def test_unknown_owner_is_preserved_and_absence_error_never_means_success(
     monkeypatch.setattr(topology_module, "docker", disconnected)
     with pytest.raises(RuntimeError, match="absence"):
         remove_owned("network", "owned", "test-owner")
+
+
+def test_trusted_preparation_initialization_capture_and_creation_are_ordered(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    value = shell(tmp_path)
+    order: list[str] = []
+    metadata: dict[str, Any] = {
+        "Id": "sha256:" + "c" * 64,
+        "Config": {"Labels": {OWNER_LABEL: value.owner}},
+    }
+
+    def built(*args: object) -> None:
+        order.append("build")
+        value.images = ["fixture", "gateway", "browser"]
+        value.image_provenance = {image: {"image_id": metadata["Id"]} for image in value.images}
+
+    def initialized() -> None:
+        order.append("initialize")
+
+    def snapshot() -> dict[str, object]:
+        order.append("snapshot")
+        return {"routes": [{"synthetic_prepared_state": True}]}
+
+    def create(*args: str, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        assert args[:2] == ("network", "create")
+        order.append("network")
+        raise subprocess.TimeoutExpired("synthetic creation boundary", 1)
+
+    monkeypatch.setattr(topology_module, "require_disposable_ci", lambda: None)
+    monkeypatch.setattr(Topology, "_build", built)
+    monkeypatch.setattr(topology_module, "resource", lambda *args: metadata)
+    monkeypatch.setattr(topology_module, "initialize", initialized)
+    monkeypatch.setattr(topology_module, "host_baseline", snapshot)
+    monkeypatch.setattr(
+        topology_module, "check_host_ipv6_forwarding", lambda: order.append("verify")
+    )
+    monkeypatch.setattr(topology_module, "docker", create)
+    try:
+        with pytest.raises(subprocess.TimeoutExpired):
+            value.start()
+        assert order == ["build", "snapshot", "initialize", "verify", "snapshot", "network"]
+        assert value.baseline == {"routes": [{"synthetic_prepared_state": True}]}
+        output = capsys.readouterr().out
+        assert "trusted_image_preparation_before_initialization" in output
+        assert "owned_prepared_images" in output and "protected_baseline_digest" in output
+    finally:
+        value.directory.cleanup()
+
+
+@pytest.mark.parametrize("problem", ["missing", "changed", "foreign_owner"])
+def test_prepared_image_identity_and_ownership_are_rechecked(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, problem: str
+) -> None:
+    value = shell(tmp_path)
+    identifier = "sha256:" + "c" * 64
+    value.image_provenance = {"prepared": {"image_id": identifier}}
+    metadata: dict[str, Any] = {
+        "Id": identifier,
+        "Config": {"Labels": {OWNER_LABEL: value.owner}},
+    }
+    if problem == "changed":
+        metadata["Id"] = "sha256:" + "d" * 64
+    elif problem == "foreign_owner":
+        metadata["Config"]["Labels"][OWNER_LABEL] = "other-owner"
+    result = None if problem == "missing" else metadata
+    monkeypatch.setattr(topology_module, "resource", lambda *args: result)
+    try:
+        with pytest.raises(RuntimeError):
+            value._prepared_image("prepared")
+    finally:
+        value.directory.cleanup()
+
+
+def test_protected_cleanup_drift_fails_without_recapturing_baseline(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    value = shell(tmp_path)
+    value.baseline = {"routes": []}
+    monkeypatch.setattr(topology_module, "host_baseline", lambda: {"routes": [{"changed": True}]})
+    with pytest.raises(RuntimeError, match="baseline_cleanup"):
+        value.close()
+    assert value.baseline == {"routes": []}
+
+
+def test_build_records_exact_owned_image_and_pinned_recipe_provenance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import hashlib
+
+    value = shell(tmp_path)
+    recipe = b"FROM python:3.12@sha256:synthetic-unit-recipe\n"
+    (tmp_path / "Dockerfile").write_bytes(recipe)
+    identifier = "sha256:" + "c" * 64
+    results = iter([None, {"Id": identifier, "Config": {"Labels": {OWNER_LABEL: value.owner}}}])
+    calls: list[tuple[str, ...]] = []
+    monkeypatch.setattr(topology_module, "resource", lambda *args: next(results))
+
+    def built(*args: str, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        return subprocess.CompletedProcess(list(args), 0, "", "")
+
+    monkeypatch.setattr(topology_module, "docker", built)
+    try:
+        value._build_image("prepared", tmp_path)
+        assert value.images == ["prepared"]
+        assert value.image_provenance["prepared"] == {
+            "image_id": identifier,
+            "dockerfile_sha256": hashlib.sha256(recipe).hexdigest(),
+            "pinned_base": recipe.decode().strip(),
+        }
+        assert calls[0][0] == "build" and "--label=" + OWNER_LABEL + "=" + value.owner in calls[0]
+    finally:
+        value.directory.cleanup()
