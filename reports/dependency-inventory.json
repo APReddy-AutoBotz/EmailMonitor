@@ -1116,7 +1116,7 @@
   ],
   "lock_sha256": {
     "apps/web/pnpm-lock.yaml": "3280fc900f8bfbcfa707f9c20e7a62a861790f32accb0413170ea2bc13005dc2",
-    "services/backend/uv.lock": "ec13807de5a57e227bb383b77347c191dd45b4d54d11fecedf63b29dee2e1b1e"
+    "services/backend/uv.lock": "d56f0f706bff4e62cecc08f60f0ed02489fa77b5271fe671d5a3a178d5e0f683"
   },
   "python": [
     {

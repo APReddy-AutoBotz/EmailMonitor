@@ -1,0 +1,70 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "batch_id": {
+      "format": "uuid",
+      "title": "Batch Id",
+      "type": "string"
+    },
+    "association_id": {
+      "format": "uuid",
+      "title": "Association Id",
+      "type": "string"
+    },
+    "expected_revision": {
+      "minimum": 1,
+      "title": "Expected Revision",
+      "type": "integer"
+    },
+    "action": {
+      "enum": [
+        "accept",
+        "reject",
+        "correct"
+      ],
+      "title": "Action",
+      "type": "string"
+    },
+    "author_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Author Id"
+    },
+    "evidence_ids": {
+      "items": {
+        "format": "uuid",
+        "type": "string"
+      },
+      "maxItems": 40,
+      "minItems": 1,
+      "title": "Evidence Ids",
+      "type": "array"
+    },
+    "reason": {
+      "maxLength": 300,
+      "minLength": 1,
+      "pattern": "\\S",
+      "title": "Reason",
+      "type": "string"
+    }
+  },
+  "required": [
+    "batch_id",
+    "association_id",
+    "expected_revision",
+    "action",
+    "evidence_ids",
+    "reason"
+  ],
+  "title": "ReviewInput",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

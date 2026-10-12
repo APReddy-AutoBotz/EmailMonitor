@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-12 — EM-009 offline association candidate
+
+- Add deterministic evidence-backed HTML/PDF mapping, conservative IDNA normalization and separate role/identity/technical/outreach states
+- Add tenant relational receipts, citation/affiliation relations and revisioned evidence-backed review with atomic history/audit/outbox
+- Add forward-only migration 0006, identifier-only test API, contracts and pure/actual-PG regression cases; review/actual CI pending
+- No live acquisition, SMTP/MX, export, UI or production activation
+
 ## 2026-10-12 — EM-008 synthetic/offline foundation verified in Draft
 
 - Independently reconcile reviewed tree, five actual run/job logs and authoritative PDF acceptance criteria

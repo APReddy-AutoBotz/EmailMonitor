@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import Connection, text
 from sqlalchemy.exc import SQLAlchemyError
 
+from emailmonitor.associations.api import association_router
 from emailmonitor.config import Settings
 from emailmonitor.identity.oidc import AuthenticationDenied, OIDCProvider
 from emailmonitor.jobs.api import job_router
@@ -415,4 +416,5 @@ AND identity_id=:actor
 
         router.include_router(source_router(self.database, token, csrf, audit))
         router.include_router(job_router(self.database, token, csrf, settings))
+        router.include_router(association_router(self.database, token, csrf, settings))
         return router
