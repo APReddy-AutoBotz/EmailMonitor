@@ -137,3 +137,8 @@ SEC-EGRESS/LIMITS: bounded test-only browser IPC and profile semantic-delta test
 ## EM-004d synthetic DNS/pinning boundary (2026-10-12)
 
 SEC-NET/AT-04/NFR-002: `test_dns_fixture.py` adds actual loopback UDP/TLS validation, immutable route/peer behavior, changed DNS across requests/redirects, mixed/IPv6/duplicate/missing answers, bounded malformed/compressed/authority records, wrong owned UDP source, shared deadline, permission recheck and production refusal. `test_fixture_gateway_tenant.py` adds actual SQL/API current-policy browser mediation with synthetic DNS/TLS and no extra receipts for another tenant or revoked policy. Browser CI uses the same DNS-gated host TLS transport; the guest remains network-none with unchanged sandbox/profile/IPC gates. These establish only the declared synthetic diagnostic after actual CI, not public-DNS/firewall/production egress. Full EM-004 remains PARTIAL/EM-006 gated; see [EM-004d validation](../reports/em004d-validation.md).
+
+
+## EM-004e planning-only boundary (2026-10-12)
+
+SEC-NET/AT-04/NFR-002: `test_fetch_plan.py` covers immutable tenant/source/version/operation binding, complete public A/AAAA snapshot and exact selected-peer matching, absolute deadline, fresh authorization callback stages and bounded redirect re-planning. These are pure invariants with network denied, not actual DNS/socket/TLS/current-tenant or non-bypassable egress evidence. No existing transport is enabled or changed. Actual generalized transport and a reviewed controlled synthetic acceptance network remain required for full EM-004; EM-006 stays gated. See [validation](../reports/em004e-validation.md).

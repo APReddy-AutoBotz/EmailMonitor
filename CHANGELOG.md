@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-12 — EM-004e shared per-hop planner under review
+
+- Add unused network-free immutable scope/URL/public snapshot/selected-peer/deadline/redirect planning core
+- Add pure scope, DNS/IP, peer, deadline, callback and redirect invariants; no actual acquisition/security acceptance claim
+- Preserve all existing runtime, network, source, profile and workflow restrictions; full EM-004 remains partial
+
 ## 2026-10-12 — EM-004d synthetic DNS/pinning verified in Draft PR
 
 - Add fixed test-only DNS-wire validation before immutable literal TLS dial, with shared deadline and current-policy recheck
