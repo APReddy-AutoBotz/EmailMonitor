@@ -60,6 +60,10 @@ def classify_browser_network_error(text: str) -> str:
     raise RuntimeError("Browser network rejection code not established: " + text[:1024])
 
 
+def trace_stage(name: str) -> None:
+    print("synthetic-browser-stage:" + name, file=sys.stderr, flush=True)
+
+
 def main() -> None:
     if os.environ.get("EM_ISOLATION_DIAGNOSTIC") != "synthetic-browser-only":
         raise RuntimeError("Explicit browser diagnostic required")
@@ -101,6 +105,7 @@ def main() -> None:
             if result != errno.ENETUNREACH:
                 raise RuntimeError("Actual namespace network denial not established")
             network.append(result)
+    trace_stage("os_verified")
     requests = 0
     denied: list[str] = []
     allowed = 0
@@ -156,6 +161,7 @@ def main() -> None:
         browser = playwright.chromium.launch(
             channel="chromium", headless=True, chromium_sandbox=True, args=["--enable-automation"]
         )
+        trace_stage("browser_launched")
         if browser.version != "153.0.8010.12":
             raise RuntimeError("Pinned Chromium version mismatch")
         context = browser.new_context(
@@ -173,6 +179,7 @@ def main() -> None:
         arguments = command["arguments"]
         if any(x in arguments for x in ("--no-sandbox", "--disable-setuid-sandbox")):
             raise RuntimeError("Sandbox disabling flag present")
+        trace_stage("sandbox_verified")
         try:
             # No interception yet: actual Chromium navigation must fail. The
             # independent sockets above establish observed kernel ENETUNREACH.
@@ -185,6 +192,7 @@ def main() -> None:
                 raise invalid from error
         else:
             raise RuntimeError("Browser escaped network-none namespace")
+        trace_stage("direct_network_rejected")
         context.route("**/*", route_request)
         context.route_web_socket("**/*", websocket)
 
@@ -209,9 +217,14 @@ def main() -> None:
 
         page.on("popup", popup)
         page.on("download", download)
+        trace_stage("routes_registered")
         page.goto(URL, wait_until="domcontentloaded")
+        trace_stage("fixture_loaded")
+        trace_stage("click_start")
         page.locator("#reveal").click()
+        trace_stage("click_complete")
         page.wait_for_function("globalThis.boundaryReady === true", timeout=10000)
+        trace_stage("boundary_ready")
         page.wait_for_timeout(300)
         if page.locator("#marker").inner_text() != "synthetic marker revealed":
             raise RuntimeError("Approved synthetic browser interaction failed")
@@ -232,8 +245,10 @@ def main() -> None:
             raise RuntimeError("Positive gateway/popup/download evidence missing")
         if context.service_workers or len(context.pages) != 1:
             raise RuntimeError("Service worker or popup remained active")
+        trace_stage("checks_complete")
         context.close()
         browser.close()
+        trace_stage("browser_closed")
     print(
         json.dumps(
             {

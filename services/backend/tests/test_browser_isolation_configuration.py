@@ -239,3 +239,36 @@ def test_browser_denial_keeps_independent_kernel_interface_evidence_and_success_
     assert "result != errno.ENETUNREACH" in guest and 'interfaces != ["lo"]' in guest
     assert 'raise RuntimeError("Browser escaped network-none namespace")' in guest
     assert "set_offline" not in guest and "offline=True" not in guest
+
+
+def format_timeout_context(stderr: bytes, last_request: dict[str, str]) -> str:
+    import runpy
+    from collections.abc import Callable
+    from typing import cast
+
+    namespace = runpy.run_path(str(ROOT / "scripts/isolation/run_browser_acceptance.py"))
+    formatter = cast(
+        Callable[[int, int, int, dict[str, str], bytes], str], namespace["timeout_evidence"]
+    )
+    return formatter(4, 2, 2, last_request, stderr)
+
+
+def test_timeout_context_records_counters_last_request_and_bounded_stage_tail() -> None:
+    message = format_timeout_context(
+        b"x" * 10000 + b"synthetic-browser-stage:click_start",
+        {"url": "https://denied.fixture.example/image", "resource": "image", "method": "GET"},
+    )
+    payload = json.loads(message.split(": ", 1)[1])
+    assert payload["requests"] == 4 and payload["accepted"] == 2 and payload["denied"] == 2
+    assert payload["guest_stderr"].endswith("synthetic-browser-stage:click_start")
+    assert len(payload["guest_stderr"]) <= 2048
+    assert payload["last_request"]["resource"] == "image"
+
+
+def test_timeout_context_never_increases_deadline_or_unbounds_guest_output() -> None:
+    message = format_timeout_context(b"\x00" * 10000, {"url": "x" * 10000, "resource": "x" * 10000})
+    assert len(message) <= 16384
+    host = (ROOT / "scripts/isolation/run_browser_acceptance.py").read_text()
+    guest = (ROOT / "scripts/isolation/browser_acceptance.py").read_text()
+    assert "deadline = time.monotonic() + 60" in host and "len(errors) > 16384" in host
+    assert "synthetic-browser-stage:" in guest and "file=sys.stderr, flush=True" in guest

@@ -66,6 +66,23 @@ def authorize(url: SafeURL, operation: Operation) -> None:
         raise FetchDenied("source_policy_denied")
 
 
+def timeout_evidence(
+    requests: int, accepted: int, denied: int, last_request: dict[str, str], stderr: bytes
+) -> str:
+    """Bounded failure context only; never weakens the deadline or pass gates."""
+    summary = {
+        "requests": requests,
+        "accepted": accepted,
+        "denied": denied,
+        "last_request": {
+            name: last_request.get(name, "")[:limit]
+            for name, limit in (("url", 512), ("resource", 64), ("method", 16))
+        },
+        "guest_stderr": stderr[-2048:].decode(errors="replace"),
+    }
+    return ("Browser diagnostic deadline exceeded: " + json.dumps(summary))[:16384]
+
+
 def conversation(identifier: str, mediator: BrowserFixtureMediator) -> dict[str, object]:
     process = subprocess.Popen(
         ["docker", "start", "--attach", "--interactive", identifier],
@@ -80,6 +97,7 @@ def conversation(identifier: str, mediator: BrowserFixtureMediator) -> dict[str,
     buffer = bytearray()
     errors = bytearray()
     total = 0
+    last_request: dict[str, str] = {}
     try:
         with selectors.DefaultSelector() as selector:
             selector.register(process.stdout, selectors.EVENT_READ, "stdout")
@@ -118,6 +136,10 @@ def conversation(identifier: str, mediator: BrowserFixtureMediator) -> dict[str,
                             raise RuntimeError("Guest frame limit exceeded")
                         message = json.loads(raw)
                         if message.get("kind") == "request":
+                            last_request = {
+                                name: str(message.get(name, ""))[:512]
+                                for name in ("url", "resource", "method")
+                            }
                             if str(message.get("url", "")).endswith("/worker.js"):
                                 raise RuntimeError("Blocked service worker reached gateway")
                             write_bounded_reply(
@@ -142,6 +164,18 @@ def conversation(identifier: str, mediator: BrowserFixtureMediator) -> dict[str,
         if mediator.accepted < 2 or mediator.denied < 7:
             raise RuntimeError("Expected real gateway acceptance/denial absent")
         return result
+    except RuntimeError as failure:
+        if str(failure) == "Browser diagnostic deadline exceeded":
+            raise RuntimeError(
+                timeout_evidence(
+                    mediator.requests,
+                    mediator.accepted,
+                    mediator.denied,
+                    last_request,
+                    bytes(errors),
+                )
+            ) from failure
+        raise
     finally:
         if process.poll() is None:
             process.kill()
