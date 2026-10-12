@@ -6,6 +6,7 @@ RUN python -m pip install --no-cache-dir uv==0.12.23 && uv sync --locked --no-de
 COPY services/backend/src ./src
 COPY fixtures/html/search-page-1.html fixtures/html/search-page-2.html ./fixtures/
 COPY fixtures/html/article-a.html fixtures/html/article-b.html fixtures/html/tooltip.html fixtures/html/no-contact.html ./fixtures/
+COPY fixtures/pdf/article-a.pdf fixtures/pdf/article-b.pdf fixtures/pdf/wrapped.pdf fixtures/pdf/ambiguous.pdf fixtures/pdf/no-contact.pdf fixtures/pdf/scanned.pdf fixtures/pdf/encrypted.pdf fixtures/pdf/page-cap.pdf fixtures/pdf/corrupt.pdf ./fixtures/pdf/
 COPY scripts/isolation/parser_acceptance.py ./parser_acceptance.py
 ENV PATH="/app/.venv/bin:$PATH" PYTHONPATH="/app/src" PYTHONDONTWRITEBYTECODE=1
 USER 65532:65532

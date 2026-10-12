@@ -1,0 +1,44 @@
+# EM-008 — Offline PDF text/layout observation runbook
+
+## Scope and authorization
+
+This slice implements the document-16 isolated byte-to-observation parser foundation. It is stateless: no new database table, migration, queue effect, usage event or HTTP endpoint. The adapter receives immutable bytes in explicit test/fixture mode and a fixed registered synthetic identifier; it cannot acquire a URL, accept a password, execute document actions, select credentials or grant tenant access. Production refuses the synthetic assembly. `allow_pdf=False` returns an explicit disabled outcome.
+
+Source acquisition remains a separate protected-fetch/current-tenant responsibility. Existing HTML/browser source routes are unchanged; a public PDF URL is not permission to fetch it. Generic PDF acquisition, real-source certification, accepted identity associations, UI integration and production worker provisioning are not claimed by this parser slice. Trusted orchestration/persistence must retain existing tenant/source/job/deletion and retention fences when composing these observations in subsequent backlog tasks.
+
+## Exact dependency and notices
+
+Only `pypdf==6.20.1` is added, without extras. The lock points to the official PyPI registry with wheel SHA-256 `aa5a55ddcffdc5e5ab291d5decb23f6383f4e56f8e3263dc39af41fff03885ad` and source SHA-256 `28f5a9d2fdc2749264612d94e6a58de54c11d730d9f0cabf8ad34117c4942b45`. These match official release metadata; installed version/license and retained notices are tested. Python 3.12/3.13 compatibility is declared by exact upstream metadata; local and current CI execution use 3.12. No required new transitive package is introduced on that range.
+
+The package declares BSD-3-Clause, while bundled glyph data also contains Unicode License V3 plus Adobe/glyph-formatter BSD notices. Effective inventory records `BSD-3-Clause AND Unicode-3.0`; the [complete bundled license](../reports/licenses/pypdf-6.20.1-LICENSE.txt) and [nine distinct leading notices from twenty source files](../reports/licenses/pypdf-6.20.1-SOURCE-NOTICES.txt) are retained and checked against installed source. Source headers remain in the dependency distribution. Redistribution must preserve applicable notices/disclaimers and avoid endorsement claims; this is a technical inventory review, not final legal certification or a project-license choice. Installation/use implicitly accepts those permissive bundled terms. [Official release](https://pypi.org/project/pypdf/6.20.1/), [exact source](https://github.com/py-pdf/pypdf/tree/628c06057308b76a21cc9779df601c7a321399fb), [Unicode terms](https://www.unicode.org/license.txt).
+
+No PDFium, MuPDF, PDF renderer, OCR engine, font program, Pillow/Brotli/fonttools or extra crypto package is introduced. Existing cryptography remains a previously inventoried dependency. The adapter explicitly disables optional `jbig2dec` discovery and never calls image conversion. A synthetic encrypted-refusal fixture uses insecure RC4 solely as test data. No product encryption or password-decryption workflow is added; pypdf initialization itself can test the empty password before `is_encrypted` is rejected.
+
+## Bounds and explicit outcomes
+
+Trusted immutable limits can only tighten these synthetic platform ceilings:
+
+- Input: 262144 bytes (oversized/disabled inputs are refused before hashing or reader construction and have no claimed full digest); at most four inspected pages; page-tree entries/depth 64/16
+- Text: 256 total fragments, 8192 total characters, 512 characters per fragment; bounded authors/candidates/metadata/evidence
+- Streams: 65536 declared/decoded bytes, four filters and 262144 accumulated decoding-work bytes per stream; bounded recovery/array/image/XMP/XForm work; no external decoder
+- Observed cooperative deadline: three seconds across reader/page/visitor processing; library limits do not replace the existing OS/process CPU, memory, PID and wall-time boundary
+
+Parser CI retains network-none, nonroot, no capabilities, no-new-privileges/default seccomp, read-only root and bounded temporary resources, 128 MiB memory and existing cleanup/OOM assertions. No container/host/security setting is widened. A synchronous adapter does not claim it can interrupt every library instruction at its cooperative deadline.
+
+`observed` and `no_contact` require fully inspected supported pages; `no_contact` means no scoped candidate in those pages, not a universal PDF-success promise. `partial/page_cap` retains total/inspected counts and never claims no address beyond the cap. Encrypted, corrupt, too-large, image-only/no-extractable-text, unsupported geometry/font/structure, resource-limit and deadline inputs return explicit unsupported outcomes without retained provisional author/contact assertions. Unsupported zero inspected pages means no safely retained completed page observations, not that reader initialization performed no work. No OCR fallback or password cracking exists.
+
+## Evidence and mapping
+
+Plain-mode pypdf visitors provide real text-fragment transforms; the adapter uses `mult(text_matrix, user_matrix)` for the anchor. Evidence is 1-based page/fragment, actual anchor, actual full CropBox, PDF-point units/bottom-left origin and `full_cropbox_not_glyph_bbox` precision. It never manufactures glyph widths or labels a coarse region as an exact character box. Non-default text rise/horizontal scale/character or word spacing and adjusted/implicit text-show operators refuse: this profile supports simple Tj shows with default text state. Rotation, non-default UserUnit, complex transforms/forms, clipping/invisible text/color or graphics-state changes, embedded/custom fonts and unsupported encodings refuse conservatively. Tested standard-font WinAnsi text includes an encoded Unicode name. [Official coordinate/text limitations](https://pypdf.readthedocs.io/en/stable/user/extract-text.html).
+
+Ordered author instances come from explicit author blocks, including actually raised source marker fragments. First position stays separate from explicit correspondence markers/names. Same-name ambiguity is retained unresolved. Two-column footnotes and only tightly adjacent same-column address lines can form a candidate; both original fragments remain evidence. Unscoped footer addresses and labeled support/reference content do not become author addresses; explicit low-page author-correspondence footnotes remain eligible. Explicit affiliations and observed PDF metadata are retained; missing metadata is null, conflicts remain facts. PDF facts do not override structured/DOM article metadata merely because a PDF was processed later.
+
+Candidates remain raw observed strings with structural author hints, `unmatched`/`needs_review`, `not_checked`, `unverified`, and `not_assessed`. No accepted association, guessed mailbox, normalization/MX/delivery promise or probability is emitted. JSON Schema enforces structure and unavailable claims; runtime additionally checks author references, metadata consistency, literal/wrapped evidence and page/locator/geometry relationships. Validate received trusted-worker JSON with `PdfObservation.model_validate_json`, not schema alone.
+
+## Fixtures, checks and operations
+
+Nine original synthetic files comprise eight valid PDFs and one deliberately corrupt input. `pdf_fixture_builder.py` uses pypdf writer/object primitives and standard-font references; it embeds no third-party font program or harvested paper. A digest-pinned fixture loader and [manifest](../fixtures/pdf/manifest.json) reject unknown/changed paths. The parser never reads manually authored expected contact outcomes. Existing Poppler 26.05.0 was used only for local visual QA of seven unencrypted valid fixtures/twelve pages, not installed/distributed in the parser runtime; encrypted/corrupt refusal fixtures were not decrypted/rendered. Font-cache warnings are a local QA-tool limitation, separate from parser results.
+
+Run `scripts/check.sh` and focused `test_pdf_extraction.py`, `test_pdf_contracts.py`, `test_pdf_dependency_boundary.py`. The existing mandatory parser job must actually parse all pinned PDF fixtures, verify role/page/anchor/wrapped/ambiguous outcomes, byte/stream caps and existing network/OOM controls. All application SQL/broker, controlled transport, browser and docs gates remain required on the published reviewed head. Local skipped services and static configuration checks are not isolation acceptance. See [validation](../reports/em008-validation.md).
+
+No migration/rollback is needed for this stateless adapter. Revert the reviewed code/dependency/fixture change together if necessary; do not float dependency versions or bypass a failing isolation gate. EM-009 follows only after independent exact-tree review and actual required CI verify this declared parser slice.

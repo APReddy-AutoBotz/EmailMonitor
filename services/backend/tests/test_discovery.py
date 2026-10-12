@@ -329,6 +329,16 @@ def test_parser_build_context_only_adds_authored_search_fixtures() -> None:
         "!fixtures/html/article-b.html",
         "!fixtures/html/tooltip.html",
         "!fixtures/html/no-contact.html",
+        "!fixtures/pdf/",
+        "!fixtures/pdf/article-a.pdf",
+        "!fixtures/pdf/article-b.pdf",
+        "!fixtures/pdf/wrapped.pdf",
+        "!fixtures/pdf/ambiguous.pdf",
+        "!fixtures/pdf/no-contact.pdf",
+        "!fixtures/pdf/scanned.pdf",
+        "!fixtures/pdf/encrypted.pdf",
+        "!fixtures/pdf/page-cap.pdf",
+        "!fixtures/pdf/corrupt.pdf",
     ]
     # Docker matches both each path and its parents; admitting a parent alone
     # includes every descendant. Model the exact/** fixture rule subset with
@@ -359,6 +369,15 @@ def test_parser_build_context_only_adds_authored_search_fixtures() -> None:
         "fixtures/html/article-b.html",
         "fixtures/html/tooltip.html",
         "fixtures/html/no-contact.html",
+        "fixtures/pdf/article-a.pdf",
+        "fixtures/pdf/article-b.pdf",
+        "fixtures/pdf/wrapped.pdf",
+        "fixtures/pdf/ambiguous.pdf",
+        "fixtures/pdf/no-contact.pdf",
+        "fixtures/pdf/scanned.pdf",
+        "fixtures/pdf/encrypted.pdf",
+        "fixtures/pdf/page-cap.pdf",
+        "fixtures/pdf/corrupt.pdf",
     }
     files = {str(p.relative_to(ROOT)) for p in (ROOT / "fixtures").rglob("*") if p.is_file()}
     assert {path for path in files if included(path, rules)} == expected
@@ -366,6 +385,8 @@ def test_parser_build_context_only_adds_authored_search_fixtures() -> None:
         "fixtures/expected/new-secret.json",
         "fixtures/html/new-article.html",
         "fixtures/pdf/new.pdf",
+        "fixtures/pdf/manifest.json",
+        "fixtures/pdf/nested/article-a.pdf",
         "fixtures/html/nested/search-page-1.html",
     ):
         assert not included(unexpected, rules)

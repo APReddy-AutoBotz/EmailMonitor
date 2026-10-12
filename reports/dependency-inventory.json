@@ -1116,7 +1116,7 @@
   ],
   "lock_sha256": {
     "apps/web/pnpm-lock.yaml": "3280fc900f8bfbcfa707f9c20e7a62a861790f32accb0413170ea2bc13005dc2",
-    "services/backend/uv.lock": "13f125e4c62a5edea114ed7b0cb537bf18e74117ece77dbaa69247338e36850e"
+    "services/backend/uv.lock": "ec13807de5a57e227bb383b77347c191dd45b4d54d11fecedf63b29dee2e1b1e"
   },
   "python": [
     {
@@ -1535,6 +1535,18 @@
       "name": "pyjwt",
       "source": "https://pypi.org/project/pyjwt/2.15.1/",
       "version": "2.15.1"
+    },
+    {
+      "installed_on_test_platform": true,
+      "license": "BSD-3-Clause AND Unicode-3.0",
+      "declared_license": "BSD-3-Clause",
+      "license_files": [
+        "pypdf-6.20.1.dist-info/licenses/LICENSE",
+        "pypdf/_codecs/adobe_glyphs.py"
+      ],
+      "name": "pypdf",
+      "source": "https://pypi.org/project/pypdf/6.20.1/",
+      "version": "6.20.1"
     },
     {
       "license": "MIT",

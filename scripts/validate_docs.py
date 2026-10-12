@@ -96,6 +96,7 @@ def main() -> int:
         'discovery-event.json': 'discovery-event.schema.json',
         'discovery-checkpoint.json': 'discovery-checkpoint.schema.json',
         'article-observation.json': 'article-observation.schema.json',
+        'pdf-observation.json': 'pdf-observation.schema.json',
     }
     loaded = {}
     for name, schema_name in examples.items():
