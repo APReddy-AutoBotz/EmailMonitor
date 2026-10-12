@@ -11,6 +11,7 @@ dependencies = [
     "pg8000==1.31.5",
     "pyjwt[crypto]==2.15.1",
     "celery==5.6.3",
+    "pypdf==6.20.1",
 ]
 
 [dependency-groups]

@@ -23,3 +23,14 @@ fixtures/html/**
 !fixtures/html/article-b.html
 !fixtures/html/tooltip.html
 !fixtures/html/no-contact.html
+!fixtures/pdf/
+fixtures/pdf/**
+!fixtures/pdf/article-a.pdf
+!fixtures/pdf/article-b.pdf
+!fixtures/pdf/wrapped.pdf
+!fixtures/pdf/ambiguous.pdf
+!fixtures/pdf/no-contact.pdf
+!fixtures/pdf/scanned.pdf
+!fixtures/pdf/encrypted.pdf
+!fixtures/pdf/page-cap.pdf
+!fixtures/pdf/corrupt.pdf

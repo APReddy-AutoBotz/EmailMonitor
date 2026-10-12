@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-12 — EM-008 bounded offline PDF candidate
+
+- Add exact pypdf 6.20.1 without extras; retain BSD/Unicode glyph-data and distinct source notices in the effective inventory
+- Add actual text-fragment/page-region, ordered role, footnote/two-column/line-wrap observations and explicit unsupported/partial outcomes
+- Generate and visually inspect original synthetic standard-font PDFs; no third-party font program or publisher document
+- Extend mandatory network-none parser assertions within unchanged security settings; review/actual CI pending, no acquisition/API/migration/live enablement
+
 ## 2026-10-12 — EM-007 synthetic/offline foundation verified in Draft
 
 - Independently reconcile actual 599/no-skip application and eleven new runtime SQL cases against authoritative acceptance criteria

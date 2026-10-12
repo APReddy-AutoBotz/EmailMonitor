@@ -1,0 +1,2332 @@
+{
+  "$defs": {
+    "MetadataValues": {
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Title"
+        },
+        "journal": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Journal"
+        },
+        "publication_date": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Publication Date"
+        },
+        "doi": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Doi"
+        }
+      },
+      "title": "MetadataValues",
+      "type": "object"
+    },
+    "PdfAuthor": {
+      "additionalProperties": false,
+      "properties": {
+        "position": {
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Position",
+          "type": "integer"
+        },
+        "display_name": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Display Name",
+          "type": "string"
+        },
+        "marker": {
+          "maxLength": 2,
+          "pattern": "^[1-9][0-9]?$",
+          "title": "Marker",
+          "type": "string"
+        },
+        "first": {
+          "title": "First",
+          "type": "boolean"
+        },
+        "affiliations": {
+          "items": {
+            "maxLength": 300,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 20,
+          "title": "Affiliations",
+          "type": "array"
+        },
+        "corresponding": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Corresponding"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/PdfEvidence"
+          },
+          "maxItems": 10,
+          "minItems": 1,
+          "title": "Evidence",
+          "type": "array"
+        }
+      },
+      "required": [
+        "position",
+        "display_name",
+        "marker",
+        "first",
+        "evidence"
+      ],
+      "title": "PdfAuthor",
+      "type": "object"
+    },
+    "PdfCandidate": {
+      "additionalProperties": false,
+      "properties": {
+        "raw_address": {
+          "maxLength": 320,
+          "minLength": 3,
+          "title": "Raw Address",
+          "type": "string"
+        },
+        "author_positions": {
+          "items": {
+            "maximum": 100,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "maxItems": 100,
+          "title": "Author Positions",
+          "type": "array",
+          "uniqueItems": true
+        },
+        "association_status": {
+          "enum": [
+            "unmatched",
+            "needs_review"
+          ],
+          "title": "Association Status",
+          "type": "string"
+        },
+        "technical_status": {
+          "const": "not_checked",
+          "default": "not_checked",
+          "title": "Technical Status",
+          "type": "string"
+        },
+        "delivery_status": {
+          "const": "unverified",
+          "default": "unverified",
+          "title": "Delivery Status",
+          "type": "string"
+        },
+        "outreach_eligibility": {
+          "const": "not_assessed",
+          "default": "not_assessed",
+          "title": "Outreach Eligibility",
+          "type": "string"
+        },
+        "reconstruction": {
+          "enum": [
+            "literal",
+            "adjacent_line_wrap"
+          ],
+          "title": "Reconstruction",
+          "type": "string"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/PdfEvidence"
+          },
+          "maxItems": 4,
+          "minItems": 1,
+          "title": "Evidence",
+          "type": "array"
+        }
+      },
+      "required": [
+        "raw_address",
+        "author_positions",
+        "association_status",
+        "reconstruction",
+        "evidence"
+      ],
+      "title": "PdfCandidate",
+      "type": "object"
+    },
+    "PdfEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "page": {
+          "maximum": 4,
+          "minimum": 1,
+          "title": "Page",
+          "type": "integer"
+        },
+        "locator": {
+          "pattern": "^page:[1-4]:fragment:[0-9]{1,3}$",
+          "title": "Locator",
+          "type": "string"
+        },
+        "anchor": {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Anchor",
+          "type": "array"
+        },
+        "region": {
+          "maxItems": 4,
+          "minItems": 4,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Region",
+          "type": "array"
+        },
+        "coordinate_units": {
+          "const": "pdf_points",
+          "default": "pdf_points",
+          "title": "Coordinate Units",
+          "type": "string"
+        },
+        "coordinate_origin": {
+          "const": "bottom_left",
+          "default": "bottom_left",
+          "title": "Coordinate Origin",
+          "type": "string"
+        },
+        "region_precision": {
+          "const": "full_cropbox_not_glyph_bbox",
+          "default": "full_cropbox_not_glyph_bbox",
+          "title": "Region Precision",
+          "type": "string"
+        },
+        "excerpt": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Excerpt",
+          "type": "string"
+        }
+      },
+      "required": [
+        "page",
+        "locator",
+        "anchor",
+        "region",
+        "excerpt"
+      ],
+      "title": "PdfEvidence",
+      "type": "object"
+    },
+    "PdfMetadata": {
+      "additionalProperties": false,
+      "properties": {
+        "date_type": {
+          "const": "unspecified",
+          "default": "unspecified",
+          "title": "Date Type",
+          "type": "string"
+        },
+        "field": {
+          "enum": [
+            "title",
+            "journal",
+            "publication_date",
+            "doi"
+          ],
+          "title": "Field",
+          "type": "string"
+        },
+        "value": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Value",
+          "type": "string"
+        },
+        "evidence": {
+          "$ref": "#/$defs/PdfEvidence"
+        }
+      },
+      "required": [
+        "field",
+        "value",
+        "evidence"
+      ],
+      "title": "PdfMetadata",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "parser_version": {
+      "const": "pypdf-6.20.1-synthetic-v1",
+      "default": "pypdf-6.20.1-synthetic-v1",
+      "title": "Parser Version",
+      "type": "string"
+    },
+    "route": {
+      "const": "pdf",
+      "default": "pdf",
+      "title": "Route",
+      "type": "string"
+    },
+    "url": {
+      "maxLength": 200,
+      "title": "Url",
+      "type": "string",
+      "enum": [
+        "https://synthetic.publisher.example/ambiguous.pdf",
+        "https://synthetic.publisher.example/article-a.pdf",
+        "https://synthetic.publisher.example/article-b.pdf",
+        "https://synthetic.publisher.example/corrupt.pdf",
+        "https://synthetic.publisher.example/encrypted.pdf",
+        "https://synthetic.publisher.example/no-contact.pdf",
+        "https://synthetic.publisher.example/page-cap.pdf",
+        "https://synthetic.publisher.example/scanned.pdf",
+        "https://synthetic.publisher.example/wrapped.pdf"
+      ]
+    },
+    "content_digest": {
+      "anyOf": [
+        {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Content Digest"
+    },
+    "status": {
+      "enum": [
+        "observed",
+        "no_contact",
+        "partial",
+        "unsupported"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "reason": {
+      "enum": [
+        "complete",
+        "page_cap",
+        "byte_cap",
+        "encrypted",
+        "corrupt",
+        "image_only_or_no_extractable_text",
+        "unsupported_geometry",
+        "unsupported_font_or_structure",
+        "resource_limit",
+        "deadline",
+        "pdf_disabled"
+      ],
+      "title": "Reason",
+      "type": "string"
+    },
+    "pages_total": {
+      "anyOf": [
+        {
+          "maximum": 64,
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Pages Total"
+    },
+    "pages_inspected": {
+      "maximum": 4,
+      "minimum": 0,
+      "title": "Pages Inspected",
+      "type": "integer"
+    },
+    "complete_scan": {
+      "title": "Complete Scan",
+      "type": "boolean"
+    },
+    "authors": {
+      "items": {
+        "$ref": "#/$defs/PdfAuthor"
+      },
+      "maxItems": 100,
+      "title": "Authors",
+      "type": "array",
+      "prefixItems": [
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 1
+                },
+                "first": {
+                  "const": true
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 2
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 3
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 4
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 5
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 6
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 7
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 8
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 9
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 10
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 11
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 12
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 13
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 14
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 15
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 16
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 17
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 18
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 19
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 20
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 21
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 22
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 23
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 24
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 25
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 26
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 27
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 28
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 29
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 30
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 31
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 32
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 33
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 34
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 35
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 36
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 37
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 38
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 39
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 40
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 41
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 42
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 43
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 44
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 45
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 46
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 47
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 48
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 49
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 50
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 51
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 52
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 53
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 54
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 55
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 56
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 57
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 58
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 59
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 60
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 61
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 62
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 63
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 64
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 65
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 66
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 67
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 68
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 69
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 70
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 71
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 72
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 73
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 74
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 75
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 76
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 77
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 78
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 79
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 80
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 81
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 82
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 83
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 84
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 85
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 86
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 87
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 88
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 89
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 90
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 91
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 92
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 93
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 94
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 95
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 96
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 97
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 98
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 99
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "$ref": "#/$defs/PdfAuthor"
+            },
+            {
+              "properties": {
+                "position": {
+                  "const": 100
+                },
+                "first": {
+                  "const": false
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "candidates": {
+      "items": {
+        "$ref": "#/$defs/PdfCandidate"
+      },
+      "maxItems": 100,
+      "title": "Candidates",
+      "type": "array"
+    },
+    "metadata": {
+      "items": {
+        "$ref": "#/$defs/PdfMetadata"
+      },
+      "maxItems": 20,
+      "title": "Metadata",
+      "type": "array"
+    },
+    "preferred_metadata": {
+      "$ref": "#/$defs/MetadataValues"
+    },
+    "identity_association_implemented": {
+      "const": false,
+      "default": false,
+      "title": "Identity Association Implemented",
+      "type": "boolean"
+    },
+    "ocr_implemented": {
+      "const": false,
+      "default": false,
+      "title": "Ocr Implemented",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "url",
+    "content_digest",
+    "status",
+    "reason",
+    "pages_inspected",
+    "complete_scan",
+    "preferred_metadata"
+  ],
+  "title": "PdfObservation",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://emailmonitor.example/contracts/pdf-observation.schema.json",
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "observed"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "reason": {
+            "const": "complete"
+          },
+          "complete_scan": {
+            "const": true
+          },
+          "authors": {
+            "minItems": 1
+          },
+          "candidates": {
+            "minItems": 1
+          }
+        },
+        "required": [
+          "authors",
+          "candidates"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "no_contact"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "reason": {
+            "const": "complete"
+          },
+          "complete_scan": {
+            "const": true
+          },
+          "authors": {
+            "minItems": 1
+          },
+          "candidates": {
+            "maxItems": 0
+          }
+        },
+        "required": [
+          "authors"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "partial"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "reason": {
+            "const": "page_cap"
+          },
+          "complete_scan": {
+            "const": false
+          },
+          "authors": {
+            "minItems": 1
+          },
+          "pages_inspected": {
+            "minimum": 1
+          },
+          "pages_total": {
+            "type": "integer",
+            "minimum": 2
+          }
+        },
+        "required": [
+          "authors"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "unsupported"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "complete_scan": {
+            "const": false
+          },
+          "pages_inspected": {
+            "const": 0
+          },
+          "authors": {
+            "maxItems": 0
+          },
+          "candidates": {
+            "maxItems": 0
+          },
+          "metadata": {
+            "maxItems": 0
+          },
+          "reason": {
+            "not": {
+              "enum": [
+                "complete",
+                "page_cap"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "reason": {
+            "enum": [
+              "byte_cap",
+              "pdf_disabled"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "content_digest": {
+            "type": "null"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "content_digest": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        }
+      }
+    }
+  ]
+}

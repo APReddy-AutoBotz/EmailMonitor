@@ -21,3 +21,7 @@ No-contact article: Leena Shah is first; no correspondence/email is declared. Pr
 EM-001 creates an offline transport or isolated fixture server mapping the synthetic source host to these bytes. Production must reject that test mode. Do not weaken production URL/egress validation to serve fixtures. No external resources are required by these pages.
 
 EM-008 adds generated synthetic PDFs and parser tests. The baseline deliberately contains no publisher PDFs or application extractor. See [test strategy](../docs/14-test-strategy-and-benchmark.md) for missing adversarial cases that implementation must add.
+
+## EM-008 authored PDF candidate
+
+`pdf/` contains deterministic original standard-font text/layout fixtures, an authored one-pixel image-only page, insecure synthetic encrypted-refusal data and one deliberately corrupt input. No publisher PDF or embedded third-party font program is included. The [digest manifest](pdf/manifest.json) records authored bytes, not expected contact outcomes. `pdf_fixture_builder.py` generates fixtures using reviewed pypdf object/writer primitives; the byte parser never imports that generator or manually authored expected contacts. Actual parser isolation acceptance is required; see the [PDF runbook](../docs/37-offline-pdf-observation-runbook.md).
