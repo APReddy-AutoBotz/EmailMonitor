@@ -130,3 +130,67 @@ def test_pinned_service_worker_block_checks_absence_not_rejection_only() -> None
     assert "getRegistrations().then(r=>r.length)" in guest
     assert 'registrations != 0 or not state["worker_blocked"]' in guest
     assert "context.service_workers" in guest
+
+
+SANDBOX_TABLE = (
+    "Layer 1 Sandbox\tNamespace\nPID namespaces\tYes\nNetwork namespaces\tYes\n"
+    "Seccomp-BPF sandbox\tYes\nSeccomp-BPF sandbox supports TSYNC\tYes\n"
+    "Ptrace Protection with Yama LSM (Broker)\tYes\n"
+    "Ptrace Protection with Yama LSM (Non-broker)\tNo"
+)
+
+
+def check_sandbox_text(text: str, evaluation: str) -> dict[str, bool]:
+    import runpy
+    from collections.abc import Callable
+    from typing import cast
+
+    namespace = runpy.run_path(str(ROOT / "scripts/isolation/browser_acceptance.py"))
+    checker = cast(Callable[[str, str], dict[str, bool]], namespace["sandbox_status"])
+    return checker(text, evaluation)
+
+
+def test_pinned_sandbox_table_and_own_evaluation_are_positive() -> None:
+    assert all(check_sandbox_text(SANDBOX_TABLE, "You are adequately sandboxed.").values())
+
+
+def test_pinned_sandbox_table_tolerates_only_cell_surrounding_whitespace() -> None:
+    table = "\n".join(" " + line.replace("\t", " \t ") + " " for line in SANDBOX_TABLE.splitlines())
+    assert all(check_sandbox_text(table, " You are adequately sandboxed. ").values())
+
+
+def test_sandbox_parser_rejects_missing_false_duplicate_and_substring_rows() -> None:
+    import pytest
+
+    for table in (
+        "",
+        SANDBOX_TABLE.split("\n", 1)[1],
+        SANDBOX_TABLE.replace("\tNamespace", "\tSUID"),
+        SANDBOX_TABLE.replace("\tNamespace", "\tNone"),
+        SANDBOX_TABLE.replace("sandbox\tYes", "sandbox\tNo"),
+        SANDBOX_TABLE.replace("PID namespaces\tYes", "PID namespaces\tNo"),
+        SANDBOX_TABLE.replace("Network namespaces\tYes", "Network namespaces\tNo"),
+        SANDBOX_TABLE + "\nLayer 1 Sandbox\tNamespace",
+        SANDBOX_TABLE.replace("\tNamespace", "\tNamespace disabled"),
+        SANDBOX_TABLE.replace("Layer 1 Sandbox", "Namespace sandbox"),
+        SANDBOX_TABLE + "\nUnknown row\tYes",
+        SANDBOX_TABLE.replace("Layer 1 Sandbox\tNamespace", "Layer 1 Sandbox Namespace"),
+    ):
+        with pytest.raises(RuntimeError):
+            check_sandbox_text(table, "You are adequately sandboxed.")
+
+
+def test_sandbox_parser_requires_own_affirmative_evaluation() -> None:
+    import pytest
+
+    for evaluation in ("", "You are NOT adequately sandboxed.", "You are adequately sandboxed. No"):
+        with pytest.raises(RuntimeError):
+            check_sandbox_text(SANDBOX_TABLE, evaluation)
+
+
+def test_sandbox_failure_evidence_is_bounded_and_preserves_negative_status() -> None:
+    import pytest
+
+    with pytest.raises(RuntimeError, match="NOT adequately") as error:
+        check_sandbox_text("x" * 10000, "You are NOT adequately sandboxed.")
+    assert len(str(error.value)) < 4500

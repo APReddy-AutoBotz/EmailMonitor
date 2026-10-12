@@ -4,7 +4,6 @@ import base64
 import errno
 import json
 import os
-import re
 import socket
 import sys
 from pathlib import Path
@@ -14,17 +13,40 @@ from playwright.sync_api import Error, Route, WebSocketRoute, sync_playwright
 URL = "https://synthetic.publisher.example/tooltip.html"
 
 
-def sandbox_status(text: str) -> dict[str, bool]:
-    normalized = " ".join(text.lower().split())
+def sandbox_status(text: str, evaluation: str) -> dict[str, bool]:
+    """Require complete pinned Linux rows, never unrelated positive substrings."""
+    diagnostic = json.dumps({"table_text": text[:4096], "evaluation": evaluation[:128]})
+    expected_names = {
+        "Layer 1 Sandbox",
+        "PID namespaces",
+        "Network namespaces",
+        "Seccomp-BPF sandbox",
+        "Seccomp-BPF sandbox supports TSYNC",
+        "Ptrace Protection with Yama LSM (Broker)",
+        "Ptrace Protection with Yama LSM (Non-broker)",
+    }
+    rows: dict[str, str] = {}
+    if len(text) > 8192 or len(evaluation) > 128:
+        raise RuntimeError("Chromium sandbox status exceeds bound: " + diagnostic)
+    for line in text.splitlines():
+        fields = [field.strip() for field in line.split("\t")]
+        if len(fields) != 2 or fields[0] not in expected_names or fields[0] in rows:
+            raise RuntimeError("Chromium sandbox status rows are invalid: " + diagnostic)
+        rows[fields[0]] = fields[1]
+    if set(rows) != expected_names or any(
+        value not in ({"Namespace", "SUID", "None"} if name == "Layer 1 Sandbox" else {"Yes", "No"})
+        for name, value in rows.items()
+    ):
+        raise RuntimeError("Chromium sandbox status rows are incomplete/unknown: " + diagnostic)
     result = {
-        name: bool(re.search(pattern, normalized))
-        for name, pattern in (
-            ("namespace", r"namespace sandbox\s+yes"),
-            ("seccomp_bpf", r"seccomp-bpf sandbox\s+yes"),
-        )
+        "namespace": rows["Layer 1 Sandbox"] == "Namespace",
+        "pid_namespace": rows["PID namespaces"] == "Yes",
+        "network_namespace": rows["Network namespaces"] == "Yes",
+        "seccomp_bpf": rows["Seccomp-BPF sandbox"] == "Yes",
+        "adequate": evaluation.strip() == "You are adequately sandboxed.",
     }
     if not all(result.values()):
-        raise RuntimeError("Chromium's own sandbox evidence is missing")
+        raise RuntimeError("Chromium's own sandbox evidence is missing: " + diagnostic)
     return result
 
 
@@ -134,7 +156,9 @@ def main() -> None:
         context.add_cookies([{"name": "diagnostic", "value": "synthetic-only", "url": URL}])
         page = context.new_page()
         page.goto("chrome://sandbox", wait_until="domcontentloaded")
-        own_sandbox = sandbox_status(page.locator("body").inner_text())
+        sandbox_text = page.locator("#sandbox-status").inner_text()
+        sandbox_evaluation = page.locator("#evaluation").inner_text()
+        own_sandbox = sandbox_status(sandbox_text, sandbox_evaluation)
         command = context.new_cdp_session(page).send("Browser.getBrowserCommandLine")
         arguments = command["arguments"]
         if any(x in arguments for x in ("--no-sandbox", "--disable-setuid-sandbox")):
@@ -206,6 +230,8 @@ def main() -> None:
                 "kind": "result",
                 "diagnostic": "synthetic-browser-boundary",
                 "sandbox": own_sandbox,
+                "sandbox_table": sandbox_text,
+                "sandbox_evaluation": sandbox_evaluation,
                 "chromium_version": "153.0.8010.12",
                 "network_errno": network,
                 "interfaces": interfaces,
