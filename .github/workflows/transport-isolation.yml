@@ -47,6 +47,8 @@ jobs:
           "$RUNNER_TEMP/tooling/bin/uv" sync --project services/backend --locked
           EM_MIGRATION_DATABASE_URL="$EM_TEST_ADMIN_DATABASE_URL" "$RUNNER_TEMP/tooling/bin/uv" run --project services/backend alembic -c services/backend/alembic.ini upgrade head
           "$RUNNER_TEMP/tooling/bin/uv" run --project services/backend python scripts/create_ci_runtime.py
+      - name: Approved disposable host IPv6 initialization before strict baseline
+        run: uv run --project services/backend python scripts/isolation/initialize_ci_ipv6.py
       - name: Actual isolated IPv4 IPv6 DNS TLS tenant and browser acceptance
         run: |
           set -euo pipefail
