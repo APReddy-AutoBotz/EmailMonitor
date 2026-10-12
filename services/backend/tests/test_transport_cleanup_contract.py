@@ -9,7 +9,31 @@ from typing import Any
 import pytest
 import transport_topology as topology_module
 from transport_fixture import State, fixture_command
-from transport_topology import OWNER_LABEL, Topology, remove_owned
+from transport_topology import OWNER_LABEL, Topology, baseline_diagnostic, remove_owned
+
+
+def test_baseline_diagnostic_distinguishes_order_and_actual_field_changes() -> None:
+    before: dict[str, object] = {"routes": [{"dst": "default"}, {"dst": "127.0.0.1"}]}
+    reordered: dict[str, object] = {"routes": [{"dst": "127.0.0.1"}, {"dst": "default"}]}
+    order = json.loads(baseline_diagnostic(before, reordered))["host_baseline_difference"]
+    assert order["routes"]["order_only"] and before != reordered
+    changed: dict[str, object] = {"routes": [{"dst": "default", "gateway": "192.0.2.1"}]}
+    fields = json.loads(baseline_diagnostic(before, changed))["host_baseline_difference"]
+    assert not fields["routes"]["order_only"]
+    assert fields["routes"]["removed_count"] == 2
+    assert fields["routes"]["added_count"] == 1
+    assert "192.0.2.1" in fields["routes"]["added"][0]
+    assert before != changed
+
+
+def test_baseline_diagnostic_is_bounded_and_retains_duplicate_counts() -> None:
+    before: dict[str, object] = {"routes": [{"dst": "x" * 20000}] * 100}
+    after: dict[str, object] = {"routes": []}
+    diagnostic = baseline_diagnostic(before, after)
+    section = json.loads(diagnostic)["host_baseline_difference"]["routes"]
+    assert len(diagnostic) < 16384 and section["removed_count"] == 100
+    assert len(section["removed"]) == 4
+    assert all(len(row) <= 512 for row in section["removed"])
 
 
 @pytest.mark.parametrize("kind", ["snapshot", "inspect", "stop"])

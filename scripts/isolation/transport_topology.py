@@ -8,6 +8,7 @@ import secrets
 import shutil
 import subprocess
 import tempfile
+from collections import Counter
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -106,6 +107,31 @@ def host_baseline() -> dict[str, object]:
         if destination != "default" and overlaps(str(destination)):
             raise RuntimeError("Synthetic IPAM conflicts with a nondefault host route")
     return {"addresses": addresses, "routes": routes, "rules": rules}
+
+
+def baseline_diagnostic(before: dict[str, object], after: dict[str, object]) -> str:
+    """Bounded read-only evidence; never normalizes or changes acceptance equality."""
+    sections: dict[str, object] = {}
+    for key in ("addresses", "routes", "rules"):
+        original, current = before.get(key), after.get(key)
+        if original == current:
+            continue
+        if type(original) is not list or type(current) is not list:
+            sections[key] = {"unexpected_shape": True}
+            continue
+        left = Counter(json.dumps(row, sort_keys=True) for row in original)
+        right = Counter(json.dumps(row, sort_keys=True) for row in current)
+        removed, added = list((left - right).elements()), list((right - left).elements())
+        sections[key] = {
+            "before_count": len(original),
+            "after_count": len(current),
+            "removed_count": len(removed),
+            "added_count": len(added),
+            "removed": [row[:512] for row in removed[:4]],
+            "added": [row[:512] for row in added[:4]],
+            "order_only": not removed and not added,
+        }
+    return json.dumps({"host_baseline_difference": sections}, sort_keys=True)[:16384]
 
 
 def check_daemon() -> str:
@@ -513,6 +539,7 @@ class Topology:
             current["rules"] != self.baseline["rules"]
             or current["routes"] != self.baseline["routes"]
         ):
+            print(baseline_diagnostic(self.baseline, current), flush=True)
             raise RuntimeError("Isolated topology changed host routes/rules")
         for role, identifier in self.identifiers.items():
             metadata = json.loads(docker("inspect", identifier).stdout)[0]
@@ -551,7 +578,9 @@ class Topology:
             except Exception:
                 failures.append("image_cleanup")
         self.directory.cleanup()
-        if host_baseline() != self.baseline:
+        current = host_baseline()
+        if current != self.baseline:
+            print(baseline_diagnostic(self.baseline, current), flush=True)
             failures.append("baseline_cleanup")
         if failures:
             raise RuntimeError("Owned cleanup failed: " + ",".join(failures))
