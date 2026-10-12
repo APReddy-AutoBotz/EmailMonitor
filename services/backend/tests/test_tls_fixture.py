@@ -67,7 +67,9 @@ def test_actual_response_denial_has_no_retry(
     tmp_path: Path, response: Response, reason: str
 ) -> None:
     with server(tmp_path, {"/article-a.html": response}) as (endpoint, calls):
-        limits = FetchLimits(max_bytes=64, total_seconds=0.1)
+        # Response-shape cases must reach their distinct denial, not race TLS
+        # scheduling. Keep the deliberate slow-response deadline case strict.
+        limits = FetchLimits(max_bytes=64, total_seconds=0.1 if response.delay else 1)
         with pytest.raises(FetchDenied, match=reason):
             TLSFixtureGateway(SETTINGS, endpoint, lambda url, op: None, limits).fetch(URL)
         assert len(calls) == 1

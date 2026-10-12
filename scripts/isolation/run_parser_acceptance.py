@@ -3,6 +3,7 @@
 import json
 import os
 import subprocess
+import time
 from pathlib import Path
 
 IMAGE = "emailmonitor-parser-diagnostic:local"
@@ -12,6 +13,26 @@ def docker(*arguments: str, timeout: float = 180) -> subprocess.CompletedProcess
     return subprocess.run(
         ["docker", *arguments], capture_output=True, text=True, check=True, timeout=timeout
     )
+
+
+def settled_oom(identifier: str, state: dict[str, object]) -> dict[str, object]:
+    """Observe the separately delivered daemon OOM event for at most two seconds."""
+    observations = []
+    deadline = time.monotonic() + 2
+    for observation in range(11):
+        observations.append({key: state.get(key) for key in ("Running", "OOMKilled", "ExitCode")})
+        if (
+            state.get("Running") is False
+            and state.get("OOMKilled") is True
+            and state.get("ExitCode") == 137
+        ):
+            break
+        if observation == 10 or time.monotonic() >= deadline:
+            break
+        time.sleep(0.2)
+        state = json.loads(docker("inspect", identifier, timeout=2).stdout)[0]["State"]
+    print(json.dumps({"parser_oom_state_observations": observations}), flush=True)
+    return state
 
 
 def run(command: list[str], *, expected_oom: bool = False) -> dict[str, object]:
@@ -63,7 +84,12 @@ def run(command: list[str], *, expected_oom: bool = False) -> dict[str, object]:
         )
         after = json.loads(docker("inspect", identifier).stdout)[0]["State"]
         if expected_oom:
-            if not after["OOMKilled"] or after["ExitCode"] != 137:
+            after = settled_oom(identifier, after)
+            if (
+                after.get("Running") is not False
+                or after["OOMKilled"] is not True
+                or after["ExitCode"] != 137
+            ):
                 raise RuntimeError(
                     "Actual memory enforcement not established: "
                     + json.dumps(

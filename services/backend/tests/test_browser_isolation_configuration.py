@@ -393,3 +393,47 @@ def test_cancelled_threaded_read_poisons_channel_before_another_exchange() -> No
             release.set()
 
     asyncio.run(exercise())
+
+
+def test_pending_task_evidence_is_bounded_to_fixed_labels_and_states() -> None:
+    from browser_acceptance import pending_task_evidence
+
+    value = {"iframe": "pending", "fetch_allowed": "fulfilled", "websocket": "rejected"}
+    assert json.loads(pending_task_evidence(value))["pending_task_evidence"] == value
+    assert len(pending_task_evidence(value)) < 1024
+
+
+def test_pending_task_evidence_never_echoes_unknown_guest_text() -> None:
+    from browser_acceptance import pending_task_evidence
+
+    values: tuple[object, ...] = (None, [], {}, {"x" * 10000: "pending"}, {"iframe": "x" * 10000})
+    for value in values:
+        result = pending_task_evidence(value)
+        assert json.loads(result) == {"pending_task_evidence": "unavailable"}
+        assert len(result) < 128
+
+
+def test_pending_task_diagnostic_preserves_deadline_and_rethrows_failure() -> None:
+    guest = (ROOT / "scripts/isolation/browser_acceptance.py").read_text()
+    assert 'page.evaluate("globalThis.boundaryPending"), timeout=1' in guest
+    assert 'page.wait_for_function("globalThis.boundaryReady === true", timeout=10000)' in guest
+    assert "trace_stage(pending_task_evidence(pending))\n            raise" in guest
+
+
+def test_fixture_tracks_each_fixed_pending_operation_without_early_readiness() -> None:
+    from run_browser_acceptance import PAGE
+
+    source = PAGE.decode()
+    assert "globalThis.boundaryPending = {}" in source
+    for label in (
+        "fetch_denied",
+        "fetch_allowed",
+        "post_denied",
+        "xhr",
+        "websocket",
+        "service_worker",
+    ):
+        assert "track('" + label + "'" in source
+    assert "track(path, new Promise" in source
+    assert "await Promise.allSettled(pending);globalThis.boundaryReady=true" in source
+    assert "throw error" in source

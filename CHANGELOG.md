@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-10-12 — EM-004 synthetic/offline foundation verified in Draft
+
+- Verify exact-head477/no-skip application and12/no-skip/no-warning controlled DNS/TCP/TLS/browser-policy cases plus actual browser/parser/docs CI
+- Independently reconcile document16 criteria, strict owned topology cleanup and successful browser-selected-peer evidence; disclose one field-alias warning
+- Enable bounded offline EM-006 after documentation checkpoint CI; preserve live-source/production refusal and unmerged Draft gates
+
+## 2026-10-12 — EM-004f controlled protected transport candidate
+
+- Wire shared hop plans into test-only actual A/AAAA snapshots, literal IPv4/IPv6 sockets and verified TLS
+- Add closed disposable dual-stack CI topology and owned-pipe host current-tenant/browser mediation
+- Add defensive protocol/topology/scope tests; actual isolation acceptance remains pending and full EM-004 partial
+
 ## 2026-10-12 — EM-004e shared per-hop planner verified as preparation in Draft PR
 
 - Add unused network-free immutable scope/URL/public snapshot/selected-peer/deadline/redirect planning core
