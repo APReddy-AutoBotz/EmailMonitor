@@ -161,6 +161,8 @@ class DiagnosticFrame(BaseModel):
     reason: Literal[
         "unknown",
         "rpc_capacity",
+        "rpc_request_capacity",
+        "rpc_admission_capacity",
         "keyboard_focus",
         "dialog_focus_restore",
         "route_fulfill_failed",
@@ -231,6 +233,8 @@ def failure_reason(error: BaseException) -> str:
         return "unknown"
     return {
         "UI diagnostic concurrency/request cap exceeded": "rpc_capacity",
+        "UI diagnostic request cap exceeded": "rpc_request_capacity",
+        "UI diagnostic admission cap exceeded": "rpc_admission_capacity",
         "Control not reachable by keyboard": "keyboard_focus",
         "Evidence dialog did not restore keyboard focus": "dialog_focus_restore",
     }.get(error.args[0], "unknown")
@@ -262,8 +266,12 @@ def route_headers_reason(failure: object, error: object = None) -> str:
             elif message.startswith(": "):
                 # rawRequestHeaders is_internal=True clears the pinned apiName.
                 message = message.removeprefix(": ")
-            if message == "UI diagnostic concurrency/request cap exceeded":
-                return "rpc_capacity"
+            if message in {
+                "UI diagnostic concurrency/request cap exceeded",
+                "UI diagnostic request cap exceeded",
+                "UI diagnostic admission cap exceeded",
+            }:
+                return failure_reason(RuntimeError(message))
             if message in {
                 "await wasn't used with future",
                 "cannot reuse already awaited coroutine",

@@ -184,3 +184,6 @@ EM-014 fourth checkpoint application1370/no skips/no pytest warning summary344.8
 
 
 EM-014 current diagnostic run again failed UI aturl_worker before timeout queue evidence. Pinned internal rawRequestHeaders calls produce the exact ': ' error prefix; a bounded classifier correction covers it with installed-source positive and nested/unknown-prefix negative regressions, preserving failure/rethrow and all caps. Normal1166/21822.10s and genuinely empty1166/21825.47s pass28React/full gates; exact-tree review and actual1384/no-skip/six own-head gates remain pending; [report](../reports/em014-validation.md).
+
+
+EM-014 actual UI now identifies the owned combined rpc_capacity refusal. A diagnostic-only split distinguishes the unchanged512 request cap from16 admitted cap, with actual Channel-body pure regressions and conserved cleanup; no frontend/cap/deadline change is inferred before the branch is known. Normal1168/21822.57s and genuinely empty1168/21825.31s pass28React/full gates; exact-tree review and actual1386/no-skip/six own-head gates remain pending; [evidence](../reports/em014-validation.md).

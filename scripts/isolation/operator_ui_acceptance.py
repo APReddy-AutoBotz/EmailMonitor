@@ -71,8 +71,10 @@ class Channel:
     async def request(self, message: dict[str, object]) -> dict[str, Any]:
         deadline = asyncio.get_running_loop().time() + RPC_DEADLINE
         queued = self.admitted >= 8
-        if self.identifier >= 512 or self.admitted >= 16:
-            raise RuntimeError("UI diagnostic concurrency/request cap exceeded")
+        if self.identifier >= 512:
+            raise RuntimeError("UI diagnostic request cap exceeded")
+        if self.admitted >= 16:
+            raise RuntimeError("UI diagnostic admission cap exceeded")
         self.admitted += 1
         if queued:
             self.waiting += 1
@@ -85,7 +87,7 @@ class Channel:
                 self.waiting -= 1
                 queued = False
             if self.identifier >= 512:
-                raise RuntimeError("UI diagnostic concurrency/request cap exceeded")
+                raise RuntimeError("UI diagnostic request cap exceeded")
             self.identifier += 1
             identifier = self.identifier
             future: asyncio.Future[dict[str, Any]] = asyncio.get_running_loop().create_future()

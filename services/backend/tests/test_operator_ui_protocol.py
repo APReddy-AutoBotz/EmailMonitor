@@ -295,7 +295,7 @@ def test_owned_channel_refuses_excess_waiters_and_cleans_cancelled_admissions() 
         for _ in range(5):
             await asyncio.sleep(0)
         assert len(channel.pending) == 8 and channel.waiting == 8
-        with pytest.raises(RuntimeError, match="concurrency/request cap"):
+        with pytest.raises(RuntimeError, match="admission cap"):
             await channel.request({"kind": "control"})
         for task in tasks:
             task.cancel()
@@ -661,3 +661,46 @@ def test_header_classifier_does_not_strip_nested_or_unknown_prefixes() -> None:
             )
             == "route_headers_unclassified"
         )
+
+
+def test_owned_channel_request_limit_has_distinct_fixed_failure() -> None:
+    from operator_ui_protocol import failure_reason, route_headers_reason
+
+    async def run() -> None:
+        channel = _owned_channel()
+        channel.identifier = 512
+        with pytest.raises(RuntimeError, match="^UI diagnostic request cap exceeded$") as error:
+            await channel.request({"kind": "control"})
+        assert failure_reason(error.value) == "rpc_request_capacity"
+        assert (
+            route_headers_reason(None, RuntimeError(": " + str(error.value)))
+            == "rpc_request_capacity"
+        )
+        assert channel.identifier == 512 and channel.admitted == 0 and not channel.pending
+
+    asyncio.run(run())
+
+
+def test_owned_channel_sixteen_admitted_limit_has_distinct_fixed_failure() -> None:
+    from operator_ui_protocol import failure_reason, route_headers_reason
+
+    async def run() -> None:
+        channel = _owned_channel(timeout=1)
+        tasks = [asyncio.create_task(channel.request({"kind": "control"})) for _ in range(16)]
+        for _ in range(8):
+            await asyncio.sleep(0)
+        assert channel.admitted == 16 and len(channel.pending) == 8 and channel.waiting == 8
+        with pytest.raises(RuntimeError, match="^UI diagnostic admission cap exceeded$") as error:
+            await channel.request({"kind": "control"})
+        assert failure_reason(error.value) == "rpc_admission_capacity"
+        assert (
+            route_headers_reason(None, RuntimeError(": " + str(error.value)))
+            == "rpc_admission_capacity"
+        )
+        assert channel.admitted == 16 and channel.identifier == 8
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        assert not channel.pending and channel.admitted == 0 and channel.capacity._value == 8
+
+    asyncio.run(run())
