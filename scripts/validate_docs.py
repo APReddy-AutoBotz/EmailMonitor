@@ -99,6 +99,9 @@ def main() -> int:
         'pdf-observation.json': 'pdf-observation.schema.json',
         'association-bundle.json': 'association-bundle.schema.json',
         'association-review-request.json': 'association-review-request.schema.json',
+        'progress-snapshot.json': 'progress-snapshot.schema.json',
+        'progress-event.json': 'progress-event.schema.json',
+        'progress-item.json': 'progress-item.schema.json',
     }
     loaded = {}
     for name, schema_name in examples.items():

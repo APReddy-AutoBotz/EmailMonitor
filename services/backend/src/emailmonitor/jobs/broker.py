@@ -17,6 +17,8 @@ from emailmonitor.discovery.service import Discovery
 from emailmonitor.jobs.ledger import Ledger, Work
 from emailmonitor.jobs.models import StrictModel
 from emailmonitor.organizations.database import Database
+from emailmonitor.progress.broker import process as execute_process
+from emailmonitor.progress.service import Progress
 
 
 class FixtureWorkerConfig(StrictModel):
@@ -29,6 +31,7 @@ class FixtureWorkerConfig(StrictModel):
     lease_seconds: int = Field(default=30, ge=1, le=300)
     diagnostic_delay_seconds: int = Field(default=0, ge=0, le=30)
     exit_after_commit: bool = False
+    exit_after_observation: bool = False
 
     @model_validator(mode="after")
     def synthetic_boundary(self) -> "FixtureWorkerConfig":
@@ -105,6 +108,23 @@ def create_worker(config: FixtureWorkerConfig) -> tuple[Any, Ledger]:
         discovery = Discovery(ledger.database, config.session_token, ledger.settings)
         discover_process(discovery, UUID(config.organization), body)
 
+    def execute(body: dict[str, object]) -> None:
+        progress = Progress(ledger.database, config.session_token, ledger.settings)
+
+        def stop_after_observation() -> None:
+            os._exit(74)
+
+        committed = execute_process(
+            progress,
+            UUID(config.organization),
+            body,
+            seconds=min(config.lease_seconds, 120),
+            after_observation=stop_after_observation if config.exit_after_observation else None,
+        )
+        if committed and config.exit_after_commit:
+            os._exit(73)
+
+    application.task(name="emailmonitor.fixture.execute", typing=False)(execute)
     application.task(name="emailmonitor.fixture.discover", typing=False)(discover)
     application.task(name="emailmonitor.fixture.persist", typing=False)(persist)
     return application, ledger

@@ -52,3 +52,5 @@ Versioning: documents use Git history; public API uses `/api/v1`; event/schema r
 [31 Synthetic browser diagnostics](31-synthetic-browser-boundary.md) records the approved temporary profile, actual acceptance requirements and remaining release gates.
 
 [38 — Offline association and review](38-offline-association-runbook.md).
+
+- [39 Offline execution and progress](39-offline-progress-runbook.md) — durable synthetic lifecycle, counters, authorized SSE and replay

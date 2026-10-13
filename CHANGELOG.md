@@ -1,4 +1,11 @@
 # Changelog
+## 2026-10-13 — EM-010 offline execution/progress candidate
+
+- Add forward-only current-lease extraction lifecycle, durable frontier/outbox/effects and auditable idempotent retry continuation
+- Add truthful metadata counters, per-item outcomes and tenant/job-bound replay with fresh authorization before each frame
+- Integrate actual controlled tooltip work with durable item completion; static browser-unavailable work remains explicit
+- Add pure and actual SQL/broker/SSE regressions; source review and new-head CI pending, no live/production activation
+
 
 ## 2026-10-12 — EM-009 scoped synthetic foundation verified in Draft
 

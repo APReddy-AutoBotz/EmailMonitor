@@ -9,6 +9,7 @@ from uuid import UUID
 from sqlalchemy import Connection, Engine, create_engine, text
 
 from emailmonitor.organizations.roles import ROLE_CAPABILITIES, Capability, Role
+from emailmonitor.progress.binding import apply as apply_work_binding
 
 
 class AuthorizationDenied(Exception):
@@ -120,4 +121,5 @@ class Database(_ConnectionPool):
                     "recovery": str(allow_inactive).lower(),
                 },
             )
+            apply_work_binding(connection, organization_id)
             yield connection, context

@@ -28,6 +28,7 @@ from emailmonitor.jobs.ledger import Ledger
 from emailmonitor.jobs.models import JobRequest
 from emailmonitor.organizations.database import AuthorizationDenied, Database
 from emailmonitor.organizations.roles import Capability
+from emailmonitor.progress.binding import matches as execution_matches
 from emailmonitor.sources.access import policy_decision
 from emailmonitor.sources.policy import Evaluation, Operation, PolicyProposal
 
@@ -44,7 +45,7 @@ class Extraction:
         row = Discovery._row(c, org, job)
         state = DiscoveryState.model_validate(row["checkpoint"])
         if (
-            parent["state"] != "draft"
+            not execution_matches(c, org, job, "article", url)
             or parent["generation"] != row["generation"]
             or parent["deletion_generation"] != row["deletion_generation"]
             or url not in state.articles
@@ -69,6 +70,7 @@ class Extraction:
             raise AuthorizationDenied()
         if proposal.retention.contact_days <= 0:
             raise HTTPException(409, "Source does not permit observation retention")
+        row["leased_execution"] = parent["state"] == "running"
         row["permit_excerpts"] = proposal.retention.excerpt_days > 0 and policy_decision(
             policy,
             Evaluation(

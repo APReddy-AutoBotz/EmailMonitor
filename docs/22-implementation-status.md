@@ -1,6 +1,6 @@
 # 22 — Implementation status and evidence ledger
 
-**Baseline date:** 2026-10-08. **Updated:** 2026-10-12. **Product state:** unmerged synthetic/offline backend foundations verified through protected fetch/sandbox and durable jobs; UI extraction and deployment unavailable.
+**Baseline date:** 2026-10-08. **Updated:** 2026-10-13. **Product state:** unmerged synthetic/offline backend foundations verified through protected fetch/sandbox and durable jobs; UI extraction and deployment unavailable.
 
 ## Documentation deliverables
 
@@ -21,7 +21,7 @@ The repository documentation validator checks local Markdown targets, JSON synta
 | EM-007 | VERIFIED SYNTHETIC/OFFLINE FOUNDATION IN DRAFT — unmerged | [PR #12](https://github.com/APReddy-AutoBotz/EmailMonitor/pull/12), head 98208a9a / tree 4c58b53a, independently reconciled against document 16/document 07; application 599/no skips/no pytest warnings, eleven new runtime SQL cases, controlled 12 with actual tooltip persistence/replay, browser/parser/docs pass; [evidence](../reports/em007-validation.md). This documentation checkpoint requires its own exact-head CI |
 | EM-008 | VERIFIED SYNTHETIC/OFFLINE FOUNDATION IN DRAFT — unmerged | [PR #13](https://github.com/APReddy-AutoBotz/EmailMonitor/pull/13), head 5e6568dc / tree 99f0257f, independently reconciled against document 16/document 07; application 664/no skips/no pytest warnings, actual nine-PDF parser/resource/network/OOM plus controlled 12/browser/docs pass; [evidence](../reports/em008-validation.md). This documentation checkpoint requires its own exact-head CI |
 | EM-009 | VERIFIED SYNTHETIC/OFFLINE FOUNDATION IN DRAFT — unmerged | [PR14](https://github.com/APReddy-AutoBotz/EmailMonitor/pull/14), head beae5deb/tree a3ea255d; independent authoritative acceptance reconciliation; application748/no skips/one disclosed alias-body warning,20 actual association SQL cases and controlled12/browser/parser/docs pass; [validation](../reports/em009-validation.md). This documentation checkpoint requires its own exact-head CI before EM-010 |
-| EM-010 | NOT STARTED | EM-006/009 |
+| EM-010 | LOCAL OFFLINE CANDIDATE — review/CI pending | EM-006/009 scoped foundations and EM-009 checkpoint own CI verified; [runbook](39-offline-progress-runbook.md), [pending validation](../reports/em010-validation.md) |
 | EM-011 | NOT STARTED | EM-009/010 |
 | EM-012 | NOT STARTED | Required UI/API dependencies |
 | EM-013 | NOT STARTED | EM-005/010/012 |
@@ -112,3 +112,7 @@ Source-backed deterministic HTML/PDF mapping, conservative normalization, per-ba
 VERIFIED IN DRAFT, unmerged: independently reviewed head beae5deba01673609534178202dde31b464705a6 and merge0073291d2aa797a11f6250cc41705ea925fc77a0 share treea3ea255ddbda34999f49ccaef21b20da859c0ab9 with exact790e40cd/beae5deb parents. Independent review fetched all five authoritative job logs and mapped document16 EM-009/document07/08/09/05 with no unmet scoped criterion. Application748 passed/no skips, including20 actual association PostgreSQL cases and existing broker tests; one existing alias-body warning remains disclosed. Controlled12, actual browser/parser/docs passed.
 
 This verifies deterministic source-backed association, conservative normalization, relational tenant/batch provenance/dedup and optimistic atomic review foundation. It does not establish a global person registry, generalized PDF persistence/acquisition, delivered review events, mailbox/outreach/export/UI or live/production activation. EM-WARN-01 remains open. After this documentation-only checkpoint passes its own exact-head gates, EM-010 may implement durable truthful progress, authorized replay/SSE and resumability within the synthetic/offline boundary.
+
+## EM-010 offline candidate (2026-10-13)
+
+The independently reviewed EM-009 documentation checkpoint passed its own exact-head five CI gates, including748/no-skip application and controlled12. [Checkpoint identities and runs](../reports/em010-validation.md). Bounded synthetic execution/progress implementation is now a local candidate: real job transitions, current per-item leases, durable metadata/outbox/effects, pause/resume/cancel/continuation, truthful counters and tenant-bound SSE. Source review and actual PostgreSQL/broker/isolated browser acceptance remain pending; no production/UI activation. [Runbook](39-offline-progress-runbook.md). EM-011 is gated.

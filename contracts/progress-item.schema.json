@@ -1,0 +1,165 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "format": "uuid",
+      "title": "Id",
+      "type": "string"
+    },
+    "work_kind": {
+      "enum": [
+        "discover",
+        "article"
+      ],
+      "title": "Work Kind",
+      "type": "string"
+    },
+    "state": {
+      "enum": [
+        "pending",
+        "running",
+        "retry_wait",
+        "succeeded",
+        "no_contact",
+        "needs_review",
+        "policy_blocked",
+        "access_blocked",
+        "unsupported",
+        "skipped",
+        "failed",
+        "cancelled"
+      ],
+      "title": "State",
+      "type": "string"
+    },
+    "reason": {
+      "enum": [
+        "scheduled",
+        "leased",
+        "observed",
+        "no_contact",
+        "requires_review",
+        "browser_not_completed",
+        "source_policy_changed",
+        "worker_failure",
+        "lease_exhausted",
+        "user_cancelled",
+        "pagination_committed"
+      ],
+      "title": "Reason",
+      "type": "string"
+    },
+    "attempts": {
+      "maximum": 3,
+      "minimum": 0,
+      "title": "Attempts",
+      "type": "integer"
+    },
+    "batch_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Batch Id"
+    },
+    "completed_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Completed At"
+    },
+    "inherited_job_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Inherited Job Id"
+    },
+    "inherited_item_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Inherited Item Id"
+    }
+  },
+  "required": [
+    "id",
+    "work_kind",
+    "state",
+    "reason",
+    "attempts",
+    "batch_id",
+    "completed_at"
+  ],
+  "title": "Item",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "allOf": [
+    {
+      "if": {
+        "required": [
+          "inherited_job_id"
+        ],
+        "properties": {
+          "inherited_job_id": {
+            "type": "string"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "inherited_item_id"
+        ],
+        "properties": {
+          "inherited_item_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "state": {
+            "enum": [
+              "succeeded",
+              "no_contact",
+              "needs_review",
+              "unsupported",
+              "policy_blocked",
+              "access_blocked",
+              "skipped",
+              "cancelled"
+            ]
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "inherited_item_id": {
+            "type": "null"
+          }
+        }
+      }
+    }
+  ]
+}
