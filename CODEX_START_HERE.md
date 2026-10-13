@@ -1,6 +1,6 @@
 # Codex implementation handoff
 
-**Baseline:** 2026-10-08. **Current phase:** EM-001 reviewed/CI-verified in Draft PR #1; EM-002 reviewed/CI-verified in Draft PR #2; EM-003 reviewed/CI-verified in Draft PR #3; EM-004a partial offline fetch under review with full isolation gate unmet. Check the [status ledger](docs/22-implementation-status.md) before starting another task.
+**Baseline:** 2026-10-08. **Current phase:** synthetic/offline foundations through EM-009 independently verified in unmerged Drafts; the EM-009 documentation checkpoint requires its own CI before bounded offline EM-010. Read the current [status ledger](docs/22-implementation-status.md) and task evidence before selecting the next dependency-ready slice.
 
 ## Read order
 

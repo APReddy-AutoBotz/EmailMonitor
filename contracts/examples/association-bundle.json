@@ -1,0 +1,144 @@
+{
+  "schema_version": "1.0",
+  "organization_id": "a0000000-0000-4000-8000-000000000001",
+  "article_id": "f5ea0915-e82d-5760-b35d-b3c83ead693c",
+  "source_url": "https://synthetic.publisher.example/article-a.html",
+  "content_digest": "33c3bddb62834da34acb300b7c0bd7bb4c8728fb57e5ece43b8fc4e81920c3f0",
+  "parser_version": "synthetic-html-v1",
+  "observation_route": "html",
+  "observation_status": "observed",
+  "preferred_metadata": {
+    "title": "Synthetic myocardial infarction study A",
+    "journal": "Example Research Journal",
+    "publication_date": "2026-01-15",
+    "doi": null
+  },
+  "authors": [
+    {
+      "id": "2cf264ec-8fc7-58fa-8bf0-4450d1bae2ce",
+      "position": 1,
+      "display_name": "Mira Rao",
+      "first": true,
+      "corresponding": null,
+      "kind": "unknown",
+      "orcid": null,
+      "affiliations": [
+        "Example University"
+      ],
+      "evidence_ids": [
+        "50a1aa99-951d-5db8-a0d1-a261aee796ef"
+      ],
+      "identity_state": "article_local_unresolved"
+    },
+    {
+      "id": "9b06788e-eaf7-5ec4-8810-1a7745d126ba",
+      "position": 2,
+      "display_name": "Alex Chen",
+      "first": false,
+      "corresponding": true,
+      "kind": "unknown",
+      "orcid": null,
+      "affiliations": [
+        "Example University"
+      ],
+      "evidence_ids": [
+        "998663fa-317b-5a01-b201-a00bf965cf52",
+        "8baf7149-549a-539a-a14a-9925545de6f3"
+      ],
+      "identity_state": "article_local_unresolved"
+    }
+  ],
+  "candidates": [
+    {
+      "id": "3bf342c1-a12e-5646-9d4f-3877bc1f1fc2",
+      "address": {
+        "raw_address": "alex.chen@example.org",
+        "normalized_address": "alex.chen@example.org",
+        "comparison_key": "alex.chen@example.org",
+        "syntax_status": "valid",
+        "reason": "ascii_dot_atom_idna",
+        "domain_status": "not_checked",
+        "delivery_status": "unverified",
+        "outreach_eligibility": "not_assessed"
+      },
+      "raw_variants": [
+        "alex.chen@example.org"
+      ],
+      "normalization_collision": false,
+      "evidence_ids": [
+        "214ac248-ad8d-59ae-a974-c24d563f340a"
+      ]
+    }
+  ],
+  "evidence": [
+    {
+      "id": "50a1aa99-951d-5db8-a0d1-a261aee796ef",
+      "locator": "root/html[1]/body[1]/main[1]/ol[1]/li[1]",
+      "excerpt": "Mira Rao Example University",
+      "method": "article_dom",
+      "page": null,
+      "anchor": null,
+      "region": null,
+      "coordinate_units": null,
+      "coordinate_origin": null,
+      "region_precision": null
+    },
+    {
+      "id": "998663fa-317b-5a01-b201-a00bf965cf52",
+      "locator": "root/html[1]/body[1]/main[1]/ol[1]/li[2]",
+      "excerpt": "Alex Chen * Example University",
+      "method": "article_dom",
+      "page": null,
+      "anchor": null,
+      "region": null,
+      "coordinate_units": null,
+      "coordinate_origin": null,
+      "region_precision": null
+    },
+    {
+      "id": "8baf7149-549a-539a-a14a-9925545de6f3",
+      "locator": "root/html[1]/body[1]/main[1]/p[2]",
+      "excerpt": "* Corresponding author: Alex Chen. alex.chen@example.org",
+      "method": "article_dom",
+      "page": null,
+      "anchor": null,
+      "region": null,
+      "coordinate_units": null,
+      "coordinate_origin": null,
+      "region_precision": null
+    },
+    {
+      "id": "214ac248-ad8d-59ae-a974-c24d563f340a",
+      "locator": "root/html[1]/body[1]/main[1]/p[2]/a[1]",
+      "excerpt": "alex.chen@example.org",
+      "method": "mailto",
+      "page": null,
+      "anchor": null,
+      "region": null,
+      "coordinate_units": null,
+      "coordinate_origin": null,
+      "region_precision": null
+    }
+  ],
+  "associations": [
+    {
+      "id": "a28f561b-fe0a-5f59-a7ac-712c8b214413",
+      "candidate_id": "3bf342c1-a12e-5646-9d4f-3877bc1f1fc2",
+      "author_id": "9b06788e-eaf7-5ec4-8810-1a7745d126ba",
+      "state": "accepted",
+      "evidence_strength": "explicit",
+      "evidence_ids": [
+        "214ac248-ad8d-59ae-a974-c24d563f340a",
+        "998663fa-317b-5a01-b201-a00bf965cf52",
+        "8baf7149-549a-539a-a14a-9925545de6f3"
+      ],
+      "rule_version": "synthetic-association-v1",
+      "reason": "explicit_observed_correspondence",
+      "heuristic_score": null,
+      "calibrated_probability": null,
+      "revision": 1
+    }
+  ],
+  "technical_network_checks": false,
+  "exports_available": false
+}

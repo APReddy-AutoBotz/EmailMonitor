@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-10-12 — EM-009 scoped synthetic foundation verified in Draft
+
+- Independently reconcile exact reviewed head/merge and all five actual job logs against authoritative association/review acceptance
+- Verify748/no-skip application including20 real PostgreSQL association cases, controlled12/browser/parser/docs; disclose existing alias warning
+- Preserve current-version RLS and actual deletion-epoch corrections, tenant/batch scope and pending event-delivery limitations
+- Gate bounded offline EM-010 on this documentation checkpoint-own CI; no merge/live/production activation
+
+## 2026-10-12 — EM-009 offline association candidate
+
+- Add deterministic evidence-backed HTML/PDF mapping, conservative IDNA normalization and separate role/identity/technical/outreach states
+- Add tenant relational receipts, citation/affiliation relations and revisioned evidence-backed review with atomic history/audit/outbox
+- Add forward-only migration 0006, identifier-only test API, contracts and pure/actual-PG regression cases; review/actual CI pending
+- No live acquisition, SMTP/MX, export, UI or production activation
+
 ## 2026-10-12 — EM-008 synthetic/offline foundation verified in Draft
 
 - Independently reconcile reviewed tree, five actual run/job logs and authoritative PDF acceptance criteria

@@ -1,0 +1,677 @@
+{
+  "$defs": {
+    "Address": {
+      "additionalProperties": false,
+      "properties": {
+        "raw_address": {
+          "maxLength": 320,
+          "minLength": 1,
+          "title": "Raw Address",
+          "type": "string"
+        },
+        "normalized_address": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Normalized Address"
+        },
+        "comparison_key": {
+          "maxLength": 384,
+          "minLength": 1,
+          "title": "Comparison Key",
+          "type": "string"
+        },
+        "syntax_status": {
+          "enum": [
+            "valid",
+            "invalid",
+            "unsupported"
+          ],
+          "title": "Syntax Status",
+          "type": "string"
+        },
+        "reason": {
+          "enum": [
+            "ascii_dot_atom_idna",
+            "malformed",
+            "smtp_utf8",
+            "quoted_or_literal"
+          ],
+          "title": "Reason",
+          "type": "string"
+        },
+        "domain_status": {
+          "const": "not_checked",
+          "default": "not_checked",
+          "title": "Domain Status",
+          "type": "string"
+        },
+        "delivery_status": {
+          "const": "unverified",
+          "default": "unverified",
+          "title": "Delivery Status",
+          "type": "string"
+        },
+        "outreach_eligibility": {
+          "const": "not_assessed",
+          "default": "not_assessed",
+          "title": "Outreach Eligibility",
+          "type": "string"
+        }
+      },
+      "required": [
+        "raw_address",
+        "normalized_address",
+        "comparison_key",
+        "syntax_status",
+        "reason"
+      ],
+      "title": "Address",
+      "type": "object"
+    },
+    "Association": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "candidate_id": {
+          "format": "uuid",
+          "title": "Candidate Id",
+          "type": "string"
+        },
+        "author_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Author Id"
+        },
+        "state": {
+          "enum": [
+            "unmatched",
+            "needs_review",
+            "accepted",
+            "rejected",
+            "suppressed"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "evidence_strength": {
+          "enum": [
+            "explicit",
+            "supported",
+            "ambiguous",
+            "none"
+          ],
+          "title": "Evidence Strength",
+          "type": "string"
+        },
+        "evidence_ids": {
+          "items": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "maxItems": 40,
+          "minItems": 1,
+          "title": "Evidence Ids",
+          "type": "array"
+        },
+        "rule_version": {
+          "const": "synthetic-association-v1",
+          "default": "synthetic-association-v1",
+          "title": "Rule Version",
+          "type": "string"
+        },
+        "reason": {
+          "enum": [
+            "explicit_observed_correspondence",
+            "structural_hint",
+            "ambiguous_identity",
+            "no_author_mapping",
+            "normalization_collision",
+            "unsupported_address",
+            "partial_document",
+            "retained_locator_only",
+            "reviewed_evidence"
+          ],
+          "title": "Reason",
+          "type": "string"
+        },
+        "heuristic_score": {
+          "default": null,
+          "title": "Heuristic Score",
+          "type": "null"
+        },
+        "calibrated_probability": {
+          "default": null,
+          "title": "Calibrated Probability",
+          "type": "null"
+        },
+        "revision": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "candidate_id",
+        "author_id",
+        "state",
+        "evidence_strength",
+        "evidence_ids",
+        "reason"
+      ],
+      "title": "Association",
+      "type": "object",
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "accepted"
+              }
+            },
+            "required": [
+              "state"
+            ]
+          },
+          "then": {
+            "properties": {
+              "author_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "evidence_strength": {
+                "enum": [
+                  "explicit",
+                  "supported"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    "Author": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "position": {
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Position",
+          "type": "integer"
+        },
+        "display_name": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Display Name",
+          "type": "string"
+        },
+        "first": {
+          "title": "First",
+          "type": "boolean"
+        },
+        "corresponding": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Corresponding"
+        },
+        "kind": {
+          "enum": [
+            "person",
+            "group",
+            "unknown"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "orcid": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Orcid"
+        },
+        "affiliations": {
+          "items": {
+            "maxLength": 1000,
+            "type": "string"
+          },
+          "maxItems": 20,
+          "title": "Affiliations",
+          "type": "array"
+        },
+        "evidence_ids": {
+          "items": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "maxItems": 20,
+          "minItems": 1,
+          "title": "Evidence Ids",
+          "type": "array"
+        },
+        "identity_state": {
+          "const": "article_local_unresolved",
+          "default": "article_local_unresolved",
+          "title": "Identity State",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "position",
+        "display_name",
+        "first",
+        "corresponding",
+        "kind",
+        "orcid",
+        "affiliations",
+        "evidence_ids"
+      ],
+      "title": "Author",
+      "type": "object"
+    },
+    "Candidate": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "address": {
+          "$ref": "#/$defs/Address"
+        },
+        "raw_variants": {
+          "items": {
+            "maxLength": 320,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 100,
+          "minItems": 1,
+          "title": "Raw Variants",
+          "type": "array"
+        },
+        "normalization_collision": {
+          "title": "Normalization Collision",
+          "type": "boolean"
+        },
+        "evidence_ids": {
+          "items": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "maxItems": 100,
+          "minItems": 1,
+          "title": "Evidence Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "address",
+        "raw_variants",
+        "normalization_collision",
+        "evidence_ids"
+      ],
+      "title": "Candidate",
+      "type": "object"
+    },
+    "Evidence": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "locator": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Locator",
+          "type": "string"
+        },
+        "excerpt": {
+          "maxLength": 512,
+          "title": "Excerpt",
+          "type": "string"
+        },
+        "method": {
+          "enum": [
+            "structured_metadata",
+            "article_dom",
+            "mailto",
+            "public_attribute",
+            "browser_dom",
+            "pdf_text"
+          ],
+          "title": "Method",
+          "type": "string"
+        },
+        "page": {
+          "anyOf": [
+            {
+              "maximum": 4,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Page"
+        },
+        "anchor": {
+          "anyOf": [
+            {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Anchor"
+        },
+        "region": {
+          "anyOf": [
+            {
+              "maxItems": 4,
+              "minItems": 4,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Region"
+        },
+        "coordinate_units": {
+          "anyOf": [
+            {
+              "const": "pdf_points",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Coordinate Units"
+        },
+        "coordinate_origin": {
+          "anyOf": [
+            {
+              "const": "bottom_left",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Coordinate Origin"
+        },
+        "region_precision": {
+          "anyOf": [
+            {
+              "const": "full_cropbox_not_glyph_bbox",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Region Precision"
+        }
+      },
+      "required": [
+        "id",
+        "locator",
+        "excerpt",
+        "method"
+      ],
+      "title": "Evidence",
+      "type": "object"
+    },
+    "MetadataValues": {
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Title"
+        },
+        "journal": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Journal"
+        },
+        "publication_date": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Publication Date"
+        },
+        "doi": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Doi"
+        }
+      },
+      "title": "MetadataValues",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "organization_id": {
+      "format": "uuid",
+      "title": "Organization Id",
+      "type": "string"
+    },
+    "article_id": {
+      "format": "uuid",
+      "title": "Article Id",
+      "type": "string"
+    },
+    "source_url": {
+      "maxLength": 2048,
+      "minLength": 1,
+      "title": "Source Url",
+      "type": "string"
+    },
+    "content_digest": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Content Digest",
+      "type": "string"
+    },
+    "parser_version": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Parser Version",
+      "type": "string"
+    },
+    "observation_route": {
+      "enum": [
+        "html",
+        "browser_dom",
+        "pdf"
+      ],
+      "title": "Observation Route",
+      "type": "string"
+    },
+    "observation_status": {
+      "enum": [
+        "observed",
+        "no_contact",
+        "requires_browser",
+        "partial",
+        "unsupported"
+      ],
+      "title": "Observation Status",
+      "type": "string"
+    },
+    "preferred_metadata": {
+      "$ref": "#/$defs/MetadataValues"
+    },
+    "authors": {
+      "items": {
+        "$ref": "#/$defs/Author"
+      },
+      "maxItems": 100,
+      "title": "Authors",
+      "type": "array"
+    },
+    "candidates": {
+      "items": {
+        "$ref": "#/$defs/Candidate"
+      },
+      "maxItems": 100,
+      "title": "Candidates",
+      "type": "array"
+    },
+    "evidence": {
+      "items": {
+        "$ref": "#/$defs/Evidence"
+      },
+      "maxItems": 2400,
+      "title": "Evidence",
+      "type": "array"
+    },
+    "associations": {
+      "items": {
+        "$ref": "#/$defs/Association"
+      },
+      "maxItems": 10000,
+      "title": "Associations",
+      "type": "array"
+    },
+    "technical_network_checks": {
+      "const": false,
+      "default": false,
+      "title": "Technical Network Checks",
+      "type": "boolean"
+    },
+    "exports_available": {
+      "const": false,
+      "default": false,
+      "title": "Exports Available",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "organization_id",
+    "article_id",
+    "source_url",
+    "content_digest",
+    "parser_version",
+    "observation_route",
+    "observation_status",
+    "preferred_metadata",
+    "authors",
+    "candidates",
+    "evidence",
+    "associations"
+  ],
+  "title": "Bundle",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}
