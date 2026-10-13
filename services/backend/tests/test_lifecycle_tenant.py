@@ -21,6 +21,7 @@ from emailmonitor.progress.binding import bound
 from emailmonitor.results.models import Filters
 from emailmonitor.results.render import render
 from sqlalchemy import create_engine, text
+from test_association_tenant import client as fixture_client
 from test_durable_jobs import SETTINGS
 from test_html_extraction_tenant import ready as observation_ready
 from test_progress_tenant import claim, planned
@@ -283,7 +284,7 @@ def test_real_support_context_is_existing_membership_metadata_and_revocable(
     results, job = prepared(scenario)
     org = scenario.organizations[0]
     owner = lifecycle(scenario, results.token)
-    with scenario.client() as client:
+    with fixture_client(scenario) as client:
         scenario.login(client, "operator")
         operator = lifecycle(scenario, str(client.cookies[COOKIE]))
         grantee = scenario.identities["operator"]
@@ -313,7 +314,7 @@ def test_real_lifecycle_api_has_current_csrf_role_and_cross_tenant_refusal(
 ) -> None:
     results, job = prepared(scenario)
     org = scenario.organizations[0]
-    with scenario.client() as client:
+    with fixture_client(scenario) as client:
         csrf = scenario.login(client, "operator")
         path = f"/api/v1/organizations/{org}/privacy/deletions"
         body = {"job_id": str(job), "reason": "owner_request"}
@@ -409,7 +410,7 @@ def test_real_due_tick_is_atomic_replay_safe_and_current_owner_only(scenario: Sc
 def test_real_privacy_digest_is_hmac_tenant_separated_and_never_exposed(scenario: Scenario) -> None:
     import hmac
 
-    with scenario.client() as client:
+    with fixture_client(scenario) as client:
         scenario.login(client, "owner")
         lifecycle(scenario, str(client.cookies[COOKIE])).retention(scenario.organizations[0])
         scenario.login(client, "owner_b")
@@ -463,7 +464,7 @@ def test_real_support_expiry_and_membership_loss_refuse(scenario: Scenario, loss
                 ),
                 {"org": org, "id": context.id},
             )
-        with scenario.client() as client:
+        with fixture_client(scenario) as client:
             scenario.login(client, "operator")
             operator = lifecycle(scenario, str(client.cookies[COOKIE]))
             with pytest.raises(AuthorizationDenied):
@@ -562,7 +563,7 @@ def test_real_support_identity_deactivation_lock_refuses_current_use(
         )
     admin = create_engine(scenario.admin_url, hide_parameters=True)
     try:
-        with scenario.client() as client:
+        with fixture_client(scenario) as client:
             scenario.login(client, "operator")
             operator = lifecycle(scenario, str(client.cookies[COOKIE]))
             identity = scenario.identities["operator" if operation == "create" else "owner"]

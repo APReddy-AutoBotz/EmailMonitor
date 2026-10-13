@@ -167,6 +167,9 @@ class DiagnosticFrame(BaseModel):
         "route_fulfill_unclassified",
         "route_headers_aborted",
         "route_headers_unclassified",
+        "route_headers_future_state",
+        "route_headers_loop_state",
+        "route_headers_iteration_state",
     ] = "unknown"
     api_statuses: list[int] = Field(default_factory=list, max_length=512)
 
@@ -242,8 +245,35 @@ def route_failure_reason(failure: object) -> str:
     )
 
 
-def route_headers_reason(failure: object) -> str:
-    """Fixed header-boundary diagnostics only; even observed abort remains a failure."""
+def route_headers_reason(failure: object, error: object = None) -> str:
+    """Closed diagnostic categories; no message is returned and every error still refuses."""
+    if type(error) is RuntimeError and len(error.args) == 1 and type(error.args[0]) is str:
+        message = error.args[0]
+        if (
+            len(message) <= 2048
+            and message.isascii()
+            and "\n" not in message
+            and "\r" not in message
+        ):
+            # Pinned Playwright preserves the exception class while adding this
+            # API prefix when replaying a prior callback error at all_headers.
+            if message.startswith("Request.all_headers: "):
+                message = message.removeprefix("Request.all_headers: ")
+            if message == "UI diagnostic concurrency/request cap exceeded":
+                return "rpc_capacity"
+            if message in {
+                "await wasn't used with future",
+                "cannot reuse already awaited coroutine",
+            }:
+                return "route_headers_future_state"
+            if message == "Event loop is closed" or (
+                message.startswith("Task ")
+                and " got Future " in message
+                and message.endswith(" attached to a different loop")
+            ):
+                return "route_headers_loop_state"
+            if message == "dictionary changed size during iteration":
+                return "route_headers_iteration_state"
     return (
         "route_headers_aborted"
         if type(failure) is str and failure == "net::ERR_ABORTED"

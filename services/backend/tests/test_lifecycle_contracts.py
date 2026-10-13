@@ -225,3 +225,22 @@ def test_http_lifecycle_identifier_refuses_noncanonical_values(identifier: objec
                 "reason": "synthetic_incident",
             }
         )
+
+
+def test_lifecycle_http_regression_uses_fixture_enabled_client() -> None:
+    import ast
+    from pathlib import Path
+
+    source = Path(__file__).with_name("test_lifecycle_tenant.py").read_text()
+    module = ast.parse(source)
+    case = next(
+        node
+        for node in module.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "test_real_lifecycle_api_has_current_csrf_role_and_cross_tenant_refusal"
+    )
+    contexts = [node for node in ast.walk(case) if isinstance(node, ast.With)]
+    assert len(contexts) == 1
+    call = contexts[0].items[0].context_expr
+    assert isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
+    assert call.func.id == "fixture_client"

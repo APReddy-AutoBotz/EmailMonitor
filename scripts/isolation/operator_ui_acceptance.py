@@ -119,7 +119,7 @@ async def api_headers(incoming: Request, failure: Callable[[str, str], None]) ->
     except (Error, RuntimeError) as error:
         failure(
             "Error" if isinstance(error, Error) else "RuntimeError",
-            route_headers_reason(incoming.failure),
+            route_headers_reason(incoming.failure, error),
         )
         raise
 

@@ -518,3 +518,38 @@ def test_actual_headers_keep_sensitive_allowlist_without_fallback() -> None:
         "origin": "https://app.example.test",
     }
     assert errors == []
+
+
+@pytest.mark.parametrize(
+    "error,expected",
+    [
+        (RuntimeError("UI diagnostic concurrency/request cap exceeded"), "rpc_capacity"),
+        (
+            RuntimeError("Request.all_headers: UI diagnostic concurrency/request cap exceeded"),
+            "rpc_capacity",
+        ),
+        (
+            RuntimeError("Request.all_headers: await wasn't used with future"),
+            "route_headers_future_state",
+        ),
+        (RuntimeError("cannot reuse already awaited coroutine"), "route_headers_future_state"),
+        (RuntimeError("Request.all_headers: Event loop is closed"), "route_headers_loop_state"),
+        (RuntimeError("dictionary changed size during iteration"), "route_headers_iteration_state"),
+        (RuntimeError("unrecognized private information"), "route_headers_unclassified"),
+        (Exception("UI diagnostic concurrency/request cap exceeded"), "route_headers_unclassified"),
+    ],
+)
+def test_header_runtime_categories_are_closed_diagnostics_never_success(
+    error: Exception, expected: str
+) -> None:
+    from operator_ui_protocol import DiagnosticFrame, route_headers_reason
+
+    reason = route_headers_reason(None, error)
+    assert reason == expected
+    assert (
+        DiagnosticFrame.model_validate(
+            {"kind": "failure", "stage": "url_worker", "error": "RuntimeError", "reason": reason}
+        ).kind
+        == "failure"
+    )
+    assert "private" not in reason
