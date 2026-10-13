@@ -329,3 +329,23 @@ def test_owned_channel_admission_and_reply_share_one_deadline() -> None:
         assert channel.identifier == 8
 
     asyncio.run(run())
+
+
+@pytest.mark.parametrize("failure", [None, "arbitrary private text", "net::ERR_FAILED"])
+def test_route_fulfill_diagnostics_are_fixed_and_remain_failure(failure: object) -> None:
+    from operator_ui_protocol import DiagnosticFrame, route_failure_reason
+
+    reason = route_failure_reason(failure)
+    assert reason == (
+        "route_fulfill_failed" if failure == "net::ERR_FAILED" else "route_fulfill_unclassified"
+    )
+    diagnostic = DiagnosticFrame.model_validate(
+        {
+            "kind": "failure",
+            "stage": "empty_contacts",
+            "error": "Error",
+            "reason": reason,
+            "api_statuses": [200],
+        }
+    )
+    assert diagnostic.kind == "failure"

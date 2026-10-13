@@ -11,9 +11,13 @@ from uuid import uuid4
 import pytest
 
 
-def helper(name: str, namespace: dict[str, Any]) -> Any:
+def helper(
+    name: str,
+    namespace: dict[str, Any],
+    relative: str = "scripts/isolation/test_transport_acceptance.py",
+) -> Any:
     root = Path(__file__).resolve().parents[3]
-    source = ast.parse((root / "scripts/isolation/test_transport_acceptance.py").read_text())
+    source = ast.parse((root / relative).read_text())
     node = next(
         n for n in source.body if isinstance(n, (ast.FunctionDef, ast.ClassDef)) and n.name == name
     )
@@ -175,3 +179,48 @@ def test_wrapped_tenant_completion_preserves_real_admission_and_denial() -> None
     proxy(SimpleNamespace(processes={"gateway": object()}), uuid4(), Tenant(), resources=wrapped)
     assert captured["resources"] is wrapped
     assert captured["diagnostic_transport_only"] is False
+
+
+@pytest.mark.parametrize("url", [None, "https://synthetic.publisher.example/article-a.html"])
+def test_owned_keyword_admission_fixture_requests_its_asserted_full_frontier(
+    url: str | None,
+) -> None:
+    from emailmonitor.jobs.models import JobRequest
+    from test_job_contracts import request_body
+
+    captured: list[JobRequest] = []
+    identifier = uuid4()
+
+    class Ledger:
+        def __init__(self, *args: object) -> None:
+            pass
+
+        def create(self, organization: object, body: JobRequest, key: object) -> object:
+            captured.append(body)
+            return identifier
+
+    class Discovery:
+        def __init__(self, *args: object) -> None:
+            pass
+
+        def plan(self, organization: object, job: object, revision: int) -> None:
+            assert job == identifier and revision == 1
+
+    create = helper(
+        "new_job",
+        {
+            "request_body": request_body,
+            "Ledger": Ledger,
+            "Discovery": Discovery,
+            "JobRequest": JobRequest,
+            "uuid4": uuid4,
+        },
+        "services/backend/tests/test_admission_tenant.py",
+    )
+    assert (
+        create(SimpleNamespace(database=object(), token="fixture", settings=object()), uuid4(), url)
+        == identifier
+    )
+    assert len(captured) == 1
+    assert captured[0].options.max_articles == (500 if url is None else 1)
+    assert captured[0].options.max_search_pages == (2 if url is None else 1)

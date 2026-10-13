@@ -50,6 +50,8 @@ def new_job(progress: Progress, org: UUID, url: str | None = None) -> UUID:
             "original_query": "Myocardial Infarction",
         }
     )
+    if url is None:
+        request["options"] = {"max_articles": 500, "max_search_pages": 2, "author_target": "both"}
     job = Ledger(progress.database, progress.token, progress.settings).create(
         org, JobRequest.model_validate(request), str(uuid4())
     )
@@ -597,3 +599,26 @@ WHERE organization_id=:org AND job_id=:job AND reference_id=:reference AND nonce
         )
     finally:
         admin.dispose()
+
+
+def test_real_discovery_only_policy_admits_fixture_io_without_contact_extraction(
+    scenario: Scenario,
+) -> None:
+    from emailmonitor.administration.admission import Admission
+    from fastapi import HTTPException
+    from test_discovery_tenant import begin
+
+    discovery, job = begin(scenario)
+    org = scenario.organizations[0]
+    first = step_fixture(discovery, org, job, 1)
+    checkpoint = first["checkpoint"]
+    assert isinstance(checkpoint, dict) and checkpoint["articles"]
+    with pytest.raises(HTTPException) as denied:
+        with Admission(discovery.database, discovery.token, discovery.settings).fixture(
+            org, job, "https://synthetic.publisher.example/article-a.html"
+        ):
+            raise AssertionError("Discovery-only permission cannot admit extraction")
+    assert denied.value.status_code == 409
+    usage = Administration(discovery.database, discovery.token, discovery.settings).usage(org)
+    assert usage.source_resource_attempts == 0 and usage.settled_resolution_units == 0
+    assert usage.active_units.get("fixture_io", 0) == 0

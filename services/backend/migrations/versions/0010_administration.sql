@@ -329,7 +329,7 @@ BEGIN
  AND j.state IN ('draft','queued','running') AND membership.status='active' AND actor.active
  AND sess.revoked_at IS NULL AND sess.expires_at>stamp AND sess.permission_revision=actor.permission_revision
  AND catalog.enabled AND policy.policy->'allowed_operations' ? 'fetch_html'
- AND policy.policy->'allowed_operations' ? 'extract_contacts'
+ AND (p_pool IN ('fixture_io','http') OR policy.policy->'allowed_operations' ? 'extract_contacts')
  AND j.request->>'purpose'=policy.policy->>'purpose'
  AND membership.role IN ('owner','admin','data_steward','operator')
  AND policy.state='approved' AND policy.valid_until>stamp AND policy.version=d.policy_version
@@ -690,7 +690,7 @@ RESET ROLE;
 SET ROLE emailmonitor_owner;
 CREATE FUNCTION emailmonitor.fixture_admission_claim(p_org uuid,p_job uuid,p_url text,p_nonce uuid,p_seconds integer)
  RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,emailmonitor AS $$
-DECLARE j emailmonitor.jobs; d emailmonitor.discovery; pool text; reference uuid; inherited boolean;
+DECLARE j emailmonitor.jobs; d emailmonitor.discovery; v_pool text; reference uuid; inherited boolean;
 BEGIN
  IF NOT COALESCE(emailmonitor.tenant_allowed(p_org),false)
  OR emailmonitor.session_role(p_org) NOT IN ('owner','admin','data_steward','operator')
@@ -706,7 +706,7 @@ BEGIN
  IF NOT (d.checkpoint->'articles' ? p_url) AND NOT (d.checkpoint->'pages' ? p_url)
  AND d.checkpoint->>'next_url' IS DISTINCT FROM p_url THEN
  RAISE EXCEPTION 'ADMINISTRATION_SCOPE_DENIED' USING ERRCODE='EM013'; END IF;
- pool:=CASE WHEN d.checkpoint->'articles' ? p_url THEN 'parse' ELSE 'fixture_io' END;
+ v_pool:=CASE WHEN d.checkpoint->'articles' ? p_url THEN 'parse' ELSE 'fixture_io' END;
  IF j.state='running' THEN
  inherited:=COALESCE(emailmonitor.execution_write_allowed(p_org,p_job),false) AND EXISTS(
  SELECT 1 FROM emailmonitor.execution_items i WHERE i.organization_id=p_org AND i.job_id=p_job
@@ -717,7 +717,7 @@ BEGIN
  IF emailmonitor.execution_budget_exhausted(p_org,p_job) THEN
  RETURN jsonb_build_object('admitted',false,'inherited',false,'reference',null); END IF;
  reference:=md5(p_org::text||':'||p_job::text||':fixture:'||p_url)::uuid;
- inherited:=emailmonitor.admission_try(p_org,p_job,reference,pool,j.generation,p_nonce,p_seconds);
+ inherited:=emailmonitor.admission_try(p_org,p_job,reference,v_pool,j.generation,p_nonce,p_seconds);
  RETURN jsonb_build_object('admitted',inherited,'inherited',false,'reference',reference);
 END $$;
 CREATE FUNCTION emailmonitor.fixture_admission_release(p_org uuid,p_job uuid,p_reference uuid,p_nonce uuid,p_success boolean)
@@ -780,7 +780,7 @@ CREATE FUNCTION emailmonitor.source_resource_claim(p_org uuid,p_id uuid,p_job uu
  LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,emailmonitor AS $$
 DECLARE stamp timestamptz:=clock_timestamp(); mine emailmonitor.source_resource_requests;
  bucket emailmonitor.source_resource_buckets; tenant emailmonitor.tenant_source_buckets;
- spacing double precision; chosen uuid; until_time timestamptz; pool text; gen bigint:=1; epoch bigint;
+ spacing double precision; chosen uuid; until_time timestamptz; v_pool text; gen bigint:=1; epoch bigint;
 BEGIN
  IF NOT COALESCE(emailmonitor.tenant_allowed(p_org),false) OR emailmonitor.session_role(p_org) NOT IN ('owner','admin','data_steward','operator')
  OR p_id IS NULL OR p_nonce IS NULL OR p_version IS NULL OR p_version<1 OR p_operation IS NULL
@@ -836,9 +836,9 @@ BEGIN
  AND t.source_id=r.source_id AND t.ready_at>stamp)
  ORDER BY (r.organization_id IS NOT DISTINCT FROM bucket.last_organization),r.ordinal LIMIT 1;
  IF chosen IS DISTINCT FROM p_id THEN RETURN jsonb_build_object('admitted',false,'wait_seconds',0.05); END IF;
- pool:=CASE p_operation WHEN 'browser' THEN 'browser' ELSE 'http' END;
+ v_pool:=CASE p_operation WHEN 'browser' THEN 'browser' ELSE 'http' END;
  -- HTTP uses the same bounded pool metadata; its per-tenant ceiling is parse's2.
- IF NOT emailmonitor.admission_try(p_org,p_job,p_id,pool,gen,p_nonce,p_seconds)
+ IF NOT emailmonitor.admission_try(p_org,p_job,p_id,v_pool,gen,p_nonce,p_seconds)
  THEN RETURN jsonb_build_object('admitted',false,'wait_seconds',0.05); END IF;
  SELECT greatest(5.0,(policy->'limits'->>'min_request_interval_seconds')::double precision) INTO spacing
  FROM emailmonitor.source_policies WHERE organization_id=p_org AND source_id='synthetic-publisher' AND version=p_version;
@@ -1098,7 +1098,7 @@ RESET ROLE;
 SET ROLE emailmonitor_owner;
 CREATE FUNCTION emailmonitor.fixture_commit_allowed(p_org uuid,p_job uuid,p_url text) RETURNS boolean
  LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog,emailmonitor AS $$
-DECLARE j emailmonitor.jobs; d emailmonitor.discovery; reference uuid; nonce text; pool text;
+DECLARE j emailmonitor.jobs; d emailmonitor.discovery; reference uuid; v_nonce text; v_pool text;
 BEGIN
  IF NOT COALESCE(emailmonitor.tenant_allowed(p_org),false)
  OR emailmonitor.session_role(p_org) NOT IN ('owner','admin','data_steward','operator') THEN RETURN false; END IF;
@@ -1108,16 +1108,16 @@ BEGIN
  SELECT * INTO d FROM emailmonitor.discovery WHERE organization_id=p_org AND job_id=p_job;
  IF d.job_id IS NULL THEN RETURN false; END IF;
  reference:=md5(p_org::text||':'||p_job::text||':fixture:'||p_url)::uuid;
- nonce:=current_setting('emailmonitor.fixture_nonce',true);
+ v_nonce:=current_setting('emailmonitor.fixture_nonce',true);
  IF current_setting('emailmonitor.fixture_reference',true) IS DISTINCT FROM reference::text THEN RETURN false; END IF;
- pool:=CASE WHEN d.checkpoint->'articles' ? p_url THEN 'parse' ELSE 'fixture_io' END;
+ v_pool:=CASE WHEN d.checkpoint->'articles' ? p_url THEN 'parse' ELSE 'fixture_io' END;
  PERFORM 1 FROM emailmonitor.admission_mutex WHERE id FOR UPDATE;
  PERFORM emailmonitor.discovery_source_fence(p_org,p_job,d.policy_version);
  IF emailmonitor.execution_budget_exhausted(p_org,p_job) THEN RETURN false; END IF;
  RETURN EXISTS(SELECT 1 FROM emailmonitor.admission_requests a WHERE a.organization_id=p_org
- AND a.job_id=p_job AND a.reference_id=reference AND a.pool=pool AND a.generation=j.generation
+ AND a.job_id=p_job AND a.reference_id=reference AND a.pool=v_pool AND a.generation=j.generation
  AND a.actor_id=emailmonitor.job_actor() AND a.session_hash=current_setting('emailmonitor.session_hash',true)
- AND a.state='active' AND a.nonce::text=nonce AND a.lease_until>clock_timestamp());
+ AND a.state='active' AND a.nonce::text=v_nonce AND a.lease_until>clock_timestamp());
 END $$;
 CREATE FUNCTION emailmonitor.fixture_draft_commit_guard() RETURNS trigger
  LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,emailmonitor AS $$

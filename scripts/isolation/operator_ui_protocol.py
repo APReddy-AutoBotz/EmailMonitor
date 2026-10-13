@@ -158,7 +158,14 @@ class DiagnosticFrame(BaseModel):
         ]
         | None
     ) = None
-    reason: Literal["unknown", "rpc_capacity", "keyboard_focus", "dialog_focus_restore"] = "unknown"
+    reason: Literal[
+        "unknown",
+        "rpc_capacity",
+        "keyboard_focus",
+        "dialog_focus_restore",
+        "route_fulfill_failed",
+        "route_fulfill_unclassified",
+    ] = "unknown"
     api_statuses: list[int] = Field(default_factory=list, max_length=512)
 
     @model_validator(mode="after")
@@ -222,3 +229,12 @@ def failure_reason(error: BaseException) -> str:
         "Control not reachable by keyboard": "keyboard_focus",
         "Evidence dialog did not restore keyboard focus": "dialog_focus_restore",
     }.get(error.args[0], "unknown")
+
+
+def route_failure_reason(failure: object) -> str:
+    """Diagnostic category only; never changes refusal or echoes request text."""
+    return (
+        "route_fulfill_failed"
+        if type(failure) is str and failure == "net::ERR_FAILED"
+        else "route_fulfill_unclassified"
+    )

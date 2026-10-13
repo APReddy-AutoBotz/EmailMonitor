@@ -197,3 +197,22 @@ def test_owned_mutex_observation_refreshes_current_query_snapshot_before_poll() 
     assert isinstance(loop.body[0], ast.Expr)
     assert "SELECT pg_stat_clear_snapshot()" in ast.unparse(loop.body[0])
     assert "pg_stat_activity" in ast.unparse(loop.body[1])
+
+
+def test_fixture_commit_fence_local_names_cannot_shadow_row_columns() -> None:
+    root = Path(__file__).resolve().parents[3]
+    sql = (root / "services/backend/migrations/versions/0010_administration.sql").read_text()
+    for name in ("fixture_admission_claim", "source_resource_claim", "fixture_commit_allowed"):
+        function = sql.split(f"CREATE FUNCTION emailmonitor.{name}(", 1)[1].split("END $$;", 1)[0]
+        assert "v_pool text" in function
+        assert " pool text" not in function
+    fence = sql.split("CREATE FUNCTION emailmonitor.fixture_commit_allowed(", 1)[1].split(
+        "END $$;", 1
+    )[0]
+    assert "a.pool=v_pool" in fence
+    assert "a.nonce::text=v_nonce" in fence
+    assert (
+        "p_pool IN ('fixture_io','http') OR "
+        "policy.policy->'allowed_operations' ? 'extract_contacts'" in sql
+    )
+    assert " nonce text" not in fence

@@ -14,7 +14,13 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from browser_acceptance import sandbox_status
-from operator_ui_protocol import ERRORS, STAGES, asset_manifest, failure_reason
+from operator_ui_protocol import (
+    ERRORS,
+    STAGES,
+    asset_manifest,
+    failure_reason,
+    route_failure_reason,
+)
 from playwright.async_api import Error, Locator, Page, Route, async_playwright, expect
 
 ORIGIN = "https://app.example.test"
@@ -266,6 +272,20 @@ async def main() -> None:
                         )
                     except Error:
                         if incoming.failure != "net::ERR_ABORTED":
+                            # Fail immediately with a fixed category rather than
+                            # filling stderr with repeated async callback stacks.
+                            print(
+                                json.dumps(
+                                    {
+                                        "kind": "failure",
+                                        "stage": stage,
+                                        "error": "Error",
+                                        "reason": route_failure_reason(incoming.failure),
+                                        "api_statuses": api_statuses,
+                                    }
+                                ),
+                                flush=True,
+                            )
                             raise
                     return
                 path = "index.html" if parsed.path == "/" else parsed.path.lstrip("/")
