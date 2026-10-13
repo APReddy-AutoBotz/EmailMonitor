@@ -1,6 +1,7 @@
 """Execute owned acceptance helpers without importing services or isolation runtimes."""
 
 import ast
+import subprocess
 import time
 from concurrent.futures import Future
 from pathlib import Path
@@ -224,3 +225,27 @@ def test_owned_keyword_admission_fixture_requests_its_asserted_full_frontier(
     assert len(captured) == 1
     assert captured[0].options.max_articles == (500 if url is None else 1)
     assert captured[0].options.max_search_pages == (2 if url is None else 1)
+
+
+@pytest.mark.parametrize(
+    ("summary", "accepted"),
+    [
+        ("================ 13 passed in 77.65s ================", True),
+        ("13 passed in 77.65s", True),
+        ("12 passed in 77.65s", False),
+        ("113 passed in 77.65s", False),
+        ("13 passed_extra", False),
+    ],
+)
+def test_transport_workflow_requires_exact_expanded_case_count(
+    summary: str, accepted: bool
+) -> None:
+    root = Path(__file__).resolve().parents[3]
+    workflow = (root / ".github/workflows/transport-isolation.yml").read_text()
+    pattern = "(^|[=[:space:]])13 passed([ ,]|$)"
+    assert f"grep -Eq '{pattern}'" in workflow
+    result = subprocess.run(
+        ["grep", "-Eq", pattern], input=summary, text=True, check=False, timeout=1
+    )
+    assert (result.returncode == 0) is accepted
+    assert "[0-9]+ skipped|[0-9]+ warnings?" in workflow
