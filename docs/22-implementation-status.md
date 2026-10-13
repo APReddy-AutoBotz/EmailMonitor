@@ -128,6 +128,13 @@ This verifies bounded fixture lifecycle, current leases/generation/deletion fenc
 The EM-010 documentation checkpoint passed its own862/no-skip application and controlled12/browser/parser/docs at exact headfe66f7a7/tree1d16ad49, closing this dependency gate. Filtered results/evidence APIs and private async export snapshots are a local candidate. Contacts/outcomes, accepted associations, technical status and outreach eligibility remain distinct. Export-capable roles/current purpose/source/revisions/expiry are checked at creation, claim, commit and download; conservative CSV refusal and literal XLSX cells prevent formula execution. Actual SQL/broker and all existing isolation gates remain pending. [Evidence](../reports/em011-validation.md). EM-012 is gated on scoped EM-011 acceptance.
 
 
-### EM-011 first published-head validation
+### EM-011 first published-head validation (historical snapshot)
 
 Draft PR16 headfc5fe611/tree510b387 passed actual1008/no-skip application (18 results PostgreSQL/four broker cases), browser, parser and docs at exact merge2ea2c24. Controlled transport12 failed before transport because precisely owned IPv6 host-veth addresses were still tentative; full cleanup equality passed. The read-only DAD-readiness repair preserves all isolation/settings/baseline controls and awaits its own application1035/no-skip plus controlled12/browser/parser/docs gates. EM-011 is not yet accepted; EM-012 remains gated. [Current evidence](../reports/em011-validation.md).
+
+
+## EM-011 synthetic/offline acceptance checkpoint (2026-10-13)
+
+VERIFIED IN DRAFT, unmerged: independent authoritative review verified head660e0dc5 and merge45377b5 share reviewed treeca84f013, exactfe66f7a7/660e0dc5 parents, and all five complete job logs. Application1035 passed/no skips/one disclosed EM-WARN-01 alias warning in214.27s, including18 actual results PostgreSQL/four broker cases; controlled12 passed70.08s with real tenant/pinning/durable browser/cleanup proof. Browser/parser/docs passed. [Exact evidence and history](../reports/em011-validation.md).
+
+This verifies runbook40's bounded current-authorized results, accepted-only default immutable snapshots, conservative CSV/literal XLSX and fresh authenticated expiry/revision/revocation/deletion download fences. UI, field-selection preview, external event delivery, global dedup, lifecycle purge and live/production activation remain later scope. EM-WARN-01 cause remains open. Bounded offline EM-012 may proceed only after this documentation checkpoint passes its own1035/no-skip application and controlled12/browser/parser/docs gates.

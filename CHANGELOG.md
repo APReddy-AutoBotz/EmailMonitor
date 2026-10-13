@@ -1,6 +1,13 @@
 # Changelog
 
-## EM-011 synthetic results/export candidate
+## 2026-10-13 — EM-011 scoped synthetic foundation verified in Draft
+
+- Independently reconcile reviewed head/merge and all five authoritative job logs against scoped results/export criteria
+- Verify1035/no-skip application with18 actual SQL/four broker cases, controlled12 and browser/parser/docs; disclose one existing alias warning
+- Preserve private current-authorized snapshots/downloads, safe formats and DAD/source-review correction history
+- Gate offline EM-012 on this documentation checkpoint-own CI; retain Draft/unmerged and product/live limits
+
+## EM-011 synthetic results/export candidate (historical snapshot)
 
 - Add bounded retained contact/outcome/evidence reads and async private export snapshots with current tenant/source/role/data-revision/expiry fences
 - Render standard-library formula-safe CSV/ZIP and literal-string XLSX with provenance; no new dependencies or live/production activation

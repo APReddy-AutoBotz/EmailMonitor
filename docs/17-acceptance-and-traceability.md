@@ -190,3 +190,8 @@ Independent authoritative reconciliation maps document16 EM-010/document10 to re
 ## EM-011 candidate traceability (2026-10-13)
 
 Document16 EM-011 and documents03/05/08/09/12 map to migration0008, results models/cursor/service/API/broker/render and test_result/test_results modules. Composite tenant references/current owner-definer fences and revision members protect private snapshots/downloads. Pure adversarial format/cursor/envelope/role/schema tests are separate from18 required actual PostgreSQL/four real-broker cases. No independent source-review or actual acceptance claim is made yet; [runbook](40-offline-results-export-runbook.md) and [validation](../reports/em011-validation.md) preserve all exact-head gates.
+
+
+## EM-011 independently verified scoped foundation
+
+Independent authoritative reconciliation maps document16 EM-011 to reviewed head660e0dc5/treeca84f013 and merge45377b5: actual1035/no-skip application includes18 results SQL/four broker cases, covering role/CSRF/current tenant and source, immutable atomic snapshots/idempotency, private artifact permissions/integrity, revision/expiry/revoke/deletion and original-message recovery. Pure CSV control/formula refusal, literal XLSX/OPC and canonical cursor scope/parity cases complement actual server tests. Controlled12/browser/parser/docs passed at the same merge. One existing alias warning remains disclosed. Contacts/outcomes, accepted association, technical checks and outreach eligibility remain independent facts. No scoped document16 criterion was missing; UI/export previews and external event delivery are not claimed. [Evidence](../reports/em011-validation.md) preserves failures/corrections, limits and checkpoint-own CI before EM-012.
