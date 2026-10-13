@@ -165,6 +165,8 @@ class DiagnosticFrame(BaseModel):
         "dialog_focus_restore",
         "route_fulfill_failed",
         "route_fulfill_unclassified",
+        "route_headers_aborted",
+        "route_headers_unclassified",
     ] = "unknown"
     api_statuses: list[int] = Field(default_factory=list, max_length=512)
 
@@ -237,6 +239,15 @@ def route_failure_reason(failure: object) -> str:
         "route_fulfill_failed"
         if type(failure) is str and failure == "net::ERR_FAILED"
         else "route_fulfill_unclassified"
+    )
+
+
+def route_headers_reason(failure: object) -> str:
+    """Fixed header-boundary diagnostics only; even observed abort remains a failure."""
+    return (
+        "route_headers_aborted"
+        if type(failure) is str and failure == "net::ERR_ABORTED"
+        else "route_headers_unclassified"
     )
 
 

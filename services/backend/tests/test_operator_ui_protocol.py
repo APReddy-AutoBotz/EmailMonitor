@@ -431,3 +431,90 @@ def test_owned_failure_log_matching_never_returns_arbitrary_content() -> None:
     assert completion_failure_classes(b"private arbitrary error") == []
     with pytest.raises(ValueError):
         completion_failure_classes(b"x" * 65537)
+
+
+def _owned_api_headers() -> tuple[Any, type[Exception]]:
+    import ast
+    from collections.abc import Callable
+
+    from operator_ui_protocol import route_headers_reason
+
+    source = (
+        Path(__file__).resolve().parents[3] / "scripts/isolation/operator_ui_acceptance.py"
+    ).read_text()
+    node = next(
+        item
+        for item in ast.parse(source).body
+        if isinstance(item, ast.AsyncFunctionDef) and item.name == "api_headers"
+    )
+
+    class DriverError(Exception):
+        pass
+
+    namespace: dict[str, Any] = {
+        "Request": object,
+        "Callable": Callable,
+        "Error": DriverError,
+        "HEADERS": {"cookie", "origin"},
+        "route_headers_reason": route_headers_reason,
+    }
+    exec(compile(ast.Module(body=[node], type_ignores=[]), "owned-api-headers", "exec"), namespace)
+    return namespace["api_headers"], DriverError
+
+
+@pytest.mark.parametrize("driver_error", [False, True])
+@pytest.mark.parametrize("failure", [None, "net::ERR_ABORTED"])
+def test_actual_header_boundary_reports_fixed_failure_and_rethrows(
+    driver_error: bool, failure: str | None
+) -> None:
+    function, error_type = _owned_api_headers()
+    errors: list[tuple[str, str]] = []
+
+    class Request:
+        async def all_headers(self) -> dict[str, str]:
+            raise (error_type if driver_error else RuntimeError)("private detail never reported")
+
+    incoming = Request()
+    incoming.failure = failure  # type: ignore[attr-defined]
+    with pytest.raises(error_type if driver_error else RuntimeError):
+        asyncio.run(function(incoming, lambda error, reason: errors.append((error, reason))))
+    assert errors == [
+        (
+            "Error" if driver_error else "RuntimeError",
+            "route_headers_aborted" if failure else "route_headers_unclassified",
+        )
+    ]
+    from operator_ui_protocol import DiagnosticFrame
+
+    assert (
+        DiagnosticFrame.model_validate(
+            {
+                "kind": "failure",
+                "stage": "url_worker",
+                "error": errors[0][0],
+                "reason": errors[0][1],
+            }
+        ).kind
+        == "failure"
+    )
+
+
+def test_actual_headers_keep_sensitive_allowlist_without_fallback() -> None:
+    function, _ = _owned_api_headers()
+    errors: list[tuple[str, str]] = []
+
+    class Request:
+        async def all_headers(self) -> dict[str, str]:
+            return {
+                "cookie": "synthetic=test",
+                "origin": "https://app.example.test",
+                "unknown": "excluded",
+            }
+
+    assert asyncio.run(
+        function(Request(), lambda error, reason: errors.append((error, reason)))
+    ) == {
+        "cookie": "synthetic=test",
+        "origin": "https://app.example.test",
+    }
+    assert errors == []

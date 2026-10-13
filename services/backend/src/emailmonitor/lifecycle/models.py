@@ -7,6 +7,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from emailmonitor.associations.api import Identifier
+
 
 class Closed(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
@@ -79,7 +81,7 @@ class Suppression(Closed):
 
 
 class DeletionRequest(Closed):
-    job_id: UUID | None
+    job_id: Identifier | None
     reason: Literal["privacy_request", "retention_expired", "owner_request"]
 
 
@@ -102,8 +104,8 @@ class DeletionReceipt(Closed):
 
 
 class SupportCreate(Closed):
-    grantee_id: UUID
-    job_id: UUID
+    grantee_id: Identifier
+    job_id: Identifier
     minutes: int = Field(ge=1, le=240)
     reason: Literal["synthetic_incident", "synthetic_privacy_check"]
 

@@ -187,3 +187,41 @@ def test_controlled_deletion_uses_existing_successful_fixture_route() -> None:
     assert 'assert observed["calls"][0]["path"] == "/tooltip.html"' in body
     assert 'target.fetch(f"https://{HOST}/tooltip.html")' in body
     assert "/article-a.html" not in body
+
+
+def test_http_lifecycle_identifiers_decode_canonical_json_without_coercion() -> None:
+    from emailmonitor.lifecycle.models import DeletionRequest
+
+    job, grantee = uuid4(), uuid4()
+    assert (
+        DeletionRequest.model_validate({"job_id": str(job), "reason": "owner_request"}).job_id
+        == job
+    )
+    assert (
+        SupportCreate.model_validate(
+            {
+                "job_id": str(job),
+                "grantee_id": str(grantee),
+                "minutes": 1,
+                "reason": "synthetic_incident",
+            }
+        ).grantee_id
+        == grantee
+    )
+
+
+@pytest.mark.parametrize("identifier", [True, 1, "not-a-uuid", "00000000000040008000000000000001"])
+def test_http_lifecycle_identifier_refuses_noncanonical_values(identifier: object) -> None:
+    from emailmonitor.lifecycle.models import DeletionRequest
+
+    with pytest.raises(ValidationError):
+        DeletionRequest.model_validate({"job_id": identifier, "reason": "owner_request"})
+    with pytest.raises(ValidationError):
+        SupportCreate.model_validate(
+            {
+                "job_id": str(uuid4()),
+                "grantee_id": identifier,
+                "minutes": 1,
+                "reason": "synthetic_incident",
+            }
+        )

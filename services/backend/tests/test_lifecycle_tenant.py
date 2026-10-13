@@ -44,7 +44,9 @@ def test_real_staged_job_deletion_invalidates_download_and_purges_content(
     service = lifecycle(scenario, results.token)
     receipt = service.stage(org, DeletionRequest(job_id=job, reason="owner_request"))
     assert receipt.stage == "fenced" and receipt.backup_replay_required
-    assert results.contacts(org, Filters(job_id=job)).items == ()
+    with pytest.raises(AuthorizationDenied):
+        results.contacts(org, Filters(job_id=job))
+    assert results.contacts(org, Filters()).items == ()
     with pytest.raises(AuthorizationDenied):
         results.download(org, export)
     again = service.stage(org, DeletionRequest(job_id=job, reason="owner_request"))
@@ -155,8 +157,22 @@ def test_real_running_lease_and_export_finish_cannot_resurrect(scenario: Scenari
     artifact = render(work.snapshot)
     service = lifecycle(scenario, results.token)
     service.stage(org, DeletionRequest(job_id=job, reason="privacy_request"))
-    with pytest.raises(AuthorizationDenied):
-        results.finish(work, artifact)
+    assert results.finish(work, artifact) is False
+    admin = create_engine(scenario.admin_url, hide_parameters=True)
+    try:
+        with admin.connect() as c:
+            assert (
+                c.execute(
+                    text(
+                        "SELECT count(*) FROM emailmonitor.export_artifacts "
+                        "WHERE organization_id=:org AND export_id=:id"
+                    ),
+                    {"org": org, "id": export.id},
+                ).scalar_one()
+                == 0
+            )
+    finally:
+        admin.dispose()
     with pytest.raises(AuthorizationDenied):
         results.download(org, export.id)
 
@@ -206,11 +222,15 @@ def test_real_contact_suppression_keeps_only_keyed_metadata_and_no_resurrection(
         ),
     )
     assert suppression.active and address not in suppression.model_dump_json()
-    assert results.contacts(org, Filters(job_id=job)).items == ()
+    with pytest.raises(AuthorizationDenied):
+        results.contacts(org, Filters(job_id=job))
+    assert results.contacts(org, Filters()).items == ()
     with pytest.raises(AuthorizationDenied):
         results.download(org, export)
     assert not service.withdraw(org, suppression.id).active
-    assert results.contacts(org, Filters(job_id=job)).items == ()
+    with pytest.raises(AuthorizationDenied):
+        results.contacts(org, Filters(job_id=job))
+    assert results.contacts(org, Filters()).items == ()
     # Withdrawal never unmasks previously retained/deleted content.
     assert service.tick(org) == 1
     assert service.tick(org) == 0
@@ -248,7 +268,9 @@ def test_real_retention_reduction_is_current_and_revision_fenced(scenario: Scena
     assert current.revision == old.revision + 1
     with pytest.raises(RevisionConflict):
         service.update_retention(org, update)
-    assert results.contacts(org, Filters(job_id=job)).items == ()
+    with pytest.raises(AuthorizationDenied):
+        results.contacts(org, Filters(job_id=job))
+    assert results.contacts(org, Filters()).items == ()
     with pytest.raises(AuthorizationDenied):
         results.download(org, export)
     assert service.tick(org) == 1
@@ -379,7 +401,9 @@ def test_real_due_tick_is_atomic_replay_safe_and_current_owner_only(scenario: Sc
     assert service.scheduled_tick(org, events[0]) == 1
     assert service.scheduled_tick(org, events[0]) == 1
     assert service.schedule(org) == ()
-    assert results.contacts(org, Filters(job_id=job)).items == ()
+    with pytest.raises(AuthorizationDenied):
+        results.contacts(org, Filters(job_id=job))
+    assert results.contacts(org, Filters()).items == ()
 
 
 def test_real_privacy_digest_is_hmac_tenant_separated_and_never_exposed(scenario: Scenario) -> None:
@@ -504,11 +528,15 @@ def test_real_retention_increase_never_unexpires_old_objects(scenario: Scenario)
     reduced = service.update_retention(
         org, RetentionUpdate(expected_revision=old.revision, retention=Retention(contact_days=0))
     )
-    assert results.contacts(org, Filters(job_id=job)).items == ()
+    with pytest.raises(AuthorizationDenied):
+        results.contacts(org, Filters(job_id=job))
+    assert results.contacts(org, Filters()).items == ()
     service.update_retention(
         org, RetentionUpdate(expected_revision=reduced.revision, retention=Retention())
     )
-    assert results.contacts(org, Filters(job_id=job)).items == ()
+    with pytest.raises(AuthorizationDenied):
+        results.contacts(org, Filters(job_id=job))
+    assert results.contacts(org, Filters()).items == ()
     assert service.tick(org) == 1
 
 
