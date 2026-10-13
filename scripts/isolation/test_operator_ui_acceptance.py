@@ -21,6 +21,7 @@ from emailmonitor.progress.broker import publish as publish_execution
 from emailmonitor.progress.service import Progress
 from emailmonitor.results.broker import publish as publish_exports
 from emailmonitor.results.service import Results
+from operator_queue_probe import observe as observe_parse_queue
 from operator_ui_protocol import (
     RequestFrame,
     asset_manifest,
@@ -204,12 +205,15 @@ WHERE i.organization_id=:org AND j.kind='extraction' LIMIT 33
                     file.seek(0, 2)
                     file.seek(max(0, file.tell() - 65536))
                     failure_classes = completion_failure_classes(file.read(65536))
+                queue_counts = observe_parse_queue(cfg.broker_url, cfg.queue)
                 print(
                     "operator-ui-control:wait_jobs "
                     + json.dumps(
                         {
                             "states": observed_states,
                             "publisher_failed": bool(errors),
+                            "worker_live": worker_process.poll() is None,
+                            "owned_parse_queue": queue_counts,
                             "units": units,
                             "matched_worker_failure_classes": failure_classes,
                         },
@@ -243,7 +247,7 @@ WHERE i.organization_id=:org AND j.kind='extraction' LIMIT 33
     }
     thread = threading.Thread(target=publisher, daemon=True)
     try:
-        with worker(cfg, tmp_path):
+        with worker(cfg, tmp_path) as worker_process:
 
             def consumer_ready() -> bool:
                 with broker.connection_for_read() as connection:

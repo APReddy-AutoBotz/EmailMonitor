@@ -374,3 +374,12 @@ def completion_failure_classes(body: bytes) -> list[str]:
         "DBAPIError",
     )
     return sorted(name for name in known if name.encode() in body)
+
+
+def completion_queue_counts(ready: object, consumers: object) -> dict[str, int]:
+    """Only bounded integer counts from one exact owned parse queue, never queue names."""
+    if type(ready) is not int or not 0 <= ready <= 10000:
+        raise ValueError("Bounded owned ready count required")
+    if type(consumers) is not int or not 0 <= consumers <= 16:
+        raise ValueError("Bounded owned consumer count required")
+    return {"ready": ready, "consumers": consumers}

@@ -553,3 +553,84 @@ def test_header_runtime_categories_are_closed_diagnostics_never_success(
         == "failure"
     )
     assert "private" not in reason
+
+
+def test_completion_queue_counts_return_no_identifier_or_task_content() -> None:
+    from operator_ui_protocol import completion_queue_counts
+
+    assert completion_queue_counts(3, 1) == {"ready": 3, "consumers": 1}
+    assert completion_queue_counts(0, 0) == {"ready": 0, "consumers": 0}
+
+
+@pytest.mark.parametrize("ready,consumers", [(True, 1), (-1, 1), (10001, 1), (3, True), (3, 17)])
+def test_completion_queue_counts_refuse_unbounded_or_coerced_values(
+    ready: object, consumers: object
+) -> None:
+    from operator_ui_protocol import completion_queue_counts
+
+    with pytest.raises(ValueError):
+        completion_queue_counts(ready, consumers)
+
+
+def test_owned_queue_probe_uses_whole_process_timeout_and_fixed_output(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import subprocess
+
+    import operator_queue_probe as probe
+
+    observed: dict[str, object] = {}
+
+    def run(*args: object, **kwargs: Any) -> subprocess.CompletedProcess[bytes]:
+        observed.update(kwargs)
+        return subprocess.CompletedProcess(["owned-probe"], 0, b'{"ready":3,"consumers":1}')
+
+    monkeypatch.setattr(subprocess, "run", run)
+    assert probe.observe("pyamqp://synthetic@127.0.0.1:5672//", "em-fixture-owned") == {
+        "ready": 3,
+        "consumers": 1,
+    }
+    assert observed["timeout"] == 0.5
+    assert observed["stderr"] == subprocess.DEVNULL
+    assert observed["check"] is False
+
+
+@pytest.mark.parametrize("failure", ["timeout", "unavailable", "invalid", "oversize"])
+def test_owned_queue_probe_unavailability_never_becomes_completion(
+    monkeypatch: pytest.MonkeyPatch, failure: str
+) -> None:
+    import subprocess
+
+    import operator_queue_probe as probe
+
+    def run(*args: object, **kwargs: Any) -> subprocess.CompletedProcess[bytes]:
+        if failure == "timeout":
+            raise subprocess.TimeoutExpired("fixed-owned-command", 0.5)
+        if failure == "unavailable":
+            return subprocess.CompletedProcess(["owned-probe"], 1, b"")
+        return subprocess.CompletedProcess(
+            ["owned-probe"], 0, b"x" * 129 if failure == "oversize" else b"{}"
+        )
+
+    monkeypatch.setattr(subprocess, "run", run)
+    assert probe.observe("pyamqp://synthetic@127.0.0.1:5672//", "em-fixture-owned") is None
+
+
+def test_owned_queue_probe_actual_stalled_child_is_terminated_without_network(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import subprocess
+    import sys
+    import time
+
+    import operator_queue_probe as probe
+
+    actual_run = subprocess.run
+
+    def stalled(*args: object, **kwargs: Any) -> subprocess.CompletedProcess[bytes]:
+        return actual_run([sys.executable, "-c", "import time; time.sleep(60)"], **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", stalled)
+    started = time.monotonic()
+    assert probe.observe("pyamqp://synthetic@127.0.0.1:5672//", "em-fixture-owned") is None
+    assert time.monotonic() - started < 2
