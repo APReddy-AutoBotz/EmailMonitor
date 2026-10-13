@@ -3,7 +3,9 @@
 import ipaddress
 import json
 import re
+import time
 from collections import Counter
+from collections.abc import Callable
 from typing import Any
 
 
@@ -41,13 +43,18 @@ def counted(rows: list[dict[str, Any]]) -> Counter[str]:
     return Counter(json.dumps(row, sort_keys=True) for row in rows)
 
 
-def validate_owned_host(
+class OwnedDadPending(RuntimeError):
+    """Precisely validated owned tentative addresses are not ready for transport."""
+
+
+def _validate_owned_host(
     baseline: dict[str, Any],
     current: dict[str, Any],
     links: list[dict[str, Any]],
     bridge: str,
     peers: dict[str, dict[str, int]],
     disabled: str,
+    allow_pending: bool = False,
 ) -> dict[str, str]:
     """Only validated owned rows are accounted separately; original baseline survives."""
     if disabled not in ("1", "1\n") or not re.fullmatch(r"em[0-9a-f]{10}", bridge):
@@ -91,6 +98,7 @@ def validate_owned_host(
     netns: set[int] = set()
     accounted: list[dict[str, Any]] = []
     targets: dict[str, str] = {}
+    pending_names: set[str] = set()
     for row in slaves:
         name = row["ifname"]
         matches = [
@@ -125,7 +133,13 @@ def validate_owned_host(
             "valid_life_time": 4294967295,
             "preferred_life_time": 4294967295,
         }
-        if row.get("addr_info") != [expected_address]:
+        if (
+            allow_pending
+            and row.get("addr_info") == [{**expected_address, "tentative": True}]
+            and row["addr_info"][0]["tentative"] is True
+        ):
+            pending_names.add(name)
+        elif row.get("addr_info") != [expected_address]:
             raise RuntimeError("Unexpected owned host address")
         accounted.extend(kernel_routes(name, address))
         targets[role] = address
@@ -134,6 +148,68 @@ def validate_owned_host(
     owned_names = {row["ifname"] for row in slaves}
     original_routes = [row for row in current["routes"] if row.get("dev") not in owned_names]
     owned_routes = [row for row in current["routes"] if row.get("dev") in owned_names]
-    if original_routes != baseline["routes"] or counted(owned_routes) != counted(accounted):
+    if original_routes != baseline["routes"]:
         raise RuntimeError("Unexpected host route change")
+    for name in owned_names:
+        actual = counted([row for row in owned_routes if row["dev"] == name])
+        expected = counted([row for row in accounted if row["dev"] == name])
+        if (name in pending_names and actual <= expected) or actual == expected:
+            continue
+        raise RuntimeError("Unexpected host route change")
+    if pending_names:
+        raise OwnedDadPending("Validated owned IPv6 DAD remains tentative")
     return targets
+
+
+def validate_owned_host(
+    baseline: dict[str, Any],
+    current: dict[str, Any],
+    links: list[dict[str, Any]],
+    bridge: str,
+    peers: dict[str, dict[str, int]],
+    disabled: str,
+) -> dict[str, str]:
+    """Original strict complete validator; tentative state never passes."""
+    return _validate_owned_host(baseline, current, links, bridge, peers, disabled)
+
+
+def observe_owned_host(
+    baseline: dict[str, Any],
+    current: dict[str, Any],
+    links: list[dict[str, Any]],
+    bridge: str,
+    peers: dict[str, dict[str, int]],
+    disabled: str,
+) -> dict[str, str]:
+    """Validate all state; distinguish only exact owned tentative DAD for waiting."""
+    return _validate_owned_host(baseline, current, links, bridge, peers, disabled, True)
+
+
+def settle_owned_dad(
+    observe: Callable[[float], None],
+    *,
+    clock: Callable[[], float] = time.monotonic,
+    sleep: Callable[[float], None] = time.sleep,
+) -> None:
+    """Read-only bounded observations; all failures except exact DAD fail immediately."""
+    deadline = clock() + 5
+    while True:
+        try:
+            observe(deadline)
+        except OwnedDadPending:
+            remaining = deadline - clock()
+            if remaining <= 0:
+                raise RuntimeError("Owned IPv6 DAD did not settle within five seconds") from None
+            sleep(min(0.1, remaining))
+        else:
+            if clock() >= deadline:
+                raise RuntimeError("Owned IPv6 DAD observation exceeded deadline")
+            return
+
+
+def remaining_read_budget(deadline: float, *, clock: Callable[[], float] = time.monotonic) -> float:
+    """Every readiness subprocess shares the same deadline, never a fresh allowance."""
+    remaining = deadline - clock()
+    if remaining <= 0:
+        raise RuntimeError("Owned IPv6 DAD observation exceeded deadline")
+    return remaining

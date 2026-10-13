@@ -126,3 +126,8 @@ This verifies bounded fixture lifecycle, current leases/generation/deletion fenc
 ## EM-011 offline candidate (2026-10-13)
 
 The EM-010 documentation checkpoint passed its own862/no-skip application and controlled12/browser/parser/docs at exact headfe66f7a7/tree1d16ad49, closing this dependency gate. Filtered results/evidence APIs and private async export snapshots are a local candidate. Contacts/outcomes, accepted associations, technical status and outreach eligibility remain distinct. Export-capable roles/current purpose/source/revisions/expiry are checked at creation, claim, commit and download; conservative CSV refusal and literal XLSX cells prevent formula execution. Actual SQL/broker and all existing isolation gates remain pending. [Evidence](../reports/em011-validation.md). EM-012 is gated on scoped EM-011 acceptance.
+
+
+### EM-011 first published-head validation
+
+Draft PR16 headfc5fe611/tree510b387 passed actual1008/no-skip application (18 results PostgreSQL/four broker cases), browser, parser and docs at exact merge2ea2c24. Controlled transport12 failed before transport because precisely owned IPv6 host-veth addresses were still tentative; full cleanup equality passed. The read-only DAD-readiness repair preserves all isolation/settings/baseline controls and awaits its own application1035/no-skip plus controlled12/browser/parser/docs gates. EM-011 is not yet accepted; EM-012 remains gated. [Current evidence](../reports/em011-validation.md).

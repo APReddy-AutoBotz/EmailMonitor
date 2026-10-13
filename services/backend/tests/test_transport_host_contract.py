@@ -214,3 +214,223 @@ def test_preexisting_route_order_remains_strict_while_owned_rows_may_reorder() -
     current["routes"][:2] = reversed(current["routes"][:2])
     with pytest.raises(RuntimeError, match="route change"):
         validate_owned_host(before, current, links, BRIDGE, peers, "1")
+
+
+def tentative() -> tuple[
+    dict[str, Any], dict[str, Any], list[dict[str, Any]], dict[str, dict[str, int]]
+]:
+    before, current, links, peers = states()
+    row = current["addresses"][2]
+    row["addr_info"][0]["tentative"] = True
+    current["routes"] = [
+        r for r in current["routes"] if r["dev"] != row["ifname"] or r.get("type") == "multicast"
+    ]
+    return before, current, links, peers
+
+
+def test_tentative_owned_state_is_pending_never_transport_ready() -> None:
+    from transport_host import OwnedDadPending, observe_owned_host
+
+    before, current, links, peers = tentative()
+    with pytest.raises(OwnedDadPending):
+        observe_owned_host(before, current, links, BRIDGE, peers, "1")
+    with pytest.raises(RuntimeError, match="host address"):
+        validate_owned_host(before, current, links, BRIDGE, peers, "1")
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "dadfailed",
+        "extra_flag",
+        "false",
+        "integer",
+        "wrong_address",
+        "extra_family",
+        "unrelated",
+        "old",
+        "rules",
+        "extra_route",
+        "duplicate_route",
+        "settled_missing_route",
+        "owner",
+        "disabled",
+        "old_route_order",
+    ],
+)
+def test_pending_never_masks_unexpected_state(mutation: str) -> None:
+    from transport_host import OwnedDadPending, observe_owned_host
+
+    before, current, links, peers = tentative()
+    row = current["addresses"][2]
+    disabled = "1"
+    if mutation == "dadfailed":
+        row["addr_info"][0]["dadfailed"] = True
+    elif mutation == "extra_flag":
+        row["addr_info"][0]["deprecated"] = True
+    elif mutation == "false":
+        row["addr_info"][0]["tentative"] = False
+    elif mutation == "integer":
+        row["addr_info"][0]["tentative"] = 1
+    elif mutation == "wrong_address":
+        row["addr_info"][0]["local"] = "fe80::dead"
+    elif mutation == "extra_family":
+        row["addr_info"].append({"family": "inet", "local": "192.0.2.1"})
+    elif mutation == "unrelated":
+        current["addresses"].append({"ifname": "unrelated", "addr_info": []})
+    elif mutation == "old":
+        current["addresses"][0]["mtu"] = 1
+    elif mutation == "rules":
+        current["rules"].append({"priority": 100})
+    elif mutation == "extra_route":
+        current["routes"].append({"dev": row["ifname"], "dst": "::/0"})
+    elif mutation == "duplicate_route":
+        current["routes"].append(copy.deepcopy(current["routes"][0]))
+    elif mutation == "settled_missing_route":
+        current["routes"].pop()
+    elif mutation == "owner":
+        peers["fixture-b"]["host_ifindex"] = peers["fixture-a"]["host_ifindex"]
+    elif mutation == "disabled":
+        disabled = "0"
+    else:
+        before["routes"] = [
+            {"dev": "eth0", "dst": "192.0.2.0/24"},
+            {"dev": "eth0", "dst": "2001:db8::/64"},
+        ]
+        current["routes"] = list(reversed(before["routes"])) + current["routes"]
+    with pytest.raises(RuntimeError) as error:
+        observe_owned_host(before, current, links, BRIDGE, peers, disabled)
+    assert not isinstance(error.value, OwnedDadPending)
+
+
+@pytest.mark.parametrize("outcome", ["settled", "timeout", "unexpected", "late_success"])
+def test_owned_dad_wait_is_bounded_and_retries_only_pending(outcome: str) -> None:
+    from transport_host import OwnedDadPending, observe_owned_host, settle_owned_dad
+
+    now = [0.0]
+    calls = [0]
+
+    def observe(deadline: float) -> None:
+        assert deadline == 5
+        calls[0] += 1
+        if outcome == "unexpected":
+            raise RuntimeError("unexpected")
+        if outcome == "late_success":
+            now[0] = 6
+            return
+        if outcome == "settled" and calls[0] == 2:
+            before, current, links, peers = states()
+            assert len(observe_owned_host(before, current, links, BRIDGE, peers, "1")) == 3
+            return
+        before, current, links, peers = tentative()
+        with pytest.raises(OwnedDadPending):
+            observe_owned_host(before, current, links, BRIDGE, peers, "1")
+        raise OwnedDadPending("pending")
+
+    def sleep(seconds: float) -> None:
+        assert 0 < seconds <= 0.1
+        now[0] += seconds
+
+    if outcome == "settled":
+        settle_owned_dad(observe, clock=lambda: now[0], sleep=sleep)
+        assert calls[0] == 2
+    else:
+        with pytest.raises(RuntimeError):
+            settle_owned_dad(observe, clock=lambda: now[0], sleep=sleep)
+        if outcome in ("unexpected", "late_success"):
+            assert calls[0] == 1
+        else:
+            assert now[0] == 5 and calls[0] <= 52
+
+
+@pytest.mark.parametrize("now", [0.0, 4.9, 5.0, 6.0])
+def test_readiness_subprocess_budget_is_shared_and_expires(now: float) -> None:
+    from transport_host import remaining_read_budget
+
+    if now < 5:
+        assert remaining_read_budget(5, clock=lambda: now) == 5 - now
+    else:
+        with pytest.raises(RuntimeError, match="deadline"):
+            remaining_read_budget(5, clock=lambda: now)
+
+
+def test_baseline_reads_share_remaining_observation_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+    import transport_topology
+
+    budgets = iter([5.0, 4.0, 3.0, 2.0, 1.0])
+    seen: list[float] = []
+    monkeypatch.setattr(transport_topology, "remaining_read_budget", lambda deadline: next(budgets))
+
+    def read(*args: str, timeout: float) -> list[dict[str, Any]]:
+        seen.append(timeout)
+        return []
+
+    monkeypatch.setattr(transport_topology, "ip", read)
+    assert transport_topology.host_baseline(5) == {"addresses": [], "routes": [], "rules": []}
+    assert seen == [5, 4, 3, 2, 1]
+
+
+@pytest.mark.parametrize("invalid_container", [False, True])
+def test_pending_host_state_still_checks_container_ownership(
+    monkeypatch: pytest.MonkeyPatch, invalid_container: bool
+) -> None:
+    import json
+    import subprocess
+    from pathlib import Path
+
+    import transport_topology
+    from transport_host import OwnedDadPending
+
+    topology = transport_topology.Topology.__new__(transport_topology.Topology)
+    before, current, links, peers = tentative()
+    topology.baseline = before
+    topology.name = "owned-network"
+    topology.bridge = BRIDGE
+    topology.owner = "owner"
+    topology.identifiers = {"gateway": "container"}
+    topology.images = ["fixture", "gateway"]
+    topology.image_provenance = {"gateway": {"image_id": "image"}}
+    topology.peer_evidence = peers
+    network = {"Id": "network"}
+    container = {
+        "Image": "image",
+        "NetworkSettings": {
+            "Networks": {
+                "owned-network": {
+                    "NetworkID": "network",
+                    "EndpointID": "a" * 64,
+                    "IPPrefixLen": 29,
+                    "GlobalIPv6PrefixLen": 64,
+                }
+            }
+        },
+    }
+    checked: list[str] = []
+
+    def owner(kind: str, metadata: dict[str, Any], expected: str) -> None:
+        checked.append(kind)
+        if kind == "container" and invalid_container:
+            raise RuntimeError("Unowned container")
+
+    monkeypatch.setattr(transport_topology, "require_owner", owner)
+    monkeypatch.setattr(transport_topology, "validate_network", lambda *args: None)
+    monkeypatch.setattr(transport_topology, "validate_container", lambda *args: None)
+    monkeypatch.setattr(transport_topology, "check_host_ipv6_forwarding", lambda: None)
+    monkeypatch.setattr(transport_topology, "host_baseline", lambda: current)
+    monkeypatch.setattr(
+        transport_topology,
+        "ip",
+        lambda *args: links if args[0] == "-details" else [{"addr_info": []}],
+    )
+    monkeypatch.setattr(Path, "read_text", lambda *args, **kwargs: "1")
+    monkeypatch.setattr(
+        transport_topology,
+        "docker",
+        lambda *args: subprocess.CompletedProcess(
+            args, 0, json.dumps([network if args[0] == "network" else container])
+        ),
+    )
+    with pytest.raises(RuntimeError) as error:
+        topology.inspect(allow_pending=True)
+    assert checked == ["network", "container"]
+    assert isinstance(error.value, OwnedDadPending) is (not invalid_container)
