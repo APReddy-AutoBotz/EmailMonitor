@@ -11,15 +11,23 @@ from uuid import UUID
 from zipfile import ZipFile
 
 from api_client import APIClient
+from emailmonitor.administration.service import Administration
 from emailmonitor.api import create_app
 from emailmonitor.jobs.broker import create_worker
 from emailmonitor.jobs.ledger import Ledger
+from emailmonitor.jobs.queues import owned_queues
 from emailmonitor.organizations.roles import Capability
 from emailmonitor.progress.broker import publish as publish_execution
 from emailmonitor.progress.service import Progress
 from emailmonitor.results.broker import publish as publish_exports
 from emailmonitor.results.service import Results
-from operator_ui_protocol import RequestFrame, asset_manifest
+from operator_ui_protocol import (
+    RequestFrame,
+    asset_manifest,
+    completion_failure_classes,
+    completion_state_counts,
+    completion_unit_counts,
+)
 from run_operator_ui_acceptance import run
 from sqlalchemy import text
 from test_durable_jobs import SETTINGS
@@ -78,7 +86,11 @@ def test_required_actual_keyboard_operator_ui(scenario: Scenario, tmp_path: Path
     broker, _ = create_worker(cfg)
     stop, release = threading.Event(), threading.Event()
     errors: list[str] = []
-    held, hold_contacts, fault_contacts = threading.Event(), threading.Event(), threading.Event()
+    held, hold_contacts, fault_contacts = (
+        threading.Event(),
+        threading.Event(),
+        threading.Event(),
+    )
     held.set()
     observed_hold = threading.Event()
     hold_events = threading.Event()
@@ -137,6 +149,7 @@ def test_required_actual_keyboard_operator_ui(scenario: Scenario, tmp_path: Path
             hold_contacts.clear()
             hold_events.clear()
         elif action == "wait_jobs":
+            observed_states: dict[str, int] = {}
 
             def complete() -> bool:
                 with progress.database.tenant(token, org, Capability.READ_ORGANIZATION) as (c, _):
@@ -151,12 +164,60 @@ def test_required_actual_keyboard_operator_ui(scenario: Scenario, tmp_path: Path
                         .scalars()
                         .all()
                     )
+                observed_states.clear()
+                observed_states.update(completion_state_counts(list(rows)))
                 return bool(rows) and all(
                     value in {"completed", "completed_partial", "failed", "cancelled"}
                     for value in rows
                 )
 
-            wait_for(complete, seconds=8)
+            try:
+                wait_for(complete, seconds=8)
+            except AssertionError:
+                with progress.database.tenant(token, org, Capability.READ_ORGANIZATION) as (c, _):
+                    units = completion_unit_counts(
+                        [
+                            dict(row)
+                            for row in c.execute(
+                                text("""
+SELECT i.work_kind AS kind, i.state, i.reason, i.attempts,
+COALESCE(i.lease_until>clock_timestamp(),false) AS lease_live,
+COALESCE(o.published_at IS NOT NULL,false) AS published
+FROM emailmonitor.execution_items i
+JOIN emailmonitor.jobs j ON j.organization_id=i.organization_id AND j.id=i.job_id
+LEFT JOIN emailmonitor.execution_outbox o ON o.organization_id=i.organization_id
+AND o.job_id=i.job_id AND o.item_id=i.id AND o.generation=j.generation
+WHERE i.organization_id=:org AND j.kind='extraction' LIMIT 33
+"""),
+                                {"org": org},
+                            ).mappings()
+                        ]
+                    )
+                logs = list(tmp_path.glob(cfg.queue + "-*.log"))
+                if (
+                    len(logs) != 1
+                    or logs[0].is_symlink()
+                    or logs[0].resolve().parent != tmp_path.resolve()
+                ):
+                    raise RuntimeError("Exact owned worker log required") from None
+                with logs[0].open("rb") as file:
+                    file.seek(0, 2)
+                    file.seek(max(0, file.tell() - 65536))
+                    failure_classes = completion_failure_classes(file.read(65536))
+                print(
+                    "operator-ui-control:wait_jobs "
+                    + json.dumps(
+                        {
+                            "states": observed_states,
+                            "publisher_failed": bool(errors),
+                            "units": units,
+                            "matched_worker_failure_classes": failure_classes,
+                        },
+                        sort_keys=True,
+                    ),
+                    flush=True,
+                )
+                raise
         elif action == "wait_exports":
             wait_for(
                 lambda: (
@@ -189,7 +250,10 @@ def test_required_actual_keyboard_operator_ui(scenario: Scenario, tmp_path: Path
                     channel = connection.channel()
                     try:
                         return bool(
-                            channel.queue_declare(queue=cfg.queue, passive=True).consumer_count > 0
+                            all(
+                                channel.queue_declare(queue=q, passive=True).consumer_count > 0
+                                for q in owned_queues(cfg.queue)
+                            )
                         )
                     except Exception:
                         return False
@@ -218,7 +282,10 @@ def test_required_actual_keyboard_operator_ui(scenario: Scenario, tmp_path: Path
                 ]
             )
             assert evidence["network_errno"] == [101, 101] and evidence["interfaces"] == ["lo"]
-            with progress.database.tenant(token, org, Capability.READ_ORGANIZATION) as (c, _):
+            with progress.database.tenant(token, org, Capability.READ_ORGANIZATION) as (
+                c,
+                _,
+            ):
                 jobs = c.execute(
                     text(
                         "SELECT id,state FROM emailmonitor.jobs "
@@ -245,7 +312,10 @@ def test_required_actual_keyboard_operator_ui(scenario: Scenario, tmp_path: Path
                 and jobs[0].state == "completed_partial"
                 and jobs[1].state == "completed"
             )
-            with progress.database.tenant(token, org, Capability.READ_ORGANIZATION) as (c, _):
+            with progress.database.tenant(token, org, Capability.READ_ORGANIZATION) as (
+                c,
+                _,
+            ):
                 event_types: Sequence[str] = (
                     c.execute(
                         text(
@@ -265,6 +335,15 @@ def test_required_actual_keyboard_operator_ui(scenario: Scenario, tmp_path: Path
                 first.counts.by_outcome["unsupported"] == first.counts.by_outcome["no_contact"] == 1
             )
             assert reviews == 1 and effects >= 5
+            administration = Administration(progress.database, token, progress.settings)
+            configuration = administration.read(org)
+            usage = administration.usage(org)
+            assert configuration.branding.label == "Keyboard authored workspace"
+            assert configuration.branding.accent_color == "#123456" and configuration.revision == 2
+            assert (
+                usage.settled_resolution_units == effects and usage.reserved_resolution_units == 0
+            )
+            assert usage.source_resource_attempts == 0  # Authored file reads are not HTTP attempts.
             exports = results.exports(org)
             assert len(exports) == 1 and exports[0].state == "ready"
             artifact = results.download(org, exports[0].id)
@@ -297,8 +376,9 @@ def test_required_actual_keyboard_operator_ui(scenario: Scenario, tmp_path: Path
         with broker.connection_for_write() as connection:
             channel = connection.channel()
             try:
-                channel.queue_delete(queue=cfg.queue)
-                channel.exchange_delete(exchange=cfg.queue)
+                for queue in owned_queues(cfg.queue):
+                    channel.queue_delete(queue=queue)
+                    channel.exchange_delete(exchange=queue)
             finally:
                 channel.close()
         broker.close()

@@ -161,7 +161,9 @@ def test_actual_tls_gateway_uses_current_tenant_policy(scenario: Scenario, tmp_p
             scenario.foundation.database, token, scenario.organizations[0], "synthetic-publisher", 1
         )
         with server(tmp_path, {"/article-a.html": Response()}) as (endpoint, calls):
-            gateway = TLSFixtureGateway(SETTINGS, endpoint, authorize)
+            gateway = TLSFixtureGateway(
+                SETTINGS, endpoint, authorize, diagnostic_transport_only=True
+            )
             assert gateway.fetch(URL) == b"<p>synthetic observation</p>"
             denied = TenantFixtureAuthorization(
                 scenario.foundation.database,
@@ -171,7 +173,9 @@ def test_actual_tls_gateway_uses_current_tenant_policy(scenario: Scenario, tmp_p
                 1,
             )
             with pytest.raises(FetchDenied):
-                TLSFixtureGateway(SETTINGS, endpoint, denied).fetch(URL)
+                TLSFixtureGateway(SETTINGS, endpoint, denied, diagnostic_transport_only=True).fetch(
+                    URL
+                )
             assert len(calls) == 1
             assert (
                 client.post(
@@ -235,7 +239,10 @@ def test_actual_dns_browser_mediation_obeys_current_tenant_policy(
         ):
             resolver = DNSFixtureResolver(SETTINGS, route)
             mediator = BrowserFixtureMediator(
-                SETTINGS, TLSFixtureGateway(SETTINGS, endpoint, authorize, resolver=resolver)
+                SETTINGS,
+                TLSFixtureGateway(
+                    SETTINGS, endpoint, authorize, resolver=resolver, diagnostic_transport_only=True
+                ),
             )
             assert json.loads(mediator.reply(raw))["status"] == "ok"
             assert len(calls) == 1 and len(queries) == 2
@@ -247,7 +254,10 @@ def test_actual_dns_browser_mediation_obeys_current_tenant_policy(
                 1,
             )
             other = BrowserFixtureMediator(
-                SETTINGS, TLSFixtureGateway(SETTINGS, endpoint, denied, resolver=resolver)
+                SETTINGS,
+                TLSFixtureGateway(
+                    SETTINGS, endpoint, denied, resolver=resolver, diagnostic_transport_only=True
+                ),
             )
             assert json.loads(other.reply(raw))["status"] == "denied"
             assert len(calls) == 1 and len(queries) == 2

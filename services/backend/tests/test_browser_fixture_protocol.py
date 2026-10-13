@@ -78,7 +78,13 @@ def test_mediator_actual_tls_acceptance_and_denials(tmp_path: Path) -> None:
     }
     with server(tmp_path, {"/tooltip.html": Response()}) as (endpoint, calls):
         mediator = BrowserFixtureMediator(
-            settings, TLSFixtureGateway(settings, endpoint, lambda url, op: operations.append(op))
+            settings,
+            TLSFixtureGateway(
+                settings,
+                endpoint,
+                lambda url, op: operations.append(op),
+                diagnostic_transport_only=True,
+            ),
         )
         accepted = json.loads(mediator.reply(json.dumps(body).encode()))
         assert base64.b64decode(accepted["body"]) == b"<p>synthetic observation</p>"
@@ -104,7 +110,9 @@ def test_mediator_caps_and_production_refusal(tmp_path: Path) -> None:
 
     settings = Settings(environment="test", fixture_mode=True)
     with server(tmp_path, {"/tooltip.html": Response()}) as (endpoint, calls):
-        gateway = TLSFixtureGateway(settings, endpoint, lambda url, op: None)
+        gateway = TLSFixtureGateway(
+            settings, endpoint, lambda url, op: None, diagnostic_transport_only=True
+        )
         with pytest.raises(IsolationUnavailable):
             BrowserFixtureMediator(Settings(), gateway)
         mediator = BrowserFixtureMediator(settings, gateway)

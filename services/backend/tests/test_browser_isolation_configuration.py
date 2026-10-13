@@ -416,7 +416,8 @@ def test_pending_task_evidence_never_echoes_unknown_guest_text() -> None:
 def test_pending_task_diagnostic_preserves_deadline_and_rethrows_failure() -> None:
     guest = (ROOT / "scripts/isolation/browser_acceptance.py").read_text()
     assert 'page.evaluate("globalThis.boundaryPending"), timeout=1' in guest
-    assert 'page.wait_for_function("globalThis.boundaryReady === true", timeout=10000)' in guest
+    assert '"globalThis.boundaryReady === true", timeout=10000' in guest
+    assert "await boundary_readiness(" in guest
     assert "trace_stage(pending_task_evidence(pending))\n            raise" in guest
 
 
@@ -437,3 +438,54 @@ def test_fixture_tracks_each_fixed_pending_operation_without_early_readiness() -
     assert "track(path, new Promise" in source
     assert "await Promise.allSettled(pending);globalThis.boundaryReady=true" in source
     assert "throw error" in source
+
+
+def test_outer_readiness_bound_refuses_stalled_driver_and_cancels_wait() -> None:
+    import asyncio
+    from types import SimpleNamespace
+    from typing import Any, cast
+
+    import pytest
+
+    readiness = cast(Any, async_guest_namespace()["boundary_readiness"])
+    observed: list[float] = []
+    cancelled: list[bool] = []
+    real_wait_for = asyncio.wait_for
+
+    async def bounded(awaitable: Any, *, timeout: float) -> Any:
+        observed.append(timeout)
+        return await real_wait_for(awaitable, timeout=0.01)
+
+    readiness.__globals__["asyncio"] = SimpleNamespace(wait_for=bounded)
+
+    async def stalled() -> None:
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cancelled.append(True)
+
+    with pytest.raises(TimeoutError):
+        asyncio.run(readiness(stalled()))
+    assert observed == [10] and cancelled == [True]
+
+
+def test_outer_readiness_preserves_success_and_driver_failure() -> None:
+    import asyncio
+    from typing import Any, cast
+
+    import pytest
+
+    readiness = cast(Any, async_guest_namespace()["boundary_readiness"])
+
+    async def complete() -> object:
+        return object()
+
+    async def failed() -> object:
+        raise RuntimeError("owned-readiness-failure")
+
+    asyncio.run(readiness(complete()))
+    with pytest.raises(RuntimeError, match="owned-readiness-failure"):
+        asyncio.run(readiness(failed()))
+    source = (ROOT / "scripts/isolation/browser_acceptance.py").read_text()
+    assert "except (Error, TimeoutError):" in source
+    assert 'trace_stage("boundary_wait_failed")' in source

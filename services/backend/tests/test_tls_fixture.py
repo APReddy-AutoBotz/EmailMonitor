@@ -23,7 +23,12 @@ def test_actual_verified_tls_pinned_connection_and_redirect_reauthorization(tmp_
             "/article-b.html": Response(),
         },
     ) as (endpoint, calls):
-        gateway = TLSFixtureGateway(SETTINGS, endpoint, lambda url, op: paths.append(url.path))
+        gateway = TLSFixtureGateway(
+            SETTINGS,
+            endpoint,
+            lambda url, op: paths.append(url.path),
+            diagnostic_transport_only=True,
+        )
         assert gateway.fetch(URL) == b"<p>synthetic observation</p>"
         assert paths == ["/article-a.html", "/article-b.html", "/article-b.html"]
         assert len(calls) == 2
@@ -37,7 +42,9 @@ def test_wrong_hostname_and_untrusted_ca_fail_actual_tls(tmp_path: Path) -> None
         calls,
     ):
         with pytest.raises(FetchDenied, match="connection"):
-            TLSFixtureGateway(SETTINGS, endpoint, lambda url, op: None).fetch(URL)
+            TLSFixtureGateway(
+                SETTINGS, endpoint, lambda url, op: None, diagnostic_transport_only=True
+            ).fetch(URL)
         assert calls == []
     other = tmp_path / "other"
     other.mkdir()
@@ -45,7 +52,9 @@ def test_wrong_hostname_and_untrusted_ca_fail_actual_tls(tmp_path: Path) -> None
     with server(tmp_path, {"/article-a.html": Response()}) as (endpoint, calls):
         untrusted = SyntheticEndpoint(endpoint.address, endpoint.port, ca, endpoint.paths)
         with pytest.raises(FetchDenied, match="connection"):
-            TLSFixtureGateway(SETTINGS, untrusted, lambda url, op: None).fetch(URL)
+            TLSFixtureGateway(
+                SETTINGS, untrusted, lambda url, op: None, diagnostic_transport_only=True
+            ).fetch(URL)
         assert calls == []
 
 
@@ -71,7 +80,9 @@ def test_actual_response_denial_has_no_retry(
         # scheduling. Keep the deliberate slow-response deadline case strict.
         limits = FetchLimits(max_bytes=64, total_seconds=0.1 if response.delay else 1)
         with pytest.raises(FetchDenied, match=reason):
-            TLSFixtureGateway(SETTINGS, endpoint, lambda url, op: None, limits).fetch(URL)
+            TLSFixtureGateway(
+                SETTINGS, endpoint, lambda url, op: None, limits, diagnostic_transport_only=True
+            ).fetch(URL)
         assert len(calls) == 1
 
 
@@ -86,7 +97,9 @@ def test_actual_body_discarded_on_current_permission_revocation(tmp_path: Path) 
 
     with server(tmp_path, {"/article-a.html": Response()}) as (endpoint, calls):
         with pytest.raises(FetchDenied, match="policy"):
-            TLSFixtureGateway(SETTINGS, endpoint, authorize).fetch(URL)
+            TLSFixtureGateway(SETTINGS, endpoint, authorize, diagnostic_transport_only=True).fetch(
+                URL
+            )
         assert count == 2 and len(calls) == 1
 
 
@@ -113,4 +126,6 @@ def test_fixture_endpoint_and_gateway_cannot_activate_in_production(tmp_path: Pa
     endpoint = SyntheticEndpoint("127.0.0.1", 443, ca, frozenset({"/article-a.html"}))
     for settings in (Settings(), Settings(environment="test")):
         with pytest.raises(IsolationUnavailable):
-            TLSFixtureGateway(settings, endpoint, lambda url, op: None)
+            TLSFixtureGateway(
+                settings, endpoint, lambda url, op: None, diagnostic_transport_only=True
+            )

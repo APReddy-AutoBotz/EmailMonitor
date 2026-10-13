@@ -135,6 +135,15 @@ def gateway(tmp_path: Path, authorize: object = None) -> ProtectedGateway:
         if callable(authorize):
             authorize(bound, url)
 
+    class DiagnosticResources:
+        # This suite isolates transport grammar/stages. No shared SQL admission proof.
+        def acquire(self, url: SafeURL, operation: Operation, deadline: float) -> object:
+            assert url.host == HOST and deadline > time.monotonic()
+            return object()
+
+        def finish(self, ticket: object, status: int | None, retry_after: str) -> None:
+            pass
+
     return ProtectedGateway(
         SETTINGS,
         SnapshotResolver(SETTINGS, ResolverRoute(V4)),
@@ -142,6 +151,7 @@ def gateway(tmp_path: Path, authorize: object = None) -> ProtectedGateway:
         scope,
         allow,
         FetchLimits(total_seconds=5, max_redirects=2),
+        resources=DiagnosticResources(),
     )
 
 

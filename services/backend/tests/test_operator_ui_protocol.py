@@ -329,3 +329,105 @@ def test_owned_channel_admission_and_reply_share_one_deadline() -> None:
         assert channel.identifier == 8
 
     asyncio.run(run())
+
+
+@pytest.mark.parametrize("failure", [None, "arbitrary private text", "net::ERR_FAILED"])
+def test_route_fulfill_diagnostics_are_fixed_and_remain_failure(failure: object) -> None:
+    from operator_ui_protocol import DiagnosticFrame, route_failure_reason
+
+    reason = route_failure_reason(failure)
+    assert reason == (
+        "route_fulfill_failed" if failure == "net::ERR_FAILED" else "route_fulfill_unclassified"
+    )
+    diagnostic = DiagnosticFrame.model_validate(
+        {
+            "kind": "failure",
+            "stage": "empty_contacts",
+            "error": "Error",
+            "reason": reason,
+            "api_statuses": [200],
+        }
+    )
+    assert diagnostic.kind == "failure"
+
+
+@pytest.mark.parametrize(
+    "states", [None, {"running": 1}, ["private arbitrary text"], [True], ["queued"] * 17]
+)
+def test_job_completion_diagnostics_refuse_unknown_or_unbounded_states(states: object) -> None:
+    from operator_ui_protocol import completion_state_counts
+
+    with pytest.raises(ValueError, match="Bounded known job states required"):
+        completion_state_counts(states)
+
+
+def test_job_completion_diagnostics_are_only_fixed_counts() -> None:
+    from operator_ui_protocol import completion_state_counts
+
+    assert completion_state_counts([]) == {}
+    assert completion_state_counts(["running", "queued", "running"]) == {
+        "queued": 1,
+        "running": 2,
+    }
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"kind": "unknown"},
+        {"state": "private text"},
+        {"reason": "secret"},
+        {"attempts": True},
+        {"attempts": 4},
+        {"lease_live": 1},
+        {"published": None},
+        {"url": "private"},
+    ],
+)
+def test_completion_units_refuse_unknown_values_and_extra_content(
+    change: dict[str, object],
+) -> None:
+    from operator_ui_protocol import completion_unit_counts
+
+    row = {
+        "kind": "article",
+        "state": "running",
+        "reason": "leased",
+        "attempts": 1,
+        "lease_live": True,
+        "published": True,
+        **change,
+    }
+    with pytest.raises(ValueError):
+        completion_unit_counts([row])
+
+
+def test_completion_units_only_count_closed_phase_categories() -> None:
+    from operator_ui_protocol import completion_unit_counts
+
+    row = {
+        "kind": "article",
+        "state": "running",
+        "reason": "leased",
+        "attempts": 1,
+        "lease_live": True,
+        "published": True,
+    }
+    assert completion_unit_counts([row, row]) == {
+        "article:running:leased:attempts=1:lease_live=1:published=1": 2,
+    }
+    assert completion_unit_counts([]) == {}
+    with pytest.raises(ValueError):
+        completion_unit_counts([row] * 33)
+
+
+def test_owned_failure_log_matching_never_returns_arbitrary_content() -> None:
+    from operator_ui_protocol import completion_failure_classes
+
+    assert completion_failure_classes(b"private text\nProgrammingError\nRevisionConflict") == [
+        "ProgrammingError",
+        "RevisionConflict",
+    ]
+    assert completion_failure_classes(b"private arbitrary error") == []
+    with pytest.raises(ValueError):
+        completion_failure_classes(b"x" * 65537)

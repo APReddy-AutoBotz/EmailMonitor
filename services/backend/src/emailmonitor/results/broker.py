@@ -7,6 +7,7 @@ from uuid import UUID
 from pydantic import Field, field_validator
 
 from emailmonitor.jobs.models import StrictModel
+from emailmonitor.jobs.queues import phase_queue
 from emailmonitor.organizations.database import AuthorizationDenied
 from emailmonitor.results.service import Results
 
@@ -60,8 +61,8 @@ def publish(application: Any, results: Results, org: UUID) -> int:
         application.send_task(
             "emailmonitor.fixture.export",
             args=[event.model_dump()],
-            queue=application.conf.task_default_queue,
-            routing_key=application.conf.task_default_queue,
+            queue=phase_queue(application.conf.task_default_queue, "export"),
+            routing_key=phase_queue(application.conf.task_default_queue, "export"),
             delivery_mode=2,
             mandatory=True,
             retry=False,

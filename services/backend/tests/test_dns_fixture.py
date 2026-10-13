@@ -40,6 +40,7 @@ def test_actual_dns_gate_verified_tls_and_no_os_resolution(
             endpoint,
             lambda url, op: authorization.append(url.path),
             resolver=DNSFixtureResolver(SETTINGS, route),
+            diagnostic_transport_only=True,
         )
         assert gateway.fetch(URL) == b"<p>synthetic observation</p>"
         assert len(calls) == 1 and len(queries) == 2
@@ -58,7 +59,11 @@ def test_actual_changed_dns_does_not_change_pinned_peer(tmp_path: Path) -> None:
         dns_server(changing) as (route, queries),
     ):
         gateway = TLSFixtureGateway(
-            SETTINGS, endpoint, lambda url, op: None, resolver=DNSFixtureResolver(SETTINGS, route)
+            SETTINGS,
+            endpoint,
+            lambda url, op: None,
+            resolver=DNSFixtureResolver(SETTINGS, route),
+            diagnostic_transport_only=True,
         )
         assert gateway.fetch(URL) == b"<p>synthetic observation</p>"
         with pytest.raises(FetchDenied, match="manifest"):
@@ -89,7 +94,11 @@ def test_actual_mixed_or_unlisted_dns_never_reaches_tls(
         dns_server(reply) as (route, queries),
     ):
         gateway = TLSFixtureGateway(
-            SETTINGS, endpoint, lambda url, op: None, resolver=DNSFixtureResolver(SETTINGS, route)
+            SETTINGS,
+            endpoint,
+            lambda url, op: None,
+            resolver=DNSFixtureResolver(SETTINGS, route),
+            diagnostic_transport_only=True,
         )
         with pytest.raises(FetchDenied):
             gateway.fetch(URL)
@@ -111,7 +120,11 @@ def test_authorization_denied_before_dns_and_revoked_after_dns(tmp_path: Path) -
                 raise FetchDenied("source_policy_denied")
 
         gateway = TLSFixtureGateway(
-            SETTINGS, endpoint, authorize, resolver=DNSFixtureResolver(SETTINGS, route)
+            SETTINGS,
+            endpoint,
+            authorize,
+            resolver=DNSFixtureResolver(SETTINGS, route),
+            diagnostic_transport_only=True,
         )
         with pytest.raises(FetchDenied, match="policy"):
             gateway.fetch(URL)
@@ -133,6 +146,7 @@ def test_actual_dns_deadline_has_no_retry_or_tls_fallback(tmp_path: Path) -> Non
             lambda url, op: None,
             FetchLimits(total_seconds=0.05),
             DNSFixtureResolver(SETTINGS, route),
+            diagnostic_transport_only=True,
         )
         start = time.monotonic()
         with pytest.raises(FetchDenied, match="connection"):
@@ -209,7 +223,11 @@ def test_actual_redirect_rechecks_dns_snapshot_before_next_tls(tmp_path: Path) -
         dns_server(changing) as (route, queries),
     ):
         gateway = TLSFixtureGateway(
-            SETTINGS, endpoint, lambda url, op: None, resolver=DNSFixtureResolver(SETTINGS, route)
+            SETTINGS,
+            endpoint,
+            lambda url, op: None,
+            resolver=DNSFixtureResolver(SETTINGS, route),
+            diagnostic_transport_only=True,
         )
         with pytest.raises(FetchDenied, match="manifest"):
             gateway.fetch(URL)
@@ -231,6 +249,7 @@ def test_actual_dns_questions_share_the_gateway_deadline(tmp_path: Path) -> None
             lambda url, op: None,
             FetchLimits(total_seconds=0.06),
             DNSFixtureResolver(SETTINGS, route),
+            diagnostic_transport_only=True,
         )
         with pytest.raises(FetchDenied, match="connection|deadline"):
             gateway.fetch(URL)
@@ -243,7 +262,11 @@ def test_actual_oversized_datagram_is_not_an_accepted_prefix(tmp_path: Path) -> 
         dns_server(lambda query, count: answer(query) + b"x" * 600) as (route, queries),
     ):
         gateway = TLSFixtureGateway(
-            SETTINGS, endpoint, lambda url, op: None, resolver=DNSFixtureResolver(SETTINGS, route)
+            SETTINGS,
+            endpoint,
+            lambda url, op: None,
+            resolver=DNSFixtureResolver(SETTINGS, route),
+            diagnostic_transport_only=True,
         )
         with pytest.raises(FetchDenied, match="response"):
             gateway.fetch(URL)
@@ -261,6 +284,7 @@ def test_actual_connected_udp_refuses_other_owned_source_port(tmp_path: Path) ->
             lambda url, op: None,
             FetchLimits(total_seconds=0.05),
             DNSFixtureResolver(SETTINGS, route),
+            diagnostic_transport_only=True,
         )
         with pytest.raises(FetchDenied, match="connection"):
             gateway.fetch(URL)

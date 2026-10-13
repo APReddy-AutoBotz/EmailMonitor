@@ -11,6 +11,7 @@ from uuid import UUID, uuid4
 import pytest
 from emailmonitor.jobs.broker import FixtureWorkerConfig, create_worker, publish
 from emailmonitor.jobs.ledger import Ledger
+from emailmonitor.jobs.queues import owned_queues
 from emailmonitor.organizations.roles import Capability
 from kombu.exceptions import OperationalError
 from sqlalchemy import text
@@ -52,11 +53,21 @@ def config(s: Scenario, ledger: Ledger, **changes: object) -> FixtureWorkerConfi
 
 
 @contextmanager
-def worker(cfg: FixtureWorkerConfig, directory: Path) -> Iterator[subprocess.Popen[bytes]]:
-    path = directory / (cfg.queue + ".json")
+def worker(
+    cfg: FixtureWorkerConfig, directory: Path, queues: tuple[str, ...] | None = None
+) -> Iterator[subprocess.Popen[bytes]]:
+    selected = queues if queues is not None else owned_queues(cfg.queue)
+    if (
+        not selected
+        or len(set(selected)) != len(selected)
+        or any(q not in owned_queues(cfg.queue) for q in selected)
+    ):
+        raise ValueError("Only exact owned worker queues can be consumed")
+    instance = cfg.queue + "-" + uuid4().hex
+    path = directory / (instance + ".json")
     with os.fdopen(os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600), "w") as file:
         file.write(cfg.model_dump_json())
-    log = (directory / (cfg.queue + ".log")).open("wb")
+    log = (directory / (instance + ".log")).open("wb")
     environment = {
         **os.environ,
         "EM_FIXTURE_WORKER": "true",
@@ -69,6 +80,7 @@ def worker(cfg: FixtureWorkerConfig, directory: Path) -> Iterator[subprocess.Pop
             "-A",
             "emailmonitor.jobs.fixture_worker:app",
             "worker",
+            "--queues=" + ",".join(selected),
             "--pool=solo",
             "--concurrency=1",
             "--loglevel=WARNING",

@@ -3,9 +3,10 @@
 import json
 import os
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
+from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import ExitStack
-from typing import Any
+from typing import Any, cast
 from uuid import UUID, uuid4
 
 import pytest
@@ -17,6 +18,7 @@ from emailmonitor.extraction.html import ArticleObservation
 from emailmonitor.extraction.service import Extraction
 from emailmonitor.fetching.fixture import HOSTS, TenantFixtureAuthorization
 from emailmonitor.fetching.plan import PlanScope
+from emailmonitor.fetching.resources import HopResources
 from emailmonitor.fetching.safety import FetchDenied, SafeURL
 from emailmonitor.identity.foundation import COOKIE
 from emailmonitor.jobs.ledger import Ledger
@@ -88,10 +90,27 @@ def proxy(
     authorize: object = None,
     family: int = 4,
     ca: str = "fixture",
+    *,
+    resources: HopResources | None = None,
+    diagnostic_transport_only: bool = False,
 ) -> GatewayProxy:
+    tenant = isinstance(authorize, TenantFixtureAuthorization)
+    if (
+        type(diagnostic_transport_only) is not bool
+        or (tenant and diagnostic_transport_only)
+        or (not tenant and (resources is not None or not diagnostic_transport_only))
+    ):
+        raise FetchDenied("source_resource_boundary_required")
+
     def scope(operation: Operation) -> PlanScope:
         return PlanScope(
-            organization, "synthetic-publisher", 1, operation, HOSTS, time.monotonic() + 4.5, 2
+            organization,
+            "synthetic-publisher",
+            1,
+            operation,
+            HOSTS,
+            time.monotonic() + (19 if isinstance(authorize, TenantFixtureAuthorization) else 4.5),
+            2,
         )
 
     def check(bound: PlanScope, url: SafeURL) -> None:
@@ -103,13 +122,45 @@ def proxy(
         if callable(authorize):
             authorize(url, bound.operation)
 
-    return GatewayProxy(topology.processes["gateway"], scope, check, family, ca)
+    return GatewayProxy(
+        topology.processes["gateway"],
+        scope,
+        check,
+        family,
+        ca,
+        resources=resources
+        if resources is not None
+        else authorize.resources
+        if isinstance(authorize, TenantFixtureAuthorization)
+        else None,
+        diagnostic_transport_only=diagnostic_transport_only,
+    )
+
+
+class CompletionResources:
+    """Trusted test hook retains real admission before and after observed response."""
+
+    def __init__(self, resources: HopResources, before_success: Callable[[], None]) -> None:
+        self._resources, self._before_success = resources, before_success
+
+    def acquire(self, url: SafeURL, operation: Operation, deadline: float) -> object:
+        return self._resources.acquire(url, operation, deadline)
+
+    def finish(self, ticket: object, status: int | None, retry_after: str) -> None:
+        if status == 200:
+            self._before_success()
+        self._resources.finish(ticket, status, retry_after)
 
 
 @pytest.mark.parametrize("family", [4, 6])
 def test_actual_dns_selected_literal_tls_family(topology: Topology, family: int) -> None:
     configure(topology)
-    target = proxy(topology, UUID("11111111-1111-4111-8111-111111111111"), family=family)
+    target = proxy(
+        topology,
+        UUID("11111111-1111-4111-8111-111111111111"),
+        family=family,
+        diagnostic_transport_only=True,
+    )
     assert b"synthetic marker" in target.fetch(f"https://{HOST}/tooltip.html")
     assert target.peers == [[ENDPOINTS["fixture-a"][family == 6], 443, HOST]]
     assert target.authorizations >= 4
@@ -125,7 +176,9 @@ def test_actual_dns_selected_literal_tls_family(topology: Topology, family: int)
 
 def test_actual_redirect_fresh_dns_and_peer(topology: Topology) -> None:
     configure(topology, "redirect")
-    target = proxy(topology, UUID("11111111-1111-4111-8111-111111111111"))
+    target = proxy(
+        topology, UUID("11111111-1111-4111-8111-111111111111"), diagnostic_transport_only=True
+    )
     assert b"synthetic marker" in target.fetch(f"https://{HOST}/redirect.html")
     assert target.peers == [
         [ENDPOINTS["fixture-a"][0], 443, HOST],
@@ -142,9 +195,9 @@ def test_actual_redirect_fresh_dns_and_peer(topology: Topology) -> None:
 def test_actual_dns_whole_snapshot_denies_before_tcp(topology: Topology, mode: str) -> None:
     configure(topology, mode)
     with pytest.raises(FetchDenied):
-        proxy(topology, UUID("11111111-1111-4111-8111-111111111111")).fetch(
-            f"https://{HOST}/tooltip.html"
-        )
+        proxy(
+            topology, UUID("11111111-1111-4111-8111-111111111111"), diagnostic_transport_only=True
+        ).fetch(f"https://{HOST}/tooltip.html")
     assert snapshot(topology)["calls"] == []
     assert len(snapshot(topology)["queries"]) == 2
 
@@ -153,9 +206,9 @@ def test_actual_dns_whole_snapshot_denies_before_tcp(topology: Topology, mode: s
 def test_actual_http_failure_no_retry_or_escape(topology: Topology, path: str) -> None:
     configure(topology)
     with pytest.raises(FetchDenied):
-        proxy(topology, UUID("11111111-1111-4111-8111-111111111111")).fetch(
-            f"https://{HOST}/{path}"
-        )
+        proxy(
+            topology, UUID("11111111-1111-4111-8111-111111111111"), diagnostic_transport_only=True
+        ).fetch(f"https://{HOST}/{path}")
     assert len(snapshot(topology)["calls"]) == 1
     assert len(snapshot(topology)["queries"]) == 2
 
@@ -163,9 +216,12 @@ def test_actual_http_failure_no_retry_or_escape(topology: Topology, path: str) -
 def test_actual_untrusted_tls_certificate_is_not_released(topology: Topology) -> None:
     configure(topology)
     with pytest.raises(FetchDenied):
-        proxy(topology, UUID("11111111-1111-4111-8111-111111111111"), ca="untrusted").fetch(
-            f"https://{HOST}/tooltip.html"
-        )
+        proxy(
+            topology,
+            UUID("11111111-1111-4111-8111-111111111111"),
+            ca="untrusted",
+            diagnostic_transport_only=True,
+        ).fetch(f"https://{HOST}/tooltip.html")
     assert snapshot(topology)["calls"] == []
     assert len(snapshot(topology)["queries"]) == 2
 
@@ -173,16 +229,18 @@ def test_actual_untrusted_tls_certificate_is_not_released(topology: Topology) ->
 def test_actual_trusted_ca_wrong_hostname_is_not_released(topology: Topology) -> None:
     configure(topology, "wrong_name")
     with pytest.raises(FetchDenied):
-        proxy(topology, UUID("11111111-1111-4111-8111-111111111111")).fetch(
-            f"https://{HOST}/tooltip.html"
-        )
+        proxy(
+            topology, UUID("11111111-1111-4111-8111-111111111111"), diagnostic_transport_only=True
+        ).fetch(f"https://{HOST}/tooltip.html")
     assert snapshot(topology)["calls"] == []
     assert len(snapshot(topology)["queries"]) == 2
 
 
 def test_actual_rebinding_cannot_re_resolve_a_selected_socket(topology: Topology) -> None:
     configure(topology, "rebinding")
-    target = proxy(topology, UUID("11111111-1111-4111-8111-111111111111"))
+    target = proxy(
+        topology, UUID("11111111-1111-4111-8111-111111111111"), diagnostic_transport_only=True
+    )
     assert b"synthetic marker" in target.fetch(f"https://{HOST}/tooltip.html")
     assert target.peers == [[ENDPOINTS["fixture-a"][0], 443, HOST]]
     assert len(snapshot(topology)["calls"]) == 1
@@ -314,6 +372,22 @@ def test_actual_browser_gateway_current_tenant_policy(
         assert actual_browser_peers == [[ENDPOINTS["fixture-a"][0], 443, HOST]] * 2
         observations = snapshot(topology)
         assert len(observations["calls"]) == 2 and len(observations["queries"]) == 4
+        assert (
+            observations["calls"][1]["received_monotonic"]
+            - observations["calls"][0]["received_monotonic"]
+            >= 4.9
+        )
+        with scenario.foundation.database.tenant(token, org, Capability.READ_ORGANIZATION) as (
+            connection,
+            _,
+        ):
+            operational: dict[str, Any] = connection.execute(
+                text("SELECT emailmonitor.administration_usage(:org)"), {"org": org}
+            ).scalar_one()
+            assert operational["source_resource_attempts"] == 2
+            assert operational["active_units"].get("browser", 0) == 0
+        evidence["source_throttle_verified"] = True
+        evidence["source_attempts"] = 2
         assert all(
             call["sni"] == HOST and set(call["headers"]) == {"Host", "Accept", "Connection"}
             for call in observations["calls"]
@@ -336,27 +410,34 @@ def test_actual_browser_gateway_current_tenant_policy(
                 f"https://{HOST}/tooltip.html", Operation.BROWSER
             )
         assert len(snapshot(topology)["queries"]) == 4
-        callback_count = [0]
+        revoked = [False]
 
-        def revoke_before_release(url: SafeURL, operation: Operation) -> None:
-            callback_count[0] += 1
-            # Host precheck + guest before-DNS/after-DNS/before-connect/after-TLS:
-            # the sixth current-policy callback is the gateway's byte release.
-            if callback_count[0] == 6:
-                assert (
-                    client.post(
-                        path + "/policy-state",
-                        headers=headers,
-                        json={"expected_version": 1, "expected_revision": 2, "state": "revoked"},
-                    ).status_code
-                    == 200
-                )
-            allow(url, operation)
+        def revoke_at_observed_completion() -> None:
+            # Completion is emitted only after a received HTTP response. Require
+            # the actual new receipt, rather than guessing authorization counts.
+            acquired = snapshot(topology)
+            assert len(acquired["calls"]) == 3
+            assert acquired["calls"][-1]["path"] == "/tooltip.html"
+            assert not revoked[0]
+            assert (
+                client.post(
+                    path + "/policy-state",
+                    headers=headers,
+                    json={"expected_version": 1, "expected_revision": 2, "state": "revoked"},
+                ).status_code
+                == 200
+            )
+            revoked[0] = True
 
-        inflight = proxy(topology, scenario.organizations[0], revoke_before_release)
+        inflight = proxy(
+            topology,
+            scenario.organizations[0],
+            allow,
+            resources=CompletionResources(allow.resources, revoke_at_observed_completion),
+        )
         with pytest.raises(FetchDenied):
             inflight.fetch(f"https://{HOST}/tooltip.html", Operation.BROWSER)
-        assert callback_count[0] == 6
+        assert revoked[0] is True
         assert len(snapshot(topology)["calls"]) == 3
         with pytest.raises(FetchDenied):
             target.fetch(f"https://{HOST}/tooltip.html", Operation.BROWSER)
@@ -372,3 +453,105 @@ def test_actual_browser_gateway_current_tenant_policy(
             ),
             flush=True,
         )
+
+
+def wait_for_held_receipt(
+    topology: Topology, pending: Future[bytes], deadline: float
+) -> dict[str, Any]:
+    """Bounded fixed-fixture observation; a failed fetch cannot consume control frames."""
+    for _ in range(50):
+        if time.monotonic() >= deadline:
+            break
+        if pending.done():
+            pending.result()
+            raise AssertionError("Synthetic response completed before held receipt")
+        calls = snapshot(topology)["calls"]
+        if calls:
+            return cast(dict[str, Any], calls[0])
+        # At most50 observations within the original10-second budget; fixture's
+        # existing128-frame control cap and all response deadlines stay unchanged.
+        time.sleep(0.2)
+    raise AssertionError("Actual synthetic HTTPS request never arrived")
+
+
+def test_actual_blocked_source_preserves_another_tenants_processing_and_export_pool(
+    topology: Topology,
+    scenario: Scenario,
+) -> None:
+    from emailmonitor.administration.service import Administration
+    from emailmonitor.administration.source import SourceAdmission
+    from emailmonitor.fetching.safety import classify_url
+    from emailmonitor.results.service import Results
+    from test_admission_tenant import run_until_terminal, tenant_b
+    from test_progress_tenant import planned
+    from test_results_tenant import options
+
+    progress, _ = planned(scenario, "https://synthetic.publisher.example/article-a.html")
+    other, job = tenant_b(scenario)
+    org, other_org = scenario.organizations
+    allow = TenantFixtureAuthorization(
+        progress.database, progress.token, org, "synthetic-publisher", 1
+    )
+    target = proxy(topology, org, allow)
+    configure(topology, "slow")
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        pending = executor.submit(target.fetch, f"https://{HOST}/tooltip.html")
+        deadline = time.monotonic() + 10
+        first_receipt = wait_for_held_receipt(topology, pending, deadline)
+        assert not pending.done()
+        resource = Administration(progress.database, progress.token, progress.settings).usage(org)
+        assert resource.active_units["http"] == 1 and resource.source_resource_attempts == 1
+        url = classify_url(f"https://{HOST}/tooltip.html", HOSTS)
+        with pytest.raises(FetchDenied):
+            SourceAdmission(other.database, other.token, other.settings).acquire(
+                other_org,
+                1,
+                Operation.HTML,
+                url,
+                time.monotonic() + 0.5,
+            )
+        assert (
+            Administration(other.database, other.token, other.settings)
+            .usage(other_org)
+            .source_resource_attempts
+            == 0
+        )
+        other.start(other_org, job, other.snapshot(other_org, job).revision)
+        run_until_terminal(other, other_org, job)
+        results = Results(other.database, other.token, other.settings)
+        export = results.create(other_org, options(job), str(uuid4()))
+        row = results.pending(other_org)[0]
+        lease = results.claim(
+            other_org, export.id, UUID(str(row["event_id"])), int(str(row["generation"]))
+        )
+        assert lease is not None and results.process(lease)
+        assert results.download(other_org, export.id).body
+        # Genuine work/artifact completed while the first actual HTTP body was held.
+        assert not pending.done()
+        release_deadline = time.monotonic() + 5
+        topology.processes["fixture-a"].send({"kind": "release"}, release_deadline)
+        assert topology.processes["fixture-a"].receive(release_deadline) == {"kind": "released"}
+        assert b"synthetic marker" in pending.result(timeout=20)
+    configure(topology)
+    other_allow = TenantFixtureAuthorization(
+        other.database, other.token, other_org, "synthetic-publisher", 1
+    )
+    assert b"synthetic marker" in proxy(topology, other_org, other_allow).fetch(
+        f"https://{HOST}/tooltip.html"
+    )
+    second_receipt = snapshot(topology)["calls"][0]
+    assert second_receipt["received_monotonic"] - first_receipt["received_monotonic"] >= 4.9
+    usage = Administration(other.database, other.token, other.settings).usage(other_org)
+    assert usage.settled_resolution_units == 4 and usage.reserved_resolution_units == 0
+    assert usage.source_resource_attempts == 1
+    print(
+        json.dumps(
+            {
+                "blocked_source_pool_progress": True,
+                "actual_source_attempts": 2,
+                "other_tenant_settled_units": 4,
+                "private_export_completed": True,
+            }
+        ),
+        flush=True,
+    )

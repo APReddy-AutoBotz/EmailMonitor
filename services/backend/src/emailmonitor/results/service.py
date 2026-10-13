@@ -43,6 +43,7 @@ def translate(error: DBAPIError) -> NoReturn:
     )
     if (code, reason) in {
         ("EM011", "RESULT_SCOPE_DENIED"),
+        ("EM013", "EXPORT_ENTITLEMENT_DENIED"),
         ("EM009", "ASSOCIATION_DENIED"),
         ("EM010", "EXECUTION_SCOPE_DENIED"),
     }:

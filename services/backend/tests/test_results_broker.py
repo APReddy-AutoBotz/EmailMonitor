@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 
 from emailmonitor.jobs.broker import create_worker
 from emailmonitor.jobs.ledger import Ledger
+from emailmonitor.jobs.queues import phase_queue
 from emailmonitor.organizations.roles import Capability
 from emailmonitor.results.broker import ExportEvent, publish
 from emailmonitor.results.service import Results
@@ -126,7 +127,7 @@ def test_real_export_confirmed_queue_loss_rebuilds(scenario: Scenario, tmp_path:
         with app.connection_for_write() as connection:
             channel = connection.channel()
             try:
-                assert app.amqp.queues[cfg.queue](channel).purge() == 1
+                assert app.amqp.queues[phase_queue(cfg.queue, "export")](channel).purge() == 1
             finally:
                 channel.close()
         results.reconcile(org, export)

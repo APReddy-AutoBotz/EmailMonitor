@@ -8,6 +8,7 @@ from pydantic import Field, field_validator
 from emailmonitor.discovery.fixture import step_fixture
 from emailmonitor.discovery.service import Discovery
 from emailmonitor.jobs.models import StrictModel
+from emailmonitor.jobs.queues import phase_queue
 from emailmonitor.organizations.database import AuthorizationDenied
 
 
@@ -72,8 +73,8 @@ def publish_discovery(application: Any, discovery: Discovery, organization: UUID
         application.send_task(
             "emailmonitor.fixture.discover",
             args=[event.model_dump()],
-            queue=application.conf.task_default_queue,
-            routing_key=application.conf.task_default_queue,
+            queue=phase_queue(application.conf.task_default_queue, "fixture_io"),
+            routing_key=phase_queue(application.conf.task_default_queue, "fixture_io"),
             delivery_mode=2,
             mandatory=True,
             retry=False,

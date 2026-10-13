@@ -1,3 +1,16 @@
+## 2026-10-13 — EM-013 scoped synthetic admission foundation verified in Draft
+
+- Independently reconcile exact reviewed head/merge/tree and six full authoritative job logs
+- Verify1267/no-skip application, controlled13 shared-source/cross-tenant progress, actual keyboard configuration/usage and retained browser/parser boundaries
+- Preserve lease/time/SQL/composition/count correction history, unresolved warning/route-error causes, Draft limits and checkpoint-own gates before EM-014
+
+## 2026-10-13 — EM-013 synthetic admission candidate
+
+- Add forward-only migration0010 for current/captured entitlements, private fair admission, source buckets and once-per-root-job/article reservations/settlement
+- Route supported discovery/article/export work through separate owned queues; protected HTTP/browser hops use actual server-owned admission before DNS/TLS
+- Add owner configuration, literal branding, metadata-only support references and truthful operational usage with current authority and tenant isolation
+- Add required real SQL/broker/source-contention/keyboard regressions; all acceptance remains pending independent exact-tree review and actual six-job CI
+
 # Changelog
 
 ## 2026-10-13 — EM-012 scoped synthetic operator foundation verified in Draft

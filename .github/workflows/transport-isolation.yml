@@ -51,5 +51,5 @@ jobs:
         run: |
           set -euo pipefail
           uv run --project services/backend pytest -c services/backend/pyproject.toml scripts/isolation/test_transport_acceptance.py -ra -s | tee "$RUNNER_TEMP/transport-acceptance.log"
-          grep -Eq '12 passed' "$RUNNER_TEMP/transport-acceptance.log"
+          grep -Eq '(^|[=[:space:]])13 passed([ ,]|$)' "$RUNNER_TEMP/transport-acceptance.log"
           ! grep -Eq '[0-9]+ skipped|[0-9]+ warnings?' "$RUNNER_TEMP/transport-acceptance.log"

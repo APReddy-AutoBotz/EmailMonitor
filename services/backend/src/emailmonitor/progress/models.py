@@ -128,6 +128,7 @@ class Item(BaseModel):
         "lease_exhausted",
         "user_cancelled",
         "pagination_committed",
+        "quota_exhausted",
     ]
     attempts: int = Field(ge=0, le=3)
     batch_id: UUID | None

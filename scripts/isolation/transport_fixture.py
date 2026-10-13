@@ -6,8 +6,9 @@ import socket
 import ssl
 import struct
 import threading
+import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, cast
@@ -24,6 +25,7 @@ QNAME = b"\x09synthetic\x09publisher\x07example\0"
 class State:
     mode: str = "normal"
     count: int = 0
+    release: threading.Event = field(default_factory=threading.Event, compare=False, repr=False)
 
 
 def fixture_command(
@@ -35,7 +37,11 @@ def fixture_command(
     inspect: Callable[[], dict[str, Any]],
 ) -> tuple[dict[str, object], bool]:
     """Owned control grammar; pure dispatch is independently regression tested."""
+    if frame == {"kind": "release"}:
+        state.release.set()
+        return {"kind": "released"}, False
     if frame == {"kind": "stop"}:
+        state.release.set()
         return {
             "kind": "stopped",
             "calls": list(calls),
@@ -55,10 +61,14 @@ def fixture_command(
         type(frame) is not dict
         or set(frame) != {"mode"}
         or frame["mode"]
-        not in ("normal", "redirect", "mixed", "private", "rebinding", "wrong_name")
+        not in ("normal", "redirect", "mixed", "private", "rebinding", "wrong_name", "slow")
     ):
         raise RuntimeError("Invalid fixture control")
     state.mode, state.count = frame["mode"], 0
+    if state.mode == "slow":
+        state.release.clear()
+    else:
+        state.release.set()
     calls.clear()
     queries.clear()
     return {"kind": "configured"}, False
@@ -110,12 +120,18 @@ def main() -> None:
                 calls.append(
                     {
                         "role": role,
+                        "received_monotonic": time.monotonic(),
                         "family": cast(socket.socket, self.connection).family,
                         "path": self.path,
                         "headers": dict(self.headers.items()),
                         "sni": observed_sni.pop(id(self.connection), None),
                     }
                 )
+            with lock:
+                slow = state.mode == "slow"
+            if slow:
+                # Fixed bounded synthetic refusal-delay case, not arbitrary source input.
+                state.release.wait(timeout=15)
             status, body, location = 200, page, None
             if self.path == "/redirect.html":
                 status, body, location = 302, b"", "/tooltip.html"

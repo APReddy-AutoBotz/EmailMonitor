@@ -14,7 +14,13 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from browser_acceptance import sandbox_status
-from operator_ui_protocol import ERRORS, STAGES, asset_manifest, failure_reason
+from operator_ui_protocol import (
+    ERRORS,
+    STAGES,
+    asset_manifest,
+    failure_reason,
+    route_failure_reason,
+)
 from playwright.async_api import Error, Locator, Page, Route, async_playwright, expect
 
 ORIGIN = "https://app.example.test"
@@ -266,6 +272,20 @@ async def main() -> None:
                         )
                     except Error:
                         if incoming.failure != "net::ERR_ABORTED":
+                            # Fail immediately with a fixed category rather than
+                            # filling stderr with repeated async callback stacks.
+                            print(
+                                json.dumps(
+                                    {
+                                        "kind": "failure",
+                                        "stage": stage,
+                                        "error": "Error",
+                                        "reason": route_failure_reason(incoming.failure),
+                                        "api_statuses": api_statuses,
+                                    }
+                                ),
+                                flush=True,
+                            )
                             raise
                     return
                 path = "index.html" if parsed.path == "/" else parsed.path.lstrip("/")
@@ -458,6 +478,24 @@ async def main() -> None:
             await page.get_by_role("table", name="Authorized audit metadata").wait_for()
             await activate(page, page.get_by_role("button", name="Settings", exact=True))
             await page.get_by_role("table", name="Current organization members").wait_for()
+            await page.get_by_role(
+                "heading", name="Synthetic allowances and branding", exact=True
+            ).wait_for()
+            await type_text(
+                page,
+                page.get_by_label("Workspace label", exact=True),
+                "Keyboard authored workspace",
+            )
+            await type_text(page, page.get_by_label("Literal accent color", exact=True), "#123456")
+            await activate(
+                page, page.get_by_role("button", name="Save synthetic configuration", exact=True)
+            )
+            await activate(
+                page,
+                page.get_by_role("button", name="Confirm save synthetic configuration", exact=True),
+            )
+            await page.get_by_role("dialog").wait_for(state="hidden")
+            await page.get_by_text("Keyboard authored workspace", exact=True).wait_for()
             checkpoint("url_plan")
             # A separate article URL takes the same real create/plan/worker path.
             await activate(page, page.get_by_role("button", name="New extraction", exact=True))
@@ -535,6 +573,16 @@ async def main() -> None:
             await asyncio.wait_for(settled_requests(), timeout=10)
             if old_address in await page.locator("body").inner_text():
                 raise RuntimeError("Late previous-tenant response survived switch")
+            await activate(page, page.get_by_role("button", name="Settings", exact=True))
+            await page.get_by_text(
+                "Current owner authority is required to change configuration.", exact=True
+            ).wait_for()
+            if await page.get_by_role(
+                "button", name="Save synthetic configuration", exact=True
+            ).is_enabled():
+                raise RuntimeError("Read-only tenant configuration edit was enabled")
+            if "Keyboard authored workspace" in await page.locator("body").inner_text():
+                raise RuntimeError("Previous organization branding survived switch")
             checkpoint("final_cleanup")
             print(
                 json.dumps(
@@ -552,6 +600,8 @@ async def main() -> None:
                         "review": True,
                         "pause_resume_cancel_dismiss": True,
                         "dialog_focus_restore": True,
+                        "configuration_keyboard": True,
+                        "branding_scope_clear": True,
                         "optional_field_preview": True,
                         "usage_audit_settings": True,
                         "download_cancelled": True,

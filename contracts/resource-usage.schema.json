@@ -1,0 +1,98 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "organization_id": {
+      "format": "uuid",
+      "title": "Organization Id",
+      "type": "string"
+    },
+    "period_start": {
+      "format": "date",
+      "title": "Period Start",
+      "type": "string"
+    },
+    "settled_resolution_units": {
+      "minimum": 0,
+      "title": "Settled Resolution Units",
+      "type": "integer"
+    },
+    "reserved_resolution_units": {
+      "minimum": 0,
+      "title": "Reserved Resolution Units",
+      "type": "integer"
+    },
+    "monthly_unit_limit": {
+      "maximum": 5000,
+      "minimum": 0,
+      "title": "Monthly Unit Limit",
+      "type": "integer"
+    },
+    "waiting_units": {
+      "additionalProperties": {
+        "maximum": 10000,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "propertyNames": {
+        "enum": [
+          "fixture_io",
+          "parse",
+          "export",
+          "browser",
+          "http"
+        ]
+      },
+      "title": "Waiting Units",
+      "type": "object"
+    },
+    "active_units": {
+      "additionalProperties": {
+        "maximum": 10000,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "propertyNames": {
+        "enum": [
+          "fixture_io",
+          "parse",
+          "export",
+          "browser",
+          "http"
+        ]
+      },
+      "title": "Active Units",
+      "type": "object"
+    },
+    "source_resource_attempts": {
+      "minimum": 0,
+      "title": "Source Resource Attempts",
+      "type": "integer"
+    },
+    "billing_implemented": {
+      "const": false,
+      "default": false,
+      "title": "Billing Implemented",
+      "type": "boolean"
+    },
+    "synthetic_only": {
+      "const": true,
+      "default": true,
+      "title": "Synthetic Only",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "organization_id",
+    "period_start",
+    "settled_resolution_units",
+    "reserved_resolution_units",
+    "monthly_unit_limit",
+    "waiting_units",
+    "active_units",
+    "source_resource_attempts"
+  ],
+  "title": "ResourceUsage",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://emailmonitor.example/contracts/resource-usage.schema.json"
+}

@@ -13,6 +13,7 @@ from fastapi import HTTPException
 from sqlalchemy import Connection, text
 from sqlalchemy.exc import DBAPIError
 
+from emailmonitor.administration.models import Entitlements, effective_article_cap
 from emailmonitor.config import Settings
 from emailmonitor.discovery.planning import ARTICLE_PATHS, plan_input
 from emailmonitor.discovery.search import SearchPage
@@ -36,6 +37,7 @@ def policy_fence_denied(error: DBAPIError) -> bool:
     return isinstance(detail, dict) and (detail.get("C"), detail.get("M")) in {
         ("EM006", "DISCOVERY_POLICY_FENCE"),
         ("EM010", "EXECUTION_WORK_FENCE"),
+        ("EM013", "FIXTURE_ADMISSION_FENCE"),
     }
 
 
@@ -137,7 +139,17 @@ WHERE organization_id=:org AND job_id=:job"""),
                     raise HTTPException(409, "Plan policy version conflict; create a new job")
                 return dict(existing)
             proposal = PolicyProposal.model_validate(policy["policy"])
-            cap = min(request.options.max_articles, proposal.limits.max_articles_per_job)
+            configured: object = c.execute(
+                text("SELECT emailmonitor.administration_plan(:org,:job)"), {"org": org, "job": job}
+            ).scalar_one()
+            if not isinstance(configured, dict):
+                raise ValueError("Bounded effective configuration required")
+            limits = Entitlements.model_validate(configured["entitlements"])
+            cap = effective_article_cap(
+                limits, proposal.limits.max_articles_per_job, request.options.max_articles
+            )
+            if cap == 0 or limits.max_running_jobs == 0 or limits.monthly_resolution_units == 0:
+                raise HTTPException(409, "Current entitlement budget is unavailable")
             state = DiscoveryState(
                 status="pending" if plan.classification == "search_results" else "completed",
                 reason="first_page"
@@ -205,9 +217,24 @@ VALUES(:org,:id,emailmonitor.job_actor(),:event,:job)"""),
     def commit(
         self, org: UUID, job: UUID, expected_revision: int, page: SearchPage
     ) -> dict[str, object]:
+        from emailmonitor.administration.admission import Admission
+        from emailmonitor.administration.binding import CURRENT as FIXTURE
+        from emailmonitor.progress.binding import CURRENT as DURABLE
+
+        if FIXTURE.get() is not None or DURABLE.get() is not None:
+            return self._commit(org, job, expected_revision, page)
+        with Admission(self.database, self.token, self.settings).fixture(org, job, page.url):
+            return self._commit(org, job, expected_revision, page)
+
+    def _commit(
+        self, org: UUID, job: UUID, expected_revision: int, page: SearchPage
+    ) -> dict[str, object]:
         with self._tenant(org, Capability.ACQUIRE_SOURCE) as (c, _):
             parent = Ledger._lock(c, org, job)
             row = self._row(c, org, job)
+            from emailmonitor.administration.binding import fence
+
+            fence(c, org, job, page.url)
             if (
                 not execution_allowed(c, org, job)
                 or parent["generation"] != row["generation"]
@@ -215,7 +242,7 @@ VALUES(:org,:id,emailmonitor.job_actor(),:event,:job)"""),
             ):
                 raise AuthorizationDenied()
             version = int(str(row["policy_version"]))
-            self._authorize(c, org, job, version, page.url, True)
+            authorized = self._authorize(c, org, job, version, page.url, True)
             state = DiscoveryState.model_validate(row["checkpoint"])
             if not execution_matches(c, org, job, "discover", page.url):
                 raise AuthorizationDenied()
@@ -238,7 +265,15 @@ VALUES(:org,:id,emailmonitor.job_actor(),:event,:job)"""),
             )
             requested = JobRequest.model_validate(parent["request"]).options.max_articles
             if updated.reason == "article_cap" and int(str(row["max_articles"])) < requested:
-                updated = updated.model_copy(update={"reason": "source_cap"})
+                source_cap = PolicyProposal.model_validate(
+                    authorized["policy"]
+                ).limits.max_articles_per_job
+                reason = (
+                    "source_cap"
+                    if int(str(row["max_articles"])) == source_cap
+                    else "entitlement_cap"
+                )
+                updated = updated.model_copy(update={"reason": reason})
             c.execute(
                 text("""UPDATE emailmonitor.discovery SET checkpoint=CAST(:state AS jsonb),
 revision=revision+1

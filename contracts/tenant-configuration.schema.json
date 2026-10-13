@@ -1,0 +1,157 @@
+{
+  "$defs": {
+    "Branding": {
+      "additionalProperties": false,
+      "properties": {
+        "accent_color": {
+          "default": "#155e63",
+          "maxLength": 7,
+          "minLength": 7,
+          "pattern": "^#[0-9a-f]{6}$",
+          "title": "Accent Color",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "logo_reference": {
+          "default": null,
+          "title": "Logo Reference",
+          "type": "null"
+        }
+      },
+      "title": "Branding",
+      "type": "object"
+    },
+    "Entitlements": {
+      "additionalProperties": false,
+      "properties": {
+        "max_running_jobs": {
+          "default": 2,
+          "maximum": 2,
+          "minimum": 0,
+          "title": "Max Running Jobs",
+          "type": "integer"
+        },
+        "max_parallel_parse": {
+          "default": 2,
+          "maximum": 2,
+          "minimum": 0,
+          "title": "Max Parallel Parse",
+          "type": "integer"
+        },
+        "max_parallel_export": {
+          "default": 1,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Max Parallel Export",
+          "type": "integer"
+        },
+        "max_parallel_browser": {
+          "default": 1,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Max Parallel Browser",
+          "type": "integer"
+        },
+        "max_articles_per_job": {
+          "default": 500,
+          "maximum": 500,
+          "minimum": 0,
+          "title": "Max Articles Per Job",
+          "type": "integer"
+        },
+        "monthly_resolution_units": {
+          "default": 5000,
+          "maximum": 5000,
+          "minimum": 0,
+          "title": "Monthly Resolution Units",
+          "type": "integer"
+        },
+        "max_export_bytes": {
+          "default": 8388608,
+          "maximum": 8388608,
+          "minimum": 0,
+          "title": "Max Export Bytes",
+          "type": "integer"
+        },
+        "browser_enabled": {
+          "default": true,
+          "title": "Browser Enabled",
+          "type": "boolean"
+        },
+        "exports_enabled": {
+          "default": true,
+          "title": "Exports Enabled",
+          "type": "boolean"
+        }
+      },
+      "title": "Entitlements",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "organization_id": {
+      "format": "uuid",
+      "title": "Organization Id",
+      "type": "string"
+    },
+    "revision": {
+      "minimum": 1,
+      "title": "Revision",
+      "type": "integer"
+    },
+    "entitlements": {
+      "$ref": "#/$defs/Entitlements"
+    },
+    "branding": {
+      "$ref": "#/$defs/Branding"
+    },
+    "support_reference": {
+      "format": "uuid",
+      "title": "Support Reference",
+      "type": "string"
+    },
+    "deployment_mode": {
+      "const": "synthetic_offline",
+      "default": "synthetic_offline",
+      "title": "Deployment Mode",
+      "type": "string"
+    },
+    "billing_implemented": {
+      "const": false,
+      "default": false,
+      "title": "Billing Implemented",
+      "type": "boolean"
+    },
+    "exceptional_support_grants_available": {
+      "const": false,
+      "default": false,
+      "title": "Exceptional Support Grants Available",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "organization_id",
+    "revision",
+    "entitlements",
+    "branding",
+    "support_reference"
+  ],
+  "title": "Configuration",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://emailmonitor.example/contracts/tenant-configuration.schema.json"
+}

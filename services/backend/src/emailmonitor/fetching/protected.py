@@ -17,6 +17,7 @@ from pathlib import Path
 from emailmonitor.config import Settings
 from emailmonitor.fetching.fixture import FetchLimits, require_fixture
 from emailmonitor.fetching.plan import HopPlan, HopPlanner, PlanScope
+from emailmonitor.fetching.resources import HopResources
 from emailmonitor.fetching.safety import FetchDenied, SafeURL, public_addresses
 from emailmonitor.fetching.tls_fixture import TLSFixtureGateway
 from emailmonitor.sources.policy import Operation
@@ -150,12 +151,15 @@ class ProtectedGateway:
         authorize: Callable[[PlanScope, SafeURL], None],
         limits: FetchLimits | None = None,
         address_family: int = 4,
+        *,
+        resources: HopResources,
     ) -> None:
         require_fixture(settings)
         if type(resolver) is not SnapshotResolver:
             raise FetchDenied("resolver_type_denied")
         if type(address_family) is not int or address_family not in (4, 6):
             raise FetchDenied("address_family_denied")
+        self._resources = resources
         self._family = address_family
         self._resolver, self._scope, self._authorize = resolver, scope, authorize
         self._limits = limits or FetchLimits()
@@ -231,15 +235,37 @@ class ProtectedGateway:
         if planner.remaining() > self._limits.total_seconds:
             raise FetchDenied("plan_deadline_denied")
         url = planner.authorize_url(value)
-        records = self._resolver.resolve(url, planner)
-        plan = planner.snapshot(url, records, self._select(records))
+        previous: HopPlan | None = None
+        location = ""
         while True:
-            status, headers, body = self._request(planner, plan)
+            ticket = self._resources.acquire(url, operation, scope.deadline)
+            status: int | None = None
+            headers: dict[str, str] = {}
+            try:
+                planner.remaining()
+                records = self._resolver.resolve(url, planner)
+                plan = (
+                    planner.snapshot(url, records, self._select(records))
+                    if previous is None
+                    else planner.redirected_snapshot(
+                        previous, location, records, self._select(records)
+                    )
+                )
+                status, headers, body = self._request(planner, plan)
+            except BaseException as error:
+                try:
+                    self._resources.finish(ticket, status, headers.get("retry-after", ""))
+                except Exception:
+                    error.add_note(
+                        "Protected resource release failed; server lease remains bounded"
+                    )
+                raise
+            else:
+                self._resources.finish(ticket, status, headers.get("retry-after", ""))
             if status in (301, 302, 303, 307, 308):
                 location = headers.get("location", "")
                 url = planner.redirect(plan, location)
-                records = self._resolver.resolve(url, planner)
-                plan = planner.redirected_snapshot(plan, location, records, self._select(records))
+                previous = plan
                 continue
             if status != 200:
                 raise FetchDenied("source_response_denied")
