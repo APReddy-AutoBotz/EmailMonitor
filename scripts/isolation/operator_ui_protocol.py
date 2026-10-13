@@ -263,3 +263,73 @@ def completion_state_counts(states: object) -> dict[str, int]:
     ):
         raise ValueError("Bounded known job states required")
     return {value: states.count(value) for value in sorted(set(states))}
+
+
+class CompletionUnit(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    kind: Literal["discover", "article"]
+    state: Literal[
+        "pending",
+        "running",
+        "retry_wait",
+        "succeeded",
+        "no_contact",
+        "needs_review",
+        "policy_blocked",
+        "access_blocked",
+        "unsupported",
+        "skipped",
+        "failed",
+        "cancelled",
+    ]
+    reason: Literal[
+        "scheduled",
+        "leased",
+        "observed",
+        "no_contact",
+        "requires_review",
+        "browser_not_completed",
+        "source_policy_changed",
+        "worker_failure",
+        "lease_exhausted",
+        "user_cancelled",
+        "pagination_committed",
+        "quota_exhausted",
+    ]
+    attempts: int = Field(ge=0, le=3)
+    lease_live: bool
+    published: bool
+
+
+def completion_unit_counts(rows: object) -> dict[str, int]:
+    """Closed phase/fence categories only; never input URLs or resource identifiers."""
+    if type(rows) is not list or len(rows) > 32:
+        raise ValueError("Bounded completion rows required")
+    counts: dict[str, int] = {}
+    for value in rows:
+        unit = CompletionUnit.model_validate(value)
+        label = (
+            f"{unit.kind}:{unit.state}:{unit.reason}:attempts={unit.attempts}:"
+            f"lease_live={int(unit.lease_live)}:published={int(unit.published)}"
+        )
+        counts[label] = counts.get(label, 0) + 1
+    return dict(sorted(counts.items()))
+
+
+def completion_failure_classes(body: bytes) -> list[str]:
+    """Match a small class allowlist in owned logs without returning log text."""
+    if len(body) > 65536:
+        raise ValueError("Bounded owned log tail required")
+    known = (
+        "AuthorizationDenied",
+        "RevisionConflict",
+        "ProgrammingError",
+        "OperationalError",
+        "IntegrityError",
+        "HTTPException",
+        "TimeoutError",
+        "RuntimeError",
+        "ValueError",
+        "DBAPIError",
+    )
+    return sorted(name for name in known if name.encode() in body)

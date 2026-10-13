@@ -21,7 +21,13 @@ from emailmonitor.progress.broker import publish as publish_execution
 from emailmonitor.progress.service import Progress
 from emailmonitor.results.broker import publish as publish_exports
 from emailmonitor.results.service import Results
-from operator_ui_protocol import RequestFrame, asset_manifest, completion_state_counts
+from operator_ui_protocol import (
+    RequestFrame,
+    asset_manifest,
+    completion_failure_classes,
+    completion_state_counts,
+    completion_unit_counts,
+)
 from run_operator_ui_acceptance import run
 from sqlalchemy import text
 from test_durable_jobs import SETTINGS
@@ -168,10 +174,45 @@ def test_required_actual_keyboard_operator_ui(scenario: Scenario, tmp_path: Path
             try:
                 wait_for(complete, seconds=8)
             except AssertionError:
+                with progress.database.tenant(token, org, Capability.READ_ORGANIZATION) as (c, _):
+                    units = completion_unit_counts(
+                        [
+                            dict(row)
+                            for row in c.execute(
+                                text("""
+SELECT i.work_kind AS kind, i.state, i.reason, i.attempts,
+COALESCE(i.lease_until>clock_timestamp(),false) AS lease_live,
+COALESCE(o.published_at IS NOT NULL,false) AS published
+FROM emailmonitor.execution_items i
+JOIN emailmonitor.jobs j ON j.organization_id=i.organization_id AND j.id=i.job_id
+LEFT JOIN emailmonitor.execution_outbox o ON o.organization_id=i.organization_id
+AND o.job_id=i.job_id AND o.item_id=i.id AND o.generation=j.generation
+WHERE i.organization_id=:org AND j.kind='extraction' LIMIT 33
+"""),
+                                {"org": org},
+                            ).mappings()
+                        ]
+                    )
+                logs = list(tmp_path.glob(cfg.queue + "-*.log"))
+                if (
+                    len(logs) != 1
+                    or logs[0].is_symlink()
+                    or logs[0].resolve().parent != tmp_path.resolve()
+                ):
+                    raise RuntimeError("Exact owned worker log required") from None
+                with logs[0].open("rb") as file:
+                    file.seek(0, 2)
+                    file.seek(max(0, file.tell() - 65536))
+                    failure_classes = completion_failure_classes(file.read(65536))
                 print(
                     "operator-ui-control:wait_jobs "
                     + json.dumps(
-                        {"states": observed_states, "publisher_failed": bool(errors)},
+                        {
+                            "states": observed_states,
+                            "publisher_failed": bool(errors),
+                            "units": units,
+                            "matched_worker_failure_classes": failure_classes,
+                        },
                         sort_keys=True,
                     ),
                     flush=True,
