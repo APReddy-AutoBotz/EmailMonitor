@@ -178,6 +178,8 @@ def conversation(
                                     + stage
                                     + ": "
                                     + str(diagnostic.error)
+                                    + "; fixed reason="
+                                    + diagnostic.reason
                                     + "; actual reply statuses="
                                     + str(diagnostic.api_statuses)
                                 )

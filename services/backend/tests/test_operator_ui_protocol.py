@@ -205,3 +205,32 @@ def test_stderr_summary_is_bounded_and_does_not_echo_arbitrary_trace_paths() -> 
 
     result = stderr_summary(b'File "/app/operator_ui_protocol.py", line 99, in fixed\n' * 100)
     assert isinstance(result["frames"], list) and len(result["frames"]) == 8
+
+
+def test_failure_reason_only_classifies_exact_known_source_messages() -> None:
+    from operator_ui_protocol import failure_reason
+
+    assert (
+        failure_reason(RuntimeError("UI diagnostic concurrency/request cap exceeded"))
+        == "rpc_capacity"
+    )
+    assert failure_reason(RuntimeError("Control not reachable by keyboard")) == "keyboard_focus"
+    assert failure_reason(RuntimeError("secret Control not reachable by keyboard")) == "unknown"
+    assert failure_reason(RuntimeError("unrecognized private text")) == "unknown"
+    assert failure_reason(RuntimeError(1)) == "unknown"
+    assert failure_reason(TimeoutError("Control not reachable by keyboard")) == "unknown"
+
+
+@pytest.mark.parametrize("reason", ["arbitrary secret", "rpc_capacity cookie"])
+def test_unrecognized_failure_reason_is_never_accepted(reason: str) -> None:
+    from operator_ui_protocol import DiagnosticFrame
+
+    with pytest.raises(ValidationError):
+        DiagnosticFrame.model_validate(
+            {
+                "kind": "failure",
+                "stage": "keyword_worker",
+                "error": "RuntimeError",
+                "reason": reason,
+            }
+        )

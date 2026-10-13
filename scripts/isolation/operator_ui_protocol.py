@@ -158,6 +158,7 @@ class DiagnosticFrame(BaseModel):
         ]
         | None
     ) = None
+    reason: Literal["unknown", "rpc_capacity", "keyboard_focus"] = "unknown"
     api_statuses: list[int] = Field(default_factory=list, max_length=512)
 
     @model_validator(mode="after")
@@ -170,7 +171,7 @@ class DiagnosticFrame(BaseModel):
             self.kind == "failure"
             and self.error is None
             or self.kind == "stage"
-            and (self.error is not None or self.api_statuses)
+            and (self.error is not None or self.api_statuses or self.reason != "unknown")
         ):
             raise ValueError("Explicit failure or fixed stage required")
         return self
@@ -210,3 +211,13 @@ def stderr_summary(raw: bytes) -> dict[str, object]:
         "classes": errors[:8],
         "frames": [{"file": name, "line": int(line)} for name, line in frames[-8:]],
     }
+
+
+def failure_reason(error: BaseException) -> str:
+    """Exact known source messages only; no substring or arbitrary exception text."""
+    if type(error) is not RuntimeError or len(error.args) != 1 or type(error.args[0]) is not str:
+        return "unknown"
+    return {
+        "UI diagnostic concurrency/request cap exceeded": "rpc_capacity",
+        "Control not reachable by keyboard": "keyboard_focus",
+    }.get(error.args[0], "unknown")

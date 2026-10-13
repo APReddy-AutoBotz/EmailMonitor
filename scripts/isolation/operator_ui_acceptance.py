@@ -14,7 +14,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from browser_acceptance import sandbox_status
-from operator_ui_protocol import ERRORS, STAGES, asset_manifest
+from operator_ui_protocol import ERRORS, STAGES, asset_manifest, failure_reason
 from playwright.async_api import Error, Locator, Page, Route, async_playwright, expect
 
 ORIGIN = "https://app.example.test"
@@ -547,6 +547,7 @@ async def main() -> None:
                     "kind": "failure",
                     "stage": stage,
                     "error": name if name in ERRORS else "UnexpectedError",
+                    "reason": failure_reason(error),
                     "api_statuses": api_statuses,
                 }
             ),
