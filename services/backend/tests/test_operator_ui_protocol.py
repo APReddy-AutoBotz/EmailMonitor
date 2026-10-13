@@ -4,6 +4,7 @@ import asyncio
 import base64
 from collections.abc import AsyncIterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fastapi import FastAPI
@@ -238,3 +239,93 @@ def test_unrecognized_failure_reason_is_never_accepted(reason: str) -> None:
                 "reason": reason,
             }
         )
+
+
+def _owned_channel(timeout: float = 10.0) -> Any:
+    import ast
+    import asyncio
+    import json
+
+    source = (
+        Path(__file__).resolve().parents[3] / "scripts/isolation/operator_ui_acceptance.py"
+    ).read_text()
+    node = next(
+        item
+        for item in ast.parse(source).body
+        if isinstance(item, ast.ClassDef) and item.name == "Channel"
+    )
+    namespace: dict[str, Any] = {
+        "asyncio": asyncio,
+        "json": json,
+        "Any": Any,
+        "RPC_DEADLINE": timeout,
+        "print": lambda *args, **kwargs: None,
+    }
+    exec(compile(ast.Module(body=[node], type_ignores=[]), "owned-channel", "exec"), namespace)
+    return namespace["Channel"]()
+
+
+def test_owned_channel_admits_bounded_waiter_without_exceeding_active_cap() -> None:
+    import asyncio
+
+    async def run() -> None:
+        channel = _owned_channel()
+        tasks = [asyncio.create_task(channel.request({"kind": "control"})) for _ in range(9)]
+        for _ in range(5):
+            await asyncio.sleep(0)
+        assert len(channel.pending) == 8 and channel.waiting == 1 and channel.identifier == 8
+        channel.pending[1].set_result({"kind": "reply"})
+        for _ in range(8):
+            await asyncio.sleep(0)
+        assert len(channel.pending) == 8 and channel.waiting == 0 and channel.identifier == 9
+        for future in list(channel.pending.values()):
+            future.set_result({"kind": "reply"})
+        await asyncio.gather(*tasks)
+        assert not channel.pending and channel.capacity._value == 8 and channel.admitted == 0
+
+    asyncio.run(run())
+
+
+def test_owned_channel_refuses_excess_waiters_and_cleans_cancelled_admissions() -> None:
+    import asyncio
+
+    async def run() -> None:
+        channel = _owned_channel()
+        tasks = [asyncio.create_task(channel.request({"kind": "control"})) for _ in range(16)]
+        for _ in range(5):
+            await asyncio.sleep(0)
+        assert len(channel.pending) == 8 and channel.waiting == 8
+        with pytest.raises(RuntimeError, match="concurrency/request cap"):
+            await channel.request({"kind": "control"})
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        assert (
+            not channel.pending
+            and channel.waiting == 0
+            and channel.capacity._value == 8
+            and channel.admitted == 0
+        )
+        assert channel.identifier == 8
+
+    asyncio.run(run())
+
+
+def test_owned_channel_admission_and_reply_share_one_deadline() -> None:
+    import asyncio
+
+    async def run() -> None:
+        channel = _owned_channel(0.03)
+        tasks = [asyncio.create_task(channel.request({"kind": "control"})) for _ in range(9)]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        assert all(isinstance(result, TimeoutError) for result in results)
+        assert (
+            not channel.pending
+            and channel.waiting == 0
+            and channel.capacity._value == 8
+            and channel.admitted == 0
+        )
+        # The admission timeout did not consume another request identifier.
+        assert channel.identifier == 8
+
+    asyncio.run(run())

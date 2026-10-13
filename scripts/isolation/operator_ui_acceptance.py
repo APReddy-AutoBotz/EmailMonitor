@@ -30,12 +30,18 @@ HEADERS = {
 }
 
 
+RPC_DEADLINE = 10.0
+
+
 class Channel:
     def __init__(self) -> None:
         self.identifier = 0
         self.pending: dict[int, asyncio.Future[dict[str, Any]]] = {}
         self.retired: set[int] = set()
         self.writer = asyncio.Lock()
+        self.capacity = asyncio.Semaphore(8)
+        self.waiting = 0
+        self.admitted = 0
 
     async def read(self) -> None:
         while True:
@@ -55,23 +61,45 @@ class Channel:
                 future.set_result(message)
 
     async def request(self, message: dict[str, object]) -> dict[str, Any]:
-        if len(self.pending) >= 8 or self.identifier >= 512:
+        deadline = asyncio.get_running_loop().time() + RPC_DEADLINE
+        queued = self.admitted >= 8
+        if self.identifier >= 512 or self.admitted >= 16:
             raise RuntimeError("UI diagnostic concurrency/request cap exceeded")
-        self.identifier += 1
-        identifier = self.identifier
-        future: asyncio.Future[dict[str, Any]] = asyncio.get_running_loop().create_future()
-        self.pending[identifier] = future
-        message["identifier"] = identifier
-        raw = json.dumps(message)
-        if len(raw.encode()) > 32768:
-            raise RuntimeError("UI diagnostic request too large")
+        self.admitted += 1
+        if queued:
+            self.waiting += 1
+        acquired = False
+        identifier = None
         try:
+            await asyncio.wait_for(self.capacity.acquire(), timeout=RPC_DEADLINE)
+            acquired = True
+            if queued:
+                self.waiting -= 1
+                queued = False
+            if self.identifier >= 512:
+                raise RuntimeError("UI diagnostic concurrency/request cap exceeded")
+            self.identifier += 1
+            identifier = self.identifier
+            future: asyncio.Future[dict[str, Any]] = asyncio.get_running_loop().create_future()
+            message["identifier"] = identifier
+            raw = json.dumps(message)
+            if len(raw.encode()) > 32768:
+                raise RuntimeError("UI diagnostic request too large")
+            self.pending[identifier] = future
             async with self.writer:
                 print(raw, flush=True)
-            return await asyncio.wait_for(future, timeout=10)
+            return await asyncio.wait_for(
+                future, timeout=max(0, deadline - asyncio.get_running_loop().time())
+            )
         finally:
-            self.pending.pop(identifier, None)
-            self.retired.add(identifier)
+            if identifier is not None:
+                self.pending.pop(identifier, None)
+                self.retired.add(identifier)
+            if queued:
+                self.waiting -= 1
+            self.admitted -= 1
+            if acquired:
+                self.capacity.release()
 
 
 async def focus(page: Page, target: Locator) -> None:
