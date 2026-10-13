@@ -173,3 +173,17 @@ def test_ordered_build_context_excludes_source_environment_and_unknown_asset_sub
         "scripts/isolation/unrelated.txt",
     ]:
         assert not included(name)
+
+
+def test_ui_assembly_explicitly_uses_existing_test_identity_guard() -> None:
+    from emailmonitor.config import Settings
+
+    original = Settings(environment="test", fixture_mode=True)
+    selected = original.model_copy(update={"identity_stub": True})
+    assert selected.environment == "test" and selected.fixture_mode and selected.identity_stub
+    assert not original.identity_stub
+    code = (ROOT / "scripts/isolation/test_operator_ui_acceptance.py").read_text()
+    assert (
+        'create_app(SETTINGS.model_copy(update={"identity_stub": True}), scenario.foundation)'
+        in code
+    )

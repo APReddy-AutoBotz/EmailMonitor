@@ -36,7 +36,8 @@ def test_required_actual_keyboard_operator_ui(scenario: Scenario, tmp_path: Path
         or os.environ.get("EM_REQUIRE_OPERATOR_UI") != "true"
     ):
         raise RuntimeError("Required reviewed disposable UI CI only")
-    app = create_app(SETTINGS, scenario.foundation)
+    # Existing provider assembly requires explicit test identity, never production activation.
+    app = create_app(SETTINGS.model_copy(update={"identity_stub": True}), scenario.foundation)
     org, other = scenario.organizations
     with APIClient(app, ORIGIN) as owner, scenario.client() as other_owner:
         other_nonce = scenario.login(other_owner, "owner_b")
