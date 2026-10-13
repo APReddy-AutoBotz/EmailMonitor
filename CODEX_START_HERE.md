@@ -1,6 +1,6 @@
 # Codex implementation handoff
 
-**Baseline:** 2026-10-08. **Current phase:** synthetic/offline foundations through EM-008 independently verified in unmerged Drafts; EM-009 association/review candidate in progress. Read the current [status ledger](docs/22-implementation-status.md) and task evidence before selecting the next dependency-ready slice.
+**Baseline:** 2026-10-08. **Current phase:** synthetic/offline foundations through EM-009 independently verified in unmerged Drafts; the EM-009 documentation checkpoint requires its own CI before bounded offline EM-010. Read the current [status ledger](docs/22-implementation-status.md) and task evidence before selecting the next dependency-ready slice.
 
 ## Read order
 
