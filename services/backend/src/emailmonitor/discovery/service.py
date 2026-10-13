@@ -23,6 +23,8 @@ from emailmonitor.jobs.ledger import Ledger
 from emailmonitor.jobs.models import JobRequest, canonical
 from emailmonitor.organizations.database import AuthorizationDenied, Database, TenantContext
 from emailmonitor.organizations.roles import Capability
+from emailmonitor.progress.binding import allowed as execution_allowed
+from emailmonitor.progress.binding import matches as execution_matches
 from emailmonitor.sources.access import current_policy, policy_decision
 from emailmonitor.sources.policy import Evaluation, Operation, PolicyProposal
 
@@ -31,11 +33,10 @@ def policy_fence_denied(error: DBAPIError) -> bool:
     """Only our exact server fence code/reason maps to a sanitized denial."""
     args = getattr(error.orig, "args", ())
     detail = args[0] if args else None
-    return (
-        isinstance(detail, dict)
-        and detail.get("C") == "EM006"
-        and detail.get("M") == "DISCOVERY_POLICY_FENCE"
-    )
+    return isinstance(detail, dict) and (detail.get("C"), detail.get("M")) in {
+        ("EM006", "DISCOVERY_POLICY_FENCE"),
+        ("EM010", "EXECUTION_WORK_FENCE"),
+    }
 
 
 class Discovery:
@@ -188,7 +189,7 @@ VALUES(:org,:id,emailmonitor.job_actor(),:event,:job)"""),
             parent = Ledger._lock(c, org, job)
             row = self._row(c, org, job)
             if (
-                parent["state"] != "draft"
+                not execution_allowed(c, org, job)
                 or parent["generation"] != row["generation"]
                 or parent["deletion_generation"] != row["deletion_generation"]
             ):
@@ -196,6 +197,8 @@ VALUES(:org,:id,emailmonitor.job_actor(),:event,:job)"""),
             state = DiscoveryState.model_validate(row["checkpoint"])
             if state.status != "pending" or state.next_url is None:
                 raise HTTPException(409, "Discovery has stopped")
+            if not execution_matches(c, org, job, "discover", state.next_url):
+                raise AuthorizationDenied()
             self._authorize(c, org, job, int(str(row["policy_version"])), state.next_url, True)
             return row
 
@@ -206,7 +209,7 @@ VALUES(:org,:id,emailmonitor.job_actor(),:event,:job)"""),
             parent = Ledger._lock(c, org, job)
             row = self._row(c, org, job)
             if (
-                parent["state"] != "draft"
+                not execution_allowed(c, org, job)
                 or parent["generation"] != row["generation"]
                 or parent["deletion_generation"] != row["deletion_generation"]
             ):
@@ -214,6 +217,8 @@ VALUES(:org,:id,emailmonitor.job_actor(),:event,:job)"""),
             version = int(str(row["policy_version"]))
             self._authorize(c, org, job, version, page.url, True)
             state = DiscoveryState.model_validate(row["checkpoint"])
+            if not execution_matches(c, org, job, "discover", page.url):
+                raise AuthorizationDenied()
             # Retransmitting an already committed identical observation is a no-op.
             if page.url in state.pages:
                 index = state.pages.index(page.url)
@@ -249,6 +254,16 @@ WHERE organization_id=:org AND job_id=:job"""),
 
     @staticmethod
     def _schedule(c: Connection, org: UUID, job: UUID, generation: int, revision: int) -> None:
+        parent_state: object = c.execute(
+            text("SELECT state FROM emailmonitor.jobs WHERE organization_id=:org AND id=:job"),
+            {"org": org, "job": job},
+        ).scalar_one()
+        if parent_state != "draft":
+            # Started extraction uses its atomic execution frontier/outbox, not the
+            # legacy single-page fixture outbox. The current lease already fenced commit.
+            if not execution_allowed(c, org, job):
+                raise AuthorizationDenied()
+            return
         event = uuid5(job, canonical([str(org), generation, revision, "discovery.page"]))
         c.execute(
             text("""INSERT INTO emailmonitor.discovery_outbox

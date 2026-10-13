@@ -127,9 +127,8 @@ article_url=:url FOR SHARE
                 raise RevisionConflict()
             # The scope/row generation and source policy are locked in this same transaction.
             if (
-                source["generation"] != row["generation"]
-                or source["deletion_generation"] != row["deletion_generation"]
-            ):
+                source["generation"] != row["generation"] and not row["leased_execution"]
+            ) or source["deletion_generation"] != row["deletion_generation"]:
                 raise AuthorizationDenied()
             observed = ArticleObservation.model_validate(source["observation"])
             if observed.route == "browser_dom":

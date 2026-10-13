@@ -1,0 +1,238 @@
+{
+  "$defs": {
+    "ItemCounts": {
+      "additionalProperties": false,
+      "properties": {
+        "discovered": {
+          "maximum": 500,
+          "minimum": 0,
+          "title": "Discovered",
+          "type": "integer"
+        },
+        "pending": {
+          "maximum": 500,
+          "minimum": 0,
+          "title": "Pending",
+          "type": "integer"
+        },
+        "active": {
+          "maximum": 500,
+          "minimum": 0,
+          "title": "Active",
+          "type": "integer"
+        },
+        "retry_wait": {
+          "maximum": 500,
+          "minimum": 0,
+          "title": "Retry Wait",
+          "type": "integer"
+        },
+        "terminal": {
+          "maximum": 500,
+          "minimum": 0,
+          "title": "Terminal",
+          "type": "integer"
+        },
+        "by_outcome": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "propertyNames": {
+            "enum": [
+              "pending",
+              "running",
+              "retry_wait",
+              "succeeded",
+              "no_contact",
+              "needs_review",
+              "policy_blocked",
+              "access_blocked",
+              "unsupported",
+              "skipped",
+              "failed",
+              "cancelled"
+            ]
+          },
+          "title": "By Outcome",
+          "type": "object"
+        }
+      },
+      "required": [
+        "discovered",
+        "pending",
+        "active",
+        "retry_wait",
+        "terminal",
+        "by_outcome"
+      ],
+      "title": "ItemCounts",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "organization_id": {
+      "format": "uuid",
+      "title": "Organization Id",
+      "type": "string"
+    },
+    "job_id": {
+      "format": "uuid",
+      "title": "Job Id",
+      "type": "string"
+    },
+    "state": {
+      "enum": [
+        "draft",
+        "awaiting_approval",
+        "ready",
+        "queued",
+        "running",
+        "pausing",
+        "paused",
+        "cancelling",
+        "cancelled",
+        "completed",
+        "completed_partial",
+        "failed"
+      ],
+      "title": "State",
+      "type": "string"
+    },
+    "revision": {
+      "minimum": 1,
+      "title": "Revision",
+      "type": "integer"
+    },
+    "generation": {
+      "minimum": 1,
+      "title": "Generation",
+      "type": "integer"
+    },
+    "discovery_pages": {
+      "maximum": 1000,
+      "minimum": 0,
+      "title": "Discovery Pages",
+      "type": "integer"
+    },
+    "source_reported_total": {
+      "anyOf": [
+        {
+          "maximum": 1000000,
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Source Reported Total"
+    },
+    "unique_articles": {
+      "maximum": 500,
+      "minimum": 0,
+      "title": "Unique Articles",
+      "type": "integer"
+    },
+    "duplicates": {
+      "maximum": 500000,
+      "minimum": 0,
+      "title": "Duplicates",
+      "type": "integer"
+    },
+    "discovery_complete": {
+      "title": "Discovery Complete",
+      "type": "boolean"
+    },
+    "completeness": {
+      "enum": [
+        "unknown",
+        "partial",
+        "pagination_exhausted",
+        "single_article"
+      ],
+      "title": "Completeness",
+      "type": "string"
+    },
+    "discovery_stop_reason": {
+      "maxLength": 100,
+      "minLength": 1,
+      "title": "Discovery Stop Reason",
+      "type": "string"
+    },
+    "counts": {
+      "$ref": "#/$defs/ItemCounts"
+    },
+    "accepted_associations": {
+      "maximum": 5000000,
+      "minimum": 0,
+      "title": "Accepted Associations",
+      "type": "integer"
+    },
+    "review_needed_associations": {
+      "maximum": 5000000,
+      "minimum": 0,
+      "title": "Review Needed Associations",
+      "type": "integer"
+    },
+    "progress_percent": {
+      "anyOf": [
+        {
+          "maximum": 100,
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Progress Percent"
+    },
+    "last_sequence": {
+      "minimum": 0,
+      "title": "Last Sequence",
+      "type": "integer",
+      "maximum": 9223372036854775807
+    },
+    "synthetic_only": {
+      "const": true,
+      "default": true,
+      "title": "Synthetic Only",
+      "type": "boolean"
+    },
+    "production_execution_available": {
+      "const": false,
+      "default": false,
+      "title": "Production Execution Available",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "organization_id",
+    "job_id",
+    "state",
+    "revision",
+    "generation",
+    "discovery_pages",
+    "source_reported_total",
+    "unique_articles",
+    "duplicates",
+    "discovery_complete",
+    "completeness",
+    "discovery_stop_reason",
+    "counts",
+    "accepted_associations",
+    "review_needed_associations",
+    "progress_percent",
+    "last_sequence"
+  ],
+  "title": "Snapshot",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

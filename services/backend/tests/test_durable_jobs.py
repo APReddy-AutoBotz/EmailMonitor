@@ -178,7 +178,7 @@ def test_core_api_draft_idempotency_preserves_original_input(scenario: Scenario)
                 headers=headers,
                 json={"expected_revision": 1},
             ).status_code
-            == 409
+            == 404  # The explicit execution route refuses before test-mode enablement.
         )
 
 

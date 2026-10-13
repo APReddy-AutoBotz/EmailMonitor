@@ -4,6 +4,7 @@ import json
 import os
 import time
 from collections.abc import Iterator
+from contextlib import ExitStack
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -20,8 +21,12 @@ from emailmonitor.fetching.safety import FetchDenied, SafeURL
 from emailmonitor.identity.foundation import COOKIE
 from emailmonitor.jobs.ledger import Ledger
 from emailmonitor.jobs.models import JobRequest
+from emailmonitor.organizations.roles import Capability
+from emailmonitor.progress.binding import bound
+from emailmonitor.progress.service import Progress
 from emailmonitor.sources.policy import Operation
 from run_browser_acceptance import conversation
+from sqlalchemy import text
 from test_source_foundation import policy_body, source_path
 from test_tenant_foundation import ORIGIN, Scenario
 from test_tenant_foundation import scenario as scenario
@@ -193,7 +198,7 @@ def test_actual_browser_gateway_current_tenant_policy(
 ) -> None:
     configure(topology)
     browser = topology.browser()
-    with scenario.client() as client:
+    with scenario.client() as client, ExitStack() as work_scope:
         csrf = scenario.login(client, "owner")
         headers = {"Origin": ORIGIN, "X-CSRF-Token": csrf}
         path = source_path(scenario)
@@ -244,6 +249,26 @@ def test_actual_browser_gateway_current_tenant_policy(
         assert (
             ArticleObservation.model_validate(pending["observation"]).status == "requires_browser"
         )
+        execution = Progress(ledger.database, token, settings)
+        execution.start(org, job, execution.snapshot(org, job).revision)
+        with ledger.database.tenant(token, org, Capability.READ_ORGANIZATION) as (
+            connection,
+            _,
+        ):
+            tooltip_item: UUID = connection.execute(
+                text(
+                    "SELECT id FROM emailmonitor.execution_items WHERE organization_id=:org "
+                    "AND job_id=:job AND input_url=:url"
+                ),
+                {"org": org, "job": job, "url": f"https://{HOST}/tooltip.html"},
+            ).scalar_one()
+        message = next(row for row in execution.pending(org) if row["item_id"] == tooltip_item)
+        browser_work = execution.claim(
+            org, job, tooltip_item, UUID(str(message["event_id"])), seconds=120
+        )
+        assert browser_work is not None
+        work_scope.enter_context(bound(browser_work.lease))
+        assert execution.snapshot(org, job).state == "running"
         extraction.prepare(org, job, f"https://{HOST}/tooltip.html", browser=True)
         allow = TenantFixtureAuthorization(
             scenario.foundation.database, token, scenario.organizations[0], "synthetic-publisher", 1
@@ -267,6 +292,21 @@ def test_actual_browser_gateway_current_tenant_policy(
             )["revision"]
             == 2
         )
+        batch = execution.associations.derive(org, job, article.url, 2)
+        assert execution.finish(browser_work, batch) == "succeeded"
+        work_scope.close()
+        for _ in range(4):
+            remaining = execution.pending(org)
+            if not remaining:
+                break
+            row = remaining[0]
+            work = execution.claim(org, job, UUID(str(row["item_id"])), UUID(str(row["event_id"])))
+            assert work is not None
+            execution.process_fixture(work)
+        completed = execution.snapshot(org, job)
+        assert completed.state == "completed" and completed.counts.terminal == 4
+        evidence["durable_browser_item_succeeded"] = True
+        evidence["durable_job_completed"] = True
         evidence["observed_authors"] = len(article.authors)
         evidence["observed_candidates"] = len(article.candidates)
         evidence["observation_persisted"] = True
