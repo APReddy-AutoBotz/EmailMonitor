@@ -2,7 +2,7 @@
 
 ## Scope and dependency
 
-EM-012 connects the actual React application to existing tenant-authorized APIs for document-03 screens: dashboard, keyword/URL wizard, jobs, contacts, review queue/evidence, exports, source policies, usage, audit and organization settings. It remains a synthetic/offline candidate until independent source review and its six exact-head CI gates pass. No deployed or live-source product is claimed.
+EM-012 connects the actual React application to existing tenant-authorized APIs for document-03 screens: dashboard, keyword/URL wizard, jobs, contacts, review queue/evidence, exports, source policies, usage, audit and organization settings. Its declared synthetic/offline foundation is VERIFIED IN DRAFT after independent source/evidence review and all six actual exact-head CI gates at head6a3c607c/treea513d96c. No deployed or live-source product is claimed.
 
 The EM-011 documentation checkpoint passed its own five gates at head9fd9fbeb/treeee54a2b3 and mergeed535748 (parentsfe66f7a7/9fd9fbeb). Its application1035/no-skip and controlled12 plus browser/parser/docs evidence is recorded in the [EM-012 report](../reports/em012-validation.md). All dependencies remain Draft/unmerged.
 
@@ -41,4 +41,7 @@ The diagnostic uses keyboard Tab/Enter/typing/select navigation, actual source a
 
 Playwright route fulfillment buffers genuine ASGI SSE frames with a bounded diagnostic disconnect; this proves real replay/reconnect and tenant cancellation, not native stream latency or an uninterrupted sixty-second browser connection. A real Blob download is observed and cancelled under `accept_downloads=False`; the trusted host verifies actual authorized artifact bytes/digest. A saved filesystem download is not claimed. Preexisting service-level tests remain required for optimistic conflicts and lifecycle races.
 
-Acceptance requires application tests with no service skips, controlled transport12, standalone browser, parser, documentation and the new actual operator-UI job at the exact reviewed published tree. Source/pure checks or a passing smoke screen cannot replace these six gates. EM-013 remains gated on scoped EM-012 acceptance.
+Acceptance requires application tests with no service skips, controlled transport12, standalone browser, parser, documentation and the new actual operator-UI job at the exact reviewed published tree. Source/pure checks or a passing smoke screen cannot replace these six gates. EM-013 remains gated on this reviewed acceptance documentation checkpoint passing its own six exact-head gates.
+
+
+Independent authoritative reconciliation confirmed application1132/no skips/one alias-body warning284.57s, keyboard UI1/64.12s and controlled12/56.92s plus actual browser/parser/docs. The keyboard result includes the unchanged affirmative Chromium sandbox/lo-only/IPv4+IPv6 errno101 controls, native Escape focus restoration, real current-authorized4471-byte export and delayed old-tenant response/replay refusal. [Validation](../reports/em012-validation.md) records exact IDs, review corrections and scope limits. All branches remain Draft/unmerged; EM-WARN-01 cause remains open.
