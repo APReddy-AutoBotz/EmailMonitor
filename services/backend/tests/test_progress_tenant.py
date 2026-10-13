@@ -410,7 +410,12 @@ def test_real_identifier_api_csrf_and_authorized_sse_replay(scenario: Scenario) 
         cross = client.get(route + "/events", headers={"Last-Event-ID": f"{uuid4()}/{job}:1"})
         assert cross.status_code == 409
         scenario.login(client, "owner_b")
-        assert client.get(route + "/events").status_code == 403
+        denied = client.get(route + "/events")
+        unknown = client.get(f"/api/v1/organizations/{org}/jobs/{uuid4()}/events")
+        assert denied.status_code == unknown.status_code == 404
+        assert denied.json() == unknown.json() == {"detail": "Resource unavailable"}
+        assert "text/event-stream" not in denied.headers["content-type"]
+        assert "data:" not in denied.text
 
 
 def test_real_stream_rechecks_source_before_each_cached_frame(scenario: Scenario) -> None:
