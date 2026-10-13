@@ -295,7 +295,7 @@ def test_owned_channel_refuses_excess_waiters_and_cleans_cancelled_admissions() 
         for _ in range(5):
             await asyncio.sleep(0)
         assert len(channel.pending) == 8 and channel.waiting == 8
-        with pytest.raises(RuntimeError, match="concurrency/request cap"):
+        with pytest.raises(RuntimeError, match="admission cap"):
             await channel.request({"kind": "control"})
         for task in tasks:
             task.cancel()
@@ -431,3 +431,276 @@ def test_owned_failure_log_matching_never_returns_arbitrary_content() -> None:
     assert completion_failure_classes(b"private arbitrary error") == []
     with pytest.raises(ValueError):
         completion_failure_classes(b"x" * 65537)
+
+
+def _owned_api_headers() -> tuple[Any, type[Exception]]:
+    import ast
+    from collections.abc import Callable
+
+    from operator_ui_protocol import route_headers_reason
+
+    source = (
+        Path(__file__).resolve().parents[3] / "scripts/isolation/operator_ui_acceptance.py"
+    ).read_text()
+    node = next(
+        item
+        for item in ast.parse(source).body
+        if isinstance(item, ast.AsyncFunctionDef) and item.name == "api_headers"
+    )
+
+    class DriverError(Exception):
+        pass
+
+    namespace: dict[str, Any] = {
+        "Request": object,
+        "Callable": Callable,
+        "Error": DriverError,
+        "HEADERS": {"cookie", "origin"},
+        "route_headers_reason": route_headers_reason,
+    }
+    exec(compile(ast.Module(body=[node], type_ignores=[]), "owned-api-headers", "exec"), namespace)
+    return namespace["api_headers"], DriverError
+
+
+@pytest.mark.parametrize("driver_error", [False, True])
+@pytest.mark.parametrize("failure", [None, "net::ERR_ABORTED"])
+def test_actual_header_boundary_reports_fixed_failure_and_rethrows(
+    driver_error: bool, failure: str | None
+) -> None:
+    function, error_type = _owned_api_headers()
+    errors: list[tuple[str, str]] = []
+
+    class Request:
+        async def all_headers(self) -> dict[str, str]:
+            raise (error_type if driver_error else RuntimeError)("private detail never reported")
+
+    incoming = Request()
+    incoming.failure = failure  # type: ignore[attr-defined]
+    with pytest.raises(error_type if driver_error else RuntimeError):
+        asyncio.run(function(incoming, lambda error, reason: errors.append((error, reason))))
+    assert errors == [
+        (
+            "Error" if driver_error else "RuntimeError",
+            "route_headers_aborted" if failure else "route_headers_unclassified",
+        )
+    ]
+    from operator_ui_protocol import DiagnosticFrame
+
+    assert (
+        DiagnosticFrame.model_validate(
+            {
+                "kind": "failure",
+                "stage": "url_worker",
+                "error": errors[0][0],
+                "reason": errors[0][1],
+            }
+        ).kind
+        == "failure"
+    )
+
+
+def test_actual_headers_keep_sensitive_allowlist_without_fallback() -> None:
+    function, _ = _owned_api_headers()
+    errors: list[tuple[str, str]] = []
+
+    class Request:
+        async def all_headers(self) -> dict[str, str]:
+            return {
+                "cookie": "synthetic=test",
+                "origin": "https://app.example.test",
+                "unknown": "excluded",
+            }
+
+    assert asyncio.run(
+        function(Request(), lambda error, reason: errors.append((error, reason)))
+    ) == {
+        "cookie": "synthetic=test",
+        "origin": "https://app.example.test",
+    }
+    assert errors == []
+
+
+@pytest.mark.parametrize(
+    "error,expected",
+    [
+        (RuntimeError("UI diagnostic concurrency/request cap exceeded"), "rpc_capacity"),
+        (
+            RuntimeError("Request.all_headers: UI diagnostic concurrency/request cap exceeded"),
+            "rpc_capacity",
+        ),
+        (
+            RuntimeError("Request.all_headers: await wasn't used with future"),
+            "route_headers_future_state",
+        ),
+        (RuntimeError("cannot reuse already awaited coroutine"), "route_headers_future_state"),
+        (RuntimeError("Request.all_headers: Event loop is closed"), "route_headers_loop_state"),
+        (RuntimeError("dictionary changed size during iteration"), "route_headers_iteration_state"),
+        (RuntimeError("unrecognized private information"), "route_headers_unclassified"),
+        (Exception("UI diagnostic concurrency/request cap exceeded"), "route_headers_unclassified"),
+    ],
+)
+def test_header_runtime_categories_are_closed_diagnostics_never_success(
+    error: Exception, expected: str
+) -> None:
+    from operator_ui_protocol import DiagnosticFrame, route_headers_reason
+
+    reason = route_headers_reason(None, error)
+    assert reason == expected
+    assert (
+        DiagnosticFrame.model_validate(
+            {"kind": "failure", "stage": "url_worker", "error": "RuntimeError", "reason": reason}
+        ).kind
+        == "failure"
+    )
+    assert "private" not in reason
+
+
+def test_completion_queue_counts_return_no_identifier_or_task_content() -> None:
+    from operator_ui_protocol import completion_queue_counts
+
+    assert completion_queue_counts(3, 1) == {"ready": 3, "consumers": 1}
+    assert completion_queue_counts(0, 0) == {"ready": 0, "consumers": 0}
+
+
+@pytest.mark.parametrize("ready,consumers", [(True, 1), (-1, 1), (10001, 1), (3, True), (3, 17)])
+def test_completion_queue_counts_refuse_unbounded_or_coerced_values(
+    ready: object, consumers: object
+) -> None:
+    from operator_ui_protocol import completion_queue_counts
+
+    with pytest.raises(ValueError):
+        completion_queue_counts(ready, consumers)
+
+
+def test_owned_queue_probe_uses_whole_process_timeout_and_fixed_output(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import subprocess
+
+    import operator_queue_probe as probe
+
+    observed: dict[str, object] = {}
+
+    def run(*args: object, **kwargs: Any) -> subprocess.CompletedProcess[bytes]:
+        observed.update(kwargs)
+        return subprocess.CompletedProcess(["owned-probe"], 0, b'{"ready":3,"consumers":1}')
+
+    monkeypatch.setattr(subprocess, "run", run)
+    assert probe.observe("pyamqp://synthetic@127.0.0.1:5672//", "em-fixture-owned") == {
+        "ready": 3,
+        "consumers": 1,
+    }
+    assert observed["timeout"] == 0.5
+    assert observed["stderr"] == subprocess.DEVNULL
+    assert observed["check"] is False
+
+
+@pytest.mark.parametrize("failure", ["timeout", "unavailable", "invalid", "oversize"])
+def test_owned_queue_probe_unavailability_never_becomes_completion(
+    monkeypatch: pytest.MonkeyPatch, failure: str
+) -> None:
+    import subprocess
+
+    import operator_queue_probe as probe
+
+    def run(*args: object, **kwargs: Any) -> subprocess.CompletedProcess[bytes]:
+        if failure == "timeout":
+            raise subprocess.TimeoutExpired("fixed-owned-command", 0.5)
+        if failure == "unavailable":
+            return subprocess.CompletedProcess(["owned-probe"], 1, b"")
+        return subprocess.CompletedProcess(
+            ["owned-probe"], 0, b"x" * 129 if failure == "oversize" else b"{}"
+        )
+
+    monkeypatch.setattr(subprocess, "run", run)
+    assert probe.observe("pyamqp://synthetic@127.0.0.1:5672//", "em-fixture-owned") is None
+
+
+def test_owned_queue_probe_actual_stalled_child_is_terminated_without_network(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import subprocess
+    import sys
+    import time
+
+    import operator_queue_probe as probe
+
+    actual_run = subprocess.run
+
+    def stalled(*args: object, **kwargs: Any) -> subprocess.CompletedProcess[bytes]:
+        return actual_run([sys.executable, "-c", "import time; time.sleep(60)"], **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", stalled)
+    started = time.monotonic()
+    assert probe.observe("pyamqp://synthetic@127.0.0.1:5672//", "em-fixture-owned") is None
+    assert time.monotonic() - started < 2
+
+
+def test_header_classifier_handles_actual_pinned_internal_api_prefix() -> None:
+    from operator_ui_protocol import route_headers_reason
+    from playwright._impl._connection import _attach_api_call_information
+    from playwright._impl._errors import rewrite_error
+
+    stack = _attach_api_call_information(
+        {"frames": [], "apiName": "Request.all_headers", "title": None}, True, None
+    )
+    assert stack["apiName"] == ""
+    original = RuntimeError("UI diagnostic concurrency/request cap exceeded")
+    wrapped = rewrite_error(original, f"{stack['apiName']}: {original}")
+    assert type(wrapped) is RuntimeError
+    assert route_headers_reason(None, wrapped) == "rpc_capacity"
+
+
+def test_header_classifier_does_not_strip_nested_or_unknown_prefixes() -> None:
+    from operator_ui_protocol import route_headers_reason
+
+    for prefix in (": : ", "Unknown.api: ", "Request.all_headers: : "):
+        assert (
+            route_headers_reason(
+                None, RuntimeError(prefix + "UI diagnostic concurrency/request cap exceeded")
+            )
+            == "route_headers_unclassified"
+        )
+
+
+def test_owned_channel_request_limit_has_distinct_fixed_failure() -> None:
+    from operator_ui_protocol import failure_reason, route_headers_reason
+
+    async def run() -> None:
+        channel = _owned_channel()
+        channel.identifier = 512
+        with pytest.raises(RuntimeError, match="^UI diagnostic request cap exceeded$") as error:
+            await channel.request({"kind": "control"})
+        assert failure_reason(error.value) == "rpc_request_capacity"
+        assert (
+            route_headers_reason(None, RuntimeError(": " + str(error.value)))
+            == "rpc_request_capacity"
+        )
+        assert channel.identifier == 512 and channel.admitted == 0 and not channel.pending
+
+    asyncio.run(run())
+
+
+def test_owned_channel_sixteen_admitted_limit_has_distinct_fixed_failure() -> None:
+    from operator_ui_protocol import failure_reason, route_headers_reason
+
+    async def run() -> None:
+        channel = _owned_channel(timeout=1)
+        tasks = [asyncio.create_task(channel.request({"kind": "control"})) for _ in range(16)]
+        for _ in range(8):
+            await asyncio.sleep(0)
+        assert channel.admitted == 16 and len(channel.pending) == 8 and channel.waiting == 8
+        with pytest.raises(RuntimeError, match="^UI diagnostic admission cap exceeded$") as error:
+            await channel.request({"kind": "control"})
+        assert failure_reason(error.value) == "rpc_admission_capacity"
+        assert (
+            route_headers_reason(None, RuntimeError(": " + str(error.value)))
+            == "rpc_admission_capacity"
+        )
+        assert channel.admitted == 16 and channel.identifier == 8
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        assert not channel.pending and channel.admitted == 0 and channel.capacity._value == 8
+
+    asyncio.run(run())

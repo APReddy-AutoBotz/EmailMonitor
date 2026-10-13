@@ -1,0 +1,278 @@
+"""Pure privacy grammar and fixed metadata limits; no deletion or access grants."""
+
+from uuid import uuid4
+
+import pytest
+from emailmonitor.config import Settings
+from emailmonitor.fetching.safety import IsolationUnavailable
+from emailmonitor.lifecycle.errors import lifecycle_denied
+from emailmonitor.lifecycle.models import (
+    Retention,
+    SupportCreate,
+    SuppressionCreate,
+    canonical_privacy,
+)
+from emailmonitor.lifecycle.service import Lifecycle
+from pydantic import ValidationError
+from sqlalchemy.exc import DBAPIError
+
+
+@pytest.mark.parametrize(
+    "kind,value,expected",
+    [
+        ("source", "synthetic-publisher", "synthetic-publisher"),
+        ("source", "SYNTHETIC-PUBLISHER", "synthetic-publisher"),
+        ("contact", "Mira.Rao@Example.ORG", "mira.rao@example.org"),
+        ("domain", "Example.ORG", "example.org"),
+    ],
+)
+def test_privacy_canonicalization_is_conservative_matching_not_identity(
+    kind: str, value: str, expected: str
+) -> None:
+    assert canonical_privacy(kind, value) == expected
+
+
+@pytest.mark.parametrize(
+    "kind,value",
+    [
+        ("contact", "mira@"),
+        ("contact", "mira@example.org\n"),
+        ("contact", "mira@exämple.org"),
+        ("contact", "mira\u202e@example.org"),
+        ("contact", "a..b@example.org"),
+        ("contact", "a" * 65 + "@example.org"),
+        ("domain", "-example.org"),
+        ("domain", "example.org/other"),
+        ("domain", "example.org."),
+        ("source", "live-publisher"),
+        ("person", "Mira Rao"),
+        ("job", "arbitrary"),
+    ],
+)
+def test_unsupported_privacy_forms_refuse(kind: str, value: str) -> None:
+    with pytest.raises(ValueError):
+        canonical_privacy(kind, value)
+
+
+def test_privacy_value_is_not_in_repr_and_extra_grants_refuse() -> None:
+    request = SuppressionCreate(kind="contact", value="mira@example.org", reason="privacy_request")
+    assert "mira" not in repr(request)
+    with pytest.raises(ValidationError):
+        SuppressionCreate.model_validate({**request.model_dump(), "grant_source_access": True})
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("contact_days", 91),
+        ("raw_hours", 25),
+        ("export_hours", 25),
+        ("excerpt_days", 31),
+        ("audit_days", 366),
+        ("audit_days", 0),
+        ("contact_days", True),
+    ],
+)
+def test_platform_retention_ceiling_never_expands(field: str, value: object) -> None:
+    with pytest.raises(ValidationError):
+        Retention.model_validate({field: value})
+
+
+@pytest.mark.parametrize("minutes", [0, 241, True])
+def test_support_context_maximum_is_four_hours_and_not_a_new_role(minutes: object) -> None:
+    with pytest.raises(ValidationError):
+        SupportCreate.model_validate(
+            {
+                "grantee_id": uuid4(),
+                "job_id": uuid4(),
+                "minutes": minutes,
+                "reason": "synthetic_incident",
+            }
+        )
+
+
+def test_only_exact_private_denial_is_sanitized() -> None:
+    error = DBAPIError(
+        "private sql", {}, Exception({"C": "EM014", "M": "PRIVACY_SUPPRESSED"}), False
+    )
+    assert lifecycle_denied(error)
+    assert not lifecycle_denied(
+        DBAPIError("sql", {}, Exception({"C": "EM014", "M": "different"}), False)
+    )
+    assert not lifecycle_denied(
+        DBAPIError("sql", {}, Exception({"C": "42P01", "M": "missing"}), False)
+    )
+
+
+def test_lifecycle_cannot_activate_in_production() -> None:
+    with pytest.raises(IsolationUnavailable):
+        Lifecycle(None, "unused", Settings())  # type: ignore[arg-type]
+
+
+def test_identifier_only_broker_message_cannot_carry_content_or_another_tenant() -> None:
+    from emailmonitor.lifecycle.broker import LifecycleEvent, process
+
+    org, event = uuid4(), uuid4()
+    value = LifecycleEvent(organization_id=org, event_id=event)
+    assert set(value.model_dump()) == {"organization_id", "event_id", "kind"}
+    with pytest.raises(ValidationError):
+        LifecycleEvent.model_validate({**value.model_dump(), "email": "mira@example.org"})
+    with pytest.raises(ValueError, match="scope"):
+        process(None, uuid4(), value.model_dump(mode="json"))  # type: ignore[arg-type]
+
+
+def test_migration_keeps_privacy_indexes_private_and_purge_capability_unforgeable() -> None:
+    from pathlib import Path
+
+    source = (
+        Path(__file__).resolve().parents[1] / "migrations/versions/0011_lifecycle.sql"
+    ).read_text()
+    assert "lifecycle_purge_context" in source and "transaction_id=txid_current()" in source
+    assert "DISABLE TRIGGER" not in source and "BYPASSRLS" not in source
+    assert "digest bytea NOT NULL CHECK(octet_length(digest)=32)" in source
+    assert (
+        "raw_address text" not in source
+        and "GRANT SELECT ON emailmonitor.privacy_keys" not in source
+    )
+    assert "RFC2104 HMAC-SHA256" in source
+    assert "ORDER BY id LIMIT 10" in source and "LIMIT 10" in source
+
+
+def test_source_release_fences_organization_before_nested_mutex() -> None:
+    from pathlib import Path
+
+    source = (
+        Path(__file__).resolve().parents[1] / "migrations/versions/0011_lifecycle.sql"
+    ).read_text()
+    for name in ("source_resource_claim", "source_resource_finish"):
+        body = source.split("CREATE OR REPLACE FUNCTION emailmonitor." + name + "(", 1)[1].split(
+            "END $$;", 1
+        )[0]
+        assert body.index("organizations WHERE id=p_org FOR SHARE NOWAIT") < body.index(
+            "admission_mutex WHERE id FOR UPDATE"
+        )
+        assert "EXCEPTION WHEN lock_not_available" in body
+    body = source.split("CREATE OR REPLACE FUNCTION emailmonitor.network_entitlement_allowed(", 1)[
+        1
+    ].split("END $$;", 1)[0]
+    assert body.index("organizations WHERE id=p_org FOR SHARE NOWAIT") < body.index(
+        "privacy_source_allowed(p_org)"
+    )
+    assert "EXCEPTION WHEN lock_not_available THEN RETURN false" in body
+
+
+def test_observation_deadline_alias_does_not_shadow_discovery_record() -> None:
+    from pathlib import Path
+
+    source = (
+        Path(__file__).resolve().parents[1] / "migrations/versions/0011_lifecycle.sql"
+    ).read_text()
+    body = source.split("CREATE OR REPLACE FUNCTION emailmonitor.guard_article_observation()", 1)[
+        1
+    ].split("END $$;", 1)[0]
+    assert "DECLARE d emailmonitor.discovery" in body
+    assert "lifecycle_job_deadlines deadline WHERE deadline.organization_id" in body
+    assert "lifecycle_job_deadlines d WHERE" not in body
+
+
+def test_controlled_deletion_uses_existing_successful_fixture_route() -> None:
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[3]
+    source = (root / "scripts/isolation/test_transport_acceptance.py").read_text()
+    body = source.split(
+        "def test_actual_tenant_deletion_after_tls_response_never_releases_bytes(", 1
+    )[1]
+    assert 'planned(scenario, f"https://{HOST}/tooltip.html")' in body
+    assert 'assert observed["calls"][0]["path"] == "/tooltip.html"' in body
+    assert 'target.fetch(f"https://{HOST}/tooltip.html")' in body
+    assert "/article-a.html" not in body
+
+
+def test_http_lifecycle_identifiers_decode_canonical_json_without_coercion() -> None:
+    from emailmonitor.lifecycle.models import DeletionRequest
+
+    job, grantee = uuid4(), uuid4()
+    assert (
+        DeletionRequest.model_validate({"job_id": str(job), "reason": "owner_request"}).job_id
+        == job
+    )
+    assert (
+        SupportCreate.model_validate(
+            {
+                "job_id": str(job),
+                "grantee_id": str(grantee),
+                "minutes": 1,
+                "reason": "synthetic_incident",
+            }
+        ).grantee_id
+        == grantee
+    )
+
+
+@pytest.mark.parametrize("identifier", [True, 1, "not-a-uuid", "00000000000040008000000000000001"])
+def test_http_lifecycle_identifier_refuses_noncanonical_values(identifier: object) -> None:
+    from emailmonitor.lifecycle.models import DeletionRequest
+
+    with pytest.raises(ValidationError):
+        DeletionRequest.model_validate({"job_id": identifier, "reason": "owner_request"})
+    with pytest.raises(ValidationError):
+        SupportCreate.model_validate(
+            {
+                "job_id": str(uuid4()),
+                "grantee_id": identifier,
+                "minutes": 1,
+                "reason": "synthetic_incident",
+            }
+        )
+
+
+def test_lifecycle_http_regression_uses_fixture_enabled_client() -> None:
+    import ast
+    from pathlib import Path
+
+    source = Path(__file__).with_name("test_lifecycle_tenant.py").read_text()
+    module = ast.parse(source)
+    case = next(
+        node
+        for node in module.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "test_real_lifecycle_api_has_current_csrf_role_and_cross_tenant_refusal"
+    )
+    contexts = [node for node in ast.walk(case) if isinstance(node, ast.With)]
+    assert len(contexts) == 1
+    call = contexts[0].items[0].context_expr
+    assert isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
+    assert call.func.id == "fixture_client"
+
+
+def test_broker_completion_observer_never_competes_for_lifecycle_lock() -> None:
+    import ast
+    from pathlib import Path
+
+    module = ast.parse(Path(__file__).with_name("test_lifecycle_broker.py").read_text())
+    observer = next(
+        node
+        for node in ast.walk(module)
+        if isinstance(node, ast.FunctionDef) and node.name == "complete"
+    )
+    texts = [
+        node.args[0].value
+        for node in ast.walk(observer)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "text"
+        and isinstance(node.args[0], ast.Constant)
+    ]
+    assert texts == [
+        "SELECT count(*)=1 AND bool_and(completed_at IS NOT NULL "
+        "AND purged_jobs=1) FROM emailmonitor.lifecycle_ticks "
+        "WHERE organization_id=:org"
+    ]
+    calls = [
+        node.func.attr
+        for node in ast.walk(observer)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+    ]
+    assert "tenant" not in calls and "schedule" not in calls
+    assert "connect" in calls and "scalar_one" in calls

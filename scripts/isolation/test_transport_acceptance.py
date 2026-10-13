@@ -177,7 +177,9 @@ def test_actual_dns_selected_literal_tls_family(topology: Topology, family: int)
 def test_actual_redirect_fresh_dns_and_peer(topology: Topology) -> None:
     configure(topology, "redirect")
     target = proxy(
-        topology, UUID("11111111-1111-4111-8111-111111111111"), diagnostic_transport_only=True
+        topology,
+        UUID("11111111-1111-4111-8111-111111111111"),
+        diagnostic_transport_only=True,
     )
     assert b"synthetic marker" in target.fetch(f"https://{HOST}/redirect.html")
     assert target.peers == [
@@ -187,7 +189,8 @@ def test_actual_redirect_fresh_dns_and_peer(topology: Topology) -> None:
     assert len(snapshot(topology)["queries"]) == 4
     assert len(snapshot(topology)["calls"]) == len(snapshot(topology, "fixture-b")["calls"]) == 1
     print(
-        json.dumps({"case": "redirect_dns_selected_peer_change", "peers": target.peers}), flush=True
+        json.dumps({"case": "redirect_dns_selected_peer_change", "peers": target.peers}),
+        flush=True,
     )
 
 
@@ -196,7 +199,9 @@ def test_actual_dns_whole_snapshot_denies_before_tcp(topology: Topology, mode: s
     configure(topology, mode)
     with pytest.raises(FetchDenied):
         proxy(
-            topology, UUID("11111111-1111-4111-8111-111111111111"), diagnostic_transport_only=True
+            topology,
+            UUID("11111111-1111-4111-8111-111111111111"),
+            diagnostic_transport_only=True,
         ).fetch(f"https://{HOST}/tooltip.html")
     assert snapshot(topology)["calls"] == []
     assert len(snapshot(topology)["queries"]) == 2
@@ -207,7 +212,9 @@ def test_actual_http_failure_no_retry_or_escape(topology: Topology, path: str) -
     configure(topology)
     with pytest.raises(FetchDenied):
         proxy(
-            topology, UUID("11111111-1111-4111-8111-111111111111"), diagnostic_transport_only=True
+            topology,
+            UUID("11111111-1111-4111-8111-111111111111"),
+            diagnostic_transport_only=True,
         ).fetch(f"https://{HOST}/{path}")
     assert len(snapshot(topology)["calls"]) == 1
     assert len(snapshot(topology)["queries"]) == 2
@@ -230,16 +237,22 @@ def test_actual_trusted_ca_wrong_hostname_is_not_released(topology: Topology) ->
     configure(topology, "wrong_name")
     with pytest.raises(FetchDenied):
         proxy(
-            topology, UUID("11111111-1111-4111-8111-111111111111"), diagnostic_transport_only=True
+            topology,
+            UUID("11111111-1111-4111-8111-111111111111"),
+            diagnostic_transport_only=True,
         ).fetch(f"https://{HOST}/tooltip.html")
     assert snapshot(topology)["calls"] == []
     assert len(snapshot(topology)["queries"]) == 2
 
 
-def test_actual_rebinding_cannot_re_resolve_a_selected_socket(topology: Topology) -> None:
+def test_actual_rebinding_cannot_re_resolve_a_selected_socket(
+    topology: Topology,
+) -> None:
     configure(topology, "rebinding")
     target = proxy(
-        topology, UUID("11111111-1111-4111-8111-111111111111"), diagnostic_transport_only=True
+        topology,
+        UUID("11111111-1111-4111-8111-111111111111"),
+        diagnostic_transport_only=True,
     )
     assert b"synthetic marker" in target.fetch(f"https://{HOST}/tooltip.html")
     assert target.peers == [[ENDPOINTS["fixture-a"][0], 443, HOST]]
@@ -272,7 +285,9 @@ def test_actual_browser_gateway_current_tenant_policy(
         )
         assert (
             client.post(
-                path + "/policies", headers=headers, json={"expected_version": 0, "policy": body}
+                path + "/policies",
+                headers=headers,
+                json={"expected_version": 0, "policy": body},
             ).status_code
             == 201
         )
@@ -280,7 +295,11 @@ def test_actual_browser_gateway_current_tenant_policy(
             client.post(
                 path + "/policy-state",
                 headers=headers,
-                json={"expected_version": 1, "expected_revision": 1, "state": "approved"},
+                json={
+                    "expected_version": 1,
+                    "expected_revision": 1,
+                    "state": "approved",
+                },
             ).status_code
             == 200
         )
@@ -293,7 +312,11 @@ def test_actual_browser_gateway_current_tenant_policy(
             "source_id": "synthetic-publisher",
             "original_query": "Myocardial Infarction",
         }
-        request["options"] = {"max_articles": 500, "max_search_pages": 2, "author_target": "both"}
+        request["options"] = {
+            "max_articles": 500,
+            "max_search_pages": 2,
+            "author_target": "both",
+        }
         settings = Settings(environment="test", fixture_mode=True)
         org = scenario.organizations[0]
         ledger = Ledger(scenario.foundation.database, token, settings)
@@ -329,7 +352,11 @@ def test_actual_browser_gateway_current_tenant_policy(
         assert execution.snapshot(org, job).state == "running"
         extraction.prepare(org, job, f"https://{HOST}/tooltip.html", browser=True)
         allow = TenantFixtureAuthorization(
-            scenario.foundation.database, token, scenario.organizations[0], "synthetic-publisher", 1
+            scenario.foundation.database,
+            token,
+            scenario.organizations[0],
+            "synthetic-publisher",
+            1,
         )
         target = proxy(topology, scenario.organizations[0], allow)
         mediator = BrowserProxyMediator(target)
@@ -340,13 +367,21 @@ def test_actual_browser_gateway_current_tenant_policy(
         assert article.candidates[0].raw_address == "elena.park@example.org"
         assert article.candidates[0].author_positions == [1]
         saved = extraction.commit(
-            org, job, article, expected_revision=3, source_digest=DIGESTS["tooltip.html"]
+            org,
+            job,
+            article,
+            expected_revision=3,
+            source_digest=DIGESTS["tooltip.html"],
         )
         assert saved["revision"] == 2
         assert ArticleObservation.model_validate(saved["observation"]).status == "observed"
         assert (
             extraction.commit(
-                org, job, article, expected_revision=3, source_digest=DIGESTS["tooltip.html"]
+                org,
+                job,
+                article,
+                expected_revision=3,
+                source_digest=DIGESTS["tooltip.html"],
             )["revision"]
             == 2
         )
@@ -394,7 +429,11 @@ def test_actual_browser_gateway_current_tenant_policy(
         )
         assert mediator.accepted == 2 and mediator.denied >= 7
         denied = TenantFixtureAuthorization(
-            scenario.foundation.database, token, scenario.organizations[1], "synthetic-publisher", 1
+            scenario.foundation.database,
+            token,
+            scenario.organizations[1],
+            "synthetic-publisher",
+            1,
         )
         with pytest.raises(FetchDenied):
             proxy(topology, scenario.organizations[1], denied).fetch(
@@ -403,7 +442,11 @@ def test_actual_browser_gateway_current_tenant_policy(
         assert len(snapshot(topology)["calls"]) == 2
         assert len(snapshot(topology)["queries"]) == 4
         stale = TenantFixtureAuthorization(
-            scenario.foundation.database, token, scenario.organizations[0], "synthetic-publisher", 2
+            scenario.foundation.database,
+            token,
+            scenario.organizations[0],
+            "synthetic-publisher",
+            2,
         )
         with pytest.raises(FetchDenied):
             proxy(topology, scenario.organizations[0], stale).fetch(
@@ -423,7 +466,11 @@ def test_actual_browser_gateway_current_tenant_policy(
                 client.post(
                     path + "/policy-state",
                     headers=headers,
-                    json={"expected_version": 1, "expected_revision": 2, "state": "revoked"},
+                    json={
+                        "expected_version": 1,
+                        "expected_revision": 2,
+                        "state": "revoked",
+                    },
                 ).status_code
                 == 200
             )
@@ -522,7 +569,10 @@ def test_actual_blocked_source_preserves_another_tenants_processing_and_export_p
         export = results.create(other_org, options(job), str(uuid4()))
         row = results.pending(other_org)[0]
         lease = results.claim(
-            other_org, export.id, UUID(str(row["event_id"])), int(str(row["generation"]))
+            other_org,
+            export.id,
+            UUID(str(row["event_id"])),
+            int(str(row["generation"])),
         )
         assert lease is not None and results.process(lease)
         assert results.download(other_org, export.id).body
@@ -551,6 +601,56 @@ def test_actual_blocked_source_preserves_another_tenants_processing_and_export_p
                 "actual_source_attempts": 2,
                 "other_tenant_settled_units": 4,
                 "private_export_completed": True,
+            }
+        ),
+        flush=True,
+    )
+
+
+def test_actual_tenant_deletion_after_tls_response_never_releases_bytes(
+    topology: Topology, scenario: Scenario
+) -> None:
+    from emailmonitor.lifecycle.models import DeletionRequest
+    from emailmonitor.lifecycle.service import Lifecycle
+    from test_progress_tenant import planned
+
+    configure(topology)
+    progress, job = planned(scenario, f"https://{HOST}/tooltip.html")
+    org = scenario.organizations[0]
+    authorization = TenantFixtureAuthorization(
+        progress.database, progress.token, org, "synthetic-publisher", 1
+    )
+    service = Lifecycle(progress.database, progress.token, progress.settings)
+    fenced: list[UUID] = []
+
+    def delete_after_receipt() -> None:
+        observed = snapshot(topology)
+        assert len(observed["calls"]) == 1
+        assert observed["calls"][0]["path"] == "/tooltip.html"
+        receipt = service.stage(org, DeletionRequest(job_id=None, reason="privacy_request"))
+        assert receipt.stage == "fenced"
+        fenced.append(receipt.id)
+
+    target = proxy(
+        topology,
+        org,
+        authorization,
+        resources=CompletionResources(authorization.resources, delete_after_receipt),
+    )
+    with pytest.raises(FetchDenied):
+        target.fetch(f"https://{HOST}/tooltip.html")
+    assert len(fenced) == 1 and len(snapshot(topology)["calls"]) == 1
+    queries = len(snapshot(topology)["queries"])
+    with pytest.raises(FetchDenied):
+        proxy(topology, org, authorization).fetch(f"https://{HOST}/tooltip.html")
+    assert len(snapshot(topology)["queries"]) == queries
+    assert service.purge(org, fenced[0]).stage == "purged"
+    print(
+        json.dumps(
+            {
+                "tenant_deletion_before_release": True,
+                "actual_received_responses": 1,
+                "no_post_deletion_dns": True,
             }
         ),
         flush=True,

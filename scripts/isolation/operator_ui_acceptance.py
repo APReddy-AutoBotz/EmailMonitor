@@ -9,6 +9,7 @@ import os
 import re
 import socket
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
@@ -20,8 +21,9 @@ from operator_ui_protocol import (
     asset_manifest,
     failure_reason,
     route_failure_reason,
+    route_headers_reason,
 )
-from playwright.async_api import Error, Locator, Page, Route, async_playwright, expect
+from playwright.async_api import Error, Locator, Page, Request, Route, async_playwright, expect
 
 ORIGIN = "https://app.example.test"
 HEADERS = {
@@ -69,8 +71,10 @@ class Channel:
     async def request(self, message: dict[str, object]) -> dict[str, Any]:
         deadline = asyncio.get_running_loop().time() + RPC_DEADLINE
         queued = self.admitted >= 8
-        if self.identifier >= 512 or self.admitted >= 16:
-            raise RuntimeError("UI diagnostic concurrency/request cap exceeded")
+        if self.identifier >= 512:
+            raise RuntimeError("UI diagnostic request cap exceeded")
+        if self.admitted >= 16:
+            raise RuntimeError("UI diagnostic admission cap exceeded")
         self.admitted += 1
         if queued:
             self.waiting += 1
@@ -83,7 +87,7 @@ class Channel:
                 self.waiting -= 1
                 queued = False
             if self.identifier >= 512:
-                raise RuntimeError("UI diagnostic concurrency/request cap exceeded")
+                raise RuntimeError("UI diagnostic request cap exceeded")
             self.identifier += 1
             identifier = self.identifier
             future: asyncio.Future[dict[str, Any]] = asyncio.get_running_loop().create_future()
@@ -106,6 +110,20 @@ class Channel:
             self.admitted -= 1
             if acquired:
                 self.capacity.release()
+
+
+async def api_headers(incoming: Request, failure: Callable[[str, str], None]) -> dict[str, str]:
+    """Keep actual sensitive-header retrieval; report only fixed failure metadata."""
+    try:
+        return {
+            key: value for key, value in (await incoming.all_headers()).items() if key in HEADERS
+        }
+    except (Error, RuntimeError) as error:
+        failure(
+            "Error" if isinstance(error, Error) else "RuntimeError",
+            route_headers_reason(incoming.failure, error),
+        )
+        raise
 
 
 async def focus(page: Page, target: Locator) -> None:
@@ -228,6 +246,20 @@ async def main() -> None:
             if "--no-sandbox" in command["arguments"]:
                 raise RuntimeError("Chromium sandbox must remain enabled")
 
+            def header_failure(error: str, reason: str) -> None:
+                print(
+                    json.dumps(
+                        {
+                            "kind": "failure",
+                            "stage": stage,
+                            "error": error,
+                            "reason": reason,
+                            "api_statuses": api_statuses,
+                        }
+                    ),
+                    flush=True,
+                )
+
             async def route_request(route: Route) -> None:
                 nonlocal accepted
                 incoming = route.request
@@ -241,11 +273,7 @@ async def main() -> None:
                     await route.abort("blockedbyclient")
                     return
                 if parsed.path.startswith("/api/v1/"):
-                    headers = {
-                        key: value
-                        for key, value in (await incoming.all_headers()).items()
-                        if key in HEADERS
-                    }
+                    headers = await api_headers(incoming, header_failure)
                     reply = await channel.request(
                         {
                             "kind": "request",

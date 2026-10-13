@@ -1,0 +1,370 @@
+{
+  "$defs": {
+    "DeletionReceipt": {
+      "additionalProperties": false,
+      "properties": {
+        "organization_id": {
+          "format": "uuid",
+          "title": "Organization Id",
+          "type": "string"
+        },
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "job_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Job Id"
+        },
+        "reason": {
+          "enum": [
+            "privacy_request",
+            "retention_expired",
+            "owner_request"
+          ],
+          "title": "Reason",
+          "type": "string"
+        },
+        "stage": {
+          "enum": [
+            "fenced",
+            "purged"
+          ],
+          "title": "Stage",
+          "type": "string"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "purged_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Purged At"
+        },
+        "backup_replay_required": {
+          "const": true,
+          "default": true,
+          "title": "Backup Replay Required",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "organization_id",
+        "id",
+        "job_id",
+        "reason",
+        "stage",
+        "created_at",
+        "purged_at"
+      ],
+      "title": "DeletionReceipt",
+      "type": "object"
+    },
+    "Retention": {
+      "additionalProperties": false,
+      "properties": {
+        "raw_hours": {
+          "default": 24,
+          "maximum": 24,
+          "minimum": 0,
+          "title": "Raw Hours",
+          "type": "integer"
+        },
+        "excerpt_days": {
+          "default": 30,
+          "maximum": 30,
+          "minimum": 0,
+          "title": "Excerpt Days",
+          "type": "integer"
+        },
+        "contact_days": {
+          "default": 90,
+          "maximum": 90,
+          "minimum": 0,
+          "title": "Contact Days",
+          "type": "integer"
+        },
+        "export_hours": {
+          "default": 24,
+          "maximum": 24,
+          "minimum": 0,
+          "title": "Export Hours",
+          "type": "integer"
+        },
+        "audit_days": {
+          "default": 365,
+          "maximum": 365,
+          "minimum": 1,
+          "title": "Audit Days",
+          "type": "integer"
+        },
+        "idempotency_hours": {
+          "default": 24,
+          "maximum": 24,
+          "minimum": 1,
+          "title": "Idempotency Hours",
+          "type": "integer"
+        }
+      },
+      "title": "Retention",
+      "type": "object"
+    },
+    "RetentionState": {
+      "additionalProperties": false,
+      "properties": {
+        "organization_id": {
+          "format": "uuid",
+          "title": "Organization Id",
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "retention": {
+          "$ref": "#/$defs/Retention"
+        },
+        "next_due_at": {
+          "format": "date-time",
+          "title": "Next Due At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "organization_id",
+        "revision",
+        "retention",
+        "next_due_at"
+      ],
+      "title": "RetentionState",
+      "type": "object"
+    },
+    "SupportContext": {
+      "additionalProperties": false,
+      "properties": {
+        "organization_id": {
+          "format": "uuid",
+          "title": "Organization Id",
+          "type": "string"
+        },
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "grantee_id": {
+          "format": "uuid",
+          "title": "Grantee Id",
+          "type": "string"
+        },
+        "job_id": {
+          "format": "uuid",
+          "title": "Job Id",
+          "type": "string"
+        },
+        "reason": {
+          "enum": [
+            "synthetic_incident",
+            "synthetic_privacy_check"
+          ],
+          "title": "Reason",
+          "type": "string"
+        },
+        "expires_at": {
+          "format": "date-time",
+          "title": "Expires At",
+          "type": "string"
+        },
+        "revoked_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Revoked At"
+        }
+      },
+      "required": [
+        "organization_id",
+        "id",
+        "grantee_id",
+        "job_id",
+        "reason",
+        "expires_at",
+        "revoked_at"
+      ],
+      "title": "SupportContext",
+      "type": "object"
+    },
+    "SupportInspection": {
+      "additionalProperties": false,
+      "properties": {
+        "organization_id": {
+          "format": "uuid",
+          "title": "Organization Id",
+          "type": "string"
+        },
+        "context_id": {
+          "format": "uuid",
+          "title": "Context Id",
+          "type": "string"
+        },
+        "job_id": {
+          "format": "uuid",
+          "title": "Job Id",
+          "type": "string"
+        },
+        "job_state": {
+          "enum": [
+            "draft",
+            "awaiting_approval",
+            "ready",
+            "queued",
+            "running",
+            "pausing",
+            "paused",
+            "cancelling",
+            "cancelled",
+            "completed",
+            "completed_partial",
+            "failed"
+          ],
+          "title": "Job State",
+          "type": "string"
+        },
+        "generation": {
+          "minimum": 1,
+          "title": "Generation",
+          "type": "integer"
+        },
+        "retained_observations": {
+          "minimum": 0,
+          "title": "Retained Observations",
+          "type": "integer"
+        },
+        "content_access": {
+          "const": false,
+          "default": false,
+          "title": "Content Access",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "organization_id",
+        "context_id",
+        "job_id",
+        "job_state",
+        "generation",
+        "retained_observations"
+      ],
+      "title": "SupportInspection",
+      "type": "object"
+    },
+    "Suppression": {
+      "additionalProperties": false,
+      "properties": {
+        "organization_id": {
+          "format": "uuid",
+          "title": "Organization Id",
+          "type": "string"
+        },
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "source",
+            "domain",
+            "contact"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "reason": {
+          "enum": [
+            "privacy_request",
+            "source_restriction"
+          ],
+          "title": "Reason",
+          "type": "string"
+        },
+        "active": {
+          "title": "Active",
+          "type": "boolean"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "withdrawn_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Withdrawn At"
+        }
+      },
+      "required": [
+        "organization_id",
+        "id",
+        "kind",
+        "reason",
+        "active",
+        "created_at",
+        "withdrawn_at"
+      ],
+      "title": "Suppression",
+      "type": "object"
+    }
+  },
+  "anyOf": [
+    {
+      "$ref": "#/$defs/DeletionReceipt"
+    },
+    {
+      "$ref": "#/$defs/RetentionState"
+    },
+    {
+      "$ref": "#/$defs/Suppression"
+    },
+    {
+      "$ref": "#/$defs/SupportContext"
+    },
+    {
+      "$ref": "#/$defs/SupportInspection"
+    }
+  ],
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://emailmonitor.example/contracts/lifecycle-receipt.schema.json"
+}

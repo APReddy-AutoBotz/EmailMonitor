@@ -149,6 +149,17 @@ def create_worker(config: FixtureWorkerConfig) -> tuple[Any, Ledger]:
         if committed and config.exit_after_commit:
             os._exit(73)
 
+    def retention(body: dict[str, object]) -> None:
+        from emailmonitor.lifecycle.broker import process
+        from emailmonitor.lifecycle.service import Lifecycle
+
+        process(
+            Lifecycle(ledger.database, config.session_token, ledger.settings),
+            UUID(config.organization),
+            body,
+        )
+
+    application.task(name="emailmonitor.fixture.retention", typing=False)(retention)
     application.task(name="emailmonitor.fixture.export", typing=False)(export)
     application.task(name="emailmonitor.fixture.execute", typing=False)(execute)
     application.task(name="emailmonitor.fixture.discover", typing=False)(discover)

@@ -1,3 +1,5 @@
+> Current handoff: scoped synthetic EM-013 own-head gates are closed. EM-014 is the active candidate, not accepted; see [ledger](docs/22-implementation-status.md) and [runbook43](docs/43-offline-lifecycle-runbook.md). Preserve existing review/CI gates and live/production refusal. Earlier milestone notes below are historical.
+
 # Codex implementation handoff
 
 **Baseline:** 2026-10-08. **Current phase:** synthetic/offline foundations through EM-009 independently verified in unmerged Drafts; the EM-009 documentation checkpoint requires its own CI before bounded offline EM-010. Read the current [status ledger](docs/22-implementation-status.md) and task evidence before selecting the next dependency-ready slice.

@@ -25,7 +25,7 @@ The repository documentation validator checks local Markdown targets, JSON synta
 | EM-011 | VERIFIED SYNTHETIC/OFFLINE FOUNDATION IN DRAFT — unmerged | [PR16](https://github.com/APReddy-AutoBotz/EmailMonitor/pull/16), reviewed treeca84f013 implementation1035/no skips and all-five CI; documentation checkpoint head9fd9fbeb/treeee54a2b3 passed its own1035/no-skip application and controlled12/browser/parser/docs; [evidence](../reports/em012-validation.md) |
 | EM-012 | VERIFIED SYNTHETIC/OFFLINE FOUNDATION IN DRAFT — unmerged | [PR17](https://github.com/APReddy-AutoBotz/EmailMonitor/pull/17), head6a3c607c/treea513d96c; independently reconciled1132/no-skip application/one alias-body warning, actual keyboard UI1, controlled12/browser/parser/docs; [evidence](../reports/em012-validation.md). This checkpoint requires its own six exact-head gates before EM-013 |
 | EM-013 | VERIFIED SYNTHETIC/OFFLINE FOUNDATION IN DRAFT — unmerged | [PR18](https://github.com/APReddy-AutoBotz/EmailMonitor/pull/18), head216a8c3b/treebb37d8e7; independently reconciled1267/no-skip application, controlled13, actual keyboard UI1/browser/parser/docs; [evidence](../reports/em013-validation.md). Own six checkpoint gates required before EM-014 |
-| EM-014 | NOT STARTED | EM-009/011/013 |
+| EM-014 | VERIFIED SYNTHETIC/OFFLINE FOUNDATION IN DRAFT — unmerged | [PR19](https://github.com/APReddy-AutoBotz/EmailMonitor/pull/19), head73a1043f/tree73dea867; independently reconciled1386/no-skip application/one alias-batch_id warning, controlled14, actual keyboardUI1/browser/parser/docs; [evidence](../reports/em014-validation.md). Own six checkpoint gates and genuine source inputs required before EM-015 |
 | EM-015 | NOT STARTED | Technical gates plus actual source permissions |
 | EM-016 | NOT STARTED | EM-012/015 and authorized benchmark |
 | EM-017 | NOT STARTED | EM-013/014 plus approved staging infrastructure |
@@ -162,3 +162,39 @@ Head216a8c3b/treebb37d8e7 and merge84673c51 passed all six exact-head gates afte
 
 
 The EM-013 documentation checkpoint head5ff0daad retained failed browser readiness/UI wait_jobs own gates despite controlled/parser/docs success. Bounded readiness cancellation and fixed job-state-count diagnostics are in progress; the next reviewed exact head must pass all six gates before EM-014. Historical implementation acceptance remains scope-qualified and does not waive these refusals; [report](../reports/em013-validation.md).
+
+
+## EM-013 checkpoint-own closure and EM-014 candidate
+
+Independent authoritative reconciliation closed all six own-head gates at845df581/tree3c3a0fa6/merge239c470c:1285/no-skip application, controlled13, actualUI1 and browser/parser/docs. Exact receipts are recorded in [EM-014 report](../reports/em014-validation.md); bounded offline EM-014 is now dependency-ready. Earlier intermittent causes and EM-WARN-01 remain open/unproven.
+
+EM-014 is IN PROGRESS: private tenant-keyed suppressions, current retention/tombstone RLS, staged synthetic purge/artifact invalidation, bounded scheduled sweeps and audited existing-member metadata support. [Runbook43](43-offline-lifecycle-runbook.md) records scope/rollback/restore limits. Corrected normal/empty-install checks pass1131/218 explicit skips21.29s/24.68s,28 React tests and all static/docs/inventory/build gates. Independent exact-tree review and all six actual own-head gates remain pending, including1349/no-skip application and controlled14; no real purge, external grant, live/production enablement or acceptance is claimed.
+
+Independent EM-014 review corrections address support identity locking, SQL privacy grammar parity, final source/privacy organization serialization and precise residual purge metadata. Held-transaction regressions remain actual-PG CI requirements; the corrected exact tree must be independently cleared before publication.
+
+EM-014 first Draft PR19 actual checkpoint failed: application1246/103 plus disclosed alias warning, controlled11/3 and UI failure; browser/parser/docs succeeded. SQL deadline alias and three fixture/test argument corrections are locally checked1133/21822.10s normal/24.38s empty-install with28React/full gates; independent corrected review and actual1351/no-skip/controlled14/all six gates remain pending. [Report](../reports/em014-validation.md) preserves exact failure evidence; no acceptance is inferred.
+
+EM-014 second actual checkpoint: controlled14/82.44s proves receipt-backed deletion-before-release; browser/parser/docs passed. Application1343/8 failed and UI header callback failed. Refusal-contract tests, canonical JSON UUID decoding and fixed fail-closed header diagnostics are corrected locally1143/21822.01s normal/25.75s empty-install,28React/full gates. Separate exact-tree reviews and actual1361/no-skip/all six gates remain mandatory; [failure evidence](../reports/em014-validation.md).
+
+
+EM-014 third actual checkpoint: application1360/1 failed489.70s due to a fixture-disabled HTTP test client; controlled14/83.69s and browser/parser/docs passed, UI still failed with fixed unclassified RuntimeError. Correction reuses the existing fixture-enabled test client and adds closed fail-closed driver-boundary classifications without runtime permission/security/cap changes. Final normal1152/21822.37s and genuinely empty1152/21824.08s pass28React/full gates; exact-tree review and actual1370/no-skip/all six gates remain pending; [evidence](../reports/em014-validation.md). UI cause and historical EM-WARN-01 remain unproven/open.
+
+
+EM-014 fourth checkpoint application1370/no skips/no pytest warning summary344.80s and four other gates passed; UI failed the unchanged8s completion assertion with three published/unattempted articles pending. Timeout-only passive owned parse-queue counts use a fixed500ms child-process deadline/no retry and worker-live status, preserving completion/deadline/security predicates; cause remains unproven. The socket-only candidate is superseded after a diagnostic-bound finding; normal1164/21822.64s and genuinely empty1164/21824.48s pass28React/full gates; exact-tree review and actual1382/no-skip/six gates remain pending; [evidence](../reports/em014-validation.md).
+
+
+EM-014 current diagnostic run again failed UI aturl_worker before timeout queue evidence. Pinned internal rawRequestHeaders calls produce the exact ': ' error prefix; a bounded classifier correction covers it with installed-source positive and nested/unknown-prefix negative regressions, preserving failure/rethrow and all caps. Normal1166/21822.10s and genuinely empty1166/21825.47s pass28React/full gates; exact-tree review and actual1384/no-skip/six own-head gates remain pending; [report](../reports/em014-validation.md).
+
+
+EM-014 actual UI now identifies the owned combined rpc_capacity refusal. A diagnostic-only split distinguishes the unchanged512 request cap from16 admitted cap, with actual Channel-body pure regressions and conserved cleanup; no frontend/cap/deadline change is inferred before the branch is known. Normal1168/21822.57s and genuinely empty1168/21825.31s pass28React/full gates; exact-tree review and actual1386/no-skip/six own-head gates remain pending; [evidence](../reports/em014-validation.md).
+
+
+EM-014 latest UI failure reachesempty_contacts and identifies the unchanged16-admitted guard in owned source frames. A bounded250ms keyboard-search coalescing correction keeps immediate input feedback, hides pending-filter contact data and cancels old-scope timers; pure scheduler checks do not substitute for actual UI evidence. Normal1168/21822.95s and genuinely empty1168/21824.77s pass31React/full gates; exact-tree review and actual1386/no-skip/31frontend/six own-head gates remain pending; [report](../reports/em014-validation.md).
+
+
+## EM-014 independently verified synthetic lifecycle foundation
+
+Independent raw Git/all-six-job reconciliation supports scoped VERIFIED IN DRAFT at73a1043f/tree73dea867/merge9ac9b930, exact845df581+73a1043f parents. Application1386/no skips/one alias-batch_id warning471.50s includes30 actual lifecycle SQL and one real broker tick; controlled14/96.03s proves receipt-backed deletion before release, UI1/64.85s proves actual PG/broker keyboard workflow and4478-byte private export, browser/parser/docs passed. [Report](../reports/em014-validation.md) preserves source findings, failed checkpoints, corrections and exclusions. EM-WARN-01 and unrelated intermittent causes remain open. This documentation checkpoint requires its own six exact-head gates; EM-015 additionally needs genuine source/permission/access/usage/retention/certification inputs. No merge, real purge, external support grant, actual backup restore or live/production enablement is implied.
+
+
+EM-014 documentation checkpoint own application gate failed1385/1 after its mutating broker completion observer collided with the worker's intended organization NOWAIT fence; five other gates passed. A test-only read-only committed-tick observer retains exactly-one purge, duplicate delivery and post-worker current-scope assertions. Prior scoped implementation evidence remains verified, but checkpoint closure is pending corrected normal/fresh/review and actual1387/no-skip/six gates; [report](../reports/em014-validation.md). No runtime or security change.

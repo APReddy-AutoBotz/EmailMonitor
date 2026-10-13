@@ -1,3 +1,17 @@
+## 2026-10-13 — EM-014 scoped synthetic lifecycle foundation verified in Draft
+
+- Independently reconcile reviewed head/merge/tree and all six authoritative full job logs
+- Verify1386/no-skip application,30 lifecycle SQL/one real-broker tick, controlled14 deletion-before-release and actual keyboardUI1/private export
+- Preserve source/fixture/HTTP/driver/search correction history, disclosed alias-batch_id warning, synthetic exclusions and checkpoint-own gates
+- Keep EM-015 dependent on genuine publisher/source permission inputs; no live access, real purge, external support, merge or production enablement
+
+## 2026-10-13 — EM-014 synthetic lifecycle candidate
+
+- Close independently verified EM-013 own-gate dependency and preserve unresolved historical warning/flakiness
+- Add private privacy/retention/tombstone fences, staged disposable-content purge and artifact invalidation
+- Add bounded identifier-only sweep/replay and audited existing-member expiring metadata support
+- Require independent review and actual SQL/broker/deletion-before-release plus all six exact-head gates; acceptance remains pending
+
 ## 2026-10-13 — EM-013 scoped synthetic admission foundation verified in Draft
 
 - Independently reconcile exact reviewed head/merge/tree and six full authoritative job logs

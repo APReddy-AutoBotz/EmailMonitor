@@ -7,8 +7,10 @@ from dataclasses import dataclass
 from uuid import UUID
 
 from sqlalchemy import Connection, Engine, create_engine, text
+from sqlalchemy.exc import DBAPIError
 
 from emailmonitor.administration.binding import apply as apply_fixture_binding
+from emailmonitor.lifecycle.errors import lifecycle_denied
 from emailmonitor.organizations.roles import ROLE_CAPABILITIES, Capability, Role
 from emailmonitor.progress.binding import apply as apply_work_binding
 
@@ -65,8 +67,13 @@ class _ConnectionPool:
 
     @contextmanager
     def transaction(self) -> Iterator[Connection]:
-        with self.engine.begin() as connection:
-            yield connection
+        try:
+            with self.engine.begin() as connection:
+                yield connection
+        except DBAPIError as error:
+            if lifecycle_denied(error):
+                raise AuthorizationDenied() from None
+            raise
 
 
 class AuthenticationDatabase(_ConnectionPool):
