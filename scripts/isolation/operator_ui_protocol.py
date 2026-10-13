@@ -259,6 +259,9 @@ def route_headers_reason(failure: object, error: object = None) -> str:
             # API prefix when replaying a prior callback error at all_headers.
             if message.startswith("Request.all_headers: "):
                 message = message.removeprefix("Request.all_headers: ")
+            elif message.startswith(": "):
+                # rawRequestHeaders is_internal=True clears the pinned apiName.
+                message = message.removeprefix(": ")
             if message == "UI diagnostic concurrency/request cap exceeded":
                 return "rpc_capacity"
             if message in {

@@ -634,3 +634,30 @@ def test_owned_queue_probe_actual_stalled_child_is_terminated_without_network(
     started = time.monotonic()
     assert probe.observe("pyamqp://synthetic@127.0.0.1:5672//", "em-fixture-owned") is None
     assert time.monotonic() - started < 2
+
+
+def test_header_classifier_handles_actual_pinned_internal_api_prefix() -> None:
+    from operator_ui_protocol import route_headers_reason
+    from playwright._impl._connection import _attach_api_call_information
+    from playwright._impl._errors import rewrite_error
+
+    stack = _attach_api_call_information(
+        {"frames": [], "apiName": "Request.all_headers", "title": None}, True, None
+    )
+    assert stack["apiName"] == ""
+    original = RuntimeError("UI diagnostic concurrency/request cap exceeded")
+    wrapped = rewrite_error(original, f"{stack['apiName']}: {original}")
+    assert type(wrapped) is RuntimeError
+    assert route_headers_reason(None, wrapped) == "rpc_capacity"
+
+
+def test_header_classifier_does_not_strip_nested_or_unknown_prefixes() -> None:
+    from operator_ui_protocol import route_headers_reason
+
+    for prefix in (": : ", "Unknown.api: ", "Request.all_headers: : "):
+        assert (
+            route_headers_reason(
+                None, RuntimeError(prefix + "UI diagnostic concurrency/request cap exceeded")
+            )
+            == "route_headers_unclassified"
+        )

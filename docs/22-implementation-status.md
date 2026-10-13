@@ -181,3 +181,6 @@ EM-014 third actual checkpoint: application1360/1 failed489.70s due to a fixture
 
 
 EM-014 fourth checkpoint application1370/no skips/no pytest warning summary344.80s and four other gates passed; UI failed the unchanged8s completion assertion with three published/unattempted articles pending. Timeout-only passive owned parse-queue counts use a fixed500ms child-process deadline/no retry and worker-live status, preserving completion/deadline/security predicates; cause remains unproven. The socket-only candidate is superseded after a diagnostic-bound finding; normal1164/21822.64s and genuinely empty1164/21824.48s pass28React/full gates; exact-tree review and actual1382/no-skip/six gates remain pending; [evidence](../reports/em014-validation.md).
+
+
+EM-014 current diagnostic run again failed UI aturl_worker before timeout queue evidence. Pinned internal rawRequestHeaders calls produce the exact ': ' error prefix; a bounded classifier correction covers it with installed-source positive and nested/unknown-prefix negative regressions, preserving failure/rethrow and all caps. Normal1166/21822.10s and genuinely empty1166/21825.47s pass28React/full gates; exact-tree review and actual1384/no-skip/six own-head gates remain pending; [report](../reports/em014-validation.md).
