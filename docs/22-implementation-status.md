@@ -162,3 +162,12 @@ Head216a8c3b/treebb37d8e7 and merge84673c51 passed all six exact-head gates afte
 
 
 The EM-013 documentation checkpoint head5ff0daad retained failed browser readiness/UI wait_jobs own gates despite controlled/parser/docs success. Bounded readiness cancellation and fixed job-state-count diagnostics are in progress; the next reviewed exact head must pass all six gates before EM-014. Historical implementation acceptance remains scope-qualified and does not waive these refusals; [report](../reports/em013-validation.md).
+
+
+## EM-013 checkpoint-own closure and EM-014 candidate
+
+Independent authoritative reconciliation closed all six own-head gates at845df581/tree3c3a0fa6/merge239c470c:1285/no-skip application, controlled13, actualUI1 and browser/parser/docs. Exact receipts are recorded in [EM-014 report](../reports/em014-validation.md); bounded offline EM-014 is now dependency-ready. Earlier intermittent causes and EM-WARN-01 remain open/unproven.
+
+EM-014 is IN PROGRESS: private tenant-keyed suppressions, current retention/tombstone RLS, staged synthetic purge/artifact invalidation, bounded scheduled sweeps and audited existing-member metadata support. [Runbook43](43-offline-lifecycle-runbook.md) records scope/rollback/restore limits. Corrected normal/empty-install checks pass1131/218 explicit skips21.29s/24.68s,28 React tests and all static/docs/inventory/build gates. Independent exact-tree review and all six actual own-head gates remain pending, including1349/no-skip application and controlled14; no real purge, external grant, live/production enablement or acceptance is claimed.
+
+Independent EM-014 review corrections address support identity locking, SQL privacy grammar parity, final source/privacy organization serialization and precise residual purge metadata. Held-transaction regressions remain actual-PG CI requirements; the corrected exact tree must be independently cleared before publication.

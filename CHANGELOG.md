@@ -1,3 +1,10 @@
+## 2026-10-13 — EM-014 synthetic lifecycle candidate
+
+- Close independently verified EM-013 own-gate dependency and preserve unresolved historical warning/flakiness
+- Add private privacy/retention/tombstone fences, staged disposable-content purge and artifact invalidation
+- Add bounded identifier-only sweep/replay and audited existing-member expiring metadata support
+- Require independent review and actual SQL/broker/deletion-before-release plus all six exact-head gates; acceptance remains pending
+
 ## 2026-10-13 — EM-013 scoped synthetic admission foundation verified in Draft
 
 - Independently reconcile exact reviewed head/merge/tree and six full authoritative job logs

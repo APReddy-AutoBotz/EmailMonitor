@@ -17,6 +17,7 @@ from emailmonitor.associations.api import association_router
 from emailmonitor.config import Settings
 from emailmonitor.identity.oidc import AuthenticationDenied, OIDCProvider
 from emailmonitor.jobs.api import job_router
+from emailmonitor.lifecycle.api import lifecycle_router
 from emailmonitor.operator.api import operator_router
 from emailmonitor.organizations.database import (
     AuthenticationDatabase,
@@ -463,6 +464,7 @@ AND identity_id=:actor
                 )
                 return {"status": body.status, "row_version": body.expected_revision + 1}
 
+        router.include_router(lifecycle_router(self.database, token, csrf, settings))
         router.include_router(administration_router(self.database, token, csrf, settings))
         router.include_router(operator_router(self.database, token, csrf, audit))
         router.include_router(source_router(self.database, token, csrf, audit))

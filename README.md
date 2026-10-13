@@ -1,3 +1,5 @@
+> Current implementation: unmerged synthetic/offline foundations are verified through EM-013. EM-014 lifecycle work is a pending candidate. See [status ledger](docs/22-implementation-status.md), [operator runbook](docs/41-offline-operator-ui-runbook.md) and [lifecycle runbook](docs/43-offline-lifecycle-runbook.md) for current capabilities and limits; older milestone summaries below are historical.
+
 # EmailMonitor
 
 **Academic contact discovery and extraction for multiple organizations.**

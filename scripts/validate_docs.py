@@ -88,6 +88,11 @@ def main() -> int:
             errors.append(f'{path.name}: invalid schema: {exc}')
 
     examples = {
+        'lifecycle-retention.json': 'lifecycle-request.schema.json',
+        'lifecycle-suppression.json': 'lifecycle-request.schema.json',
+        'lifecycle-deletion.json': 'lifecycle-request.schema.json',
+        'lifecycle-support.json': 'lifecycle-request.schema.json',
+        'lifecycle-receipt.json': 'lifecycle-receipt.schema.json',
         'keyword-job.json': 'job-request.schema.json',
         'url-job.json': 'job-request.schema.json',
         'contact-record.json': 'contact-record.schema.json',
