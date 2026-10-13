@@ -21,7 +21,13 @@ from cryptography.x509.oid import NameOID
 from initialize_ci_ipv6 import initialize, require_disposable_ci
 from run_browser_acceptance import PAGE
 from tls_fixture_server import certificate
-from transport_host import validate_owned_host
+from transport_host import (
+    OwnedDadPending,
+    observe_owned_host,
+    remaining_read_budget,
+    settle_owned_dad,
+    validate_owned_host,
+)
 from transport_manifest import ENDPOINTS, IPAM_GATEWAYS, V4_SUBNET, V6_SUBNET
 from transport_rpc import OwnedProcess
 
@@ -94,9 +100,9 @@ def remove_owned(kind: str, name: str, owner: str) -> None:
         raise RuntimeError("Owned resource remains after cleanup")
 
 
-def ip(*arguments: str) -> list[dict[str, Any]]:
+def ip(*arguments: str, timeout: float = 10) -> list[dict[str, Any]]:
     result = subprocess.run(
-        ["ip", "-j", *arguments], capture_output=True, text=True, check=True, timeout=10
+        ["ip", "-j", *arguments], capture_output=True, text=True, check=True, timeout=timeout
     )
     value = json.loads(result.stdout)
     if type(value) is not list:
@@ -111,10 +117,19 @@ def overlaps(value: str) -> bool:
     )
 
 
-def host_baseline() -> dict[str, object]:
-    addresses = ip("address", "show")
-    routes = ip("-4", "route", "show", "table", "all") + ip("-6", "route", "show", "table", "all")
-    rules = ip("-4", "rule", "show") + ip("-6", "rule", "show")
+def host_baseline(deadline: float | None = None) -> dict[str, object]:
+    def read_ip(*arguments: str) -> list[dict[str, Any]]:
+        return (
+            ip(*arguments)
+            if deadline is None
+            else ip(*arguments, timeout=min(10, remaining_read_budget(deadline)))
+        )
+
+    addresses = read_ip("address", "show")
+    routes = read_ip("-4", "route", "show", "table", "all") + read_ip(
+        "-6", "route", "show", "table", "all"
+    )
+    rules = read_ip("-4", "rule", "show") + read_ip("-6", "rule", "show")
     for interface in addresses:
         for address in interface.get("addr_info", []):
             if overlaps(str(address["local"]) + "/" + str(address["prefixlen"])):
@@ -560,6 +575,7 @@ class Topology:
                 "guest_ifindex": ready["evidence"]["guest_ifindex"],
             }
             print(json.dumps(ready), flush=True)
+        settle_owned_dad(lambda deadline: self.inspect(allow_pending=True, deadline=deadline))
         self.inspect()
         for role, process in self.processes.items():
             deadline = time.monotonic() + 3
@@ -635,37 +651,59 @@ class Topology:
         validate_applied_profile(host["SecurityOpt"], json.loads(profile.read_text()))
         return identifier
 
-    def inspect(self, running: bool = True) -> None:
+    def inspect(
+        self, running: bool = True, allow_pending: bool = False, deadline: float | None = None
+    ) -> None:
+        def read_docker(*arguments: str) -> subprocess.CompletedProcess[str]:
+            return (
+                docker(*arguments)
+                if deadline is None
+                else docker(*arguments, timeout=remaining_read_budget(deadline))
+            )
+
+        def read_ip(*arguments: str) -> list[dict[str, Any]]:
+            return (
+                ip(*arguments)
+                if deadline is None
+                else ip(*arguments, timeout=min(10, remaining_read_budget(deadline)))
+            )
+
         if self.baseline is None:
             raise RuntimeError("Protected baseline missing")
-        network = json.loads(docker("network", "inspect", self.name).stdout)[0]
+        network = json.loads(read_docker("network", "inspect", self.name).stdout)[0]
         require_owner("network", network, self.owner)
         validate_network(
             network, self.name, self.bridge, set(self.identifiers.values()) if running else set()
         )
-        bridge = ip("address", "show", "dev", self.bridge)
+        bridge = read_ip("address", "show", "dev", self.bridge)
         if len(bridge) != 1 or bridge[0].get("addr_info"):
             raise RuntimeError("Isolated bridge has a host address")
         check_host_ipv6_forwarding()
-        current = host_baseline()
+        current = host_baseline() if deadline is None else host_baseline(deadline)
+        pending: OwnedDadPending | None = None
         try:
-            owned_targets = validate_owned_host(
+            validator = observe_owned_host if allow_pending else validate_owned_host
+            owned_targets = validator(
                 self.baseline,
                 current,
-                ip("-details", "link", "show"),
+                read_ip("-details", "link", "show"),
                 self.bridge,
                 self.peer_evidence if running else {},
                 Path(f"/proc/sys/net/ipv6/conf/{self.bridge}/disable_ipv6").read_text(
                     encoding="ascii"
                 ),
             )
+        except OwnedDadPending as error:
+            pending = error
+            owned_targets = {}
         except (OSError, UnicodeError, RuntimeError):
             print(baseline_diagnostic(self.baseline, current), flush=True)
             raise
-        self.owned_targets = owned_targets
-        print(json.dumps({"owned_host_link_local": owned_targets}), flush=True)
+        if pending is None:
+            self.owned_targets = owned_targets
+            print(json.dumps({"owned_host_link_local": owned_targets}), flush=True)
         for role, identifier in self.identifiers.items():
-            metadata = json.loads(docker("inspect", identifier).stdout)[0]
+            metadata = json.loads(read_docker("inspect", identifier).stdout)[0]
             require_owner("container", metadata, self.owner)
             expected_image = self.images[1 if role == "gateway" else 0]
             if metadata.get("Image") != self.image_provenance[expected_image]["image_id"]:
@@ -680,6 +718,9 @@ class Topology:
                     or endpoint["GlobalIPv6PrefixLen"] != 64
                 ):
                     raise RuntimeError("Operational network identity/prefix mismatch")
+
+        if pending is not None:
+            raise pending
 
     def close(self) -> None:
         failures: list[str] = []

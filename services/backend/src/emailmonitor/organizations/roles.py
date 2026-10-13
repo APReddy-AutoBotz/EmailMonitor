@@ -11,6 +11,7 @@ class Role(StrEnum):
 
 
 class Capability(StrEnum):
+    EXPORT_RESULTS = "results.export"
     READ_ORGANIZATION = "organization.read"
     REVIEW_ASSOCIATIONS = "association.review"
     MANAGE_MEMBERS = "membership.manage"
@@ -46,3 +47,6 @@ LIFECYCLE_TRANSITIONS: dict[str, frozenset[str]] = {
     "offboarding": frozenset({"deleted"}),
     "deleted": frozenset(),
 }
+
+for permitted_role in (Role.OWNER, Role.ADMIN, Role.DATA_STEWARD):
+    ROLE_CAPABILITIES[permitted_role] |= {Capability.EXPORT_RESULTS}

@@ -1,0 +1,40 @@
+# 40 — Offline results and private export snapshots
+
+EM-011 is a synthetic/offline candidate. Run the locked aggregate with `scripts/check.sh`; actual PostgreSQL and broker cases require the existing disposable CI environment and are explicitly skipped locally. All five exact-head gates and independent review precede acceptance. Existing protected transport/browser/parser settings are unchanged. There is no production export activation or live acquisition route.
+
+## Retained results
+
+The authenticated organization-path API exposes filtered contacts, separate article outcomes, contact detail and bounded evidence citations. Contacts default to accepted associations; `state`, `job_id`, literal `query` and `author_target` filters run server-side. Cursors are canonical keyset positions bound to tenant, kind and exact filters, not authorization tokens. Every request rechecks current session, organization, source policy/version, retention and deletion barriers. Page limits are1–200; there is no total derived from queue delivery counts.
+
+Association and evidence identifiers are article-local: detail requests require `batch_id`. Continuations may expose retained predecessor receipts, keeping their original provenance. First-author/corresponding-author observations, accepted association, unresolved identity, syntax, unchecked technical status and unassessed outreach eligibility remain separate. No raw document response or global person registry is created.
+
+## Export roles and commands
+
+Owner/admin/data-steward can request/download/revoke exports. Operator/reviewer need the separate grants described in document05, which this slice does not create; viewer cannot export. The current approved source must explicitly permit `export_contacts`, the academic research purpose and its platform ceiling. The original requester must remain active in an export-capable role, even when another current authorized member downloads.
+
+POST `/api/v1/organizations/{organization_id}/exports` requires CSRF, an `Idempotency-Key`, and only bounded options/identifiers. Supported formats are CSV and XLSX. Default contact selection is accepted-only; `include_unresolved=true` explicitly adds needs-review/unmatched rows. Rejected/suppressed rows never enter exports. `include_article_outcomes=true` adds the separate outcomes table. The requested TTL is1–86400 seconds (default24 hours), lowered by current source policy and captured data retention. At most2000 contacts and2000 outcomes/2MiB snapshot JSON/8MiB rendered output are accepted; refine filters if capped. The transaction applies a5-second statement timeout; contended locks refuse without broadening permissions.
+
+The database constructs snapshots from actual authorized retained rows, not caller-supplied content. An atomic queued state, revision members, audit event and IDs-only work outbox accompany creation. Idempotency is actor/tenant/key/payload-scoped for24 hours; reuse with another payload conflicts. Expiry of a request key does not erase prior immutable export effects.
+
+## Asynchronous rendering and lifecycle
+
+The existing loopback-only synthetic broker worker supports `emailmonitor.fixture.export`. Message fields are only version/kind/organization/export/event/generation. Claim proves current role, source, requester, deletion generation, captured association revisions/outcome documents and retention; leases are capped at120 seconds and three attempts. Rendering runs outside the transaction using standard-library CSV/XML/ZIP only. Finish rechecks the same authority and current lease before atomically storing private bytes, one immutable effect and `export.ready` metadata/audit. `export.requested`/`export.ready`/`export.revoked` records are durable metadata; external event delivery/subscriptions are not implemented by this slice.
+
+Reconciliation reopens eligible lost-confirmed queued work and expired leases from PostgreSQL, with bounded exhaustion. Original unacked broker redelivery is verified separately from an explicit duplicate; neither creates another business effect. Late/stale leases cannot commit after revocation, expiry, deletion or changed source/member/data authority. Explicit revoke increments the export generation and removes its owned artifact while retaining effect/audit history. Expiry reconciliation marks expired and removes the owned artifact; download already refuses on time expiry even before reconciliation. Organization-wide retention purge remains the later lifecycle task.
+
+## Formula-safe formats
+
+CSV uses a conservative [OWASP-informed refusal](https://community.owasp.org/attacks/CSV_Injection), not an escaping promise that a spreadsheet might strip on resave. Any Unicode control/format character (including C1 and invisible format controls), line separator, or NFKC-normalized/leading-whitespace `=`, `+`, `-`, `@` cell fails the entire export with `unsafe_csv_cell`; safe values remain unchanged and every cell is quoted. This may refuse legitimate leading-plus text. XLSX is the alternative: every value is an explicit [inline string](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.spreadsheet.inlinestring?view=openxml-3.0.1), with no formulas/macros/external relationships. XML characters and cell/output budgets are checked. Fixed OOXML/OPC package names/default namespaces and three sheets (Contacts, Article outcomes, Readme) are validated; omitting outcomes yields two sheets. CSV with outcomes is a ZIP of two CSVs plus a provenance readme; contacts-only is one CSV.
+
+A separately installed read-only XLSX consumer successfully imported an authored three-sheet artifact with `=1+1` retained as literal text and no formulas. That consumer is not a project dependency. It printed font-cache diagnostics; this is not a claim of globally warning-free logs or compatibility with every spreadsheet program. Source facts are observed research evidence, not mailbox verification or a marketing-approved mailing list.
+
+## Authenticated downloads and tests
+
+GET `/exports/{id}/download` releases bytes only through the authenticated handler after current role/requester/source/version/member-revision/outcome-revision/expiry/deletion checks and artifact/effect SHA256 consistency. There are no public or bearer presigned URLs. Fixed UUID filenames, attachment/no-store/nosniff headers and trusted MIME/extensions prevent content/header injection. Metadata/history contains IDs/counts/state only and can remain readable after source revocation; `download_available` is advisory, never a substitute for download authorization.
+
+Forward-only migration0008 has forced tenant RLS, composite parent references, owner-only snapshot/artifact writes and revoked public/private-helper execution. Runtime cannot SELECT artifact bytes or the snapshot column directly, nor write catalog/export tables. Pure tests cover formula refusal/literal XLSX, actual OPC packaging, cursor scope/grammar, DTO/schema parity, role gates and narrow SQLSTATE translation. Actual CI must verify18 new PostgreSQL cases plus four real-broker cases, all existing application tests without skips, and controlled12/browser/parser/docs. See the [validation report](../reports/em011-validation.md) and [ledger](22-implementation-status.md).
+
+
+## Scoped verified checkpoint
+
+Independent exact-head review and all five actual CI logs establish VERIFIED IN DRAFT for this declared offline foundation: application1035/no skips (18 results SQL/four broker cases), controlled12 and browser/parser/docs passed at head660e0dc5/merge45377b5/treeca84f013. One existing Pydantic alias warning remains disclosed, not resolved. This proves document16 EM-011 acceptance in scope, not UI field-selection/preview, external event delivery, global identity registry, organization-wide purge or live/production enablement. Current cursor authorization and private download rechecks remain mandatory. [Validation](../reports/em011-validation.md) records immutable identities and complete history. This documentation checkpoint's own five gates must pass before offline EM-012 implementation.

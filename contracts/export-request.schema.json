@@ -1,0 +1,71 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "job_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Job Id"
+    },
+    "format": {
+      "enum": [
+        "csv",
+        "xlsx"
+      ],
+      "title": "Format",
+      "type": "string"
+    },
+    "purpose": {
+      "const": "academic_contact_research",
+      "title": "Purpose",
+      "type": "string"
+    },
+    "include_unresolved": {
+      "default": false,
+      "title": "Include Unresolved",
+      "type": "boolean"
+    },
+    "include_article_outcomes": {
+      "default": true,
+      "title": "Include Article Outcomes",
+      "type": "boolean"
+    },
+    "author_target": {
+      "default": "all",
+      "enum": [
+        "all",
+        "first",
+        "corresponding"
+      ],
+      "title": "Author Target",
+      "type": "string"
+    },
+    "query": {
+      "default": "",
+      "maxLength": 100,
+      "title": "Query",
+      "type": "string"
+    },
+    "ttl_seconds": {
+      "default": 86400,
+      "maximum": 86400,
+      "minimum": 1,
+      "title": "Ttl Seconds",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "format",
+    "purpose"
+  ],
+  "title": "ExportInput",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

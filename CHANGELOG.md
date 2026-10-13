@@ -1,4 +1,17 @@
 # Changelog
+
+## 2026-10-13 — EM-011 scoped synthetic foundation verified in Draft
+
+- Independently reconcile reviewed head/merge and all five authoritative job logs against scoped results/export criteria
+- Verify1035/no-skip application with18 actual SQL/four broker cases, controlled12 and browser/parser/docs; disclose one existing alias warning
+- Preserve private current-authorized snapshots/downloads, safe formats and DAD/source-review correction history
+- Gate offline EM-012 on this documentation checkpoint-own CI; retain Draft/unmerged and product/live limits
+
+## EM-011 synthetic results/export candidate (historical snapshot)
+
+- Add bounded retained contact/outcome/evidence reads and async private export snapshots with current tenant/source/role/data-revision/expiry fences
+- Render standard-library formula-safe CSV/ZIP and literal-string XLSX with provenance; no new dependencies or live/production activation
+- Add pure contracts/cursor/format tests and required real SQL/broker acceptance regressions; source review and actual CI remain pending
 ## 2026-10-13 — EM-010 scoped synthetic foundation verified in Draft
 
 - Independently reconcile reviewed head/merge and all five actual job logs against authoritative progress/recovery acceptance
@@ -129,3 +142,5 @@ No application, live source connector, actual email collection, deployment, send
 - EM-004b partial under review: actual test-only verified/pinned loopback TLS, inert bounded HTML observations and restrictive parser-only network-none/OOM CI diagnostics. Parser actual isolation evidence pending; browser profile/code absent, full EM-004 remains partial. No migration or production activation.
 
 - EM004c synthetic browser boundary under review: owner-approved scoped container profile, pinned current default plus three namespace syscall names, locked dev-only Playwright and bounded credential-free fixture IPC. Actual browser/sandbox CI pending; full EM004 partial, EM006 gated, production/live extraction unchanged.
+
+- EM-011 validation repair: bounded read-only settling for precisely owned IPv6 DAD before the unchanged strict controlled-transport gate; no settings or baseline changes.

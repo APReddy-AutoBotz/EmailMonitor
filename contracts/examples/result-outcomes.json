@@ -1,0 +1,20 @@
+{
+  "items": [
+    {
+      "organization_id": "a0000000-0000-4000-8000-000000000001",
+      "job_id": "b0000000-0000-4000-8000-000000000001",
+      "item_id": "b0000000-0000-4000-8000-000000000005",
+      "source_url": "https://synthetic.publisher.example/no-contact.html",
+      "state": "no_contact",
+      "reason": "no_contact",
+      "batch_id": null,
+      "completed_at": "2026-10-13T00:00:00Z",
+      "inherited_job_id": null,
+      "observation_status": "no_contact",
+      "technical_status": "not_checked",
+      "outreach_eligibility": "not_assessed"
+    }
+  ],
+  "next_cursor": null,
+  "synthetic": true
+}

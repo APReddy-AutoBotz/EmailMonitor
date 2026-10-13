@@ -1,0 +1,170 @@
+{
+  "$defs": {
+    "ArticleOutcome": {
+      "additionalProperties": false,
+      "properties": {
+        "organization_id": {
+          "format": "uuid",
+          "title": "Organization Id",
+          "type": "string"
+        },
+        "job_id": {
+          "format": "uuid",
+          "title": "Job Id",
+          "type": "string"
+        },
+        "item_id": {
+          "format": "uuid",
+          "title": "Item Id",
+          "type": "string"
+        },
+        "source_url": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Source Url",
+          "type": "string"
+        },
+        "state": {
+          "enum": [
+            "pending",
+            "running",
+            "retry_wait",
+            "succeeded",
+            "no_contact",
+            "needs_review",
+            "policy_blocked",
+            "access_blocked",
+            "unsupported",
+            "skipped",
+            "failed",
+            "cancelled"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "batch_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Batch Id"
+        },
+        "completed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Completed At"
+        },
+        "inherited_job_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Inherited Job Id"
+        },
+        "observation_status": {
+          "anyOf": [
+            {
+              "enum": [
+                "observed",
+                "no_contact",
+                "requires_browser",
+                "partial",
+                "unsupported"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Observation Status"
+        },
+        "technical_status": {
+          "const": "not_checked",
+          "default": "not_checked",
+          "title": "Technical Status",
+          "type": "string"
+        },
+        "outreach_eligibility": {
+          "const": "not_assessed",
+          "default": "not_assessed",
+          "title": "Outreach Eligibility",
+          "type": "string"
+        }
+      },
+      "required": [
+        "organization_id",
+        "job_id",
+        "item_id",
+        "source_url",
+        "state",
+        "reason",
+        "batch_id",
+        "completed_at",
+        "inherited_job_id",
+        "observation_status"
+      ],
+      "title": "ArticleOutcome",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "items": {
+      "items": {
+        "$ref": "#/$defs/ArticleOutcome"
+      },
+      "maxItems": 200,
+      "title": "Items",
+      "type": "array"
+    },
+    "next_cursor": {
+      "anyOf": [
+        {
+          "maxLength": 2048,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Next Cursor"
+    },
+    "synthetic": {
+      "const": true,
+      "default": true,
+      "title": "Synthetic",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "items"
+  ],
+  "title": "OutcomePage",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}
