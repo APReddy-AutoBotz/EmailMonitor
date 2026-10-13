@@ -16,3 +16,5 @@ The event schema intentionally has a bounded payload field set. Add event-specif
 `negative/source-policy-credential.json` is deliberately invalid: the fixture source requires an explicit null credential reference. It is tested as rejection evidence, never a valid policy example. Generic future source-reference vocabulary does not enable real credential use.
 
 EM-011 adds result-contacts/result-outcomes and export-request/export-state contracts with synthetic examples. JSON Schema validates shape; immutable snapshot membership, current policy/role/retention/revision/download authority and accepted-evidence semantics remain server/runtime checks. Export requests contain options/identifiers, never arbitrary document/contact/artifact content.
+
+EM-012 adds export-preview and allowlisted optional_contact_fields (affiliations/article_title) to export-request. Existing requests default to both columns; mandatory evidence/source/use-state fields cannot be omitted. Preview returns only current eligible counts and fixed exclusion reasons, never suppressed counts or an artifact/access grant. Runtime export fences revalidate at every existing stage.

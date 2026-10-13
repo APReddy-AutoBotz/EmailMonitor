@@ -90,6 +90,10 @@ def result_router(
     ) -> EvidenceView:
         return service(token(request)).evidence(organization_id, batch_id, evidence_id)
 
+    @router.post("/organizations/{organization_id}/exports/preview")
+    def export_preview(request: Request, organization_id: UUID, body: ExportInput) -> object:
+        return Results(database, csrf(request), settings).preview(organization_id, body)
+
     @router.post("/organizations/{organization_id}/exports", status_code=201)
     def create(
         request: Request,

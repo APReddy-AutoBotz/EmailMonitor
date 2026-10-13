@@ -1,17 +1,17 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import App from './App'
-
-describe('truthful scaffold', () => {
-  it('renders the real application with explicit unavailable extraction', () => {
+describe('truthful signed-out operator shell', () => {
+  it('requires a real current session instead of inserting contacts or metrics', () => {
     const html = renderToStaticMarkup(<App />)
-    expect(html).toContain('Extraction is unavailable in this UI')
-    expect(html).toContain('No contact records are shown')
-    expect(html).toContain('<fieldset disabled=""')
-    expect(html).toContain('Start extraction (unavailable)')
-    expect(html).toContain('id="keyword"')
-    expect(html).toContain('id="url"')
+    expect(html).toContain('Operator workspace')
+    expect(html).toContain('Checking the current session')
+    expect(html).toContain('Synthetic offline environment')
+    expect(html).toContain('No demo contacts are inserted')
+    expect(html).toContain('href="#main"')
+    expect(html).toContain('First author, corresponding author, observed email')
     expect(html).not.toContain('mailto:')
-    expect(html).not.toContain('<form')
+    expect(html).not.toContain('Mira Rao')
+    expect(html).not.toContain('Export ready')
   })
 })

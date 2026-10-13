@@ -106,6 +106,7 @@ def main() -> int:
         'result-outcomes.json': 'result-outcomes.schema.json',
         'export-request.json': 'export-request.schema.json',
         'export-state.json': 'export-state.schema.json',
+        'export-preview.json': 'export-preview.schema.json',
     }
     loaded = {}
     for name, schema_name in examples.items():

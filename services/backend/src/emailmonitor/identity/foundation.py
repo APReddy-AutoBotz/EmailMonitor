@@ -16,6 +16,7 @@ from emailmonitor.associations.api import association_router
 from emailmonitor.config import Settings
 from emailmonitor.identity.oidc import AuthenticationDenied, OIDCProvider
 from emailmonitor.jobs.api import job_router
+from emailmonitor.operator.api import operator_router
 from emailmonitor.organizations.database import (
     AuthenticationDatabase,
     AuthorizationDenied,
@@ -23,13 +24,19 @@ from emailmonitor.organizations.database import (
     TenantContext,
     digest,
 )
-from emailmonitor.organizations.roles import LIFECYCLE_TRANSITIONS, Capability, Role
+from emailmonitor.organizations.roles import (
+    LIFECYCLE_TRANSITIONS,
+    ROLE_CAPABILITIES,
+    Capability,
+    Role,
+)
 from emailmonitor.progress.api import progress_router
 from emailmonitor.results.api import result_router
 from emailmonitor.sources.api import source_router
 
 COOKIE = "__Host-emailmonitor_session"
 FLOW_COOKIE = "__Host-emailmonitor_login"
+CSRF_COOKIE = "__Host-emailmonitor_csrf"
 
 
 class MembershipUpdate(BaseModel):
@@ -182,6 +189,15 @@ VALUES(:org,:id,:actor,:action,:resource)
                 max_age=3600,
                 path="/",
             )
+            response.set_cookie(
+                CSRF_COOKIE,
+                csrf_token,
+                secure=True,
+                httponly=True,
+                samesite="strict",
+                max_age=3600,
+                path="/",
+            )
             response.delete_cookie(
                 FLOW_COOKIE, secure=True, httponly=True, samesite="lax", path="/"
             )
@@ -198,6 +214,9 @@ VALUES(:org,:id,:actor,:action,:resource)
                 )
             response = Response(status_code=204)
             response.delete_cookie(COOKIE, secure=True, httponly=True, samesite="lax", path="/")
+            response.delete_cookie(
+                CSRF_COOKIE, secure=True, httponly=True, samesite="strict", path="/"
+            )
             return response
 
         @router.get("/me")
@@ -222,6 +241,33 @@ VALUES(:org,:id,:actor,:action,:resource)
                     "identity_id": str(identity),
                     "memberships": [dict(row) for row in memberships],
                 }
+
+        @router.get("/auth/session")
+        def current_session(request: Request) -> dict[str, object]:
+            if request.headers.get("x-emailmonitor-ui") != "session" or request.headers.get(
+                "origin"
+            ) not in (None, self.provider.origin):
+                raise HTTPException(403, "Request not permitted")
+            nonce = request.cookies.get(CSRF_COOKIE, "")
+            if not nonce or len(nonce) > 256:
+                raise HTTPException(401, "Sign in again")
+            with self.database.transaction() as connection:
+                stored = connection.execute(
+                    text("SELECT csrf_hash FROM emailmonitor.resolve_session(:token)"),
+                    {"token": digest(token(request))},
+                ).scalar()
+            if stored is None or not compare_digest(str(stored), digest(nonce)):
+                raise HTTPException(401, "Authentication required")
+            result = me(request)
+            result["csrf_token"] = nonce
+            result["synthetic_only"] = True
+            result["production_enabled"] = False
+            memberships = result["memberships"]
+            assert isinstance(memberships, list)
+            for membership in memberships:
+                assert isinstance(membership, dict)
+                membership["capabilities"] = sorted(ROLE_CAPABILITIES[Role(membership["role"])])
+            return result
 
         @router.get("/organizations/{organization_id}")
         def organization(request: Request, organization_id: UUID) -> dict[str, object]:
@@ -416,6 +462,7 @@ AND identity_id=:actor
                 )
                 return {"status": body.status, "row_version": body.expected_revision + 1}
 
+        router.include_router(operator_router(self.database, token, csrf, audit))
         router.include_router(source_router(self.database, token, csrf, audit))
         router.include_router(progress_router(self.database, token, csrf, settings))
         router.include_router(job_router(self.database, token, csrf, settings))

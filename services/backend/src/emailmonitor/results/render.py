@@ -113,7 +113,12 @@ def contact_rows(snapshot: ExportSnapshot) -> list[list[str]]:
                 contact.outreach_eligibility,
             ]
         )
-    return rows
+    excluded = set()
+    if "affiliations" not in snapshot.optional_contact_fields:
+        excluded.add(6)
+    if "article_title" not in snapshot.optional_contact_fields:
+        excluded.add(16)
+    return [[value for index, value in enumerate(row) if index not in excluded] for row in rows]
 
 
 def outcome_rows(snapshot: ExportSnapshot) -> list[list[str]]:

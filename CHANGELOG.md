@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-13 — EM-012 synthetic operator UI candidate
+
+- Connect actual React screens to current-authorized tenant APIs with scoped abort/replay isolation and truthful unsupported states
+- Add existing-authority session reload, owner profile, bounded usage/audit and server export preview/optional field selection in forward migration0009
+- Add restrictive keyboard CI over actual assets/ASGI/PostgreSQL/broker workers using unchanged approved network-none Chromium settings
+- Require independent review and six actual exact-head gates; preserve Draft/unmerged, live/provider/deployment and product limits
+
 ## 2026-10-13 — EM-011 scoped synthetic foundation verified in Draft
 
 - Independently reconcile reviewed head/merge and all five authoritative job logs against scoped results/export criteria
