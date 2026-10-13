@@ -168,3 +168,32 @@ def test_source_claim_sql_literals_have_no_leading_quote_artifacts() -> None:
     for statement in statements:
         assert statement.lstrip().startswith("SELECT emailmonitor.source_resource_claim(")
         assert not statement.lstrip().startswith('"')
+
+
+def test_admission_pool_record_name_cannot_shadow_conflict_column() -> None:
+    root = Path(__file__).resolve().parents[3]
+    sql = (root / "services/backend/migrations/versions/0010_administration.sql").read_text()
+    function = sql.split("CREATE FUNCTION emailmonitor.admission_try(", 1)[1].split("END $$;", 1)[0]
+    assert "pool_state emailmonitor.admission_pools" in function
+    assert " pool emailmonitor.admission_pools" not in function
+    assert "ON CONFLICT(organization_id,pool,reference_id,generation)" in function
+    assert "active>=pool_state.maximum" in function
+
+
+def test_owned_mutex_observation_refreshes_current_query_snapshot_before_poll() -> None:
+    module = ast.parse(Path(__file__).with_name("test_admission_tenant.py").read_text())
+    outer = next(
+        node
+        for node in module.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "test_real_contended_source_grant_and_backoff_use_post_lock_time"
+    )
+    observer = next(
+        node
+        for node in outer.body
+        if isinstance(node, ast.FunctionDef) and node.name == "contended"
+    )
+    loop = next(node for node in observer.body if isinstance(node, ast.While))
+    assert isinstance(loop.body[0], ast.Expr)
+    assert "SELECT pg_stat_clear_snapshot()" in ast.unparse(loop.body[0])
+    assert "pg_stat_activity" in ast.unparse(loop.body[1])

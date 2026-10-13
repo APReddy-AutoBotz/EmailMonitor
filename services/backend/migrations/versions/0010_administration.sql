@@ -265,7 +265,7 @@ END $$;
 CREATE FUNCTION emailmonitor.admission_try(p_org uuid,p_job uuid,p_reference uuid,p_pool text,p_generation bigint,p_nonce uuid,p_seconds integer)
  RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,emailmonitor AS $$
 DECLARE stamp timestamptz:=clock_timestamp(); conf jsonb; saved jsonb; slots integer; active integer;
- pool emailmonitor.admission_pools; mine emailmonitor.admission_requests; chosen uuid; ticket uuid;
+ pool_state emailmonitor.admission_pools; mine emailmonitor.admission_requests; chosen uuid; ticket uuid;
 BEGIN
  IF NOT COALESCE(emailmonitor.tenant_allowed(p_org),false) OR p_nonce IS NULL OR p_reference IS NULL
  OR p_generation IS NULL OR p_generation<1 OR p_seconds IS NULL OR p_seconds NOT BETWEEN 1 AND 120
@@ -285,7 +285,7 @@ BEGIN
  ELSE least((conf->>'max_parallel_parse')::integer,(saved->>'max_parallel_parse')::integer) END;
  IF slots IS NULL OR slots=0 OR (p_pool='export' AND NOT ((conf->>'exports_enabled')::boolean AND (saved->>'exports_enabled')::boolean))
  OR (p_pool='browser' AND NOT ((conf->>'browser_enabled')::boolean AND (saved->>'browser_enabled')::boolean)) THEN RETURN false; END IF;
- SELECT * INTO pool FROM emailmonitor.admission_pools WHERE admission_pools.pool=p_pool FOR UPDATE;
+ SELECT * INTO pool_state FROM emailmonitor.admission_pools WHERE admission_pools.pool=p_pool FOR UPDATE;
  ticket:=md5(p_org::text||':'||p_pool||':'||p_reference::text||':'||p_generation::text)::uuid;
  IF NOT EXISTS(SELECT 1 FROM emailmonitor.admission_requests WHERE organization_id=p_org AND id=ticket)
  AND ((SELECT count(*) FROM emailmonitor.admission_requests WHERE organization_id=p_org)>=500
@@ -297,7 +297,7 @@ BEGIN
  SELECT * INTO mine FROM emailmonitor.admission_requests WHERE organization_id=p_org AND id=ticket;
  IF mine.state<>'waiting' THEN RETURN false; END IF;
  SELECT count(*) INTO active FROM emailmonitor.admission_requests WHERE admission_requests.pool=p_pool AND state='active';
- IF active>=pool.maximum OR (SELECT count(*) FROM emailmonitor.admission_requests
+ IF active>=pool_state.maximum OR (SELECT count(*) FROM emailmonitor.admission_requests
  WHERE organization_id=p_org AND admission_requests.pool=p_pool AND state='active')>=slots THEN RETURN false; END IF;
  SELECT a.id INTO chosen FROM emailmonitor.admission_requests a
  JOIN emailmonitor.organizations o ON o.id=a.organization_id AND o.status='active'
@@ -341,7 +341,7 @@ BEGIN
  (COALESCE(captured.entitlements,c.configuration->'entitlements')->>'max_parallel_browser')::integer)
  ELSE least((c.configuration->'entitlements'->>'max_parallel_parse')::integer,
  (COALESCE(captured.entitlements,c.configuration->'entitlements')->>'max_parallel_parse')::integer) END
- ORDER BY (a.organization_id IS NOT DISTINCT FROM pool.last_organization),a.ordinal LIMIT 1;
+ ORDER BY (a.organization_id IS NOT DISTINCT FROM pool_state.last_organization),a.ordinal LIMIT 1;
  IF chosen IS DISTINCT FROM ticket THEN RETURN false; END IF;
  stamp:=clock_timestamp();
  UPDATE emailmonitor.admission_requests SET state='active',nonce=p_nonce,

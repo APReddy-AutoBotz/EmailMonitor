@@ -409,6 +409,9 @@ def test_real_contended_source_grant_and_backoff_use_post_lock_time(scenario: Sc
         pid: object = connection.execute(text("SELECT pg_backend_pid()")).scalar_one()
         deadline = time.monotonic() + 2
         while time.monotonic() < deadline:
+            # Current-query statistics are transaction-cached; refresh this read-only
+            # observation while retaining the exact owned mutex lock.
+            connection.execute(text("SELECT pg_stat_clear_snapshot()"))
             waiting: object = connection.execute(
                 text("""SELECT EXISTS(SELECT 1 FROM pg_stat_activity a
 WHERE :pid=ANY(pg_blocking_pids(a.pid)) AND a.query LIKE :function)"""),
