@@ -1,6 +1,7 @@
 """Synthetic UI diagnostic RPC grammar; never a general network proxy."""
 
 import base64
+import re
 from pathlib import Path
 from typing import Literal
 from urllib.parse import urlsplit
@@ -173,3 +174,39 @@ class DiagnosticFrame(BaseModel):
         ):
             raise ValueError("Explicit failure or fixed stage required")
         return self
+
+
+def stderr_summary(raw: bytes) -> dict[str, object]:
+    """Fixed source/error metadata only; never echo a guest cookie/body/exception message."""
+    value = raw.decode(errors="replace")
+    labels = (
+        "TimeoutError",
+        "RuntimeError",
+        "Error",
+        "AssertionError",
+        "ValueError",
+        "ValidationError",
+        "TypeError",
+        "BrokenPipeError",
+        "CancelledError",
+        "InvalidStateError",
+        "TargetClosedError",
+        "UnicodeDecodeError",
+        "Task exception was never retrieved",
+        "Future exception was never retrieved",
+    )
+    errors = [
+        label
+        for label in labels
+        if re.search(r"(?<![A-Za-z])" + re.escape(label) + r"(?![A-Za-z])", value)
+    ]
+    frames = re.findall(
+        r'File "/app/(operator_ui_acceptance\.py|operator_ui_protocol\.py)", '
+        r"line ([0-9]{1,6})(?:,|\n)",
+        value,
+    )
+    return {
+        "bytes": len(raw),
+        "classes": errors[:8],
+        "frames": [{"file": name, "line": int(line)} for name, line in frames[-8:]],
+    }

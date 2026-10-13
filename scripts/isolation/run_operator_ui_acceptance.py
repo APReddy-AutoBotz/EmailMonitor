@@ -14,7 +14,7 @@ from typing import Any
 from emailmonitor.fetching.browser_fixture import validate_applied_profile, write_bounded_reply
 from fastapi import FastAPI
 from operator_ui_asgi import relay
-from operator_ui_protocol import DiagnosticFrame, RequestFrame, encoded_reply
+from operator_ui_protocol import DiagnosticFrame, RequestFrame, encoded_reply, stderr_summary
 from transport_topology import OWNER_LABEL, docker, remove_owned, require_owner, resource
 
 
@@ -112,6 +112,7 @@ def conversation(
     pending: set[Future[dict[str, object]]] = set()
     result: dict[str, Any] | None = None
     stage, stages = "bootstrap", 0
+    statuses: list[int] = []
     try:
         write_bounded_reply(process.stdin.fileno(), json.dumps(setup).encode() + b"\n", deadline)
         with ThreadPoolExecutor(max_workers=8) as executor, selectors.DefaultSelector() as selector:
@@ -123,15 +124,21 @@ def conversation(
                     raise RuntimeError(
                         "UI diagnostic absolute deadline exceeded at "
                         + stage
-                        + "; bounded stderr="
-                        + errors.decode(errors="replace")
+                        + "; sanitized stderr="
+                        + str(stderr_summary(bytes(errors)))
+                        + "; actual reply statuses="
+                        + str(statuses)
                     )
                 for future in tuple(pending):
                     if future.done():
                         pending.remove(future)
+                        reply = future.result()
+                        status = reply.get("status")
+                        if type(status) is int:
+                            statuses.append(status)
                         write_bounded_reply(
                             process.stdin.fileno(),
-                            json.dumps(future.result()).encode() + b"\n",
+                            json.dumps(reply).encode() + b"\n",
                             deadline,
                         )
                 for key, _ in selector.select(min(remaining, 0.05)):
@@ -145,7 +152,14 @@ def conversation(
                     if key.data == "stderr":
                         errors.extend(chunk)
                         if len(errors) > 16384:
-                            raise RuntimeError("UI diagnostic stderr exceeded")
+                            raise RuntimeError(
+                                "UI diagnostic stderr exceeded at "
+                                + stage
+                                + "; sanitized stderr="
+                                + str(stderr_summary(bytes(errors)))
+                                + "; actual reply statuses="
+                                + str(statuses)
+                            )
                         continue
                     buffer.extend(chunk)
                     while b"\n" in buffer:
@@ -164,7 +178,7 @@ def conversation(
                                     + stage
                                     + ": "
                                     + str(diagnostic.error)
-                                    + "; actual API statuses="
+                                    + "; actual reply statuses="
                                     + str(diagnostic.api_statuses)
                                 )
                             stages += 1
@@ -193,7 +207,12 @@ def conversation(
                         raise RuntimeError("UI request frame exceeded")
                 if process.poll() is not None and result is None:
                     raise RuntimeError(
-                        "Actual UI guest failed; bounded stderr=" + errors.decode(errors="replace")
+                        "Actual UI guest failed at "
+                        + stage
+                        + "; sanitized stderr="
+                        + str(stderr_summary(bytes(errors)))
+                        + "; actual reply statuses="
+                        + str(statuses)
                     )
         process.stdin.close()
         if process.wait(timeout=10) != 0 or result.get("diagnostic") != "synthetic-operator-ui":

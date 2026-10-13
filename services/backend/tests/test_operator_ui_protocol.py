@@ -180,3 +180,28 @@ def test_owned_pipe_failure_is_observed_before_guest_waits_for_host_eof(
         host.conversation(
             "owned-pipe-only", FastAPI(), {}, lambda action: None, lambda request: False
         )
+
+
+def test_stderr_summary_only_retains_fixed_source_and_error_metadata() -> None:
+    from operator_ui_protocol import stderr_summary
+
+    secret = "untrusted-cookie-or-exception-message"
+    raw = (
+        'Traceback\n  File "/app/operator_ui_acceptance.py", line 123, in main\n'
+        "TypeError: " + secret + '\nFile "/unrecognized/' + secret + '", line 4\n'
+    ).encode()
+    result = stderr_summary(raw)
+    assert result == {
+        "bytes": len(raw),
+        "classes": ["TypeError"],
+        "frames": [{"file": "operator_ui_acceptance.py", "line": 123}],
+    }
+    assert secret not in str(result)
+    assert stderr_summary(secret.encode()) == {"bytes": len(secret), "classes": [], "frames": []}
+
+
+def test_stderr_summary_is_bounded_and_does_not_echo_arbitrary_trace_paths() -> None:
+    from operator_ui_protocol import stderr_summary
+
+    result = stderr_summary(b'File "/app/operator_ui_protocol.py", line 99, in fixed\n' * 100)
+    assert isinstance(result["frames"], list) and len(result["frames"]) == 8
