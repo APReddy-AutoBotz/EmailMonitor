@@ -319,6 +319,7 @@ def main() -> None:
                     authorize,
                     FetchLimits(max_bytes=32768, total_seconds=5),
                     DNSFixtureResolver(Settings(environment="test", fixture_mode=True), dns_route),
+                    diagnostic_transport_only=True,
                 )
                 mediator = BrowserFixtureMediator(
                     Settings(environment="test", fixture_mode=True), gateway

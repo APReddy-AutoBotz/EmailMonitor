@@ -7,6 +7,7 @@ from uuid import UUID
 from pydantic import Field, field_validator
 
 from emailmonitor.jobs.models import StrictModel
+from emailmonitor.jobs.queues import phase_queue
 from emailmonitor.organizations.database import AuthorizationDenied
 from emailmonitor.progress.service import Progress
 
@@ -66,11 +67,17 @@ def publish(application: Any, progress: Progress, organization: UUID) -> int:
             event_id=str(row["event_id"]),
             generation=int(str(row["generation"])),
         )
+        if row["work_kind"] not in ("discover", "article"):
+            raise ValueError("Unsupported server-owned execution phase")
+        queue = phase_queue(
+            application.conf.task_default_queue,
+            "fixture_io" if row["work_kind"] == "discover" else "parse",
+        )
         application.send_task(
             "emailmonitor.fixture.execute",
             args=[event.model_dump()],
-            queue=application.conf.task_default_queue,
-            routing_key=application.conf.task_default_queue,
+            queue=queue,
+            routing_key=queue,
             delivery_mode=2,
             mandatory=True,
             retry=False,

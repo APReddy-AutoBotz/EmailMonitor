@@ -11,6 +11,7 @@ from uuid import UUID
 from fastapi import HTTPException
 from sqlalchemy import Connection, text
 
+from emailmonitor.administration.admission import Admission
 from emailmonitor.config import Settings
 from emailmonitor.discovery.service import Discovery
 from emailmonitor.discovery.state import DiscoveryState
@@ -115,6 +116,35 @@ class Extraction:
         expected_revision: int,
         source_digest: str,
     ) -> dict[str, object]:
+        from emailmonitor.administration.binding import CURRENT as FIXTURE
+        from emailmonitor.progress.binding import CURRENT as DURABLE
+
+        if FIXTURE.get() is not None or DURABLE.get() is not None:
+            return self._commit(
+                org,
+                job,
+                observation,
+                expected_revision=expected_revision,
+                source_digest=source_digest,
+            )
+        with Admission(self.database, self.token, self.settings).fixture(org, job, observation.url):
+            return self._commit(
+                org,
+                job,
+                observation,
+                expected_revision=expected_revision,
+                source_digest=source_digest,
+            )
+
+    def _commit(
+        self,
+        org: UUID,
+        job: UUID,
+        observation: ArticleObservation,
+        *,
+        expected_revision: int,
+        source_digest: str,
+    ) -> dict[str, object]:
         # Internal trusted-worker API only. No user endpoint accepts this model.
         name = observation.url.rsplit("/", 1)[-1]
         if DIGESTS.get(name) != source_digest or (
@@ -128,6 +158,9 @@ class Extraction:
         if observation.route == "browser_dom" and name != "tooltip.html":
             raise ValueError("Registered tooltip browser plan required")
         with self.discovery._tenant(org, Capability.ACQUIRE_SOURCE) as (c, _):
+            from emailmonitor.administration.binding import fence
+
+            fence(c, org, job, observation.url)
             context = self._scope(
                 c, org, job, observation.url, browser=observation.route == "browser_dom"
             )
@@ -228,30 +261,31 @@ WHERE organization_id=:org AND job_id=:job AND article_url=:url"""),
         context = self.prepare(org, job, url)
         if context["revision"] != expected_revision:
             raise HTTPException(409, "Discovery revision conflict")
-        payload = article_bytes(url.rsplit("/", 1)[-1])
-        auth = TenantFixtureAuthorization(
-            self.database,
-            self.token,
-            org,
-            "synthetic-publisher",
-            int(str(context["policy_version"])),
-        )
-        transport = FixtureByteTransport(
-            self.settings, {url: ByteResponse(200, (payload,), content_length=len(payload))}
-        )
-        acquired = FixtureGateway(
-            self.settings, transport, auth, FetchLimits(max_bytes=32768)
-        ).fetch(url, Operation.HTML)
-        observation = parse_article(
-            self.settings, url, acquired, max_depth=int(str(context["max_link_depth"]))
-        )
-        return self.commit(
-            org,
-            job,
-            observation,
-            expected_revision=expected_revision,
-            source_digest=hashlib.sha256(acquired).hexdigest(),
-        )
+        with Admission(self.database, self.token, self.settings).fixture(org, job, url):
+            payload = article_bytes(url.rsplit("/", 1)[-1])
+            auth = TenantFixtureAuthorization(
+                self.database,
+                self.token,
+                org,
+                "synthetic-publisher",
+                int(str(context["policy_version"])),
+            )
+            transport = FixtureByteTransport(
+                self.settings, {url: ByteResponse(200, (payload,), content_length=len(payload))}
+            )
+            acquired = FixtureGateway(
+                self.settings, transport, auth, FetchLimits(max_bytes=32768)
+            ).fetch(url, Operation.HTML)
+            observation = parse_article(
+                self.settings, url, acquired, max_depth=int(str(context["max_link_depth"]))
+            )
+            return self.commit(
+                org,
+                job,
+                observation,
+                expected_revision=expected_revision,
+                source_digest=hashlib.sha256(acquired).hexdigest(),
+            )
 
     def read(self, org: UUID, job: UUID) -> list[dict[str, object]]:
         with self.discovery._tenant(org, Capability.READ_ORGANIZATION) as (c, _):

@@ -418,3 +418,13 @@ def test_build_records_exact_owned_image_and_pinned_recipe_provenance(
         assert calls[0][0] == "build" and "--label=" + OWNER_LABEL + "=" + value.owner in calls[0]
     finally:
         value.directory.cleanup()
+
+
+def test_fixture_delay_release_is_exact_owned_control_and_bounded() -> None:
+    state = State()
+    result, stopped = fixture_command({"mode": "slow"}, state, [], [], [], lambda: {})
+    assert result == {"kind": "configured"} and not stopped and not state.release.is_set()
+    result, stopped = fixture_command({"kind": "release"}, state, [], [], [], lambda: {})
+    assert result == {"kind": "released"} and not stopped and state.release.is_set()
+    with pytest.raises(RuntimeError):
+        fixture_command({"kind": "release", "arbitrary_delay": 9999}, state, [], [], [], lambda: {})

@@ -107,6 +107,9 @@ def main() -> int:
         'export-request.json': 'export-request.schema.json',
         'export-state.json': 'export-state.schema.json',
         'export-preview.json': 'export-preview.schema.json',
+        'tenant-configuration.json': 'tenant-configuration.schema.json',
+        'tenant-configuration-update.json': 'tenant-configuration-update.schema.json',
+        'resource-usage.json': 'resource-usage.schema.json',
     }
     loaded = {}
     for name, schema_name in examples.items():
@@ -128,6 +131,12 @@ def main() -> int:
             errors.append(f'negative contract case incorrectly accepted: {label}')
         negative_count += 1
 
+    bad = copy.deepcopy(loaded['tenant-configuration-update.json']); bad['entitlements']['max_running_jobs'] = 3
+    rejects('tenant-configuration-update.schema.json', bad, 'entitlement expands platform')
+    bad = copy.deepcopy(loaded['tenant-configuration-update.json']); bad['branding']['logo_reference'] = 'https://external.example/logo'
+    rejects('tenant-configuration-update.schema.json', bad, 'external branding asset')
+    bad = copy.deepcopy(loaded['tenant-configuration-update.json']); bad['support_access_grant'] = True
+    rejects('tenant-configuration-update.schema.json', bad, 'configuration expands support access')
     bad = copy.deepcopy(loaded['keyword-job.json']); del bad['input']['source_id']
     rejects('job-request.schema.json', bad, 'keyword missing source')
     bad = copy.deepcopy(loaded['keyword-job.json']); bad['organization_id'] = 'client-must-not-grant-tenant-access'

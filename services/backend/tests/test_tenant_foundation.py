@@ -161,10 +161,23 @@ VALUES(:id,:name,'active','test-only')
         identities,
         admin_url,
     )
-    yield test
-    database.engine.dispose()
-    authentication.engine.dispose()
-    admin.dispose()
+    try:
+        yield test
+    finally:
+        # Shared admission must not inherit live credentials from a finished case.
+        # Revoke only this fixture's exact authored identities; no global purge.
+        with admin.begin() as connection:
+            for identity in identities.values():
+                connection.execute(
+                    text(
+                        "UPDATE emailmonitor.sessions SET revoked_at=clock_timestamp() "
+                        "WHERE identity_id=:identity AND revoked_at IS NULL"
+                    ),
+                    {"identity": identity},
+                )
+        database.engine.dispose()
+        authentication.engine.dispose()
+        admin.dispose()
 
 
 def test_real_api_tenant_selection_and_pool_reuse(scenario: Scenario) -> None:

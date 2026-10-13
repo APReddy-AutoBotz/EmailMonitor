@@ -1,3 +1,10 @@
+## 2026-10-13 — EM-013 synthetic admission candidate
+
+- Add forward-only migration0010 for current/captured entitlements, private fair admission, source buckets and once-per-root-job/article reservations/settlement
+- Route supported discovery/article/export work through separate owned queues; protected HTTP/browser hops use actual server-owned admission before DNS/TLS
+- Add owner configuration, literal branding, metadata-only support references and truthful operational usage with current authority and tenant isolation
+- Add required real SQL/broker/source-contention/keyboard regressions; all acceptance remains pending independent exact-tree review and actual six-job CI
+
 # Changelog
 
 ## 2026-10-13 — EM-012 scoped synthetic operator foundation verified in Draft

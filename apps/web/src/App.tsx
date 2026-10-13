@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { ApiError, ApiScope, errorMessage, sessionRequest } from './client'
+import { currentBrand } from './branding'
 import { validatedSession } from './session'
-import type { Membership, Organization, Session } from './models'
+import type { Membership, Organization, Session, TenantConfiguration } from './models'
 import { Load, useResource, type Context } from './ui'
 import { Dashboard, Wizard, Jobs, Contacts, Exports, Sources, UsageView, AuditView, SettingsView, type ContactFilters } from './views'
 const screens = ['Dashboard', 'New extraction', 'Jobs', 'Contacts', 'Review queue', 'Exports', 'Sources', 'Usage', 'Audit', 'Settings'] as const
@@ -70,6 +71,8 @@ function Workspace(props: WorkspaceProps) {
     review: { query: '', state: 'needs_review', target: 'all', job: '' },
   })
   const organization = useResource<Organization>(props.scope, '/', props.revision)
+  const configuration = useResource<TenantConfiguration>(props.scope, '/configuration', props.revision)
+  const brand = currentBrand(configuration.data, props.scope.organization)
   // Organization detail is the base resource; scoped paths intentionally require a trailing slash.
   const context: Context = { scope: props.scope, revision: props.revision, refresh: props.refresh, identity: props.identity, zone: organization.data?.timezone ?? 'UTC', can: capability => props.membership.capabilities.includes(capability), openJob: id => { props.setJob(id); props.setScreen('Jobs') },
     confirm: (title, detail, work) => props.confirm({ title, detail, work }), act: async (label, work, success = 'Saved. Current organization data refreshed.') => {
@@ -79,7 +82,7 @@ function Workspace(props: WorkspaceProps) {
       catch (failure) { if (!props.scope.closed) props.setNotice(errorMessage(failure)) }
       finally { if (!props.scope.closed) props.setBusy('') }
     } }
-  return <div className="shell"><nav aria-label="Workspace">{screens.map(item => <button key={item} aria-current={item === props.screen ? 'page' : undefined} onClick={() => { props.setScreen(item); props.setNotice('') }}>{item}</button>)}</nav><main id="main" className="workspace" aria-busy={!!props.busy}><div className="workspace-heading"><div><p className="eyebrow">{props.membership.role.replaceAll('_', ' ')} · {props.scope.organization}</p><Load resource={organization}>{org => <h2>{org.display_name}</h2>}</Load><h3>{props.screen}</h3></div><button onClick={props.refresh}>Refresh current view</button></div>
+  return <div className="shell"><nav aria-label="Workspace">{screens.map(item => <button key={item} aria-current={item === props.screen ? 'page' : undefined} onClick={() => { props.setScreen(item); props.setNotice('') }}>{item}</button>)}</nav><main id="main" className="workspace" aria-busy={!!props.busy} style={{ borderTop: '3px solid ' + brand.accent }}><div className="workspace-heading"><div><p className="eyebrow">{props.membership.role.replaceAll('_', ' ')} · {props.scope.organization}</p><Load resource={organization}>{org => <h2>{org.display_name}</h2>}</Load><h3>{props.screen}</h3>{brand.label && <p className="tenant-brand">{brand.label}</p>}</div><button onClick={props.refresh}>Refresh current view</button></div>
     {props.busy && <p role="status">{props.busy}…</p>}{props.notice && <p role="status" className="notice">{props.notice}</p>}
     {props.screen === 'Dashboard' && <Dashboard context={context} navigate={props.setScreen} />}
     {props.screen === 'New extraction' && <Wizard context={context} />}

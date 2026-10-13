@@ -4,6 +4,7 @@ import json
 import os
 import time
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import ExitStack
 from typing import Any
 from uuid import UUID, uuid4
@@ -91,7 +92,13 @@ def proxy(
 ) -> GatewayProxy:
     def scope(operation: Operation) -> PlanScope:
         return PlanScope(
-            organization, "synthetic-publisher", 1, operation, HOSTS, time.monotonic() + 4.5, 2
+            organization,
+            "synthetic-publisher",
+            1,
+            operation,
+            HOSTS,
+            time.monotonic() + (19 if isinstance(authorize, TenantFixtureAuthorization) else 4.5),
+            2,
         )
 
     def check(bound: PlanScope, url: SafeURL) -> None:
@@ -103,7 +110,16 @@ def proxy(
         if callable(authorize):
             authorize(url, bound.operation)
 
-    return GatewayProxy(topology.processes["gateway"], scope, check, family, ca)
+    return GatewayProxy(
+        topology.processes["gateway"],
+        scope,
+        check,
+        family,
+        ca,
+        resources=authorize.resources
+        if isinstance(authorize, TenantFixtureAuthorization)
+        else None,
+    )
 
 
 @pytest.mark.parametrize("family", [4, 6])
@@ -314,6 +330,22 @@ def test_actual_browser_gateway_current_tenant_policy(
         assert actual_browser_peers == [[ENDPOINTS["fixture-a"][0], 443, HOST]] * 2
         observations = snapshot(topology)
         assert len(observations["calls"]) == 2 and len(observations["queries"]) == 4
+        assert (
+            observations["calls"][1]["received_monotonic"]
+            - observations["calls"][0]["received_monotonic"]
+            >= 4.9
+        )
+        with scenario.foundation.database.tenant(token, org, Capability.READ_ORGANIZATION) as (
+            connection,
+            _,
+        ):
+            operational: dict[str, Any] = connection.execute(
+                text("SELECT emailmonitor.administration_usage(:org)"), {"org": org}
+            ).scalar_one()
+            assert operational["source_resource_attempts"] == 2
+            assert operational["active_units"].get("browser", 0) == 0
+        evidence["source_throttle_verified"] = True
+        evidence["source_attempts"] = 2
         assert all(
             call["sni"] == HOST and set(call["headers"]) == {"Host", "Accept", "Connection"}
             for call in observations["calls"]
@@ -372,3 +404,90 @@ def test_actual_browser_gateway_current_tenant_policy(
             ),
             flush=True,
         )
+
+
+def test_actual_blocked_source_preserves_another_tenants_processing_and_export_pool(
+    topology: Topology,
+    scenario: Scenario,
+) -> None:
+    from emailmonitor.administration.service import Administration
+    from emailmonitor.administration.source import SourceAdmission
+    from emailmonitor.fetching.safety import classify_url
+    from emailmonitor.results.service import Results
+    from test_admission_tenant import run_until_terminal, tenant_b
+    from test_progress_tenant import planned
+    from test_results_tenant import options
+
+    progress, _ = planned(scenario, "https://synthetic.publisher.example/article-a.html")
+    other, job = tenant_b(scenario)
+    org, other_org = scenario.organizations
+    allow = TenantFixtureAuthorization(
+        progress.database, progress.token, org, "synthetic-publisher", 1
+    )
+    target = proxy(topology, org, allow)
+    configure(topology, "slow")
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        pending = executor.submit(target.fetch, f"https://{HOST}/tooltip.html")
+        deadline = time.monotonic() + 10
+        while not snapshot(topology)["calls"]:
+            if time.monotonic() >= deadline:
+                raise AssertionError("Actual synthetic HTTPS request never arrived")
+            time.sleep(0.05)
+        assert not pending.done()
+        first_receipt = snapshot(topology)["calls"][0]
+        resource = Administration(progress.database, progress.token, progress.settings).usage(org)
+        assert resource.active_units["http"] == 1 and resource.source_resource_attempts == 1
+        url = classify_url(f"https://{HOST}/tooltip.html", HOSTS)
+        with pytest.raises(FetchDenied):
+            SourceAdmission(other.database, other.token, other.settings).acquire(
+                other_org,
+                1,
+                Operation.HTML,
+                url,
+                time.monotonic() + 0.5,
+            )
+        assert (
+            Administration(other.database, other.token, other.settings)
+            .usage(other_org)
+            .source_resource_attempts
+            == 0
+        )
+        other.start(other_org, job, other.snapshot(other_org, job).revision)
+        run_until_terminal(other, other_org, job)
+        results = Results(other.database, other.token, other.settings)
+        export = results.create(other_org, options(job), str(uuid4()))
+        row = results.pending(other_org)[0]
+        lease = results.claim(
+            other_org, export.id, UUID(str(row["event_id"])), int(str(row["generation"]))
+        )
+        assert lease is not None and results.process(lease)
+        assert results.download(other_org, export.id).body
+        # Genuine work/artifact completed while the first actual HTTP body was held.
+        assert not pending.done()
+        release_deadline = time.monotonic() + 5
+        topology.processes["fixture-a"].send({"kind": "release"}, release_deadline)
+        assert topology.processes["fixture-a"].receive(release_deadline) == {"kind": "released"}
+        assert b"synthetic marker" in pending.result(timeout=20)
+    configure(topology)
+    other_allow = TenantFixtureAuthorization(
+        other.database, other.token, other_org, "synthetic-publisher", 1
+    )
+    assert b"synthetic marker" in proxy(topology, other_org, other_allow).fetch(
+        f"https://{HOST}/tooltip.html"
+    )
+    second_receipt = snapshot(topology)["calls"][0]
+    assert second_receipt["received_monotonic"] - first_receipt["received_monotonic"] >= 4.9
+    usage = Administration(other.database, other.token, other.settings).usage(other_org)
+    assert usage.settled_resolution_units == 4 and usage.reserved_resolution_units == 0
+    assert usage.source_resource_attempts == 1
+    print(
+        json.dumps(
+            {
+                "blocked_source_pool_progress": True,
+                "actual_source_attempts": 2,
+                "other_tenant_settled_units": 4,
+                "private_export_completed": True,
+            }
+        ),
+        flush=True,
+    )

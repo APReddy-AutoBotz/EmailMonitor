@@ -5,6 +5,7 @@ from uuid import UUID
 
 from emailmonitor.jobs.broker import create_worker
 from emailmonitor.jobs.ledger import Ledger
+from emailmonitor.jobs.queues import phase_queue
 from emailmonitor.organizations.roles import Capability
 from emailmonitor.progress.broker import ExecutionEvent, publish
 from sqlalchemy import text
@@ -108,6 +109,8 @@ def test_real_execution_crash_after_observation_resumes_retained_checkpoint(
 ) -> None:
     import time
 
+    from emailmonitor.administration.service import Administration
+
     progress, job = planned(scenario, "https://synthetic.publisher.example/article-a.html")
     org = scenario.organizations[0]
     progress.start(org, job, progress.snapshot(org, job).revision)
@@ -127,6 +130,9 @@ def test_real_execution_crash_after_observation_resumes_retained_checkpoint(
             assert running.returncode == 74
         retained = progress.extraction.read(org, job)[0]
         assert retained["revision"] == 1
+        usage = Administration(progress.database, progress.token, progress.settings)
+        assert usage.usage(org).reserved_resolution_units == 1
+        assert usage.usage(org).settled_resolution_units == 0
         assert progress.snapshot(org, job).state == "running"
         time.sleep(2.1)
         progress.reconcile(org, job)
@@ -135,6 +141,8 @@ def test_real_execution_crash_after_observation_resumes_retained_checkpoint(
             wait_for(lambda: deliveries(progress, org, job, event_id) >= 2)
             wait_for(lambda: progress.snapshot(org, job).state == "completed")
         assert progress.extraction.read(org, job)[0]["observed_at"] == retained["observed_at"]
+        assert usage.usage(org).settled_resolution_units == 1
+        assert usage.usage(org).reserved_resolution_units == 0
         with progress.database.tenant(progress.token, org, Capability.READ_ORGANIZATION) as (c, _):
             assert (
                 c.execute(
@@ -167,7 +175,7 @@ def test_real_confirmed_queue_loss_before_claim_is_rebuilt_from_database(
         with app.connection_for_write() as connection:
             channel = connection.channel()
             try:
-                owned_queue = app.amqp.queues[cfg.queue](channel)
+                owned_queue = app.amqp.queues[phase_queue(cfg.queue, "parse")](channel)
                 assert owned_queue.purge() == 1
             finally:
                 channel.close()

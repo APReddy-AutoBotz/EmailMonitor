@@ -4,7 +4,7 @@ import base64
 import json
 import sys
 from pathlib import Path
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from emailmonitor.config import Settings
 from emailmonitor.fetching.fixture import FetchLimits
@@ -47,6 +47,51 @@ def scope_fields(scope: PlanScope) -> dict[str, object]:
         "deadline": scope.deadline,
         "max_redirects": scope.max_redirects,
     }
+
+
+class HostResources:
+    """No credentials or database route in guest; host owns current admission."""
+
+    def __init__(self, bound: PlanScope) -> None:
+        self.bound = bound
+
+    def acquire(self, url: SafeURL, operation: Operation, deadline: float) -> object:
+        if operation != self.bound.operation or deadline != self.bound.deadline:
+            raise FetchDenied("plan_scope_mismatch")
+        identifier = str(uuid4())
+        emit(
+            {
+                "kind": "resource_acquire",
+                "scope": scope_fields(self.bound),
+                "url": url.normalized,
+                "id": identifier,
+            }
+        )
+        if read_frame() != {"admitted": True}:
+            raise FetchDenied("source_resource_denied")
+        return identifier
+
+    def finish(self, ticket: object, status: int | None, retry_after: str) -> None:
+        if type(ticket) is not str or str(UUID(ticket)) != ticket:
+            raise FetchDenied("source_resource_denied")
+        safe_retry = (
+            retry_after
+            if retry_after.isascii() and retry_after.isdecimal() and len(retry_after) <= 5
+            else "unsupported"
+            if retry_after
+            else ""
+        )
+        emit(
+            {
+                "kind": "resource_finish",
+                "scope": scope_fields(self.bound),
+                "id": ticket,
+                "status": status,
+                "retry_after": safe_retry,
+            }
+        )
+        if read_frame() != {"finished": True}:
+            raise FetchDenied("source_resource_denied")
 
 
 def main() -> None:
@@ -133,8 +178,9 @@ def main() -> None:
                 ca_file,
                 supply,
                 authorize,
-                FetchLimits(max_bytes=32768, total_seconds=5, max_redirects=2),
+                FetchLimits(max_bytes=32768, total_seconds=20, max_redirects=2),
                 family,
+                resources=HostResources(bound),
             )
             body = gateway.fetch(frame["url"], bound.operation)
             emit(

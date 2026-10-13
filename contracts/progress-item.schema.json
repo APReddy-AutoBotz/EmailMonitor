@@ -44,7 +44,8 @@
         "worker_failure",
         "lease_exhausted",
         "user_cancelled",
-        "pagination_committed"
+        "pagination_committed",
+        "quota_exhausted"
       ],
       "title": "Reason",
       "type": "string"

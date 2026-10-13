@@ -1,0 +1,24 @@
+{
+  "organization_id": "11111111-1111-4111-8111-111111111111",
+  "revision": 1,
+  "entitlements": {
+    "max_running_jobs": 2,
+    "max_parallel_parse": 2,
+    "max_parallel_export": 1,
+    "max_parallel_browser": 1,
+    "max_articles_per_job": 500,
+    "monthly_resolution_units": 5000,
+    "max_export_bytes": 8388608,
+    "browser_enabled": true,
+    "exports_enabled": true
+  },
+  "branding": {
+    "accent_color": "#155e63",
+    "label": "Authored organization",
+    "logo_reference": null
+  },
+  "support_reference": "22222222-2222-4222-8222-222222222222",
+  "deployment_mode": "synthetic_offline",
+  "billing_implemented": false,
+  "exceptional_support_grants_available": false
+}

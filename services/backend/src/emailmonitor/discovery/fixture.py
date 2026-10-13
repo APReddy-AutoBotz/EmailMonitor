@@ -8,6 +8,7 @@ import hashlib
 from pathlib import Path
 from uuid import UUID
 
+from emailmonitor.administration.admission import Admission
 from emailmonitor.discovery.search import parse_search
 from emailmonitor.discovery.service import Discovery
 from emailmonitor.discovery.state import DiscoveryState
@@ -51,27 +52,30 @@ def step_fixture(
     if state.next_url is None:
         raise ValueError("Pending page required")
     name = state.next_url.rsplit("/", 1)[-1]
-    payload = fixture_bytes(name)
-    auth = TenantFixtureAuthorization(
-        discovery.database,
-        discovery.token,
-        org,
-        "synthetic-publisher",
-        int(str(row["policy_version"])),
-    )
-    # Search authorization is checked during prepare and again during commit;
-    # the same current HTML policy governs the authored byte-release gateway.
-    transport = FixtureByteTransport(
-        discovery.settings,
-        {
-            state.next_url: ByteResponse(200, (payload,), content_length=len(payload)),
-        },
-    )
-    acquired = FixtureGateway(
-        discovery.settings, transport, auth, FetchLimits(max_bytes=32768)
-    ).fetch(
-        state.next_url,
-        Operation.HTML,
-    )
-    page = parse_search(discovery.settings, state.next_url, acquired)
-    return discovery.commit(org, job, expected_revision, page)
+    with Admission(discovery.database, discovery.token, discovery.settings).fixture(
+        org, job, state.next_url
+    ):
+        payload = fixture_bytes(name)
+        auth = TenantFixtureAuthorization(
+            discovery.database,
+            discovery.token,
+            org,
+            "synthetic-publisher",
+            int(str(row["policy_version"])),
+        )
+        # Search authorization is checked during prepare and again during commit;
+        # the same current HTML policy governs the authored byte-release gateway.
+        transport = FixtureByteTransport(
+            discovery.settings,
+            {
+                state.next_url: ByteResponse(200, (payload,), content_length=len(payload)),
+            },
+        )
+        acquired = FixtureGateway(
+            discovery.settings, transport, auth, FetchLimits(max_bytes=32768)
+        ).fetch(
+            state.next_url,
+            Operation.HTML,
+        )
+        page = parse_search(discovery.settings, state.next_url, acquired)
+        return discovery.commit(org, job, expected_revision, page)

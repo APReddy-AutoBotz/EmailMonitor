@@ -16,7 +16,13 @@ from urllib.parse import urljoin
 
 from emailmonitor.config import Settings
 from emailmonitor.fetching.dns_fixture import DNSFixtureResolver
-from emailmonitor.fetching.fixture import HOSTS, FetchLimits, require_fixture
+from emailmonitor.fetching.fixture import (
+    HOSTS,
+    FetchLimits,
+    TenantFixtureAuthorization,
+    require_fixture,
+)
+from emailmonitor.fetching.resources import HopResources
 from emailmonitor.fetching.safety import FetchDenied, SafeURL, classify_url
 from emailmonitor.sources.policy import Operation
 
@@ -48,10 +54,20 @@ class TLSFixtureGateway:
         authorize: Callable[[SafeURL, Operation], None],
         limits: FetchLimits | None = None,
         resolver: DNSFixtureResolver | None = None,
+        *,
+        resources: HopResources | None = None,
+        diagnostic_transport_only: bool = False,
     ) -> None:
         require_fixture(settings)
         if resolver is not None and type(resolver) is not DNSFixtureResolver:
             raise FetchDenied("dns_fixture_resolver_type_denied")
+        if type(diagnostic_transport_only) is not bool:
+            raise FetchDenied("source_resource_boundary_denied")
+        self._resources = (
+            authorize.resources if isinstance(authorize, TenantFixtureAuthorization) else resources
+        )
+        if self._resources is None and not diagnostic_transport_only:
+            raise FetchDenied("source_resource_boundary_required")
         self._resolver = resolver
         self._endpoint, self._authorize = endpoint, authorize
         self._limits = limits or FetchLimits()
@@ -159,7 +175,25 @@ class TLSFixtureGateway:
                 raise FetchDenied("redirect_loop_denied")
             seen.add(url.normalized)
             self._authorize(url, operation)
-            status, headers, body = self._request(url, deadline, operation)
+            ticket = (
+                self._resources.acquire(url, operation, deadline)
+                if self._resources is not None
+                else None
+            )
+            status: int | None = None
+            headers: dict[str, str] = {}
+            try:
+                status, headers, body = self._request(url, deadline, operation)
+            except BaseException as error:
+                try:
+                    if self._resources is not None and ticket is not None:
+                        self._resources.finish(ticket, status, headers.get("retry-after", ""))
+                except Exception:
+                    error.add_note("Owned source release failed; server lease remains bounded")
+                raise
+            else:
+                if self._resources is not None and ticket is not None:
+                    self._resources.finish(ticket, status, headers.get("retry-after", ""))
             if status in (301, 302, 303, 307, 308):
                 if hop == self._limits.max_redirects or not headers.get("location"):
                     raise FetchDenied("redirect_limit_denied")

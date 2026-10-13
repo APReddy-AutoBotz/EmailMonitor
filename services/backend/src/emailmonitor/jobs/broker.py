@@ -16,6 +16,7 @@ from emailmonitor.discovery.broker import process as discover_process
 from emailmonitor.discovery.service import Discovery
 from emailmonitor.jobs.ledger import Ledger, Work
 from emailmonitor.jobs.models import StrictModel
+from emailmonitor.jobs.queues import owned_queues
 from emailmonitor.organizations.database import Database
 from emailmonitor.progress.broker import process as execute_process
 from emailmonitor.progress.service import Progress
@@ -72,14 +73,15 @@ def create_worker(config: FixtureWorkerConfig) -> tuple[Any, Ledger]:
         task_default_exchange=config.queue,
         task_default_routing_key=config.queue,
         worker_detect_quorum_queues=True,
-        task_queues=(
+        task_queues=tuple(
             Queue(
-                config.queue,
-                Exchange(config.queue, type="direct", durable=True),
-                routing_key=config.queue,
+                name,
+                Exchange(name, type="direct", durable=True),
+                routing_key=name,
                 durable=True,
                 queue_arguments={"x-queue-type": "quorum"},
-            ),
+            )
+            for name in owned_queues(config.queue)
         ),
         task_default_delivery_mode="persistent",
         task_create_missing_queues=False,
@@ -113,15 +115,20 @@ def create_worker(config: FixtureWorkerConfig) -> tuple[Any, Ledger]:
     def execute(body: dict[str, object]) -> None:
         progress = Progress(ledger.database, config.session_token, ledger.settings)
 
-        def stop_after_observation() -> None:
-            os._exit(74)
+        def after_observation() -> None:
+            if config.diagnostic_delay_seconds:
+                time.sleep(config.diagnostic_delay_seconds)
+            if config.exit_after_observation:
+                os._exit(74)
 
         committed = execute_process(
             progress,
             UUID(config.organization),
             body,
             seconds=min(config.lease_seconds, 120),
-            after_observation=stop_after_observation if config.exit_after_observation else None,
+            after_observation=after_observation
+            if config.exit_after_observation or config.diagnostic_delay_seconds
+            else None,
         )
         if committed and config.exit_after_commit:
             os._exit(73)

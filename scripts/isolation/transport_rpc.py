@@ -8,10 +8,13 @@ import subprocess
 import time
 from collections.abc import Callable
 from typing import Any
+from uuid import UUID
 
 from emailmonitor.fetching.browser_fixture import BrowserFixtureRequest, write_bounded_reply
 from emailmonitor.fetching.plan import PlanScope
+from emailmonitor.fetching.resources import HopResources
 from emailmonitor.fetching.safety import FetchDenied, SafeURL, classify_url
+from emailmonitor.organizations.database import AuthorizationDenied
 from emailmonitor.sources.policy import Operation
 from pydantic import ValidationError
 from transport_gateway import scope_fields
@@ -109,11 +112,20 @@ class GatewayProxy:
         authorize: Callable[[PlanScope, SafeURL], None],
         family: int = 4,
         ca: str = "fixture",
+        resources: HopResources | None = None,
+        diagnostic_transport_only: bool = False,
     ) -> None:
         if type(family) is not int or family not in (4, 6):
             raise RuntimeError("Invalid literal family")
         if ca not in ("fixture", "untrusted"):
             raise RuntimeError("Invalid trusted CA selection")
+        if type(diagnostic_transport_only) is not bool or (
+            resources is None and not diagnostic_transport_only
+        ):
+            raise FetchDenied("source_resource_boundary_required")
+        self._resources = resources
+        self._active_resources: dict[str, object] = {}
+        self._inflight = False
         self._ca = ca
         self._process, self._scope, self._authorize, self._family = (
             process,
@@ -125,9 +137,34 @@ class GatewayProxy:
         self.peers: list[list[object]] = []
 
     def fetch(self, value: str, operation: Operation = Operation.HTML) -> bytes:
+        if self._active_resources:
+            raise RuntimeError("Previous resource state remains active")
+        try:
+            return self._fetch(value, operation)
+        except BaseException as error:
+            if self._inflight:
+                self._process.poisoned = True
+            try:
+                self._abandon_resources()
+            except Exception:
+                error.add_note("Owned resource abandonment failed; server lease remains bounded")
+            raise
+        finally:
+            # Normal successful protocol requires all per-hop completion frames.
+            if self._active_resources:
+                self._process.poisoned = True
+
+    def _abandon_resources(self) -> None:
+        tickets = tuple(self._active_resources.values())
+        self._active_resources.clear()
+        if self._resources is not None:
+            for ticket in tickets:
+                self._resources.finish(ticket, None, "")
+
+    def _fetch(self, value: str, operation: Operation = Operation.HTML) -> bytes:
         self.peers = []
         bound = self._scope(operation)
-        if bound.operation != operation or not 0 < bound.deadline - time.monotonic() <= 5:
+        if bound.operation != operation or not 0 < bound.deadline - time.monotonic() <= 20:
             raise FetchDenied("plan_scope_mismatch")
         url = classify_url(value, bound.allowed_hosts)
         self._authorize(bound, url)
@@ -142,6 +179,7 @@ class GatewayProxy:
             },
             deadline,
         )
+        self._inflight = True
         for _ in range(32):
             frame = self._process.receive(deadline)
             if frame.get("kind") == "authorize":
@@ -163,7 +201,72 @@ class GatewayProxy:
                     self.authorizations += 1
                     self._process.send({"authorized": True}, deadline)
                 continue
+            if frame.get("kind") == "resource_acquire":
+                if (
+                    set(frame) != {"kind", "scope", "url", "id"}
+                    or frame["scope"] != scope_fields(bound)
+                    or type(frame["url"]) is not str
+                    or type(frame["id"]) is not str
+                    or self._active_resources
+                ):
+                    self._process.poisoned = True
+                    raise RuntimeError("Invalid bounded resource scope")
+                try:
+                    identifier = str(UUID(frame["id"]))
+                except ValueError as error:
+                    self._process.poisoned = True
+                    raise RuntimeError("Invalid resource identifier") from error
+                if identifier != frame["id"]:
+                    raise RuntimeError("Noncanonical resource identifier")
+                approved = classify_url(frame["url"], bound.allowed_hosts)
+                try:
+                    self._authorize(bound, approved)
+                    ticket = (
+                        self._resources.acquire(approved, bound.operation, deadline)
+                        if self._resources is not None
+                        else object()
+                    )
+                    self._active_resources[identifier] = ticket
+                except (FetchDenied, AuthorizationDenied):
+                    self._process.send({"admitted": False}, deadline)
+                else:
+                    self._process.send({"admitted": True}, deadline)
+                continue
+            if frame.get("kind") == "resource_finish":
+                if (
+                    set(frame) != {"kind", "scope", "id", "status", "retry_after"}
+                    or frame["scope"] != scope_fields(bound)
+                    or type(frame["id"]) is not str
+                    or frame["id"] not in self._active_resources
+                    or (
+                        frame["status"] is not None
+                        and (type(frame["status"]) is not int or not 100 <= frame["status"] <= 599)
+                    )
+                    or type(frame["retry_after"]) is not str
+                    or len(frame["retry_after"]) > 11
+                    or (
+                        frame["retry_after"]
+                        and frame["retry_after"] != "unsupported"
+                        and not (
+                            len(frame["retry_after"]) <= 5
+                            and frame["retry_after"].isascii()
+                            and frame["retry_after"].isdecimal()
+                        )
+                    )
+                ):
+                    self._process.poisoned = True
+                    raise RuntimeError("Invalid resource completion")
+                ticket = self._active_resources.pop(frame["id"])
+                try:
+                    if self._resources is not None:
+                        self._resources.finish(ticket, frame["status"], frame["retry_after"])
+                except (FetchDenied, AuthorizationDenied):
+                    self._process.send({"finished": False}, deadline)
+                else:
+                    self._process.send({"finished": True}, deadline)
+                continue
             if frame == {"kind": "result", "status": "denied"}:
+                self._inflight = False
                 raise FetchDenied("protected_fetch_denied")
             if (
                 set(frame) == {"kind", "status", "body", "peers"}
@@ -173,10 +276,14 @@ class GatewayProxy:
             ):
                 if type(frame["peers"]) is not list or not 1 <= len(frame["peers"]) <= 3:
                     raise RuntimeError("Missing actual peer receipts")
+                if self._active_resources:
+                    self._process.poisoned = True
+                    raise RuntimeError("Resource completion missing before byte release")
                 self.peers = frame["peers"]
                 body = base64.b64decode(frame["body"], validate=True)
                 if len(body) > 32768:
                     raise RuntimeError("Gateway body cap exceeded")
+                self._inflight = False
                 # Host policy remains authoritative even if a guest lies about a
                 # successful result. Redirect callbacks already covered final URL.
                 self._authorize(bound, url)

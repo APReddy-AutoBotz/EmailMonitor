@@ -7,8 +7,10 @@ from urllib.parse import urljoin
 from uuid import UUID
 
 from fastapi import HTTPException
+from sqlalchemy import text
 
 from emailmonitor.config import Settings
+from emailmonitor.fetching.resources import HopResources
 from emailmonitor.fetching.safety import FetchDenied, IsolationUnavailable, SafeURL, classify_url
 from emailmonitor.organizations.database import AuthorizationDenied, Database
 from emailmonitor.organizations.roles import Capability
@@ -131,8 +133,22 @@ class TenantFixtureAuthorization:
     def __init__(
         self, database: Database, token: str, organization: UUID, source: str, version: int
     ) -> None:
+        if source != "synthetic-publisher" or type(version) is not int or version < 1:
+            raise FetchDenied("fixture_source_scope_denied")
         self._database, self._token = database, token
         self._organization, self._source, self._version = organization, source, version
+
+    @property
+    def resources(self) -> "HopResources":
+        from emailmonitor.administration.source import SourceAdmission, TenantHopResources
+
+        return TenantHopResources(
+            SourceAdmission(
+                self._database, self._token, Settings(environment="test", fixture_mode=True)
+            ),
+            self._organization,
+            self._version,
+        )
 
     def __call__(self, url: SafeURL, operation: Operation) -> None:
         try:
@@ -149,6 +165,21 @@ class TenantFixtureAuthorization:
                 )
                 if not policy_decision(row, request):
                     raise FetchDenied("source_policy_denied")
+                from emailmonitor.progress.binding import CURRENT
+
+                bound = CURRENT.get()
+                if bound is not None and bound.organization != self._organization:
+                    raise FetchDenied("source_resource_scope_denied")
+                current: bool = connection.execute(
+                    text("SELECT emailmonitor.network_entitlement_allowed(:org,:operation,:job)"),
+                    {
+                        "org": self._organization,
+                        "operation": operation.value,
+                        "job": bound.job if bound is not None else None,
+                    },
+                ).scalar_one()
+                if not current:
+                    raise FetchDenied("source_entitlement_denied")
         except (AuthorizationDenied, HTTPException) as error:
             raise FetchDenied("source_policy_denied") from error
 

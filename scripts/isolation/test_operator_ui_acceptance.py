@@ -11,9 +11,11 @@ from uuid import UUID
 from zipfile import ZipFile
 
 from api_client import APIClient
+from emailmonitor.administration.service import Administration
 from emailmonitor.api import create_app
 from emailmonitor.jobs.broker import create_worker
 from emailmonitor.jobs.ledger import Ledger
+from emailmonitor.jobs.queues import owned_queues
 from emailmonitor.organizations.roles import Capability
 from emailmonitor.progress.broker import publish as publish_execution
 from emailmonitor.progress.service import Progress
@@ -189,7 +191,10 @@ def test_required_actual_keyboard_operator_ui(scenario: Scenario, tmp_path: Path
                     channel = connection.channel()
                     try:
                         return bool(
-                            channel.queue_declare(queue=cfg.queue, passive=True).consumer_count > 0
+                            all(
+                                channel.queue_declare(queue=q, passive=True).consumer_count > 0
+                                for q in owned_queues(cfg.queue)
+                            )
                         )
                     except Exception:
                         return False
@@ -265,6 +270,15 @@ def test_required_actual_keyboard_operator_ui(scenario: Scenario, tmp_path: Path
                 first.counts.by_outcome["unsupported"] == first.counts.by_outcome["no_contact"] == 1
             )
             assert reviews == 1 and effects >= 5
+            administration = Administration(progress.database, token, progress.settings)
+            configuration = administration.read(org)
+            usage = administration.usage(org)
+            assert configuration.branding.label == "Keyboard authored workspace"
+            assert configuration.branding.accent_color == "#123456" and configuration.revision == 2
+            assert (
+                usage.settled_resolution_units == effects and usage.reserved_resolution_units == 0
+            )
+            assert usage.source_resource_attempts == 0  # Authored file reads are not HTTP attempts.
             exports = results.exports(org)
             assert len(exports) == 1 and exports[0].state == "ready"
             artifact = results.download(org, exports[0].id)
@@ -297,8 +311,9 @@ def test_required_actual_keyboard_operator_ui(scenario: Scenario, tmp_path: Path
         with broker.connection_for_write() as connection:
             channel = connection.channel()
             try:
-                channel.queue_delete(queue=cfg.queue)
-                channel.exchange_delete(exchange=cfg.queue)
+                for queue in owned_queues(cfg.queue):
+                    channel.queue_delete(queue=queue)
+                    channel.exchange_delete(exchange=queue)
             finally:
                 channel.close()
         broker.close()

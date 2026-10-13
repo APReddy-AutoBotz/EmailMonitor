@@ -8,6 +8,7 @@ from uuid import UUID
 
 from sqlalchemy import Connection, Engine, create_engine, text
 
+from emailmonitor.administration.binding import apply as apply_fixture_binding
 from emailmonitor.organizations.roles import ROLE_CAPABILITIES, Capability, Role
 from emailmonitor.progress.binding import apply as apply_work_binding
 
@@ -122,4 +123,5 @@ class Database(_ConnectionPool):
                 },
             )
             apply_work_binding(connection, organization_id)
+            apply_fixture_binding(connection, organization_id)
             yield connection, context

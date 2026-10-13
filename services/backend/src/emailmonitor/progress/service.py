@@ -137,6 +137,11 @@ job_id=:job AND work_kind='article'
                     {"org": org, "job": job},
                 )
             )
+            quota_stopped: bool = c.execute(
+                text("""SELECT EXISTS(SELECT 1 FROM emailmonitor.execution_items
+WHERE organization_id=:org AND job_id=:job AND reason='quota_exhausted')"""),
+                {"org": org, "job": job},
+            ).scalar_one()
             # An unscheduled durable frontier entry is pending, never silently omitted.
             item_counts = counts([durable.get(url, "pending") for url in articles])
             quality: dict[str, int] = row_pairs(
@@ -163,7 +168,7 @@ AND i.job_id=:job AND i.batch_id=a.batch_id)) GROUP BY a.state
                 duplicates=state.duplicates,
                 discovery_complete=state.discovery_complete,
                 completeness=state.completeness,
-                discovery_stop_reason=state.reason,
+                discovery_stop_reason="quota_exhausted" if quota_stopped else state.reason,
                 counts=item_counts,
                 accepted_associations=quality.get("accepted", 0),
                 review_needed_associations=quality.get("needs_review", 0)
@@ -216,7 +221,7 @@ SELECT emailmonitor.execution_control(:org, :job, :revision, :action, :event)
                 dict(row)
                 for row in c.execute(
                     text("""
-SELECT o.job_id, o.event_id, o.item_id, o.generation
+SELECT o.job_id, o.event_id, o.item_id, o.generation, i.work_kind
 FROM emailmonitor.execution_outbox o JOIN emailmonitor.execution_items i
 USING(organization_id, job_id)
 JOIN emailmonitor.jobs j ON j.organization_id=o.organization_id AND j.id=o.job_id
