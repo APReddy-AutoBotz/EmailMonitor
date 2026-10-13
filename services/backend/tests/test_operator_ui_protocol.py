@@ -215,6 +215,10 @@ def test_failure_reason_only_classifies_exact_known_source_messages() -> None:
         == "rpc_capacity"
     )
     assert failure_reason(RuntimeError("Control not reachable by keyboard")) == "keyboard_focus"
+    assert (
+        failure_reason(RuntimeError("Evidence dialog did not restore keyboard focus"))
+        == "dialog_focus_restore"
+    )
     assert failure_reason(RuntimeError("secret Control not reachable by keyboard")) == "unknown"
     assert failure_reason(RuntimeError("unrecognized private text")) == "unknown"
     assert failure_reason(RuntimeError(1)) == "unknown"

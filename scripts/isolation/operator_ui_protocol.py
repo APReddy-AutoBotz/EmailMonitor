@@ -158,7 +158,7 @@ class DiagnosticFrame(BaseModel):
         ]
         | None
     ) = None
-    reason: Literal["unknown", "rpc_capacity", "keyboard_focus"] = "unknown"
+    reason: Literal["unknown", "rpc_capacity", "keyboard_focus", "dialog_focus_restore"] = "unknown"
     api_statuses: list[int] = Field(default_factory=list, max_length=512)
 
     @model_validator(mode="after")
@@ -220,4 +220,5 @@ def failure_reason(error: BaseException) -> str:
     return {
         "UI diagnostic concurrency/request cap exceeded": "rpc_capacity",
         "Control not reachable by keyboard": "keyboard_focus",
+        "Evidence dialog did not restore keyboard focus": "dialog_focus_restore",
     }.get(error.args[0], "unknown")
