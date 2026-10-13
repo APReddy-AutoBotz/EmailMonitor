@@ -238,3 +238,28 @@ def route_failure_reason(failure: object) -> str:
         if type(failure) is str and failure == "net::ERR_FAILED"
         else "route_fulfill_unclassified"
     )
+
+
+def completion_state_counts(states: object) -> dict[str, int]:
+    """Fixed operational state counts only, never IDs or arbitrary job content."""
+    known = {
+        "draft",
+        "awaiting_approval",
+        "ready",
+        "queued",
+        "running",
+        "pausing",
+        "paused",
+        "cancelling",
+        "cancelled",
+        "completed",
+        "completed_partial",
+        "failed",
+    }
+    if (
+        type(states) is not list
+        or len(states) > 16
+        or any(type(value) is not str or value not in known for value in states)
+    ):
+        raise ValueError("Bounded known job states required")
+    return {value: states.count(value) for value in sorted(set(states))}

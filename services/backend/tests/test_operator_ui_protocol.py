@@ -349,3 +349,23 @@ def test_route_fulfill_diagnostics_are_fixed_and_remain_failure(failure: object)
         }
     )
     assert diagnostic.kind == "failure"
+
+
+@pytest.mark.parametrize(
+    "states", [None, {"running": 1}, ["private arbitrary text"], [True], ["queued"] * 17]
+)
+def test_job_completion_diagnostics_refuse_unknown_or_unbounded_states(states: object) -> None:
+    from operator_ui_protocol import completion_state_counts
+
+    with pytest.raises(ValueError, match="Bounded known job states required"):
+        completion_state_counts(states)
+
+
+def test_job_completion_diagnostics_are_only_fixed_counts() -> None:
+    from operator_ui_protocol import completion_state_counts
+
+    assert completion_state_counts([]) == {}
+    assert completion_state_counts(["running", "queued", "running"]) == {
+        "queued": 1,
+        "running": 2,
+    }

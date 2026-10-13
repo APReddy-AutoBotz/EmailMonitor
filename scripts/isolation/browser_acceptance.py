@@ -8,6 +8,7 @@ import json
 import os
 import socket
 import sys
+from collections.abc import Awaitable
 from pathlib import Path
 from typing import BinaryIO, TextIO
 
@@ -90,6 +91,11 @@ def pending_task_evidence(value: object) -> str:
     ):
         return '{"pending_task_evidence":"unavailable"}'
     return json.dumps({"pending_task_evidence": value}, sort_keys=True)
+
+
+async def boundary_readiness(readiness: Awaitable[object]) -> None:
+    """Keep the existing ten-second gate independent of driver timeout delivery."""
+    await asyncio.wait_for(readiness, timeout=10)
 
 
 class FixtureChannel:
@@ -304,9 +310,13 @@ async def main() -> None:
         trace_stage("click_start")
         await page.locator("#reveal").click()
         trace_stage("click_complete")
+        trace_stage("boundary_wait_start")
         try:
-            await page.wait_for_function("globalThis.boundaryReady === true", timeout=10000)
-        except Error:
+            await boundary_readiness(
+                page.wait_for_function("globalThis.boundaryReady === true", timeout=10000)
+            )
+        except (Error, TimeoutError):
+            trace_stage("boundary_wait_failed")
             try:
                 pending = await asyncio.wait_for(
                     page.evaluate("globalThis.boundaryPending"), timeout=1

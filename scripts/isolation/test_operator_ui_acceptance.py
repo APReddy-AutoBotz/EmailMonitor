@@ -21,7 +21,7 @@ from emailmonitor.progress.broker import publish as publish_execution
 from emailmonitor.progress.service import Progress
 from emailmonitor.results.broker import publish as publish_exports
 from emailmonitor.results.service import Results
-from operator_ui_protocol import RequestFrame, asset_manifest
+from operator_ui_protocol import RequestFrame, asset_manifest, completion_state_counts
 from run_operator_ui_acceptance import run
 from sqlalchemy import text
 from test_durable_jobs import SETTINGS
@@ -80,7 +80,11 @@ def test_required_actual_keyboard_operator_ui(scenario: Scenario, tmp_path: Path
     broker, _ = create_worker(cfg)
     stop, release = threading.Event(), threading.Event()
     errors: list[str] = []
-    held, hold_contacts, fault_contacts = threading.Event(), threading.Event(), threading.Event()
+    held, hold_contacts, fault_contacts = (
+        threading.Event(),
+        threading.Event(),
+        threading.Event(),
+    )
     held.set()
     observed_hold = threading.Event()
     hold_events = threading.Event()
@@ -139,6 +143,7 @@ def test_required_actual_keyboard_operator_ui(scenario: Scenario, tmp_path: Path
             hold_contacts.clear()
             hold_events.clear()
         elif action == "wait_jobs":
+            observed_states: dict[str, int] = {}
 
             def complete() -> bool:
                 with progress.database.tenant(token, org, Capability.READ_ORGANIZATION) as (c, _):
@@ -153,12 +158,25 @@ def test_required_actual_keyboard_operator_ui(scenario: Scenario, tmp_path: Path
                         .scalars()
                         .all()
                     )
+                observed_states.clear()
+                observed_states.update(completion_state_counts(list(rows)))
                 return bool(rows) and all(
                     value in {"completed", "completed_partial", "failed", "cancelled"}
                     for value in rows
                 )
 
-            wait_for(complete, seconds=8)
+            try:
+                wait_for(complete, seconds=8)
+            except AssertionError:
+                print(
+                    "operator-ui-control:wait_jobs "
+                    + json.dumps(
+                        {"states": observed_states, "publisher_failed": bool(errors)},
+                        sort_keys=True,
+                    ),
+                    flush=True,
+                )
+                raise
         elif action == "wait_exports":
             wait_for(
                 lambda: (
@@ -223,7 +241,10 @@ def test_required_actual_keyboard_operator_ui(scenario: Scenario, tmp_path: Path
                 ]
             )
             assert evidence["network_errno"] == [101, 101] and evidence["interfaces"] == ["lo"]
-            with progress.database.tenant(token, org, Capability.READ_ORGANIZATION) as (c, _):
+            with progress.database.tenant(token, org, Capability.READ_ORGANIZATION) as (
+                c,
+                _,
+            ):
                 jobs = c.execute(
                     text(
                         "SELECT id,state FROM emailmonitor.jobs "
@@ -250,7 +271,10 @@ def test_required_actual_keyboard_operator_ui(scenario: Scenario, tmp_path: Path
                 and jobs[0].state == "completed_partial"
                 and jobs[1].state == "completed"
             )
-            with progress.database.tenant(token, org, Capability.READ_ORGANIZATION) as (c, _):
+            with progress.database.tenant(token, org, Capability.READ_ORGANIZATION) as (
+                c,
+                _,
+            ):
                 event_types: Sequence[str] = (
                     c.execute(
                         text(
