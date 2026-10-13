@@ -14,7 +14,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from browser_acceptance import sandbox_status
-from operator_ui_protocol import asset_manifest
+from operator_ui_protocol import ERRORS, STAGES, asset_manifest
 from playwright.async_api import Error, Locator, Page, Route, async_playwright, expect
 
 ORIGIN = "https://app.example.test"
@@ -158,7 +158,17 @@ async def main() -> None:
     accepted = 0
     api_statuses: list[int] = []
     download_seen = asyncio.Event()
+    stage = "browser_launch"
+
+    def checkpoint(value: str) -> None:
+        nonlocal stage
+        if value not in STAGES:
+            raise RuntimeError("Fixed UI stage required")
+        stage = value
+        print(json.dumps({"kind": "stage", "stage": value}), flush=True)
+
     try:
+        checkpoint("browser_launch")
         async with async_playwright() as playwright:
             browser = await playwright.chromium.launch(
                 channel="chromium",
@@ -172,6 +182,7 @@ async def main() -> None:
             await context.add_cookies(setup["cookies"])
             page = await context.new_page()
             page.set_default_timeout(10000)
+            checkpoint("sandbox")
             await page.goto("chrome://sandbox", wait_until="domcontentloaded")
             sandbox = sandbox_status(
                 await page.locator("#sandbox-status").inner_text(),
@@ -261,6 +272,7 @@ async def main() -> None:
                 download_seen.set()
 
             page.on("download", observe_download)
+            checkpoint("assets_session")
             await page.goto(ORIGIN, wait_until="domcontentloaded")
             await page.get_by_role("combobox", name="Active organization", exact=True).wait_for()
             await select_index(
@@ -273,6 +285,7 @@ async def main() -> None:
                 ).index(setup["initial_organization"]),
             )
             await page.get_by_role("heading", name="Synthetic tenant 0", exact=True).wait_for()
+            checkpoint("source_review")
             # Every action below is activated or entered through keyboard events.
             await activate(page, page.get_by_role("button", name="Sources", exact=True))
             await activate(
@@ -287,6 +300,7 @@ async def main() -> None:
                 page.get_by_role("button", name="Confirm approve synthetic policy", exact=True),
             )
             await page.get_by_text("Current synthetic policy", exact=True).wait_for()
+            checkpoint("keyword_plan")
             await activate(page, page.get_by_role("button", name="New extraction", exact=True))
             await type_text(page, page.get_by_label("Keyword", exact=True), "Myocardial Infarction")
             await activate(
@@ -300,6 +314,7 @@ async def main() -> None:
                     "heading", name=re.compile(r"^Job [0-9a-f-]{36}$")
                 ).inner_text()
             ).removeprefix("Job ")
+            checkpoint("pause_resume")
             await activate(page, page.get_by_role("button", name="Pause", exact=True))
             await page.get_by_role("button", name="Resume", exact=True).wait_for()
             await activate(page, page.get_by_role("button", name="Resume", exact=True))
@@ -308,6 +323,7 @@ async def main() -> None:
             await page.get_by_role("dialog").wait_for()
             await page.keyboard.press("Escape")
             await page.get_by_role("dialog").wait_for(state="hidden")
+            checkpoint("old_replay")
             await channel.request({"kind": "control", "action": "hold_events"})
             await channel.request({"kind": "control", "action": "wait_held"})
             await select_index(
@@ -338,6 +354,7 @@ async def main() -> None:
             await activate(
                 page, page.get_by_role("button", name="Open job " + keyword_job, exact=True)
             )
+            checkpoint("keyword_worker")
             await channel.request({"kind": "control", "action": "publish"})
             await channel.request({"kind": "control", "action": "wait_jobs"})
             await activate(
@@ -346,6 +363,7 @@ async def main() -> None:
             await page.get_by_text("completed partial", exact=True).first.wait_for()
             await activate(page, page.get_by_role("button", name="Contacts", exact=True))
             await page.get_by_role("table", name="Current-authorized observed contacts").wait_for()
+            checkpoint("contacts_retry")
             await channel.request({"kind": "control", "action": "fault_contacts"})
             await activate(
                 page, page.get_by_role("button", name="Refresh current view", exact=True)
@@ -355,6 +373,7 @@ async def main() -> None:
                 page, page.get_by_role("button", name="Refresh current view", exact=True)
             )
             await page.get_by_text("Stale view.", exact=False).wait_for(state="hidden")
+            checkpoint("evidence_review")
             await activate(
                 page, page.get_by_role("button", name="Evidence and review", exact=True).first
             )
@@ -378,6 +397,7 @@ async def main() -> None:
             )
             await activate(page, page.get_by_role("button", name="Save review", exact=True))
             await page.get_by_role("dialog").wait_for(state="hidden")
+            checkpoint("export_preview")
             await activate(page, page.get_by_role("button", name="Exports", exact=True))
             await activate(
                 page, page.get_by_role("button", name="Preview eligible export counts", exact=True)
@@ -393,12 +413,14 @@ async def main() -> None:
             await activate(
                 page, page.get_by_role("button", name="Create asynchronous export", exact=True)
             )
+            checkpoint("export_worker")
             await channel.request({"kind": "control", "action": "wait_exports"})
             await activate(
                 page, page.get_by_role("button", name="Refresh current view", exact=True)
             )
             await activate(page, page.get_by_role("button", name="Download", exact=True).first)
             await asyncio.wait_for(download_seen.wait(), timeout=5)
+            checkpoint("metadata_screens")
             await activate(page, page.get_by_role("button", name="Usage", exact=True))
             await page.get_by_role("heading", name="Observed usage metadata", exact=True).wait_for()
             await page.get_by_text(
@@ -408,6 +430,7 @@ async def main() -> None:
             await page.get_by_role("table", name="Authorized audit metadata").wait_for()
             await activate(page, page.get_by_role("button", name="Settings", exact=True))
             await page.get_by_role("table", name="Current organization members").wait_for()
+            checkpoint("url_plan")
             # A separate article URL takes the same real create/plan/worker path.
             await activate(page, page.get_by_role("button", name="New extraction", exact=True))
             await activate(page, page.get_by_role("button", name="URL", exact=True))
@@ -426,6 +449,7 @@ async def main() -> None:
             await activate(
                 page, page.get_by_role("button", name="Refresh current view", exact=True)
             )
+            checkpoint("url_worker")
             await page.get_by_text("no contact", exact=True).first.wait_for()
             await activate(page, page.get_by_role("button", name="Contacts", exact=True))
             await type_text(
@@ -433,6 +457,7 @@ async def main() -> None:
                 page.get_by_label("Search loaded scope", exact=True),
                 "no-such-observed-person",
             )
+            checkpoint("empty_contacts")
             await page.get_by_text("No contacts match these server filters.", exact=True).wait_for()
             await type_text(page, page.get_by_label("Search loaded scope", exact=True), "")
             await page.get_by_role("table", name="Current-authorized observed contacts").wait_for()
@@ -443,6 +468,7 @@ async def main() -> None:
                 .nth(2)
                 .inner_text()
             ).splitlines()[0]
+            checkpoint("old_contact_response")
             await channel.request({"kind": "control", "action": "hold_contacts"})
             await activate(
                 page, page.get_by_role("button", name="Refresh current view", exact=True)
@@ -465,6 +491,7 @@ async def main() -> None:
             if old_address in await page.locator("body").inner_text():
                 raise RuntimeError("Previous organization results survived switch")
             await activate(page, page.get_by_role("button", name="Exports", exact=True))
+            checkpoint("readonly_role")
             await page.get_by_text(
                 "Export capability is not available for this role.", exact=False
             ).wait_for()
@@ -480,6 +507,7 @@ async def main() -> None:
             await asyncio.wait_for(settled_requests(), timeout=10)
             if old_address in await page.locator("body").inner_text():
                 raise RuntimeError("Late previous-tenant response survived switch")
+            checkpoint("final_cleanup")
             print(
                 json.dumps(
                     {
@@ -510,6 +538,21 @@ async def main() -> None:
             )
             await context.close()
             await browser.close()
+    except Exception as error:
+        name = type(error).__name__
+        # Report before cancelling the owned stdin reader: its executor shutdown awaits host EOF.
+        print(
+            json.dumps(
+                {
+                    "kind": "failure",
+                    "stage": stage,
+                    "error": name if name in ERRORS else "UnexpectedError",
+                    "api_statuses": api_statuses,
+                }
+            ),
+            flush=True,
+        )
+        raise
     finally:
         receiver.cancel()
         await asyncio.gather(receiver, return_exceptions=True)

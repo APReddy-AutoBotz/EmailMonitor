@@ -2,6 +2,7 @@
 
 import base64
 from pathlib import Path
+from typing import Literal
 from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -108,3 +109,67 @@ def asset_manifest(root: Path) -> dict[str, str]:
     if "index.html" not in manifest:
         raise ValueError("Actual compiled entry point required")
     return manifest
+
+
+STAGES = (
+    "browser_launch",
+    "sandbox",
+    "assets_session",
+    "source_review",
+    "keyword_plan",
+    "pause_resume",
+    "old_replay",
+    "keyword_worker",
+    "contacts_retry",
+    "evidence_review",
+    "export_preview",
+    "export_worker",
+    "metadata_screens",
+    "url_plan",
+    "url_worker",
+    "empty_contacts",
+    "old_contact_response",
+    "readonly_role",
+    "final_cleanup",
+)
+ERRORS = {
+    "TimeoutError",
+    "RuntimeError",
+    "Error",
+    "AssertionError",
+    "ValueError",
+    "UnexpectedError",
+}
+
+
+class DiagnosticFrame(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    kind: Literal["stage", "failure"]
+    stage: str
+    error: (
+        Literal[
+            "TimeoutError",
+            "RuntimeError",
+            "Error",
+            "AssertionError",
+            "ValueError",
+            "UnexpectedError",
+        ]
+        | None
+    ) = None
+    api_statuses: list[int] = Field(default_factory=list, max_length=512)
+
+    @model_validator(mode="after")
+    def fixed_diagnostic(self) -> "DiagnosticFrame":
+        if self.stage not in STAGES or any(
+            type(code) is not int or not 100 <= code <= 599 for code in self.api_statuses
+        ):
+            raise ValueError("Fixed bounded UI diagnostic required")
+        if (
+            self.kind == "failure"
+            and self.error is None
+            or self.kind == "stage"
+            and (self.error is not None or self.api_statuses)
+        ):
+            raise ValueError("Explicit failure or fixed stage required")
+        return self

@@ -104,3 +104,79 @@ def test_asset_manifest_has_only_actual_reviewed_built_files(tmp_path: Path) -> 
     (tmp_path / "assets/unexpected.js").symlink_to(tmp_path / "index.html")
     with pytest.raises(ValueError):
         asset_manifest(tmp_path)
+
+
+def test_fixed_failure_and_stage_diagnostics_contain_no_request_content() -> None:
+    from operator_ui_protocol import DiagnosticFrame
+
+    assert (
+        DiagnosticFrame.model_validate({"kind": "stage", "stage": "assets_session"}).error is None
+    )
+    row = DiagnosticFrame.model_validate(
+        {
+            "kind": "failure",
+            "stage": "assets_session",
+            "error": "TimeoutError",
+            "api_statuses": [200, 404],
+        }
+    )
+    assert row.api_statuses == [200, 404]
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"stage": "arbitrary secret"},
+        {"error": "arbitrary exception text"},
+        {"cookie": "unrecognized"},
+        {"api_statuses": [True]},
+        {"api_statuses": [99]},
+        {"api_statuses": [600]},
+        {"api_statuses": [200] * 513},
+        {"kind": "stage", "error": "TimeoutError"},
+        {"kind": "stage", "error": None, "api_statuses": [200]},
+    ],
+)
+def test_unbounded_or_unrecognized_ui_diagnostics_refuse(changes: dict[str, object]) -> None:
+    from operator_ui_protocol import DiagnosticFrame
+
+    with pytest.raises(ValidationError):
+        DiagnosticFrame.model_validate(
+            {"kind": "failure", "stage": "assets_session", "error": "TimeoutError", **changes}
+        )
+
+
+def test_owned_pipe_failure_is_observed_before_guest_waits_for_host_eof(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import subprocess
+    import sys
+
+    import run_operator_ui_acceptance as host
+
+    original = subprocess.Popen
+
+    def owned_python_pipe(*args: object, **kwargs: object) -> subprocess.Popen[bytes]:
+        return original(
+            [
+                sys.executable,
+                "-c",
+                "import sys; sys.stdin.readline(); "
+                'print(\'{"kind":"stage","stage":"assets_session"}\',flush=True); '
+                'print(\'{"kind":"failure","stage":"assets_session",'
+                '"error":"TimeoutError","api_statuses":[200]}\',flush=True); '
+                "sys.stdin.read()",
+            ],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            bufsize=0,
+        )
+
+    monkeypatch.setattr(subprocess, "Popen", owned_python_pipe)
+    with pytest.raises(
+        RuntimeError, match=r"Actual UI failure at assets_session: TimeoutError.*200"
+    ):
+        host.conversation(
+            "owned-pipe-only", FastAPI(), {}, lambda action: None, lambda request: False
+        )

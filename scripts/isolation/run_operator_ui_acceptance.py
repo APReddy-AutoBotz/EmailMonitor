@@ -14,7 +14,7 @@ from typing import Any
 from emailmonitor.fetching.browser_fixture import validate_applied_profile, write_bounded_reply
 from fastapi import FastAPI
 from operator_ui_asgi import relay
-from operator_ui_protocol import RequestFrame, encoded_reply
+from operator_ui_protocol import DiagnosticFrame, RequestFrame, encoded_reply
 from transport_topology import OWNER_LABEL, docker, remove_owned, require_owner, resource
 
 
@@ -111,6 +111,7 @@ def conversation(
     total, last_identifier = 0, 0
     pending: set[Future[dict[str, object]]] = set()
     result: dict[str, Any] | None = None
+    stage, stages = "bootstrap", 0
     try:
         write_bounded_reply(process.stdin.fileno(), json.dumps(setup).encode() + b"\n", deadline)
         with ThreadPoolExecutor(max_workers=8) as executor, selectors.DefaultSelector() as selector:
@@ -120,7 +121,9 @@ def conversation(
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     raise RuntimeError(
-                        "UI diagnostic absolute deadline exceeded; bounded stderr="
+                        "UI diagnostic absolute deadline exceeded at "
+                        + stage
+                        + "; bounded stderr="
                         + errors.decode(errors="replace")
                     )
                 for future in tuple(pending):
@@ -151,6 +154,24 @@ def conversation(
                         if len(line) > 32768:
                             raise RuntimeError("UI request frame exceeded")
                         value = json.loads(line)
+                        if value.get("kind") in {"stage", "failure"}:
+                            diagnostic = DiagnosticFrame.model_validate(value)
+                            if diagnostic.kind == "failure":
+                                if diagnostic.stage != stage:
+                                    raise RuntimeError("Unmatched UI failure stage")
+                                raise RuntimeError(
+                                    "Actual UI failure at "
+                                    + stage
+                                    + ": "
+                                    + str(diagnostic.error)
+                                    + "; actual API statuses="
+                                    + str(diagnostic.api_statuses)
+                                )
+                            stages += 1
+                            if stages > 32:
+                                raise RuntimeError("UI diagnostic stage cap exceeded")
+                            stage = diagnostic.stage
+                            continue
                         if value.get("kind") == "result":
                             if pending:
                                 raise RuntimeError("Guest completed with pending requests")
