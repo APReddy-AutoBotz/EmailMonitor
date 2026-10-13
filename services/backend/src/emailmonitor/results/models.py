@@ -142,6 +142,19 @@ class ExportInput(BaseModel):
     def literal_query(cls, value: str) -> str:
         return Filters.literal_query(value)
 
+    optional_contact_fields: tuple[Literal["affiliations", "article_title"], ...] = Field(
+        default=("affiliations", "article_title"),
+        max_length=2,
+        json_schema_extra={"uniqueItems": True},
+    )
+
+    @field_validator("optional_contact_fields")
+    @classmethod
+    def distinct_fields(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        if len(set(value)) != len(value):
+            raise ValueError("Distinct allowlisted optional fields required")
+        return value
+
     def filters(self) -> Filters:
         return Filters(
             job_id=self.job_id,
@@ -192,6 +205,11 @@ class ExportSnapshot(Record):
     filters: Filters
     format: Literal["csv", "xlsx"]
     include_article_outcomes: bool
+    optional_contact_fields: tuple[Literal["affiliations", "article_title"], ...] = Field(
+        default=("affiliations", "article_title"),
+        max_length=2,
+        json_schema_extra={"uniqueItems": True},
+    )
     contacts: tuple[Contact, ...] = Field(max_length=2000)
     article_outcomes: tuple[ArticleOutcome, ...] = Field(max_length=2000)
     created_at: datetime
@@ -199,6 +217,11 @@ class ExportSnapshot(Record):
     synthetic: Literal[True] = True
     technical_checks_performed: Literal[False] = False
     outreach_approved: Literal[False] = False
+
+    @field_validator("optional_contact_fields")
+    @classmethod
+    def distinct_fields(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        return ExportInput.distinct_fields(value)
 
     @field_validator("expires_at", "created_at")
     @classmethod
@@ -234,3 +257,19 @@ class ExportSnapshot(Record):
         ):
             raise ValueError("Export snapshots cannot contain rejected/unrequested associations")
         return self
+
+
+class ExportPreview(Record):
+    organization_id: UUID
+    contacts: int = Field(ge=0, le=2000)
+    article_outcomes: int = Field(ge=0, le=2000)
+    optional_contact_fields: tuple[Literal["affiliations", "article_title"], ...]
+    counts_may_change: Literal[True] = True
+    excluded_reasons: tuple[
+        Literal[
+            "unaccepted_excluded_by_default",
+            "rejected_and_suppressed_excluded",
+            "unavailable_records_not_disclosed",
+        ],
+        ...,
+    ]

@@ -8,7 +8,13 @@ import pytest
 from emailmonitor.organizations.database import AuthorizationDenied, RevisionConflict
 from emailmonitor.organizations.roles import ROLE_CAPABILITIES, Capability, Role
 from emailmonitor.results.broker import ExportEvent
-from emailmonitor.results.models import ContactPage, ExportInput, ExportState, OutcomePage
+from emailmonitor.results.models import (
+    ContactPage,
+    ExportInput,
+    ExportPreview,
+    ExportState,
+    OutcomePage,
+)
 from emailmonitor.results.service import translate
 from jsonschema import Draft202012Validator, FormatChecker
 from pydantic import ValidationError
@@ -24,10 +30,11 @@ ROOT = Path(__file__).resolve().parents[3]
         ("result-outcomes", OutcomePage),
         ("export-request", ExportInput),
         ("export-state", ExportState),
+        ("export-preview", ExportPreview),
     ],
 )
 def test_committed_result_schema_examples(
-    name: str, model: type[ContactPage | OutcomePage | ExportInput | ExportState]
+    name: str, model: type[ContactPage | OutcomePage | ExportInput | ExportState | ExportPreview]
 ) -> None:
     raw = (ROOT / f"contracts/examples/{name}.json").read_text()
     schema = json.loads((ROOT / f"contracts/{name}.schema.json").read_text())
@@ -104,3 +111,30 @@ def test_only_exact_owned_driver_denials_are_translated(
     error = DBAPIError("synthetic", {}, Exception({"C": code, "M": message}), False)
     with pytest.raises(expected):
         translate(error)
+
+
+@pytest.mark.parametrize(
+    "fields", [[], ["affiliations"], ["article_title"], ["affiliations", "article_title"]]
+)
+def test_optional_export_schema_and_runtime_allowlist_parity(fields: list[str]) -> None:
+    body = {
+        "format": "csv",
+        "purpose": "academic_contact_research",
+        "optional_contact_fields": fields,
+    }
+    schema = json.loads((ROOT / "contracts/export-request.schema.json").read_text())
+    Draft202012Validator(schema).validate(body)
+    assert ExportInput.model_validate(body).optional_contact_fields == tuple(fields)
+
+
+@pytest.mark.parametrize("fields", [["affiliations", "affiliations"], ["raw_address"], [1], None])
+def test_optional_export_schema_and_runtime_refuse_invalid_selection(fields: object) -> None:
+    body = {
+        "format": "csv",
+        "purpose": "academic_contact_research",
+        "optional_contact_fields": fields,
+    }
+    schema = json.loads((ROOT / "contracts/export-request.schema.json").read_text())
+    assert list(Draft202012Validator(schema).iter_errors(body))
+    with pytest.raises(ValidationError):
+        ExportInput.model_validate(body)

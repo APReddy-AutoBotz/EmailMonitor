@@ -22,6 +22,7 @@ from emailmonitor.results.models import (
     ContactPage,
     EvidenceView,
     ExportInput,
+    ExportPreview,
     ExportSnapshot,
     ExportState,
     Filters,
@@ -156,6 +157,14 @@ class Results:
                 {"org": org, "batch": batch, "id": evidence},
             ).scalar_one()
             return EvidenceView.model_validate_json(json.dumps(row))
+
+    def preview(self, org: UUID, request: ExportInput) -> ExportPreview:
+        with self._tenant(org, True) as c:
+            document: object = c.execute(
+                text("SELECT emailmonitor.exports_preview(:org,CAST(:request AS jsonb))"),
+                {"org": org, "request": request.model_dump_json()},
+            ).scalar_one()
+            return ExportPreview.model_validate_json(json.dumps(document))
 
     def create(self, org: UUID, request: ExportInput, key: str) -> ExportState:
         if (

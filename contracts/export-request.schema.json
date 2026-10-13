@@ -59,6 +59,23 @@
       "minimum": 1,
       "title": "Ttl Seconds",
       "type": "integer"
+    },
+    "optional_contact_fields": {
+      "default": [
+        "affiliations",
+        "article_title"
+      ],
+      "items": {
+        "enum": [
+          "affiliations",
+          "article_title"
+        ],
+        "type": "string"
+      },
+      "maxItems": 2,
+      "title": "Optional Contact Fields",
+      "type": "array",
+      "uniqueItems": true
     }
   },
   "required": [
