@@ -2,7 +2,8 @@
 
 import pytest
 from emailmonitor.organizations.database import AuthorizationDenied, RevisionConflict
-from emailmonitor.progress.service import translate
+from emailmonitor.progress.service import row_pairs, translate
+from sqlalchemy import create_engine, text
 from sqlalchemy.exc import DBAPIError
 
 
@@ -31,3 +32,20 @@ def test_arbitrary_failure_remains_the_actual_error(code: str, reason: str) -> N
     with pytest.raises(DBAPIError) as caught:
         translate(error)
     assert caught.value is error
+
+
+@pytest.mark.parametrize("empty", [False, True])
+def test_installed_sqlalchemy_row_pairs_are_not_a_result_mapping(empty: bool) -> None:
+    import warnings
+
+    engine = create_engine("sqlite://")
+    try:
+        with engine.begin() as connection, warnings.catch_warnings():
+            warnings.simplefilter("error")
+            where = " WHERE 0" if empty else ""
+            result = connection.execute(text("SELECT 'accepted' AS outcome, 2 AS total" + where))
+            assert list(result.keys()) == ["outcome", "total"]
+            assert row_pairs(result) == ({} if empty else {"accepted": 2})
+            assert result.all() == []
+    finally:
+        engine.dispose()

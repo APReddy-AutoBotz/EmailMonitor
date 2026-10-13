@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Literal, NoReturn
 from uuid import UUID, uuid4
 
-from sqlalchemy import Connection, text
+from sqlalchemy import Connection, Result, text
 from sqlalchemy.exc import DBAPIError
 
 from emailmonitor.associations.service import Associations
@@ -22,6 +22,11 @@ from emailmonitor.organizations.roles import Capability
 from emailmonitor.progress.binding import Lease, bound
 from emailmonitor.progress.models import Event, Item, Snapshot
 from emailmonitor.progress.state import Outcome, counts, percentage
+
+
+def row_pairs[Value](rows: Result[str, Value]) -> dict[str, Value]:
+    """Consume result rows explicitly; Result.keys is metadata, not a mapping."""
+    return {row[0]: row[1] for row in rows}
 
 
 def translate(error: DBAPIError) -> NoReturn:
@@ -121,7 +126,7 @@ organization_id=:org AND job_id=:job
             )
             selected = run["selected_urls"] if run else None
             articles = [url for url in state.articles if selected is None or url in selected]
-            durable: dict[str, Outcome] = dict(
+            durable: dict[str, Outcome] = row_pairs(
                 c.execute(
                     text(
                         """
@@ -130,11 +135,11 @@ job_id=:job AND work_kind='article'
 """
                     ),
                     {"org": org, "job": job},
-                ).tuples()
+                )
             )
             # An unscheduled durable frontier entry is pending, never silently omitted.
             item_counts = counts([durable.get(url, "pending") for url in articles])
-            quality: dict[str, int] = dict(
+            quality: dict[str, int] = row_pairs(
                 c.execute(
                     text("""
 SELECT a.state, count(*) FROM emailmonitor.author_email_associations a
@@ -144,7 +149,7 @@ SELECT 1 FROM emailmonitor.execution_items i WHERE i.organization_id=a.organizat
 AND i.job_id=:job AND i.batch_id=a.batch_id)) GROUP BY a.state
 """),
                     {"org": org, "job": job},
-                ).tuples()
+                )
             )
             document = Snapshot(
                 organization_id=org,
