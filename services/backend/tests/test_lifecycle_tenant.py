@@ -121,7 +121,7 @@ def test_real_deletion_during_parse_cannot_commit_after_purge(scenario: Scenario
     extraction, job = observation_ready(scenario)
     org = scenario.organizations[0]
     url = "https://synthetic.publisher.example/article-a.html"
-    payload = article_bytes(url)
+    payload = article_bytes("article-a.html")
     observation = parse_article(SETTINGS, url, payload)
     service = lifecycle(scenario, extraction.token)
     receipt = service.stage(org, DeletionRequest(job_id=job, reason="privacy_request"))
@@ -478,7 +478,7 @@ def test_real_probe_purge_releases_reserved_quota_without_changing_used(scenario
 
     ledger = approved(scenario)
     org = scenario.organizations[0]
-    job = ledger.create_probe(org, 2)
+    job = ledger.create_probe(org, version=1, count=2)
     service = lifecycle(scenario, ledger.token)
     with ledger.database.tenant(ledger.token, org, Capability.READ_ORGANIZATION) as (c, _):
         before = c.execute(

@@ -159,3 +159,31 @@ def test_source_release_fences_organization_before_nested_mutex() -> None:
         "privacy_source_allowed(p_org)"
     )
     assert "EXCEPTION WHEN lock_not_available THEN RETURN false" in body
+
+
+def test_observation_deadline_alias_does_not_shadow_discovery_record() -> None:
+    from pathlib import Path
+
+    source = (
+        Path(__file__).resolve().parents[1] / "migrations/versions/0011_lifecycle.sql"
+    ).read_text()
+    body = source.split("CREATE OR REPLACE FUNCTION emailmonitor.guard_article_observation()", 1)[
+        1
+    ].split("END $$;", 1)[0]
+    assert "DECLARE d emailmonitor.discovery" in body
+    assert "lifecycle_job_deadlines deadline WHERE deadline.organization_id" in body
+    assert "lifecycle_job_deadlines d WHERE" not in body
+
+
+def test_controlled_deletion_uses_existing_successful_fixture_route() -> None:
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[3]
+    source = (root / "scripts/isolation/test_transport_acceptance.py").read_text()
+    body = source.split(
+        "def test_actual_tenant_deletion_after_tls_response_never_releases_bytes(", 1
+    )[1]
+    assert 'planned(scenario, f"https://{HOST}/tooltip.html")' in body
+    assert 'assert observed["calls"][0]["path"] == "/tooltip.html"' in body
+    assert 'target.fetch(f"https://{HOST}/tooltip.html")' in body
+    assert "/article-a.html" not in body

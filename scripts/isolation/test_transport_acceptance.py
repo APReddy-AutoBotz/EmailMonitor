@@ -615,7 +615,7 @@ def test_actual_tenant_deletion_after_tls_response_never_releases_bytes(
     from test_progress_tenant import planned
 
     configure(topology)
-    progress, job = planned(scenario, f"https://{HOST}/article-a.html")
+    progress, job = planned(scenario, f"https://{HOST}/tooltip.html")
     org = scenario.organizations[0]
     authorization = TenantFixtureAuthorization(
         progress.database, progress.token, org, "synthetic-publisher", 1
@@ -626,7 +626,7 @@ def test_actual_tenant_deletion_after_tls_response_never_releases_bytes(
     def delete_after_receipt() -> None:
         observed = snapshot(topology)
         assert len(observed["calls"]) == 1
-        assert observed["calls"][0]["path"] == "/article-a.html"
+        assert observed["calls"][0]["path"] == "/tooltip.html"
         receipt = service.stage(org, DeletionRequest(job_id=None, reason="privacy_request"))
         assert receipt.stage == "fenced"
         fenced.append(receipt.id)
@@ -638,11 +638,11 @@ def test_actual_tenant_deletion_after_tls_response_never_releases_bytes(
         resources=CompletionResources(authorization.resources, delete_after_receipt),
     )
     with pytest.raises(FetchDenied):
-        target.fetch(f"https://{HOST}/article-a.html")
+        target.fetch(f"https://{HOST}/tooltip.html")
     assert len(fenced) == 1 and len(snapshot(topology)["calls"]) == 1
     queries = len(snapshot(topology)["queries"])
     with pytest.raises(FetchDenied):
-        proxy(topology, org, authorization).fetch(f"https://{HOST}/article-a.html")
+        proxy(topology, org, authorization).fetch(f"https://{HOST}/tooltip.html")
     assert len(snapshot(topology)["queries"]) == queries
     assert service.purge(org, fenced[0]).stage == "purged"
     print(
