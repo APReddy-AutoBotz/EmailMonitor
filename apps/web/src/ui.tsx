@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { ApiError, ApiScope, errorMessage } from './client'
+import { scheduleSearch } from './search'
 export type Resource<T> = { data?: T; loading: boolean; error?: string; stale?: boolean }
 export function useResource<T>(scope: ApiScope, path: string | null, revision = 0): Resource<T> {
   const [state, setState] = useState<Resource<T>>({ loading: true })
@@ -21,6 +22,11 @@ export function useResource<T>(scope: ApiScope, path: string | null, revision = 
     return () => controller.abort()
   }, [scope, path, revision])
   return state
+}
+export function useSettledSearch(scope: ApiScope, value: string): string | null {
+  const [settled, setSettled] = useState({ scope, value })
+  useEffect(() => scheduleSearch(value, scope.controller.signal, next => setSettled({ scope, value: next })), [scope, value])
+  return !scope.closed && settled.scope === scope && settled.value === value ? value : null
 }
 export function Load<T>({ resource, children }: { resource: Resource<T>; children: (data: T) => ReactNode }) {
   return <>{resource.loading && <p role="status">Loading current organization data…</p>}

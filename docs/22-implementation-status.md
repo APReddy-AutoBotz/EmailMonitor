@@ -187,3 +187,6 @@ EM-014 current diagnostic run again failed UI aturl_worker before timeout queue 
 
 
 EM-014 actual UI now identifies the owned combined rpc_capacity refusal. A diagnostic-only split distinguishes the unchanged512 request cap from16 admitted cap, with actual Channel-body pure regressions and conserved cleanup; no frontend/cap/deadline change is inferred before the branch is known. Normal1168/21822.57s and genuinely empty1168/21825.31s pass28React/full gates; exact-tree review and actual1386/no-skip/six own-head gates remain pending; [evidence](../reports/em014-validation.md).
+
+
+EM-014 latest UI failure reachesempty_contacts and identifies the unchanged16-admitted guard in owned source frames. A bounded250ms keyboard-search coalescing correction keeps immediate input feedback, hides pending-filter contact data and cancels old-scope timers; pure scheduler checks do not substitute for actual UI evidence. Normal1168/21822.95s and genuinely empty1168/21824.77s pass31React/full gates; exact-tree review and actual1386/no-skip/31frontend/six own-head gates remain pending; [report](../reports/em014-validation.md).
