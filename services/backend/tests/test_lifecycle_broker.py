@@ -7,7 +7,6 @@ from emailmonitor.jobs.broker import create_worker
 from emailmonitor.lifecycle.broker import publish
 from emailmonitor.lifecycle.models import Retention, RetentionUpdate
 from emailmonitor.lifecycle.service import Lifecycle
-from emailmonitor.organizations.roles import Capability
 from sqlalchemy import text
 from test_durable_jobs import SETTINGS
 from test_real_broker_jobs import config, wait_for, worker
@@ -43,16 +42,19 @@ def test_real_identifier_tick_purges_once_and_confirms_duplicate_delivery(
         with worker(cfg, tmp_path):
 
             def complete() -> bool:
-                with results.database.tenant(results.token, org, Capability.READ_ORGANIZATION) as (
-                    c,
-                    _,
-                ):
+                # Observe committed evidence without competing with the worker's
+                # deliberate organization UPDATE NOWAIT lifecycle fence.
+                with admin.connect() as c:
                     return (
                         c.execute(
-                            text("SELECT emailmonitor.lifecycle_schedule(:org,:id)"),
-                            {"org": org, "id": uuid4()},
-                        ).first()
-                        is None
+                            text(
+                                "SELECT count(*)=1 AND bool_and(completed_at IS NOT NULL "
+                                "AND purged_jobs=1) FROM emailmonitor.lifecycle_ticks "
+                                "WHERE organization_id=:org"
+                            ),
+                            {"org": org},
+                        ).scalar_one()
+                        is True
                     )
 
             wait_for(complete)

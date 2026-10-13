@@ -244,3 +244,35 @@ def test_lifecycle_http_regression_uses_fixture_enabled_client() -> None:
     call = contexts[0].items[0].context_expr
     assert isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
     assert call.func.id == "fixture_client"
+
+
+def test_broker_completion_observer_never_competes_for_lifecycle_lock() -> None:
+    import ast
+    from pathlib import Path
+
+    module = ast.parse(Path(__file__).with_name("test_lifecycle_broker.py").read_text())
+    observer = next(
+        node
+        for node in ast.walk(module)
+        if isinstance(node, ast.FunctionDef) and node.name == "complete"
+    )
+    texts = [
+        node.args[0].value
+        for node in ast.walk(observer)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "text"
+        and isinstance(node.args[0], ast.Constant)
+    ]
+    assert texts == [
+        "SELECT count(*)=1 AND bool_and(completed_at IS NOT NULL "
+        "AND purged_jobs=1) FROM emailmonitor.lifecycle_ticks "
+        "WHERE organization_id=:org"
+    ]
+    calls = [
+        node.func.attr
+        for node in ast.walk(observer)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+    ]
+    assert "tenant" not in calls and "schedule" not in calls
+    assert "connect" in calls and "scalar_one" in calls
