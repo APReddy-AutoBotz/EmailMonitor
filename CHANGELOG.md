@@ -1,4 +1,10 @@
 # Changelog
+
+## EM-011 synthetic results/export candidate
+
+- Add bounded retained contact/outcome/evidence reads and async private export snapshots with current tenant/source/role/data-revision/expiry fences
+- Render standard-library formula-safe CSV/ZIP and literal-string XLSX with provenance; no new dependencies or live/production activation
+- Add pure contracts/cursor/format tests and required real SQL/broker acceptance regressions; source review and actual CI remain pending
 ## 2026-10-13 — EM-010 scoped synthetic foundation verified in Draft
 
 - Independently reconcile reviewed head/merge and all five actual job logs against authoritative progress/recovery acceptance

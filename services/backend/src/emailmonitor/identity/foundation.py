@@ -25,6 +25,7 @@ from emailmonitor.organizations.database import (
 )
 from emailmonitor.organizations.roles import LIFECYCLE_TRANSITIONS, Capability, Role
 from emailmonitor.progress.api import progress_router
+from emailmonitor.results.api import result_router
 from emailmonitor.sources.api import source_router
 
 COOKIE = "__Host-emailmonitor_session"
@@ -419,4 +420,5 @@ AND identity_id=:actor
         router.include_router(progress_router(self.database, token, csrf, settings))
         router.include_router(job_router(self.database, token, csrf, settings))
         router.include_router(association_router(self.database, token, csrf, settings))
+        router.include_router(result_router(self.database, token, csrf, settings))
         return router

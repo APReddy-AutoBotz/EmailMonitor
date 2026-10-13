@@ -1,0 +1,277 @@
+{
+  "$defs": {
+    "Contact": {
+      "additionalProperties": false,
+      "properties": {
+        "organization_id": {
+          "format": "uuid",
+          "title": "Organization Id",
+          "type": "string"
+        },
+        "job_id": {
+          "format": "uuid",
+          "title": "Job Id",
+          "type": "string"
+        },
+        "batch_id": {
+          "format": "uuid",
+          "title": "Batch Id",
+          "type": "string"
+        },
+        "association_id": {
+          "format": "uuid",
+          "title": "Association Id",
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "candidate_id": {
+          "format": "uuid",
+          "title": "Candidate Id",
+          "type": "string"
+        },
+        "author_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Author Id"
+        },
+        "author_name": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Author Name"
+        },
+        "first_author": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "First Author"
+        },
+        "corresponding_author": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Corresponding Author"
+        },
+        "affiliations": {
+          "items": {
+            "maxLength": 1000,
+            "type": "string"
+          },
+          "maxItems": 20,
+          "title": "Affiliations",
+          "type": "array"
+        },
+        "raw_address": {
+          "maxLength": 320,
+          "minLength": 1,
+          "title": "Raw Address",
+          "type": "string"
+        },
+        "normalized_address": {
+          "anyOf": [
+            {
+              "maxLength": 320,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Normalized Address"
+        },
+        "state": {
+          "enum": [
+            "accepted",
+            "needs_review",
+            "unmatched",
+            "rejected"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "identity_state": {
+          "const": "article_local_unresolved",
+          "default": "article_local_unresolved",
+          "title": "Identity State",
+          "type": "string"
+        },
+        "evidence_strength": {
+          "enum": [
+            "explicit",
+            "supported",
+            "ambiguous",
+            "none"
+          ],
+          "title": "Evidence Strength",
+          "type": "string"
+        },
+        "association_reason": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Association Reason",
+          "type": "string"
+        },
+        "evidence_ids": {
+          "items": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "maxItems": 40,
+          "minItems": 1,
+          "title": "Evidence Ids",
+          "type": "array"
+        },
+        "source_id": {
+          "const": "synthetic-publisher",
+          "default": "synthetic-publisher",
+          "title": "Source Id",
+          "type": "string"
+        },
+        "source_url": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Source Url",
+          "type": "string"
+        },
+        "policy_version": {
+          "minimum": 1,
+          "title": "Policy Version",
+          "type": "integer"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Title"
+        },
+        "observed_at": {
+          "format": "date-time",
+          "title": "Observed At",
+          "type": "string"
+        },
+        "syntax_status": {
+          "enum": [
+            "valid",
+            "invalid",
+            "unsupported"
+          ],
+          "title": "Syntax Status",
+          "type": "string"
+        },
+        "technical_status": {
+          "const": "not_checked",
+          "default": "not_checked",
+          "title": "Technical Status",
+          "type": "string"
+        },
+        "delivery_status": {
+          "const": "unverified",
+          "default": "unverified",
+          "title": "Delivery Status",
+          "type": "string"
+        },
+        "outreach_eligibility": {
+          "const": "not_assessed",
+          "default": "not_assessed",
+          "title": "Outreach Eligibility",
+          "type": "string"
+        }
+      },
+      "required": [
+        "organization_id",
+        "job_id",
+        "batch_id",
+        "association_id",
+        "revision",
+        "candidate_id",
+        "author_id",
+        "first_author",
+        "corresponding_author",
+        "affiliations",
+        "raw_address",
+        "state",
+        "evidence_strength",
+        "association_reason",
+        "evidence_ids",
+        "source_url",
+        "policy_version",
+        "observed_at",
+        "syntax_status"
+      ],
+      "title": "Contact",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "items": {
+      "items": {
+        "$ref": "#/$defs/Contact"
+      },
+      "maxItems": 200,
+      "title": "Items",
+      "type": "array"
+    },
+    "next_cursor": {
+      "anyOf": [
+        {
+          "maxLength": 2048,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Next Cursor"
+    },
+    "synthetic": {
+      "const": true,
+      "default": true,
+      "title": "Synthetic",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "items"
+  ],
+  "title": "ContactPage",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

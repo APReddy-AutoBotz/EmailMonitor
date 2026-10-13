@@ -14,3 +14,5 @@ All examples are synthetic. Reserved example domains do not authorize a live req
 The event schema intentionally has a bounded payload field set. Add event-specific semantics/tests when endpoints exist. Generate and test OpenAPI from real backend handlers; do not pretend these four schemas define every completed endpoint.
 
 `negative/source-policy-credential.json` is deliberately invalid: the fixture source requires an explicit null credential reference. It is tested as rejection evidence, never a valid policy example. Generic future source-reference vocabulary does not enable real credential use.
+
+EM-011 adds result-contacts/result-outcomes and export-request/export-state contracts with synthetic examples. JSON Schema validates shape; immutable snapshot membership, current policy/role/retention/revision/download authority and accepted-evidence semantics remain server/runtime checks. Export requests contain options/identifiers, never arbitrary document/contact/artifact content.

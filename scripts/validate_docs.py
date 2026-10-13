@@ -102,6 +102,10 @@ def main() -> int:
         'progress-snapshot.json': 'progress-snapshot.schema.json',
         'progress-event.json': 'progress-event.schema.json',
         'progress-item.json': 'progress-item.schema.json',
+        'result-contacts.json': 'result-contacts.schema.json',
+        'result-outcomes.json': 'result-outcomes.schema.json',
+        'export-request.json': 'export-request.schema.json',
+        'export-state.json': 'export-state.schema.json',
     }
     loaded = {}
     for name, schema_name in examples.items():

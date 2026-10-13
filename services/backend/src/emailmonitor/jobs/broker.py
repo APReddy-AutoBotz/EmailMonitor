@@ -19,6 +19,8 @@ from emailmonitor.jobs.models import StrictModel
 from emailmonitor.organizations.database import Database
 from emailmonitor.progress.broker import process as execute_process
 from emailmonitor.progress.service import Progress
+from emailmonitor.results.broker import process as export_process
+from emailmonitor.results.service import Results
 
 
 class FixtureWorkerConfig(StrictModel):
@@ -124,6 +126,23 @@ def create_worker(config: FixtureWorkerConfig) -> tuple[Any, Ledger]:
         if committed and config.exit_after_commit:
             os._exit(73)
 
+    def export(body: dict[str, object]) -> None:
+        results = Results(ledger.database, config.session_token, ledger.settings)
+
+        def stop_after_claim() -> None:
+            os._exit(74)
+
+        committed = export_process(
+            results,
+            UUID(config.organization),
+            body,
+            seconds=min(config.lease_seconds, 120),
+            after_claim=stop_after_claim if config.exit_after_observation else None,
+        )
+        if committed and config.exit_after_commit:
+            os._exit(73)
+
+    application.task(name="emailmonitor.fixture.export", typing=False)(export)
     application.task(name="emailmonitor.fixture.execute", typing=False)(execute)
     application.task(name="emailmonitor.fixture.discover", typing=False)(discover)
     application.task(name="emailmonitor.fixture.persist", typing=False)(persist)
