@@ -4,7 +4,7 @@
 
 EM-014 follows the independently closed EM-013 checkpoint: PR18 head845df581/tree3c3a0fa6, merge239c470c, all six actual jobs successful. Application1285/no skips/no pytest warning summary307.02s, controlled13/76.84s, UI1/73.77s and browser/parser/docs passed. The inherited intermittent readiness/completion causes remain unproven; EM-WARN-01 remains historical/open. This task adds no dependency, host setting, network permission, production enablement or external support principal.
 
-Document16 requires staged deletion/generation fences, artifact invalidation, source/privacy suppressions, retention schedules and audited exceptional support grants. This candidate implements those boundaries for disposable authored data, using existing owner lifecycle and owner/steward source-policy capabilities. A synthetic support context is an audited, expiring inspection by an already active tenant member. It never creates membership, a database role, an IdP grant or content-access permission. Real platform-staff grants, real customer purges, legal holds and production activation require separate decisions.
+Document16 requires staged deletion/generation fences, artifact invalidation, source/privacy suppressions, retention schedules and audited exceptional support grants. This scoped synthetic foundation implements those boundaries for disposable authored data, using existing owner lifecycle and owner/steward source-policy capabilities. A synthetic support context is an audited, expiring inspection by an already active tenant member. It never creates membership, a database role, an IdP grant or content-access permission. Real platform-staff grants, real customer purges, legal holds and production activation require separate decisions.
 
 ## API and private state
 
@@ -41,3 +41,8 @@ Backup tombstones must be replayed before any restored tenant becomes readable o
 ## Validation and rollback
 
 [Validation report](../reports/em014-validation.md) tracks exact candidate checks, independent review and the six own-head application/controlled/UI/browser/parser/docs gates. Actual SQL/RabbitMQ, deletion-before-release and artifact controls are mandatory; local explicit skips do not establish acceptance. Migration0011 is forward-only. Tombstones must never be rolled back or omitted during deployment/restore. No merge, deployment, real deletion or live-source onboarding follows from a passing synthetic test. EM-015 requires genuine source-owner/policy/license/access decisions.
+
+
+## Verified synthetic checkpoint
+
+Independent exact-tree/all-six-log reconciliation verifies73a1043f/tree73dea867/merge9ac9b930 in unmerged Draft PR19:1386/no-skip application with one disclosed alias-batch_id warning, controlled14, actual keyboardUI1 and browser/parser/docs. [Report](../reports/em014-validation.md) records complete receipts and limitations. Its documentation-only checkpoint must pass its own six gates; real purge, external support, actual backup restore and live/production onboarding remain separately gated.
