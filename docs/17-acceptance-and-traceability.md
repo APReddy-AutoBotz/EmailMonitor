@@ -209,3 +209,8 @@ Document16/document03 criteria reconcile to reviewed head6a3c607c/treea513d96c a
 ## EM-013 candidate traceability
 
 Shared admission and usage (documents10/15/21; document16 EM-013) map to `test_admission_tenant.py`, `test_administration_tenant.py`, `test_admission_broker.py` and the required controlled transport source-contention case. Configuration/branding/support metadata map to strict model/schema/API tests, `branding.test.ts` and the existing keyboard CI. Pure tests do not establish actual source throttling, SQL atomicity/fairness or real broker separation. [Runbook42](42-offline-admission-runbook.md) and [validation report](../reports/em013-validation.md) preserve those pending acceptance gates and synthetic limits.
+
+
+## EM-013 independently verified synthetic admission foundation
+
+Document16 fairness, documents10/21 shared source controls and document15 usage reconcile to reviewed216a8c3b/treebb37d8e7 and exact merge84673c51. Actual application1267/no skips includes five administration SQL,19 admission-tenant and two broker cases; controlled13 proves real source spacing/admission and four other-tenant settled resolutions/private export during held source I/O. Current owner/revision/CSRF/policy/expiry/private-accounting guards, captured/current limits, duplicate/crash/cancellation settlement and discovery-only phase permission are exercised. Actual keyboard UI1 verifies configuration/usage/audit/settings and tenant-cleared branding. Browser/parser/docs remain affirmative. [Report](../reports/em013-validation.md) records no missing scoped criterion, unresolved warning/route-error causes and excluded live/production/commercial/support-grant/lifecycle features. This checkpoint requires its own six gates before EM-014.

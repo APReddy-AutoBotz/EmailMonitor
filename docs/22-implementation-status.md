@@ -1,6 +1,6 @@
 # 22 — Implementation status and evidence ledger
 
-**Baseline date:** 2026-10-08. **Updated:** 2026-10-13. **Product state:** unmerged synthetic/offline backend foundations verified through protected fetch/sandbox and durable jobs; UI extraction and deployment unavailable.
+**Baseline date:** 2026-10-08. **Updated:** 2026-10-13. **Product state:** unmerged synthetic/offline foundations verified through scoped operator UI and shared admission; live/production deployment unavailable.
 
 ## Documentation deliverables
 
@@ -24,7 +24,7 @@ The repository documentation validator checks local Markdown targets, JSON synta
 | EM-010 | VERIFIED SYNTHETIC/OFFLINE FOUNDATION IN DRAFT — unmerged | [PR15](https://github.com/APReddy-AutoBotz/EmailMonitor/pull/15), head16bb590e/tree58a708d8; independent authoritative acceptance reconciliation; application862/no skips/no pytest warning summary,22 actual progress SQL/four real-broker cases, controlled12 with durable browser completion and browser/parser/docs pass; [validation](../reports/em010-validation.md). This checkpoint requires its own exact-head CI before EM-011 |
 | EM-011 | VERIFIED SYNTHETIC/OFFLINE FOUNDATION IN DRAFT — unmerged | [PR16](https://github.com/APReddy-AutoBotz/EmailMonitor/pull/16), reviewed treeca84f013 implementation1035/no skips and all-five CI; documentation checkpoint head9fd9fbeb/treeee54a2b3 passed its own1035/no-skip application and controlled12/browser/parser/docs; [evidence](../reports/em012-validation.md) |
 | EM-012 | VERIFIED SYNTHETIC/OFFLINE FOUNDATION IN DRAFT — unmerged | [PR17](https://github.com/APReddy-AutoBotz/EmailMonitor/pull/17), head6a3c607c/treea513d96c; independently reconciled1132/no-skip application/one alias-body warning, actual keyboard UI1, controlled12/browser/parser/docs; [evidence](../reports/em012-validation.md). This checkpoint requires its own six exact-head gates before EM-013 |
-| EM-013 | DRAFT IMPLEMENTATION — acceptance pending | [PR18](https://github.com/APReddy-AutoBotz/EmailMonitor/pull/18); EM-005/010/012 scoped dependency gates closed; [runbook42](42-offline-admission-runbook.md); migration0010/API/worker/protected-hop/UI integration. Second actual head1209passed/46failed, controlled11passed/2failed and UI diagnostic refusal; bounded corrections awaiting exact-tree re-review and all six new-head gates. [Evidence](../reports/em013-validation.md) |
+| EM-013 | VERIFIED SYNTHETIC/OFFLINE FOUNDATION IN DRAFT — unmerged | [PR18](https://github.com/APReddy-AutoBotz/EmailMonitor/pull/18), head216a8c3b/treebb37d8e7; independently reconciled1267/no-skip application, controlled13, actual keyboard UI1/browser/parser/docs; [evidence](../reports/em013-validation.md). Own six checkpoint gates required before EM-014 |
 | EM-014 | NOT STARTED | EM-009/011/013 |
 | EM-015 | NOT STARTED | Technical gates plus actual source permissions |
 | EM-016 | NOT STARTED | EM-012/015 and authorized benchmark |
@@ -154,3 +154,8 @@ This verifies runbook41's declared synthetic operator scope. Real IdP callback/l
 ## EM-013 synthetic admission candidate (2026-10-13)
 
 The EM-012 reviewed checkpoint passed its own six exact-head gates. Migration0010 and the candidate API/worker/protected-hop/UI integration now cover shared tenant/source admission, separate supported phase queues, root-job/article reservation/settlement, owner limits and bounded branding/support metadata. Actual protected network attempts are distinct from authored file reads and resolution units. Existing security/topology/profile/cleanup controls remain in force. [Runbook42](42-offline-admission-runbook.md), [evidence](../reports/em013-validation.md). Normal/fresh checks, independent exact-tree review and actual application/controlled13/browser/parser/docs/operator-UI gates must complete before scoped acceptance; EM-014 remains gated. This is synthetic/offline work in Draft, not live/production or billing enablement.
+
+
+## EM-013 independently verified synthetic admission foundation
+
+Head216a8c3b/treebb37d8e7 and merge84673c51 passed all six exact-head gates after independent source/evidence reconciliation: application1267/no skips/no pytest warnings285.99s; controlled13/79.00s; keyboard UI1/63.66s plus browser/parser/docs. Actual source contention/spacing, other-tenant four-unit/private-export progress, fair claims, separate consumers, once-only usage across retries/recovery and current owner/source/entitlement boundaries satisfy scoped document16 acceptance. [Evidence](../reports/em013-validation.md) preserves failures and limits. EM-WARN-01 and prior intermittent UI route-error cause remain open. Live/production/billing/exceptional support grants/lifecycle purge are excluded. Bounded synthetic EM-014 may proceed after this checkpoint's own1267/no-skip application and all six gates; no merge/deployment is implied.

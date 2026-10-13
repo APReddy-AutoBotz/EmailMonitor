@@ -2,7 +2,7 @@
 
 ## Boundary and dependency
 
-EM-013 depends on EM-005/010/012. The reviewed EM-012 checkpoint head828fa269/treea8a0643b and merge1b4f694a (exact9fd9fbeb+828fa269 parents) passed its own six gates: application1132/no skips/one disclosed alias warning283.34s, keyboard UI1/75.05s, controlled12/57.26s, browser/parser/docs. Dependencies remain Draft/unmerged. This EM-013 branch is implementation in progress, not acceptance.
+EM-013 depends on EM-005/010/012. The reviewed EM-012 checkpoint head828fa269/treea8a0643b and merge1b4f694a (exact9fd9fbeb+828fa269 parents) passed its own six gates: application1132/no skips/one disclosed alias warning283.34s, keyboard UI1/75.05s, controlled12/57.26s, browser/parser/docs. Dependencies remain Draft/unmerged. Scoped EM-013 acceptance is now independently verified in Draft; this documentation checkpoint requires its own six exact-head gates before bounded synthetic EM-014.
 
 Document16 requires shared tenant/source throttles, fair admission, usage reconciliation, entitlements, branding and operational support metadata. Documents10/21/15 require source resource attempts (including retries/browser requests) to be distinct from once-per-job/article resolution units. A plan intersects platform/source/job maxima and never confers a source operation, tenant role, retention/network permission or billing agreement. Numerical defaults are synthetic conservative versions of document21 proposals, not provider/customer commitments.
 
@@ -48,3 +48,8 @@ Migration0010 is forward-only and backfills existing synthetic jobs/exports/conf
 Admission timestamps are sampled after contended locks and again at the grant/backoff mutation. Successful protected-byte completion requires the same active nonce, unexpired lease and current authorization; waiting, failed, expired or previously finished state cannot acknowledge success. Failure cleanup is separately idempotent. A source request with revoked permission retains its physical-concurrency slot until explicit completion or lease expiry, even though successful release is refused.
 
 Draft authored parsing binds its original owned reference/nonce into later tenant transactions. Discovery checkpoint updates and observation persistence have database commit guards requiring current scope and the same active unexpired lease; expired slot reuse cannot authorize old work. Successful lease release also checks current scope and expiry. Trusted direct commit composition uses a short explicit admission lease; actual fixture read/parse composition keeps its lease from before parsing. Running jobs retain their original durable execution-item lease/generation fence. No database connection spans parsing or networking; the short commit transaction serializes only metadata and durable writes.
+
+
+## Verified synthetic acceptance
+
+Reviewed head216a8c3b/treebb37d8e7 and merge84673c51 passed independent authoritative reconciliation plus all six exact-head gates: application1267/no skips/no pytest warnings, controlled13, actual keyboard UI1 and browser/parser/docs. [Validation report](../reports/em013-validation.md) records exact runs/jobs, criteria mapping, correction history and exclusions. EM-WARN-01's cause and the earlier intermittent UI route error remain unproven. This verifies the declared fixed-source/offline admission/usage/configuration foundation only; it does not enable live sources, billing, exceptional access grants, lifecycle purge or production. This documentation checkpoint needs its own six gates before EM-014.
