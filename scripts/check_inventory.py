@@ -84,6 +84,15 @@ def main() -> None:
             != runtime["browser_seccomp"][key]
         ):
             raise ValueError("Browser profile differs from reviewed inventory")
+    packaging_image = runtime["metadata_packaging"]["base_image"]
+    if (
+        packaging_image != parser_image
+        or (ROOT / "scripts/packaging/Metadata.Dockerfile")
+        .read_text()
+        .count("FROM --platform=linux/amd64 " + packaging_image)
+        != 2
+    ):
+        raise ValueError("Metadata prerequisite image differs from reviewed immutable base")
     print(
         f"PASS: license inventory covers {len(python_packages)} Python and "
         f"{len(node_packages)} JavaScript locked packages"

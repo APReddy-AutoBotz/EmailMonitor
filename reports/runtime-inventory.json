@@ -49,5 +49,12 @@
     "derived_sha256": "298a3da8bde69390ca36e26ee2bd9b2bd3db193f406d223895a84f06f2e9d0f5",
     "delta": "Two argument-unfiltered allow blocks: clone,setns,unshare and separately approved chroot; all current baseline fields/rules preserved",
     "scope": "Only the temporary synthetic browser container; no host configuration change"
+  },
+  "metadata_packaging": {
+    "base_image": "python:3.12.13-slim-bookworm@sha256:4766d8b510c428e595d74b9cc5bbb2fae8e26316fffb4adc89908d79aacd58a2",
+    "platform": "linux/amd64",
+    "scope": "Disposable metadata-only prerequisite packaging CI; no working extraction runtime or production distribution",
+    "runtime_dependencies": "Evaluated locked Linux CPython3.12 closure; actual installed versions must match",
+    "release_certification": false
   }
 }

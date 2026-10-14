@@ -32,7 +32,7 @@ dev = [
 package = false
 
 [tool.pytest.ini_options]
-pythonpath = ["src", "../../tests", "../../scripts/isolation"]
+pythonpath = ["src", "../../tests", "../../scripts/isolation", "../../scripts/packaging"]
 testpaths = ["tests", "../../tests"]
 
 [tool.ruff]
@@ -40,6 +40,9 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["artifacts", "run_acceptance"]
 
 [tool.mypy]
 strict = true
