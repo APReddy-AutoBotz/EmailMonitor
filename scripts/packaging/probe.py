@@ -71,11 +71,15 @@ def content_digest() -> str:
                 (name == ".venv/lib64" and target == "lib")
                 or (
                     name in {".venv/bin/python", ".venv/bin/python3", ".venv/bin/python3.12"}
-                    and target in {"python", "/usr/local/bin/python", "/usr/local/bin/python3.12"}
+                    and target
+                    in {
+                        "python",
+                        "/usr/local/bin/python",
+                        "/usr/local/bin/python3",
+                        "/usr/local/bin/python3.12",
+                    }
                 )
             ):
-                if target == "/usr/local/bin/python3":
-                    raise RuntimeError("metadata_image_python3_link_refused")
                 raise RuntimeError("metadata_image_link_refused")
             records[name] = {"link": target}
         elif path.is_file():

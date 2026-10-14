@@ -553,8 +553,8 @@ def test_changed_or_ambiguous_build_tool_versions_refuse(name: str, value: str) 
     [
         ("RuntimeError: metadata_runtime_closure_refused\n", "metadata_runtime_closure_refused"),
         (
-            "RuntimeError: metadata_image_python3_link_refused\n",
-            "metadata_image_python3_link_refused",
+            "RuntimeError: metadata_image_link_refused\n",
+            "metadata_image_link_refused",
         ),
         ("RuntimeError: metadata_unknown_secret\n", "unclassified_probe_failure"),
         ("ValueError: SYNTHETIC_SECRET_MARKER\n", "unclassified_probe_failure"),
@@ -570,3 +570,32 @@ def test_smoke_failure_diagnostics_emit_only_fixed_source_owned_reasons(
     output = capsys.readouterr()
     assert json.loads(output.out) == {"metadata_smoke_failure": {"returncode": 1, "reason": reason}}
     assert "SYNTHETIC_SECRET_MARKER" not in output.out and not output.err
+
+
+@pytest.mark.parametrize(
+    "name,target,allowed",
+    [
+        (".venv/bin/python", "/usr/local/bin/python3", True),
+        (".venv/bin/python3", "python", True),
+        (".venv/bin/python3.12", "python", True),
+        (".venv/lib64", "lib", True),
+        (".venv/bin/python", "/usr/bin/python3", False),
+        (".venv/bin/foreign", "/usr/local/bin/python3", False),
+        (".venv/bin/python", "../../secret", False),
+    ],
+)
+def test_image_digest_accepts_only_fixed_base_interpreter_links(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, name: str, target: str, allowed: bool
+) -> None:
+    from probe import content_digest
+
+    link = tmp_path / name
+    link.parent.mkdir(parents=True)
+    link.symlink_to(target)
+    monkeypatch.setattr("probe.ROOT", tmp_path)
+    if allowed:
+        first = content_digest()
+        assert len(first) == 64 and first == content_digest()
+    else:
+        with pytest.raises(RuntimeError, match="metadata_image_link_refused"):
+            content_digest()
