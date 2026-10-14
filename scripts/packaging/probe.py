@@ -74,6 +74,8 @@ def content_digest() -> str:
                     and target in {"python", "/usr/local/bin/python", "/usr/local/bin/python3.12"}
                 )
             ):
+                if target == "/usr/local/bin/python3":
+                    raise RuntimeError("metadata_image_python3_link_refused")
                 raise RuntimeError("metadata_image_link_refused")
             records[name] = {"link": target}
         elif path.is_file():

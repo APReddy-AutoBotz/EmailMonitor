@@ -36,9 +36,30 @@ def command(arguments: list[str], timeout: float = 180) -> subprocess.CompletedP
         )
     except (OSError, subprocess.TimeoutExpired):
         raise PackagingRefused("package_command_failed") from None
+    if result.returncode != 0 and arguments[:3] == ["docker", "start", "--attach"]:
+        report_smoke_failure(result.returncode, result.stderr)
     if result.returncode != 0 or len(result.stdout) > 8 * 1024 * 1024:
         raise PackagingRefused("package_command_failed")
     return result
+
+
+def report_smoke_failure(returncode: int, stderr: str) -> None:
+    # Only a source-owned fixed reason may leave the disposable probe. Never emit
+    # traceback text, arbitrary stderr, paths, source content or environment data.
+    reasons = set(
+        re.findall(
+            r'raise RuntimeError\("(metadata_[a-z0-9_]+)"\)',
+            (ROOT / "scripts/packaging/probe.py").read_text(),
+        )
+    )
+    match = re.search(r"^RuntimeError: (metadata_[a-z0-9_]+)$", stderr, re.MULTILINE)
+    reason = match.group(1) if match and match.group(1) in reasons else "unclassified_probe_failure"
+    print(
+        json.dumps(
+            {"metadata_smoke_failure": {"returncode": returncode, "reason": reason}}, sort_keys=True
+        ),
+        flush=True,
+    )
 
 
 def runtime_versions(requirements: str) -> dict[str, str]:
@@ -363,6 +384,7 @@ def main() -> None:
                 raise PackagingRefused("package_reproducibility_refused")
     finally:
         owned.close()
+        print(json.dumps({"metadata_owned_cleanup_verified": True}), flush=True)
     print(
         json.dumps(
             {

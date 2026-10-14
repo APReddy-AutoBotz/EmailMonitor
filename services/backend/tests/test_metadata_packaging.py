@@ -546,3 +546,27 @@ def test_changed_or_ambiguous_build_tool_versions_refuse(name: str, value: str) 
     versions = {"uv": "uv 0.12.23", "pnpm": "11.25.0", "node": "v24.19.0", name: value}
     with pytest.raises(PackagingRefused, match="tool_version"):
         require_tool_versions(versions)
+
+
+@pytest.mark.parametrize(
+    "stderr,reason",
+    [
+        ("RuntimeError: metadata_runtime_closure_refused\n", "metadata_runtime_closure_refused"),
+        (
+            "RuntimeError: metadata_image_python3_link_refused\n",
+            "metadata_image_python3_link_refused",
+        ),
+        ("RuntimeError: metadata_unknown_secret\n", "unclassified_probe_failure"),
+        ("ValueError: SYNTHETIC_SECRET_MARKER\n", "unclassified_probe_failure"),
+        ("private/path: SYNTHETIC_SECRET_MARKER\n", "unclassified_probe_failure"),
+    ],
+)
+def test_smoke_failure_diagnostics_emit_only_fixed_source_owned_reasons(
+    capsys: pytest.CaptureFixture[str], stderr: str, reason: str
+) -> None:
+    from run_acceptance import report_smoke_failure
+
+    report_smoke_failure(1, stderr)
+    output = capsys.readouterr()
+    assert json.loads(output.out) == {"metadata_smoke_failure": {"returncode": 1, "reason": reason}}
+    assert "SYNTHETIC_SECRET_MARKER" not in output.out and not output.err
