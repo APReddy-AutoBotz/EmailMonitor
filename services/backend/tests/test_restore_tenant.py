@@ -32,7 +32,7 @@ from test_tenant_foundation import scenario as scenario
 
 
 def test_actual_restore_replays_current_privacy_before_runtime_and_rebuilds_broker(
-    scenario: Scenario, tmp_path: Path
+    scenario: Scenario, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     if os.environ.get("EM_REQUIRE_SYNTHETIC_RESTORE") != "true":
         pytest.skip("Required disposable PostgreSQL dump/restore exercise is unavailable")
@@ -245,19 +245,20 @@ def test_actual_restore_replays_current_privacy_before_runtime_and_rebuilds_brok
         )
         with pytest.raises(RestoreRefused, match="restore_unreplayed_business_frontier"):
             supported_delta(before, capture(admin, (org_a, org_b)))
-        print(
-            {
-                "synthetic_restore": True,
-                "same_version_tools": True,
-                "archive_sha256": archive_digest,
-                "unaffected_artifact_hash": True,
-                "privacy_before_runtime": True,
-                "two_tenant_rls": True,
-                "broker_rebuilt_from_ledger": True,
-                "exercise_seconds": round(time.monotonic() - started, 3),
-                "production_rpo_rto_measured": False,
-            }
-        )
+        with capsys.disabled():
+            print(
+                {
+                    "synthetic_restore": True,
+                    "same_version_tools": True,
+                    "archive_sha256": archive_digest,
+                    "unaffected_artifact_hash": True,
+                    "privacy_before_runtime": True,
+                    "two_tenant_rls": True,
+                    "broker_rebuilt_from_ledger": True,
+                    "exercise_seconds": round(time.monotonic() - started, 3),
+                    "production_rpo_rto_measured": False,
+                }
+            )
     finally:
         if restored is not None:
             restored.engine.dispose()

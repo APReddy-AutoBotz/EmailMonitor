@@ -247,3 +247,38 @@ def test_missing_privacy_key_is_not_silently_recreated_from_stale_archive() -> N
     )
     with pytest.raises(RestoreRefused, match="restore_privacy_key_change_refused"):
         supported_delta(before, replace(before, rows={**before.rows, "privacy_keys": []}))
+
+
+def test_actual_recap_is_capture_visible_and_contains_only_fixed_safe_fields() -> None:
+    import ast
+
+    source = Path(__file__).with_name("test_restore_tenant.py").read_text()
+    module = ast.parse(source)
+    visible = [
+        node
+        for node in ast.walk(module)
+        if isinstance(node, ast.With)
+        and any(
+            isinstance(item.context_expr, ast.Call)
+            and ast.unparse(item.context_expr) == "capsys.disabled()"
+            for item in node.items
+        )
+    ]
+    assert len(visible) == 1 and len(visible[0].body) == 1
+    call = visible[0].body[0]
+    assert isinstance(call, ast.Expr) and isinstance(call.value, ast.Call)
+    assert ast.unparse(call.value.func) == "print" and len(call.value.args) == 1
+    value = call.value.args[0]
+    assert isinstance(value, ast.Dict)
+    assert {key.value for key in value.keys if isinstance(key, ast.Constant)} == {
+        "synthetic_restore",
+        "same_version_tools",
+        "archive_sha256",
+        "unaffected_artifact_hash",
+        "privacy_before_runtime",
+        "two_tenant_rls",
+        "broker_rebuilt_from_ledger",
+        "exercise_seconds",
+        "production_rpo_rto_measured",
+    }
+    assert ast.unparse(value.values[-1]) == "False"
