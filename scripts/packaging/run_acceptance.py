@@ -96,6 +96,16 @@ def require_ci(environ: dict[str, str]) -> None:
         raise PackagingRefused("package_ci_context_refused")
 
 
+def require_tool_versions(versions: dict[str, str]) -> None:
+    if (
+        set(versions) != {"uv", "pnpm", "node"}
+        or not re.fullmatch(r"uv 0\.12\.23(?: \([A-Za-z0-9 ._+-]{1,128}\))?", versions["uv"])
+        or versions["pnpm"] != "11.25.0"
+        or versions["node"] != "v24.19.0"
+    ):
+        raise PackagingRefused("package_tool_version_refused")
+
+
 class OwnedBuilds:
     def __init__(self, owner: str) -> None:
         if not re.fullmatch(r"[a-f0-9]{32}", owner):
@@ -275,12 +285,11 @@ def validate_container(record: dict[str, Any]) -> None:
 
 def main() -> None:
     require_ci(dict(os.environ))
-    if (
-        command(["uv", "--version"]).stdout.strip() != "uv 0.12.23"
-        or command(["pnpm", "--version"]).stdout.strip() != "11.25.0"
-        or command(["node", "--version"]).stdout.strip() != "v24.19.0"
-    ):
-        raise PackagingRefused("package_tool_version_refused")
+    versions = {
+        name: command([name, "--version"]).stdout.strip() for name in ("uv", "pnpm", "node")
+    }
+    require_tool_versions(versions)
+    print(json.dumps({"verified_build_tools": versions}, sort_keys=True), flush=True)
     command(["git", "diff", "--exit-code", "HEAD"], timeout=10)
     tree_sha = command(["git", "rev-parse", "HEAD^{tree}"], timeout=10).stdout.strip()
     exported = command(

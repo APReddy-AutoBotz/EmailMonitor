@@ -512,3 +512,37 @@ def test_cleanup_continues_after_failure_and_reports_remaining_resources(
         owner.close()
     assert [call[-1] for call in calls] == ["failed-container", "owned-image"]
     assert existing == {"failed-container"}
+
+
+@pytest.mark.parametrize(
+    "uv_version",
+    [
+        "uv 0.12.23",
+        "uv 0.12.23 (x86_64-unknown-linux-gnu)",
+        "uv 0.12.23 (123abc45 2026-10-01)",
+    ],
+)
+def test_exact_uv_pin_allows_only_bounded_build_metadata(uv_version: str) -> None:
+    from run_acceptance import require_tool_versions
+
+    require_tool_versions({"uv": uv_version, "pnpm": "11.25.0", "node": "v24.19.0"})
+
+
+@pytest.mark.parametrize(
+    "name,value",
+    [
+        ("uv", "uv 0.12.230"),
+        ("uv", "uv 0.12.24 (123abc45 2026-10-01)"),
+        ("uv", "uv 0.12.23\nextra"),
+        ("uv", "uv 0.12.23 (" + "x" * 129 + ")"),
+        ("uv", "uv 0.12.23 ; command"),
+        ("pnpm", "11.25.1"),
+        ("node", "v24.19.1"),
+    ],
+)
+def test_changed_or_ambiguous_build_tool_versions_refuse(name: str, value: str) -> None:
+    from run_acceptance import require_tool_versions
+
+    versions = {"uv": "uv 0.12.23", "pnpm": "11.25.0", "node": "v24.19.0", name: value}
+    with pytest.raises(PackagingRefused, match="tool_version"):
+        require_tool_versions(versions)
