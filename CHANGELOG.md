@@ -1,3 +1,10 @@
+## 2026-10-14 — EM-017a partial synthetic restore candidate
+
+- Add guarded same-version disposable PostgreSQL dump/restore exercise and private current-authority replay before runtime access
+- Require physical no-resurrection, two-tenant RLS/artifact/hash/accounting checks and broker reconstruction from durable identifiers
+- Preserve exact prior EM-014 gate closure, current isolation controls and historical warning; actual restore CI remains pending
+- Keep full staging/deployment/RPO/RTO and real-source permissions outside this partial slice
+
 ## 2026-10-13 — EM-014 scoped synthetic lifecycle foundation verified in Draft
 
 - Independently reconcile reviewed head/merge/tree and all six authoritative full job logs
