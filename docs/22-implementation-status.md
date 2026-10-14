@@ -28,7 +28,7 @@ The repository documentation validator checks local Markdown targets, JSON synta
 | EM-014 | VERIFIED SYNTHETIC/OFFLINE FOUNDATION IN DRAFT — unmerged | [PR19](https://github.com/APReddy-AutoBotz/EmailMonitor/pull/19), head73a1043f/tree73dea867; independently reconciled1386/no-skip application/one alias-batch_id warning, controlled14, actual keyboardUI1/browser/parser/docs; [evidence](../reports/em014-validation.md). Own six checkpoint gates and genuine source inputs required before EM-015 |
 | EM-015 | NOT STARTED | Technical gates plus actual source permissions |
 | EM-016 | NOT STARTED | EM-012/015 and authorized benchmark |
-| EM-017 | NOT STARTED | EM-013/014 plus approved staging infrastructure |
+| EM-017 | IN PROGRESS — PARTIAL synthetic restore candidate | Quiesced same-version disposable dump/restore and current privacy replay under review; actual CI pending. No staging/deployment or production RPO/RTO. [Runbook](44-synthetic-restore-exercise.md) / [evidence](../reports/em017a-validation.md) |
 | EM-018 | NOT STARTED | EM-016/017 and commercial/legal owner decisions |
 | EM-EXT-01–05 | DEFERRED | Separate post-core gates |
 
@@ -198,3 +198,10 @@ Independent raw Git/all-six-job reconciliation supports scoped VERIFIED IN DRAFT
 
 
 EM-014 documentation checkpoint own application gate failed1385/1 after its mutating broker completion observer collided with the worker's intended organization NOWAIT fence; five other gates passed. A test-only read-only committed-tick observer retains exactly-one purge, duplicate delivery and post-worker current-scope assertions. Prior scoped implementation evidence remains verified, but checkpoint closure is pending corrected normal/fresh/review and actual1387/no-skip/six gates; [report](../reports/em014-validation.md). No runtime or security change.
+
+
+## EM-017a partial synthetic restore candidate
+
+The EM-014 own-gate loop closed atc62efa1a/tree30a9c0ed/mergebf60a1a8 after a reviewed test-only read-only broker observer correction: independently verified1387/no-skip application/one alias-identifier warning473.07s, controlled14/81.68s, actual keyboardUI1/76.70s and browser/parser/docs. PR19 remains Draft/unmerged; no redundant checkpoint is required. Historical EM-WARN-01 remains open.
+
+A dependency-ready partial EM-017 exercise now targets the existing disposable PostgreSQL service only: same-version custom dump/restore, coherent current privacy/tombstone/same-version source revocation before restored reads, sealed closed readiness, two-tenant RLS, physical no-resurrection, artifact hash/refusal, accounting and broker-from-ledger checks. Pure tests are not restore evidence. Corrected normal1213/21923.10s and genuinely empty1213/21924.07s plus31React/full local gates pass; independent source review is clear. Initial published headf7bce557/treeff583df8 passed actual1432/no skips/one disclosed alias warning and all six gates. A recap-visibility correction passes normal1214/21921.35s/fresh1214/21923.88s+31React; new-head1433/no-skip/six gates and numeric exercise evidence remain pending; [report](../reports/em017a-validation.md). No application migration, live source, new dependency/access/network/security setting, paid staging or deployment is introduced; production RPO/RTO and generalized newer-history recovery remain unmet. EM-015/016 input gates are unchanged.
