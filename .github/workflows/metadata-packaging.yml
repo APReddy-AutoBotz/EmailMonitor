@@ -1,0 +1,38 @@
+name: Metadata prerequisite packaging checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: metadata-packaging-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  packaging:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.19.0
+      - name: Install existing pinned build tools and locked dependencies
+        run: |
+          python3 -m venv "$RUNNER_TEMP/tooling"
+          "$RUNNER_TEMP/tooling/bin/python" -m pip install uv==0.12.23
+          echo "$RUNNER_TEMP/tooling/bin" >> "$GITHUB_PATH"
+          npm install --global pnpm@11.25.0
+          "$RUNNER_TEMP/tooling/bin/uv" sync --project services/backend --locked
+          pnpm --dir apps/web install --frozen-lockfile --strict-peer-dependencies
+      - name: Two uncached builds and network-none metadata smokes
+        env:
+          EM_REQUIRE_METADATA_PACKAGING: synthetic-test-only
+        run: uv run --project services/backend python scripts/packaging/run_acceptance.py

@@ -1,17 +1,19 @@
-"""Public metadata endpoints only; tenant data APIs await EM-002."""
+"""Public metadata default; tenant APIs require explicit offline foundation injection."""
+
+from __future__ import annotations
 
 import os
 from collections.abc import Awaitable, Callable
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy.exc import SQLAlchemyError
 
 from emailmonitor.config import Settings
-from emailmonitor.identity.foundation import Foundation
-from emailmonitor.organizations.database import AuthorizationDenied
+
+if TYPE_CHECKING:
+    from emailmonitor.identity.foundation import Foundation
 
 
 class Health(BaseModel):
@@ -57,15 +59,22 @@ def create_app(settings: Settings | None = None, foundation: Foundation | None =
             response.headers["Cache-Control"] = "no-store"
             return response
 
-    @application.exception_handler(AuthorizationDenied)
-    async def unavailable_resource(request: Request, error: AuthorizationDenied) -> JSONResponse:
-        return JSONResponse({"detail": "Resource unavailable"}, status_code=404)
+    if foundation is not None:
+        from sqlalchemy.exc import SQLAlchemyError
 
-    @application.exception_handler(SQLAlchemyError)
-    async def database_error(request: Request, error: SQLAlchemyError) -> JSONResponse:
-        return JSONResponse(
-            {"detail": "Operation conflict or dependency unavailable"}, status_code=409
-        )
+        from emailmonitor.organizations.database import AuthorizationDenied
+
+        @application.exception_handler(AuthorizationDenied)
+        async def unavailable_resource(
+            request: Request, error: AuthorizationDenied
+        ) -> JSONResponse:
+            return JSONResponse({"detail": "Resource unavailable"}, status_code=404)
+
+        @application.exception_handler(SQLAlchemyError)
+        async def database_error(request: Request, error: SQLAlchemyError) -> JSONResponse:
+            return JSONResponse(
+                {"detail": "Operation conflict or dependency unavailable"}, status_code=409
+            )
 
     return application
 

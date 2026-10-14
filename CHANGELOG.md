@@ -1,3 +1,9 @@
+## 2026-10-14 — EM-017b partial metadata packaging prerequisite
+
+- Add explicit fixture-free metadata library packaging, separate deterministic migration/static/schema/notice archives and evaluated locked-runtime manifests using existing image/dependency pins.
+- Add two-uncached-build/network-none prerequisite CI with owned resource reconciliation and pure artifact/profile/import regressions; actual gates remain pending.
+- Preserve all synthetic foundation behavior, production refusal and unresolved live/staging/release/EM-WARN-01/UI-cause gates. This is not a working extraction runtime or deployment.
+
 ## 2026-10-14 — EM-017a partial synthetic restore candidate
 
 - Add guarded same-version disposable PostgreSQL dump/restore exercise and private current-authority replay before runtime access
