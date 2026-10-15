@@ -32,6 +32,7 @@ from sqlalchemy import text
 from test_source_foundation import policy_body, source_path
 from test_tenant_foundation import ORIGIN, Scenario
 from test_tenant_foundation import scenario as scenario
+from transport_cleanup import held_response_cleanup
 from transport_manifest import ENDPOINTS, HOST
 from transport_rpc import BrowserProxyMediator, GatewayProxy
 from transport_topology import Topology, docker
@@ -510,7 +511,11 @@ def wait_for_held_receipt(
         if time.monotonic() >= deadline:
             break
         if pending.done():
-            pending.result()
+            # Observe terminal failure without collecting the response a second
+            # time; the owning finally block alone calls result(timeout=20).
+            failure = pending.exception(timeout=0)
+            if failure is not None:
+                raise failure
             raise AssertionError("Synthetic response completed before held receipt")
         calls = snapshot(topology)["calls"]
         if calls:
@@ -543,45 +548,44 @@ def test_actual_blocked_source_preserves_another_tenants_processing_and_export_p
     configure(topology, "slow")
     with ThreadPoolExecutor(max_workers=1) as executor:
         pending = executor.submit(target.fetch, f"https://{HOST}/tooltip.html")
-        deadline = time.monotonic() + 10
-        first_receipt = wait_for_held_receipt(topology, pending, deadline)
-        assert not pending.done()
-        resource = Administration(progress.database, progress.token, progress.settings).usage(org)
-        assert resource.active_units["http"] == 1 and resource.source_resource_attempts == 1
-        url = classify_url(f"https://{HOST}/tooltip.html", HOSTS)
-        with pytest.raises(FetchDenied):
-            SourceAdmission(other.database, other.token, other.settings).acquire(
-                other_org,
-                1,
-                Operation.HTML,
-                url,
-                time.monotonic() + 0.5,
+        with held_response_cleanup(topology, pending):
+            deadline = time.monotonic() + 10
+            first_receipt = wait_for_held_receipt(topology, pending, deadline)
+            assert not pending.done()
+            resource = Administration(progress.database, progress.token, progress.settings).usage(
+                org
             )
-        assert (
-            Administration(other.database, other.token, other.settings)
-            .usage(other_org)
-            .source_resource_attempts
-            == 0
-        )
-        other.start(other_org, job, other.snapshot(other_org, job).revision)
-        run_until_terminal(other, other_org, job)
-        results = Results(other.database, other.token, other.settings)
-        export = results.create(other_org, options(job), str(uuid4()))
-        row = results.pending(other_org)[0]
-        lease = results.claim(
-            other_org,
-            export.id,
-            UUID(str(row["event_id"])),
-            int(str(row["generation"])),
-        )
-        assert lease is not None and results.process(lease)
-        assert results.download(other_org, export.id).body
-        # Genuine work/artifact completed while the first actual HTTP body was held.
-        assert not pending.done()
-        release_deadline = time.monotonic() + 5
-        topology.processes["fixture-a"].send({"kind": "release"}, release_deadline)
-        assert topology.processes["fixture-a"].receive(release_deadline) == {"kind": "released"}
-        assert b"synthetic marker" in pending.result(timeout=20)
+            assert resource.active_units["http"] == 1 and resource.source_resource_attempts == 1
+            url = classify_url(f"https://{HOST}/tooltip.html", HOSTS)
+            with pytest.raises(FetchDenied):
+                SourceAdmission(other.database, other.token, other.settings).acquire(
+                    other_org,
+                    1,
+                    Operation.HTML,
+                    url,
+                    time.monotonic() + 0.5,
+                )
+            assert (
+                Administration(other.database, other.token, other.settings)
+                .usage(other_org)
+                .source_resource_attempts
+                == 0
+            )
+            other.start(other_org, job, other.snapshot(other_org, job).revision)
+            run_until_terminal(other, other_org, job)
+            results = Results(other.database, other.token, other.settings)
+            export = results.create(other_org, options(job), str(uuid4()))
+            row = results.pending(other_org)[0]
+            lease = results.claim(
+                other_org,
+                export.id,
+                UUID(str(row["event_id"])),
+                int(str(row["generation"])),
+            )
+            assert lease is not None and results.process(lease)
+            assert results.download(other_org, export.id).body
+            # Genuine work/artifact completed while the first actual HTTP body was held.
+            assert not pending.done()
     configure(topology)
     other_allow = TenantFixtureAuthorization(
         other.database, other.token, other_org, "synthetic-publisher", 1

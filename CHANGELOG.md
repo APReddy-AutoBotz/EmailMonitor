@@ -1,3 +1,9 @@
+## 2026-10-15 — Bounded owned-test cleanup and stage diagnostics
+
+- Guarantee once-only fixture-a held-response release and bounded future collection inside executor cleanup, preserving original failures and current control limits.
+- Add fixed before/after route-registration markers and pure failure/cancellation/poisoned-channel regressions.
+- Preserve PR23 first-failure and same-head-retry evidence; UI, browser-registration and admission stall causes remain unproven. No runtime/XML/security changes or reliability claim.
+
 ## 2026-10-14 — EM-017b partial metadata packaging prerequisite
 
 - Add explicit fixture-free metadata library packaging, separate deterministic migration/static/schema/notice archives and evaluated locked-runtime manifests using existing image/dependency pins.

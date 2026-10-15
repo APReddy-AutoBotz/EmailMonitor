@@ -4,6 +4,8 @@ import hashlib
 import json
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[3]
 
 
@@ -489,3 +491,104 @@ def test_outer_readiness_preserves_success_and_driver_failure() -> None:
     source = (ROOT / "scripts/isolation/browser_acceptance.py").read_text()
     assert "except (Error, TimeoutError):" in source
     assert 'trace_stage("boundary_wait_failed")' in source
+
+
+def route_registration_probe() -> object:
+    """Compile only the actual registration statements, plus their next navigation."""
+    import ast
+
+    module = ast.parse((ROOT / "scripts/isolation/browser_acceptance.py").read_text())
+    main = next(
+        node
+        for node in module.body
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "main"
+    )
+    browser = next(node for node in main.body if isinstance(node, ast.AsyncWith))
+    statements = browser.body
+    start = next(
+        index
+        for index, node in enumerate(statements)
+        if ast.unparse(node) == "trace_stage('direct_network_rejected')"
+    )
+    finish = next(
+        index
+        for index, node in enumerate(statements)
+        if ast.unparse(node) == "trace_stage('routes_registered')"
+    )
+    registration = statements[start : start + 7]
+    assert [ast.unparse(node) for node in registration] == [
+        "trace_stage('direct_network_rejected')",
+        "trace_stage('route_registration_started')",
+        "await context.route('**/*', route_request)",
+        "trace_stage('route_registration_completed')",
+        "trace_stage('websocket_registration_started')",
+        "await context.route_web_socket('**/*', websocket)",
+        "trace_stage('websocket_registration_completed')",
+    ]
+    assert all(not isinstance(node, (ast.Await, ast.Try)) for node in statements[start:finish])
+    assert ast.unparse(statements[finish + 1]) == (
+        "await page.goto(URL, wait_until='domcontentloaded')"
+    )
+    probe = ast.parse("async def probe():\n    pass\n")
+    function = probe.body[0]
+    assert isinstance(function, ast.AsyncFunctionDef)
+    function.body = registration + statements[finish : finish + 2]
+    return compile(ast.fix_missing_locations(probe), "owned-registration-probe", "exec")
+
+
+@pytest.mark.parametrize("failure", ["", "route", "websocket"])
+@pytest.mark.parametrize("cancelled", [False, True])
+def test_route_registration_stages_preserve_order_and_stop_at_failed_await(
+    failure: str, cancelled: bool
+) -> None:
+    import asyncio
+    from types import CodeType, SimpleNamespace
+    from typing import Any, cast
+
+    import pytest
+
+    events: list[str] = []
+    original = asyncio.CancelledError() if cancelled else RuntimeError("driver-failure")
+    request_handler, websocket_handler = object(), object()
+
+    async def route(pattern: str, handler: object) -> None:
+        assert pattern == "**/*" and handler is request_handler
+        events.append("await_route")
+        if failure == "route":
+            raise original
+
+    async def websocket(pattern: str, handler: object) -> None:
+        assert pattern == "**/*" and handler is websocket_handler
+        events.append("await_websocket")
+        if failure == "websocket":
+            raise original
+
+    async def navigate(url: str, *, wait_until: str) -> None:
+        assert url == "synthetic-only" and wait_until == "domcontentloaded"
+        events.append("navigate")
+
+    namespace: dict[str, Any] = {
+        "trace_stage": events.append,
+        "context": SimpleNamespace(route=route, route_web_socket=websocket),
+        "page": SimpleNamespace(goto=navigate),
+        "route_request": request_handler,
+        "websocket": websocket_handler,
+        "URL": "synthetic-only",
+    }
+    exec(cast(CodeType, route_registration_probe()), namespace)
+    if failure:
+        with pytest.raises(type(original)) as observed:
+            asyncio.run(namespace["probe"]())
+        assert observed.value is original
+    else:
+        asyncio.run(namespace["probe"]())
+    expected = ["direct_network_rejected", "route_registration_started", "await_route"]
+    if failure != "route":
+        expected += [
+            "route_registration_completed",
+            "websocket_registration_started",
+            "await_websocket",
+        ]
+    if not failure:
+        expected += ["websocket_registration_completed", "routes_registered", "navigate"]
+    assert events == expected
