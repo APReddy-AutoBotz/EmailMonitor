@@ -428,3 +428,260 @@ def test_fixture_delay_release_is_exact_owned_control_and_bounded() -> None:
     assert result == {"kind": "released"} and not stopped and state.release.is_set()
     with pytest.raises(RuntimeError):
         fixture_command({"kind": "release", "arbitrary_delay": 9999}, state, [], [], [], lambda: {})
+
+
+class HeldFixture:
+    def __init__(self, events: list[str], problem: str = "") -> None:
+        self.events, self.problem = events, problem
+        self.poisoned = problem == "poisoned"
+        self.deadlines: list[float] = []
+
+    def send(self, value: dict[str, object], deadline: float) -> None:
+        assert value == {"kind": "release"} and not self.poisoned
+        self.events.append("release_send")
+        self.deadlines.append(deadline)
+        if self.problem == "send":
+            raise OSError("private-send-content")
+
+    def receive(self, deadline: float) -> dict[str, object]:
+        self.events.append("release_receive")
+        self.deadlines.append(deadline)
+        if self.problem == "receive":
+            raise RuntimeError("private-receive-content")
+        if self.problem == "release_timeout":
+            raise TimeoutError("private-timeout-content")
+        if self.problem == "wrong_ack":
+            return {"kind": "released", "unexpected": "private-frame-content"}
+        return {"kind": "released"}
+
+
+class HeldResult:
+    def __init__(self, events: list[str], problem: str = "") -> None:
+        self.events, self.problem = events, problem
+
+    def result(self, timeout: float | None = None) -> bytes:
+        assert timeout == 20
+        self.events.append("future_result")
+        if self.problem == "future":
+            raise RuntimeError("private-future-content")
+        if self.problem == "future_timeout":
+            raise TimeoutError("private-future-timeout-content")
+        return b"unexpected body" if self.problem == "body" else b"synthetic marker"
+
+
+def held_cleanup_case(
+    monkeypatch: pytest.MonkeyPatch, problem: str = "", future_problem: str = ""
+) -> tuple[Topology, HeldFixture, Any, list[str]]:
+    from typing import cast
+
+    from transport_rpc import OwnedProcess
+
+    events: list[str] = []
+    fixture = HeldFixture(events, problem)
+    value = Topology.__new__(Topology)
+    value.processes = {"fixture-a": cast(OwnedProcess, fixture)}
+    pending = HeldResult(events, future_problem or problem)
+    monkeypatch.setattr("transport_cleanup.time.monotonic", lambda: 100.0)
+    return value, fixture, pending, events
+
+
+def test_held_response_cleanup_runs_once_after_fairness_before_executor_exit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from collections.abc import Iterator
+    from contextlib import contextmanager
+
+    from transport_cleanup import held_response_cleanup
+
+    value, fixture, pending, events = held_cleanup_case(monkeypatch)
+
+    @contextmanager
+    def executor_scope() -> Iterator[None]:
+        try:
+            yield
+        finally:
+            events.append("executor_exit")
+
+    with executor_scope(), held_response_cleanup(value, pending):
+        assert events == []
+        events.append("fairness_assertions")
+    assert events == [
+        "fairness_assertions",
+        "release_send",
+        "release_receive",
+        "future_result",
+        "executor_exit",
+    ]
+    assert fixture.deadlines == [105.0, 105.0] and not fixture.poisoned
+
+
+@pytest.mark.parametrize("cancelled", [False, True])
+def test_held_response_primary_failure_or_cancellation_is_preserved(
+    monkeypatch: pytest.MonkeyPatch, cancelled: bool
+) -> None:
+    import asyncio
+
+    from transport_cleanup import held_response_cleanup
+
+    value, _, pending, events = held_cleanup_case(monkeypatch)
+    primary = asyncio.CancelledError() if cancelled else AssertionError("primary-fairness")
+    with pytest.raises(type(primary)) as observed, held_response_cleanup(value, pending):
+        raise primary
+    assert observed.value is primary
+    assert not getattr(primary, "__notes__", [])
+    assert events == ["release_send", "release_receive", "future_result"]
+
+
+CLEANUP_FAILURES = [
+    ("send", "release_send:OSError"),
+    ("receive", "release_receive:RuntimeError"),
+    ("release_timeout", "release_receive:TimeoutError"),
+    ("wrong_ack", "release_acknowledgement:AssertionError"),
+    ("poisoned", "fixture_poisoned:RuntimeError"),
+    ("future", "future_result:RuntimeError"),
+    ("future_timeout", "future_result:TimeoutError"),
+    ("body", "future_body:AssertionError"),
+]
+
+
+@pytest.mark.parametrize(("problem", "note"), CLEANUP_FAILURES)
+@pytest.mark.parametrize("has_primary", [False, True])
+def test_held_response_cleanup_failures_never_retry_or_mask_primary(
+    monkeypatch: pytest.MonkeyPatch, problem: str, note: str, has_primary: bool
+) -> None:
+    from transport_cleanup import held_response_cleanup
+
+    value, fixture, pending, events = held_cleanup_case(monkeypatch, problem)
+    primary = AssertionError("primary-fairness")
+    with pytest.raises(Exception) as observed, held_response_cleanup(value, pending):
+        if has_primary:
+            raise primary
+    error = observed.value
+    assert (error is primary) == has_primary
+    assert error.__notes__ == ["held_response_cleanup:" + note]
+    assert all("private" not in item and len(item) < 100 for item in error.__notes__)
+    assert events.count("release_send") == (0 if problem == "poisoned" else 1)
+    assert events.count("release_receive") == (0 if problem in {"poisoned", "send"} else 1)
+    assert events.count("future_result") == 1 and events[-1] == "future_result"
+    assert fixture.poisoned == (problem in {row[0] for row in CLEANUP_FAILURES[:5]})
+
+
+def test_held_response_collects_failed_future_even_after_uncertain_release(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import asyncio
+
+    from transport_cleanup import held_response_cleanup
+
+    value, fixture, pending, events = held_cleanup_case(monkeypatch, "receive", "future")
+    primary = asyncio.CancelledError()
+    with pytest.raises(asyncio.CancelledError) as observed, held_response_cleanup(value, pending):
+        raise primary
+    assert observed.value is primary and fixture.poisoned
+    assert primary.__notes__ == [
+        "held_response_cleanup:release_receive:RuntimeError",
+        "held_response_cleanup:future_result:RuntimeError",
+    ]
+    assert events == ["release_send", "release_receive", "future_result"]
+
+
+def test_held_response_poisoned_gateway_never_prevents_healthy_fixture_release(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from typing import cast
+
+    from transport_cleanup import held_response_cleanup
+    from transport_rpc import OwnedProcess
+
+    value, fixture, pending, events = held_cleanup_case(monkeypatch)
+    gateway = HeldFixture([], "poisoned")
+    other = HeldFixture([])
+    value.processes.update(
+        {"gateway": cast(OwnedProcess, gateway), "fixture-b": cast(OwnedProcess, other)}
+    )
+    with held_response_cleanup(value, pending):
+        pass
+    assert events == ["release_send", "release_receive", "future_result"]
+    assert not fixture.poisoned and gateway.poisoned
+    assert not gateway.events and not other.events
+
+
+def test_actual_held_request_is_guarded_inside_executor_before_all_fairness_assertions() -> None:
+    import ast
+
+    path = Path(__file__).resolve().parents[3] / "scripts/isolation/test_transport_acceptance.py"
+    module = ast.parse(path.read_text())
+    case = next(
+        node
+        for node in module.body
+        if isinstance(node, ast.FunctionDef) and node.name.startswith("test_actual_blocked_source")
+    )
+    executor = next(node for node in case.body if isinstance(node, ast.With))
+    assert ast.unparse(executor.items[0].context_expr) == "ThreadPoolExecutor(max_workers=1)"
+    assert len(executor.body) == 2 and isinstance(executor.body[0], ast.Assign)
+    cleanup = executor.body[1]
+    assert isinstance(cleanup, ast.With)
+    assert ast.unparse(cleanup.items[0].context_expr) == "held_response_cleanup(topology, pending)"
+    body = ast.unparse(cleanup)
+    assert "wait_for_held_receipt(topology, pending, deadline)" in body
+    assert "resource.active_units['http'] == 1" in body
+    assert "run_until_terminal(other, other_org, job)" in body
+    assert "results.download(other_org, export.id).body" in body
+    assert ast.unparse(cleanup.body[-1]) == "assert not pending.done()"
+    assert body.count("assert not pending.done()") == 2
+    assert "release" not in body and "pending.result" not in body
+
+
+@pytest.mark.parametrize("outcome", ["success", "failure", "cancelled"])
+def test_terminal_held_future_is_collected_once_by_cleanup_after_receipt_failure(
+    monkeypatch: pytest.MonkeyPatch, outcome: str
+) -> None:
+    import time
+    from concurrent.futures import CancelledError, Future
+    from typing import cast
+
+    from test_admission_acceptance_contract import helper
+    from transport_cleanup import held_response_cleanup
+
+    value, _, _, events = held_cleanup_case(monkeypatch)
+    primary: list[BaseException] = []
+    stored_failure = RuntimeError("original-fetch-failure")
+
+    class CountingFuture(Future[bytes]):
+        def result(self, timeout: float | None = None) -> bytes:
+            assert timeout == 20
+            events.append("future_result")
+            return super().result(timeout)
+
+        def exception(self, timeout: float | None = None) -> BaseException | None:
+            assert timeout == 0
+            events.append("future_exception")
+            return super().exception(timeout)
+
+    pending = CountingFuture()
+    if outcome == "success":
+        pending.set_result(b"synthetic marker")
+    elif outcome == "failure":
+        pending.set_exception(stored_failure)
+    else:
+        assert pending.cancel()
+
+    def snapshot(topology: object) -> object:
+        pytest.fail("Terminal fetch must not consume fixture control frames")
+
+    wait = helper(
+        "wait_for_held_receipt", {"time": time, "snapshot": snapshot, "cast": cast, "Any": Any}
+    )
+    expected = {"success": AssertionError, "failure": RuntimeError, "cancelled": CancelledError}
+    with pytest.raises(expected[outcome]) as observed, held_response_cleanup(value, pending):
+        try:
+            wait(value, pending, 110)
+        except BaseException as error:
+            primary.append(error)
+            raise
+    assert observed.value is primary[0]
+    if outcome == "failure":
+        assert observed.value is stored_failure
+    elif outcome == "success":
+        assert str(observed.value) == "Synthetic response completed before held receipt"
+    assert events == ["future_exception", "release_send", "release_receive", "future_result"]

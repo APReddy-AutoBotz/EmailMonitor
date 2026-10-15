@@ -278,8 +278,12 @@ async def main() -> None:
         else:
             raise RuntimeError("Browser escaped network-none namespace")
         trace_stage("direct_network_rejected")
+        trace_stage("route_registration_started")
         await context.route("**/*", route_request)
+        trace_stage("route_registration_completed")
+        trace_stage("websocket_registration_started")
         await context.route_web_socket("**/*", websocket)
+        trace_stage("websocket_registration_completed")
 
         async def popup(child: object) -> None:
             nonlocal popup_count
