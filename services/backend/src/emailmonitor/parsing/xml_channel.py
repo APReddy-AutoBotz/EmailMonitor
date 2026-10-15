@@ -1,6 +1,5 @@
 """Trusted synthetic host channel. No credentials/mounts/commands enter the sandbox."""
 
-import hashlib
 import json
 import os
 import selectors
@@ -10,9 +9,15 @@ from collections.abc import Mapping
 
 from emailmonitor.config import Settings
 from emailmonitor.extraction.sciencedirect import MAX_BYTES, XmlObservation
-from emailmonitor.extraction.xml_retained import MAX_ENVELOPE, XML_IDENTIFIER, XML_PROFILE
+from emailmonitor.extraction.xml_retained import (
+    MAX_ENVELOPE,
+    XML_DIGEST,
+    XML_IDENTIFIER,
+    XML_PROFILE,
+)
 from emailmonitor.fetching.fixture import require_fixture
 from emailmonitor.fetching.safety import IsolationUnavailable
+from emailmonitor.parsing.xml_protocol import XmlExpectation, encode_input
 
 IMAGE = "emailmonitor-parser-diagnostic:local"
 PROFILE = (
@@ -33,7 +38,22 @@ PROFILE = (
 COMMAND = ("python", "-m", "emailmonitor.parsing.xml_worker")
 
 
-def decode_output(output: bytes, data: bytes) -> XmlObservation:
+def fixture_expectation() -> XmlExpectation:
+    return XmlExpectation.model_validate(
+        {
+            "requested_identifier": XML_IDENTIFIER,
+            "content_digest": XML_DIGEST,
+            "source_profile": XML_PROFILE,
+        }
+    )
+
+
+def decode_output(
+    output: bytes, data: bytes, expected: XmlExpectation | None = None
+) -> XmlObservation:
+    expected = expected or fixture_expectation()
+    expected = XmlExpectation.model_validate(expected.model_dump())
+    expected.check_bytes(data)
     if not output or len(output) > MAX_ENVELOPE:
         raise ValueError("Bounded parser output required")
 
@@ -59,12 +79,7 @@ def decode_output(output: bytes, data: bytes) -> XmlObservation:
     ):
         raise ValueError("Registered parser profile required")
     observed = XmlObservation.model_validate(document["observation"])
-    if (
-        observed.content_digest != hashlib.sha256(data).hexdigest()
-        or observed.requested_identifier != XML_IDENTIFIER
-        or observed.source_profile != XML_PROFILE
-    ):
-        raise ValueError("Parser provenance mismatch")
+    expected.check_observation(observed)
     return observed
 
 
@@ -184,10 +199,14 @@ def exchange(command: list[str], data: bytes, timeout: float = 30) -> bytes:
             raise
 
 
-def parse_isolated(settings: Settings, data: bytes) -> XmlObservation:
+def parse_isolated(
+    settings: Settings, data: bytes, *, expected: XmlExpectation | None = None
+) -> XmlObservation:
     require_fixture(settings)
     if not isinstance(data, bytes) or not 1 <= len(data) <= MAX_BYTES:
         raise ValueError("Bounded XML input required")
+    expected = expected or fixture_expectation()
+    framed = encode_input(data, expected)
     image_metadata = json.loads(_docker("image", "inspect", IMAGE))[0]
     image_id = image_metadata.get("Id", "")
     if (
@@ -225,7 +244,7 @@ def parse_isolated(settings: Settings, data: bytes) -> XmlObservation:
             for value in environment
         ):
             raise IsolationUnavailable("xml_container_environment_invalid")
-        output = exchange(["docker", "start", "--attach", "--interactive", identifier], data)
+        output = exchange(["docker", "start", "--attach", "--interactive", identifier], framed)
         state = json.loads(_docker("inspect", identifier))[0]["State"]
         if (
             state.get("Running") is not False
@@ -234,7 +253,7 @@ def parse_isolated(settings: Settings, data: bytes) -> XmlObservation:
         ):
             raise IsolationUnavailable("xml_parser_exit_invalid")
         try:
-            return decode_output(output, data)
+            return decode_output(output, data, expected)
         except (ValueError, TypeError, KeyError):
             raise IsolationUnavailable("xml_parser_output_invalid") from None
     finally:

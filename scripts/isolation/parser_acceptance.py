@@ -5,6 +5,7 @@ No credentials, live destinations, shell input or host socket are consumed.
 
 import errno
 import hashlib
+import io
 import json
 import logging
 import os
@@ -21,6 +22,8 @@ from emailmonitor.extraction.sciencedirect import parse_article as parse_xml
 from emailmonitor.extraction.xml_retained import XML_IDENTIFIER
 from emailmonitor.fetching.safety import FetchDenied
 from emailmonitor.parsing.fixture import observe_fixture
+from emailmonitor.parsing.xml_protocol import XmlExpectation, encode_input, parse_input
+from emailmonitor.sources.sciencedirect import normalize_identifier
 
 
 def main() -> None:
@@ -188,6 +191,18 @@ def main() -> None:
     xml = parse_xml(xml_data, XML_IDENTIFIER)
     if xml.status != "observed" or len(xml.authors) != 3 or len(xml.candidates) != 2:
         raise RuntimeError("Isolated XML observations failed")
+    generalized_data = xml_data.replace(b"10.9999/synthetic.1", b"10.9999/synthetic.2")
+    generalized_expected = XmlExpectation(
+        requested_identifier=normalize_identifier("10.9999/synthetic.2"),
+        content_digest=hashlib.sha256(generalized_data).hexdigest(),
+        source_profile="article_retrieval_response",
+    )
+    generalized = parse_input(io.BytesIO(encode_input(generalized_data, generalized_expected)))
+    if generalized.requested_identifier != generalized_expected.requested_identifier or (
+        len(generalized.authors),
+        len(generalized.candidates),
+    ) != (3, 2):
+        raise RuntimeError("Generalized isolated XML protocol failed")
     for hostile in (
         b'<!DOCTYPE x [<!ENTITY remote SYSTEM "http://192.0.2.1/">]><x>&remote;</x>',
         b'<!DOCTYPE x [<!ENTITY a "1234"><!ENTITY b "&a;&a;">]><x>&b;</x>',
@@ -214,6 +229,7 @@ def main() -> None:
                     "candidates": len(xml.candidates),
                     "digest": xml.content_digest,
                     "hostile_refusals": 5,
+                    "generalized_input_protocol": "xml-input-v1",
                 },
                 "pdf_resource_caps": True,
                 "pdf_observations": {
