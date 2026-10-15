@@ -204,3 +204,9 @@ No application, live source connector, actual email collection, deployment, send
 - Preserve ordered author metadata and row provenance; explicitly report search contact fields unavailable.
 - Add DOI/PII deduplication and conservative pagination/conflict/resource-limit tests.
 - Keep live execution, credentials, source grants, runtime registration and deployment disabled; full EM-015 remains partial. See [runbook46](docs/46-sciencedirect-adapter-prerequisite.md).
+
+## EM-015b — bounded XML contact observations (candidate, 2026-10-15)
+
+- Add an inert standard-library Elsevier-shaped journal-head XML parser with native XOCS identity binding and an explicitly unverified retrieval-wrapper compatibility profile.
+- Preserve ordered first/corresponding authors, direct published email and affiliation evidence in a separate XML envelope using existing fact states; retain ambiguous/missing/unsupported outcomes.
+- Add newly authored synthetic source-shaped fixtures and positive/adversarial XML, resource, identity and provenance tests. No live source, worker/tenant integration, new dependency, migration, credential, activation or isolated XML runtime claim. See [runbook47](docs/47-sciencedirect-xml-observations.md) and [validation](reports/em015b-validation.md).
