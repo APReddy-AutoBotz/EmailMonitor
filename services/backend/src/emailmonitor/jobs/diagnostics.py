@@ -100,7 +100,9 @@ class WorkerDiagnostics:
             and task is expected
             and type(info) is dict
             and info.get("routing_key") in self.queues
-            and info.get("exchange") == info.get("routing_key")
+            # Pinned Celery publishes direct named queues through AMQP's
+            # empty default exchange. Do not infer exchange from queue name.
+            and info.get("exchange") == ""
         )
 
     def ready(self, sender: Any = None, **_: Any) -> None:

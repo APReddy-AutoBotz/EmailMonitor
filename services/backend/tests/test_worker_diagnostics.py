@@ -134,7 +134,7 @@ class SignalObject:
 def recorder() -> tuple[WorkerDiagnostics, Any, Any, Any, list[str]]:
     output: list[str] = []
     app = SimpleNamespace(tasks={})
-    info = {"routing_key": NAMESPACE + "-parse", "exchange": NAMESPACE + "-parse"}
+    info = {"routing_key": NAMESPACE + "-parse", "exchange": ""}
     task = SignalObject(app=app, name=TASK, request=SimpleNamespace(delivery_info=info))
     app.tasks[TASK] = task
     request = SimpleNamespace(app=app, task=task, delivery_info=info)
@@ -168,7 +168,19 @@ def test_supported_signals_emit_only_closed_cumulative_counters() -> None:
     assert "ack" not in "".join(output).lower()
 
 
-@pytest.mark.parametrize("foreign", ["app", "task", "task_identity", "queue", "exchange"])
+@pytest.mark.parametrize(
+    "foreign",
+    [
+        "app",
+        "task",
+        "task_identity",
+        "queue",
+        "exchange",
+        "named_exchange",
+        "missing_exchange",
+        "null_exchange",
+    ],
+)
 def test_foreign_task_signals_are_ignored(foreign: str) -> None:
     observer, task, request, consumer, output = recorder()
     if foreign == "app":
@@ -178,7 +190,13 @@ def test_foreign_task_signals_are_ignored(foreign: str) -> None:
     elif foreign == "task_identity":
         observer.application.tasks[TASK] = SimpleNamespace()
     elif foreign == "queue":
-        request.delivery_info["routing_key"] = request.delivery_info["exchange"] = "foreign"
+        request.delivery_info["routing_key"] = "foreign"
+    elif foreign == "named_exchange":
+        request.delivery_info["exchange"] = request.delivery_info["routing_key"]
+    elif foreign == "missing_exchange":
+        del request.delivery_info["exchange"]
+    elif foreign == "null_exchange":
+        request.delivery_info["exchange"] = None
     else:
         request.delivery_info["exchange"] = "foreign"
     observer.received(sender=consumer, request=request)
@@ -319,7 +337,7 @@ def _check_worker_config(enabled: bool) -> None:
     task = app.tasks[TASK]
     try:
         for queue in [NAMESPACE + "-parse", "foreign"]:
-            task.push_request(delivery_info={"routing_key": queue, "exchange": queue})
+            task.push_request(delivery_info={"routing_key": queue, "exchange": ""})
             try:
                 task.run({})
             finally:
@@ -356,3 +374,147 @@ def test_diagnostic_wire_parity_and_existing_ui_controls_are_unchanged() -> None
     assert "file.read(65536)" in source
     assert '"worker_stages": worker_snapshot' in source
     assert FixtureWorkerConfig.model_fields["ui_diagnostics"].default is False
+
+
+def _check_published_delivery(kind: str, outcome: str) -> None:
+    """Pinned publication metadata, genuine Request and actual Celery trace signals."""
+    import socket
+    from contextlib import nullcontext
+    from importlib import import_module
+
+    from emailmonitor.jobs import broker
+    from emailmonitor.jobs.queues import phase_queue
+    from emailmonitor.progress.broker import publish
+
+    monkeypatch = pytest.MonkeyPatch()
+    output: list[str] = []
+    publications: list[tuple[object, dict[str, Any]]] = []
+    confirmations: list[object] = []
+    calls: list[str] = []
+    org, job, item, event = (uuid4() for _ in range(4))
+    original = RuntimeError("synthetic-task-failure")
+
+    def no_socket(*_: object, **__: object) -> None:
+        raise AssertionError("No network in publication/trace regression")
+
+    def claim(*_: object) -> object:
+        calls.append("claim")
+        if outcome == "claim_error":
+            raise original
+        return None if outcome == "empty" else SimpleNamespace(lease=SimpleNamespace(generation=1))
+
+    def fixture(*_: object) -> None:
+        calls.append("process")
+        if outcome == "process_error":
+            raise original
+
+    progress = SimpleNamespace(
+        claim=claim,
+        process_fixture=fixture,
+        pending=lambda _: [
+            {
+                "job_id": job,
+                "item_id": item,
+                "event_id": event,
+                "generation": 1,
+                "work_kind": kind,
+            }
+        ],
+        confirmed=lambda *args: confirmations.append(args),
+    )
+
+    class Producer:
+        connection = SimpleNamespace(_reraise_as_library_errors=nullcontext)
+
+        def publish(self, value: object, **options: Any) -> None:
+            publications.append((value, options))
+
+    monkeypatch.setattr(socket, "socket", no_socket)
+    monkeypatch.setattr(broker, "Database", lambda _: SimpleNamespace())
+    monkeypatch.setattr(broker, "Progress", lambda *_: progress)
+    monkeypatch.setattr(
+        broker, "WorkerDiagnostics", lambda app, queue: WorkerDiagnostics(app, queue, output.append)
+    )
+    config = FixtureWorkerConfig(
+        environment="test",
+        database_url="postgresql+pg8000://fixture@127.0.0.1/test",
+        broker_url="pyamqp://fixture@127.0.0.1/",
+        organization=str(org),
+        session_token="synthetic-session-only",
+        queue=NAMESPACE,
+        ui_diagnostics=True,
+    )
+    app, _ = create_worker(config)
+    monkeypatch.setattr(app, "producer_or_acquire", lambda _: nullcontext(Producer()))
+    try:
+        assert publish(app, cast(Progress, progress), org) == 1
+        assert confirmations == [(org, job, event)]
+        value, options = publications[0]
+        queue = phase_queue(NAMESPACE, "fixture_io" if kind == "discover" else "parse")
+        # Assert actual pinned send_task metadata rather than fabricating the
+        # exchange/routing pair that blinded the first diagnostic version.
+        assert options["exchange"] == "" and options["routing_key"] == queue
+        assert options["mandatory"] is True
+        content_type, encoding, serialized = import_module("kombu.serialization").dumps(
+            value, serializer=options["serializer"]
+        )
+        message = import_module("kombu.message").Message(
+            body=serialized,
+            content_type=content_type,
+            content_encoding=encoding,
+            headers=options["headers"],
+            properties={"correlation_id": options["correlation_id"]},
+            delivery_info={"exchange": options["exchange"], "routing_key": options["routing_key"]},
+        )
+        task = app.tasks[TASK]
+        request = import_module("celery.worker.request").Request(message, app=app, task=task)
+        assert request.app is app and request.task is task
+        consumer = SignalObject(app=app)
+        signals.task_received.send(sender=consumer, request=request)
+        traced = import_module("celery.app.trace").trace_task(
+            task, request.id, request.args, request.kwargs, request=request.request_dict, app=app
+        )
+        assert (traced.info is not None) is outcome.endswith("error")
+        expected = ["task_received", "execute_enter", "validated", "claim_enter"]
+        if outcome == "empty":
+            expected += ["claim_empty"]
+        elif outcome == "claim_error":
+            expected += ["claim_error", "task_failure"]
+        else:
+            expected += ["claim_acquired", "process_enter"]
+            expected += (
+                ["process_error", "task_failure"]
+                if outcome == "process_error"
+                else ["process_return"]
+            )
+        expected += ["task_postrun"]
+        snapshots = [json.loads(line.removeprefix(PREFIX)) for line in output]
+        assert [snapshot["last_stage"] for snapshot in snapshots] == expected
+        assert calls == (["claim"] if outcome in {"empty", "claim_error"} else ["claim", "process"])
+        parsed = completion_worker_snapshot("".join(output).encode())
+        assert parsed["status"] == "available"
+        assert cast(dict[str, int], parsed["counts"])["task_postrun"] == 1
+        assert not any(
+            value in "".join(output)
+            for value in [str(org), str(job), str(item), str(event), queue, config.session_token]
+        )
+    finally:
+        app.close()
+        monkeypatch.undo()
+
+
+@pytest.mark.parametrize("kind", ["discover", "article"])
+@pytest.mark.parametrize("outcome", ["success", "empty", "claim_error", "process_error"])
+def test_real_published_routing_and_celery_request_trace_signals(kind: str, outcome: str) -> None:
+    child = multiprocessing.get_context("spawn").Process(
+        target=_check_published_delivery, args=(kind, outcome)
+    )
+    child.start()
+    try:
+        child.join(timeout=10)
+        assert child.exitcode == 0
+    finally:
+        if child.is_alive():
+            child.kill()
+            child.join(timeout=5)
+        child.close()

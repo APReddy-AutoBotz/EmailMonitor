@@ -107,8 +107,17 @@ def test_actual_container_output_persists_review_and_both_exports(
         profiles.append(metadata)
 
     monkeypatch.setattr(xml_channel, "verify_profile", verified)
-    progress, job, work = running(scenario)
+    progress, job = planned_xml(scenario)
     org = scenario.organizations[0]
+    progress.start(org, job, progress.snapshot(org, job).revision)
+    messages = [row for row in progress.pending(org) if row["job_id"] == job]
+    assert len(messages) == 1
+    message = messages[0]
+    event = UUID(str(message["event_id"]))
+    item = UUID(str(message["item_id"]))
+    generation = int(str(message["generation"]))
+    work = progress.claim(org, job, item, event, generation=generation)
+    assert work is not None
     assert progress.process_fixture(work) == "needs_review"
     snapshots = progress.extraction.read(org, job)
     assert len(snapshots) == 1
@@ -185,8 +194,18 @@ def test_actual_container_output_persists_review_and_both_exports(
                 other.download(org, export)
         with pytest.raises(AuthorizationDenied):
             other.contacts(scenario.organizations[1], Filters(job_id=job))
+    # A genuine duplicate uses the original server-owned outbox event. A forged
+    # event is denied before the terminal/no-work return, even after completion.
+    assert progress.claim(org, job, item, event, generation=generation) is None
+    with pytest.raises(DBAPIError) as denied:
+        progress.claim(org, job, item, uuid4(), generation=generation)
+    original = denied.value.orig
+    detail = original.args[0] if original is not None and original.args else None
+    assert isinstance(detail, dict)
+    assert detail.get("C") == "P0001" and detail.get("M") == "EXECUTION_EVENT_DENIED"
     # Reviewed rows remain stable on duplicate delivery; no additional effect/unit.
-    assert progress.claim(org, job, work.lease.item, uuid4()) is None
+    assert len(progress.extraction.read(org, job)) == 1
+    assert len(results.contacts(org, Filters(job_id=job)).items) == 1
     with progress.database.tenant(progress.token, org, Capability.READ_ORGANIZATION) as (c, _):
         assert (
             c.execute(

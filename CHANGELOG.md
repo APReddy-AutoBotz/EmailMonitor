@@ -226,3 +226,4 @@ No application, live source connector, actual email collection, deployment, send
 
 - Preserve original PR25 build/UI failures; admit only the authored XML fixture to the deny-all parser build context and couple static allowlist checks to every fixture COPY input. Corrected-head runtime gates remain required.
 - Add opt-in synthetic UI worker readiness/task/claim/process counters and strict bounded cumulative-tail diagnostics; preserve original returns/exceptions and existing deadlines/readiness/queue/ACK/security behavior. No stall-fix or broker-acknowledgement claim.
+- Correct diagnostic filtering to the pinned publisher’s exact empty AMQP exchange and add genuine publication/request/trace-signal regressions. Correct XML catalog parity and replay the original durable event while preserving forged-event denial; retain second-head failures and unresolved UI/alias-warning evidence.
