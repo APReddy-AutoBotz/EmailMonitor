@@ -412,12 +412,52 @@ WORKER_STAGES = (
     "task_postrun",
     "task_failure",
 )
+WORKER_FAILURE_CLASSES = (
+    "FetchDenied",
+    "IsolationUnavailable",
+    "AssertionError",
+    "KeyError",
+    "OSError",
+    "RuntimeError",
+    "TimeoutError",
+    "TypeError",
+    "ValueError",
+    "other",
+)
+WORKER_FAILURE_REASONS = (
+    "source_entitlement_denied",
+    "source_policy_denied",
+    "source_resource_scope_denied",
+    "source_admission_deadline",
+    "source_response_denied",
+    "total_deadline_exceeded",
+    "other",
+)
+
+
+class WorkerFailure(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    phase: Literal["claim", "process", "other"]
+    exception_class: str = Field(alias="class")
+    reason: str
+
+    @model_validator(mode="after")
+    def closed_failure(self) -> "WorkerFailure":
+        if (
+            self.exception_class not in WORKER_FAILURE_CLASSES
+            or self.reason not in WORKER_FAILURE_REASONS
+            or self.exception_class != "FetchDenied"
+            and self.reason != "other"
+        ):
+            raise ValueError("Closed worker failure categories required")
+        return self
 
 
 class WorkerSnapshot(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     counts: dict[str, int]
     last_stage: str
+    last_failure: WorkerFailure | None
     saturated: bool
 
     @model_validator(mode="after")
@@ -429,6 +469,10 @@ class WorkerSnapshot(BaseModel):
             or self.counts.get(self.last_stage, 0) == 0
             or not 1 <= sum(self.counts.values()) <= 512
             or self.saturated != (sum(self.counts.values()) == 512)
+            or (self.last_failure is not None) != (self.counts.get("task_failure", 0) > 0)
+            or self.last_failure is not None
+            and self.last_failure.phase != "other"
+            and self.counts.get(self.last_failure.phase + "_error", 0) == 0
         ):
             raise ValueError("Closed bounded worker counters required")
         return self
@@ -443,7 +487,12 @@ def completion_worker_snapshot(raw: bytes, *, truncated: bool = False) -> dict[s
     """
     import json
 
-    empty: dict[str, object] = {"counts": None, "last_stage": None, "saturated": None}
+    empty: dict[str, object] = {
+        "counts": None,
+        "last_stage": None,
+        "last_failure": None,
+        "saturated": None,
+    }
     if len(raw) > 65536 or type(truncated) is not bool:
         return {"status": "invalid", **empty}
     lines = raw.splitlines(keepends=True)
@@ -477,6 +526,14 @@ def completion_worker_snapshot(raw: bytes, *, truncated: bool = False) -> dict[s
                     value.counts[key] != last.counts[key] + int(key == value.last_stage)
                     for key in WORKER_STAGES
                 )
+                or value.last_stage != "task_failure"
+                and value.last_failure != last.last_failure
+                or value.last_stage == "task_failure"
+                and value.last_failure is not None
+                and value.last_failure.phase
+                != {"claim_error": "claim", "process_error": "process"}.get(
+                    last.last_stage, "other"
+                )
             ):
                 raise ValueError("Non-cumulative diagnostic counters")
             last = value
@@ -486,5 +543,5 @@ def completion_worker_snapshot(raw: bytes, *, truncated: bool = False) -> dict[s
         return {"status": "truncated" if incomplete else "unavailable", **empty}
     return {
         "status": "truncated" if incomplete or last.saturated else "available",
-        **last.model_dump(),
+        **last.model_dump(by_alias=True),
     }

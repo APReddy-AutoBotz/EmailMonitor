@@ -1,3 +1,9 @@
+## 2026-10-15 — Opt-in bounded worker failure evidence
+
+- Retain closed phase/class/reason categories from the scoped Celery failure signal in later cumulative UI diagnostic snapshots, with exact known FetchDenied reasons and conservative unknown/wrapper handling.
+- Preserve default-off activation, strict parser and output caps, task returns/errors and all runtime controls; publish no raw worker logs or exception data.
+- Retain PR28's successful corrected application/connected controlled proof and separate actual UI failure. Historical cause and next-head acceptance remain open.
+
 ## 2026-10-15 — EM-015f controlled provider keyword-to-export candidate
 
 - Join native PUT keyword discovery, registry-bound DOI/PII FULL retrieval, actual isolated XML parsing and the same tenant persistence/review/CSV/XLSX services through a trusted durable composition.

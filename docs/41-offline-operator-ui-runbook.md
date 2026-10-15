@@ -1,5 +1,13 @@
 # 41 — Synthetic operator UI runbook
 
+## Bounded worker failure evidence (2026-10-15)
+
+The default-off `ui_diagnostics` option now retains `last_failure` in every later cumulative snapshot. Only the exact registered execute task, application, owned routing key and pinned empty AMQP exchange can update it. Phase is `claim`, `process` or `other`, derived from the immediately preceding scoped stage; a later task resets that stage without erasing the last failure. The failure receiver maps the actual Celery signal exception by exact type identity to `FetchDenied`, `IsolationUnavailable`, seven common built-in classes or `other`. Celery may replace non-pickleable exceptions; wrappers remain `other`, without inspecting their stored original name or arguments.
+
+Only an exact `FetchDenied` with one exact-string argument can emit one of six fixed reasons: `source_entitlement_denied`, `source_policy_denied`, `source_resource_scope_denied`, `source_admission_deadline`, `source_response_denied`, `total_deadline_exceeded`. All other reasons are `other`. No raw names, exception text, traceback, arguments, IDs, URLs, payloads or worker logs are published. Classification/writer errors cannot change task behavior.
+
+The existing 512-snapshot, 1024-byte record and 65536-byte owned-tail limits remain. The strict parser requires the closed metadata field, rejects extra/unknown/inconsistent fields and rejects metadata changing on nonfailure records. Old records lacking the field are invalid evidence, never zero failures. Saturation, absent evidence and truncated tails remain explicit; a retained failure is not proof of a broker ACK, job identity or root cause. No timer, resource, queue, ACK, source policy, SQL fence or completion deadline changes are made. Actual own-head UI and all seven gates remain required; a later successful UI run without recurrence does not identify the earlier cause. [Failure history and verification](../reports/em015f-validation.md).
+
 ## Synthetic solo-worker callback wake candidate (2026-10-15)
 
 The existing fixture worker now registers a consumer bootstep for its exact solo pool with an asynchronous hub, independently of diagnostic logging. Pinned Celery 5.6.3/Kombu 5.6.2/amqp 5.4.1 can run a buffered transport-reader callback from the hub's ready snapshot, execute a synchronous task, enqueue its original late-acknowledgement promise, then enter a poll of up to 10 seconds before revisiting the new ready queue. A real-worker/no-broker regression reproduces this mechanism; task postrun and `Request.acknowledged` become true while the actual `Message` remains unacknowledged and the synthetic channel has received zero `basic_ack` calls. It does not establish that a historical CI failure took this exact branch.
