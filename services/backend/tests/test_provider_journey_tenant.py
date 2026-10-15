@@ -216,11 +216,19 @@ def test_sql_generalized_retention_and_registry_are_not_caller_authority(
             )
     finally:
         admin.dispose()
-    with progress.database.tenant(progress.token, org, Capability.READ_ORGANIZATION) as (c, _):
-        with pytest.raises(DBAPIError):
+    # Let the denied statement unwind the tenant transaction before catching it.
+    with pytest.raises(DBAPIError) as denied:
+        with progress.database.tenant(progress.token, org, Capability.READ_ORGANIZATION) as (c, _):
             c.execute(
                 text(
                     "UPDATE emailmonitor.source_catalog SET support='{}'::jsonb "
                     "WHERE source_id='synthetic-publisher'"
                 )
             )
+
+    assert denied.value.orig is not None
+    detail = denied.value.orig.args[0]
+    assert isinstance(detail, dict) and detail.get("C") == "42501"
+    # A fresh transaction remains usable after the expected privilege denial.
+    with progress.database.tenant(progress.token, org, Capability.READ_ORGANIZATION) as (c, _):
+        assert c.execute(text("SELECT 1")).scalar_one() == 1
