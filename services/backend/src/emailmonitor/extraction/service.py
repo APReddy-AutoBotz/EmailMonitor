@@ -299,7 +299,7 @@ WHERE organization_id=:org AND job_id=:job AND article_url=:url"""),
                 for row in c.execute(
                     text("""SELECT * FROM emailmonitor.article_observations
 WHERE organization_id=:org AND job_id=:job AND expires_at>clock_timestamp()
-ORDER BY article_url LIMIT 4"""),
+ORDER BY article_url LIMIT 500"""),
                     {"org": org, "job": job},
                 ).mappings()
             ]

@@ -129,6 +129,7 @@ def main() -> None:
     context.set_servername_callback(record_sni)
     page = Path("/app/synthetic-page.html").read_bytes()
     xml = Path("/app/synthetic-article.xml").read_bytes()
+    pii_xml = Path("/app/provider-pii.xml").read_bytes()
 
     class Handler(BaseHTTPRequestHandler):
         def do_PUT(self) -> None:
@@ -186,7 +187,12 @@ def main() -> None:
                     self.command == "PUT"
                     and self.path == "/content/search/sciencedirect"
                     or self.command == "GET"
-                    and self.path == "/content/article/doi/10.9999/synthetic.1"
+                    and self.path
+                    in (
+                        "/content/article/doi/10.9999/synthetic.1",
+                        "/content/article/doi/10.9999/synthetic.1?view=FULL",
+                        "/content/article/pii/S0000000000000002?view=FULL",
+                    )
                     and not data
                 )
                 status = (
@@ -197,8 +203,40 @@ def main() -> None:
                 body = (
                     json.dumps({"resultsFound": 0, "results": []}, separators=(",", ":")).encode()
                     if self.command == "PUT"
+                    else pii_xml
+                    if self.path == "/content/article/pii/S0000000000000002?view=FULL"
                     else xml
                 )
+                if self.command == "PUT":
+                    try:
+                        query = json.loads(data)
+                    except (ValueError, UnicodeError):
+                        query = None
+                    if query == {
+                        "qs": "Controlled provider journey",
+                        "display": {"offset": 0, "show": 10, "sortBy": "relevance"},
+                    }:
+                        body = json.dumps(
+                            {
+                                "resultsFound": 3,
+                                "results": [
+                                    {
+                                        "doi": "10.9999/synthetic.1",
+                                        "title": "Synthetic observations",
+                                    },
+                                    {
+                                        "doi": "10.9999/synthetic.1",
+                                        "pii": "S0000000000000001",
+                                        "title": "Synthetic observations duplicate",
+                                    },
+                                    {
+                                        "pii": "S0000000000000002",
+                                        "title": "Second controlled synthetic document",
+                                    },
+                                ],
+                            },
+                            separators=(",", ":"),
+                        ).encode()
                 if state.mode == "provider_redirect":
                     status, location = 307, "https://denied.fixture.example/"
                 elif state.mode == "provider_forbidden":

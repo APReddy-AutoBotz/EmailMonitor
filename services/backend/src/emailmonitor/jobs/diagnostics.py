@@ -7,6 +7,7 @@ from typing import Any, Literal
 
 from celery import signals
 
+from emailmonitor.fetching.safety import FetchDenied, IsolationUnavailable
 from emailmonitor.jobs.queues import owned_queues
 
 Stage = Literal[
@@ -42,6 +43,42 @@ STAGES: tuple[Stage, ...] = (
 PREFIX = "EM_UI_WORKER_V1 "
 MAX_SNAPSHOTS = 512
 TASK = "emailmonitor.fixture.execute"
+FAILURE_CLASSES: tuple[tuple[type[BaseException], str], ...] = (
+    (FetchDenied, "FetchDenied"),
+    (IsolationUnavailable, "IsolationUnavailable"),
+    (AssertionError, "AssertionError"),
+    (KeyError, "KeyError"),
+    (OSError, "OSError"),
+    (RuntimeError, "RuntimeError"),
+    (TimeoutError, "TimeoutError"),
+    (TypeError, "TypeError"),
+    (ValueError, "ValueError"),
+)
+FAILURE_REASONS = (
+    "source_entitlement_denied",
+    "source_policy_denied",
+    "source_resource_scope_denied",
+    "source_admission_deadline",
+    "source_response_denied",
+    "total_deadline_exceeded",
+)
+
+
+def failure_metadata(exception: object, stage: Stage | None) -> dict[str, str]:
+    """Return constants only; unknown types/subclasses/text never cross the boundary."""
+    name = next((label for kind, label in FAILURE_CLASSES if type(exception) is kind), "other")
+    reason = "other"
+    # Only this exact owned exception type can supply a fixed reason. Never
+    # stringify exceptions or inspect unknown objects, subclasses or causes.
+    if type(exception) is FetchDenied:
+        arguments = exception.args
+        if len(arguments) == 1 and type(arguments[0]) is str:
+            reason = next((token for token in FAILURE_REASONS if arguments[0] == token), "other")
+    return {
+        "phase": {"claim_error": "claim", "process_error": "process"}.get(stage or "", "other"),
+        "class": name,
+        "reason": reason,
+    }
 
 
 def emit(stage: Stage, callback: Callable[[Stage], None] | None) -> None:
@@ -71,18 +108,22 @@ class WorkerDiagnostics:
         self.writer = writer
         self.counts = dict.fromkeys(STAGES, 0)
         self.snapshots = 0
+        self.last_stage: Stage | None = None
+        self.last_failure: dict[str, str] | None = None
 
     def record(self, stage: Stage) -> None:
         if stage not in STAGES or self.snapshots >= MAX_SNAPSHOTS:
             return
         self.counts[stage] += 1
         self.snapshots += 1
+        self.last_stage = stage
         self.writer(
             PREFIX
             + json.dumps(
                 {
                     "counts": self.counts,
                     "last_stage": stage,
+                    "last_failure": self.last_failure,
                     "saturated": self.snapshots == MAX_SNAPSHOTS,
                 },
                 separators=(",", ":"),
@@ -126,9 +167,16 @@ class WorkerDiagnostics:
             # Celery's pool callback/late broker acknowledgement occurs later.
             emit("task_postrun", self.record)
 
-    def failure(self, sender: Any = None, **_: Any) -> None:
-        if self.matches(sender, getattr(sender, "request", None)):
-            emit("task_failure", self.record)
+    def failure(self, sender: Any = None, exception: object = None, **_: Any) -> None:
+        try:
+            if self.snapshots < MAX_SNAPSHOTS and self.matches(
+                sender, getattr(sender, "request", None)
+            ):
+                self.last_failure = failure_metadata(exception, self.last_stage)
+                emit("task_failure", self.record)
+        except Exception:
+            # The failure signal is observational, including classification.
+            pass
 
     def connect(self) -> None:
         # Weak bound-method receivers remain owned by this application's execute

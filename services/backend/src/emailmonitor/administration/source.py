@@ -75,7 +75,7 @@ class SourceAdmission(Administration):
             or type(deadline) not in (int, float)
             or type(version) is not int
             or version < 1
-            or operation not in (Operation.HTML, Operation.XML, Operation.BROWSER)
+            or operation not in (Operation.HTML, Operation.XML, Operation.BROWSER, Operation.SEARCH)
             or url.host != "synthetic.publisher.example"
             or not math.isfinite(deadline)
             or not 0 < deadline - time.monotonic() <= 60

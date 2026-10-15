@@ -26,6 +26,7 @@ from emailmonitor.organizations.database import AuthorizationDenied, Database, T
 from emailmonitor.organizations.roles import Capability
 from emailmonitor.progress.binding import allowed as execution_allowed
 from emailmonitor.progress.binding import matches as execution_matches
+from emailmonitor.sources import provider_documents as provider
 from emailmonitor.sources.access import current_policy, policy_decision
 from emailmonitor.sources.policy import Evaluation, Operation, PolicyProposal
 
@@ -70,8 +71,20 @@ class Discovery:
             {"org": org, "job": job, "version": version},
         )
         policy = current_policy(c, org, "synthetic-publisher")
-        operation = Operation.XML if safe.path == "/article-xml.xml" else Operation.HTML
-        operations = (Operation.HTML, Operation.SEARCH) if search else (operation,)
+        operation = (
+            Operation.XML
+            if safe.path == "/article-xml.xml" or url in provider.ARTICLE_URLS
+            else Operation.HTML
+        )
+        operations = (
+            (
+                (Operation.SEARCH,)
+                if url == provider.SEARCH_URL
+                else (Operation.HTML, Operation.SEARCH)
+            )
+            if search
+            else (operation,)
+        )
         for operation in operations:
             if not policy_decision(
                 policy,
@@ -256,7 +269,10 @@ VALUES(:org,:id,emailmonitor.job_actor(),:event,:job)"""),
             if row["revision"] != expected_revision:
                 raise HTTPException(409, "Discovery revision conflict")
             for article in page.articles:
-                if classify_url(article, HOSTS).path not in ARTICLE_PATHS:
+                if (
+                    classify_url(article, HOSTS).path not in ARTICLE_PATHS
+                    and article not in provider.ARTICLE_URLS
+                ):
                     raise AuthorizationDenied()
                 self._authorize(c, org, job, version, article, False)
             if page.next_url is not None:

@@ -87,3 +87,115 @@ def test_well_formed_denial_is_terminal_without_channel_poison(
     with pytest.raises(FetchDenied):
         ProviderProxy(cast(OwnedProcess, process)).acquire(boundary)
     assert not process.poisoned
+
+
+@pytest.mark.parametrize("failure", ["protocol", "finish"])
+def test_resource_cleanup_failure_never_reopens_uncertain_channel(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure: str
+) -> None:
+    from emailmonitor.fetching.safety import SafeURL
+    from emailmonitor.sources.policy import Operation
+    from transport_gateway import scope_fields
+
+    _, boundary, _, _, _, _, _ = assembly(tmp_path, monkeypatch)
+    scope = scope_fields(boundary.planner.scope)
+    identity = str(UUID(int=80))
+    frames: list[dict[str, Any]] = [
+        {"kind": "resource_acquire", "id": identity, "scope": scope, "url": boundary.request.url}
+    ]
+    frames.append(
+        {
+            "kind": "resource_finish",
+            "id": identity,
+            "scope": scope,
+            "status": 200,
+            "retry_after": "",
+        }
+        if failure == "finish"
+        else {"kind": "unknown"}
+    )
+    process = Process(frames)
+
+    class Resources:
+        calls = 0
+
+        def acquire(self, url: SafeURL, operation: Operation, deadline: float) -> object:
+            return identity
+
+        def finish(self, ticket: object, status: int | None, retry_after: str) -> None:
+            assert ticket == identity
+            self.calls += 1
+            raise RuntimeError("Owned SQL cleanup refused")
+
+    resources = Resources()
+    with pytest.raises(
+        RuntimeError, match="SQL cleanup" if failure == "finish" else "Unexpected provider"
+    ):
+        ProviderProxy(cast(OwnedProcess, process)).acquire(boundary, resources=resources)
+    assert process.poisoned and resources.calls == 1
+
+
+@pytest.mark.parametrize("mode", ["missing", "duplicate", "valid"])
+def test_sql_resource_mode_requires_one_owned_completed_ticket(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mode: str
+) -> None:
+    from emailmonitor.fetching.safety import SafeURL
+    from emailmonitor.sources.policy import Operation
+    from transport_gateway import scope_fields
+
+    _, boundary, _, _, _, _, _ = assembly(tmp_path, monkeypatch)
+    scope = scope_fields(boundary.planner.scope)
+    identity = str(UUID(int=81))
+    acquire: dict[str, Any] = {
+        "kind": "resource_acquire",
+        "id": identity,
+        "scope": scope,
+        "url": boundary.request.url,
+    }
+    finish: dict[str, Any] = {
+        "kind": "resource_finish",
+        "id": identity,
+        "scope": scope,
+        "status": 200,
+        "retry_after": "",
+    }
+    result: dict[str, Any] = {
+        "kind": "provider_result",
+        "status": "ok",
+        "request": boundary.request.model_dump(mode="json"),
+        "binding": boundary.binding.model_dump(mode="json"),
+        "body": base64.b64encode(BODY).decode(),
+        "digest": hashlib.sha256(BODY).hexdigest(),
+        "peers": [[ENDPOINTS["fixture-a"][0], 443, "api.elsevier.com"]],
+    }
+    frames: list[dict[str, Any]] = (
+        [result]
+        if mode == "missing"
+        else [acquire, finish, result]
+        if mode == "valid"
+        else [acquire, finish, acquire, result]
+    )
+    process = Process(frames)
+
+    class Resources:
+        acquired = 0
+        finished = 0
+
+        def acquire(self, url: SafeURL, operation: Operation, deadline: float) -> object:
+            self.acquired += 1
+            return identity
+
+        def finish(self, ticket: object, status: int | None, retry_after: str) -> None:
+            assert ticket == identity
+            self.finished += 1
+
+    resources = Resources()
+    proxy = ProviderProxy(cast(OwnedProcess, process))
+    if mode == "valid":
+        assert proxy.acquire(boundary, resources=resources).body == BODY
+        assert not process.poisoned
+    else:
+        with pytest.raises(RuntimeError):
+            proxy.acquire(boundary, resources=resources)
+        assert process.poisoned
+    assert resources.acquired == resources.finished == (0 if mode == "missing" else 1)

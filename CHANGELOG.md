@@ -1,3 +1,16 @@
+## 2026-10-15 — Opt-in bounded worker failure evidence
+
+- Retain closed phase/class/reason categories from the scoped Celery failure signal in later cumulative UI diagnostic snapshots, with exact known FetchDenied reasons and conservative unknown/wrapper handling.
+- Preserve default-off activation, strict parser and output caps, task returns/errors and all runtime controls; publish no raw worker logs or exception data.
+- Retain PR28's successful corrected application/connected controlled proof and separate actual UI failure. Historical cause and next-head acceptance remain open.
+
+## 2026-10-15 — EM-015f controlled provider keyword-to-export candidate
+
+- Join native PUT keyword discovery, registry-bound DOI/PII FULL retrieval, actual isolated XML parsing and the same tenant persistence/review/CSV/XLSX services through a trusted durable composition.
+- Preserve separate synthetic source authorization and canonical API provenance, real SQL source accounting, current authority, conservative evidence and no-refetch recovery.
+- Add forward-only migration0013 with exact controlled routes and latest lifecycle/lease/privacy fences, plus required dual-stack actual journey/cap/race acceptance under the unchanged topology.
+- Keep original fixture flows and all real-source entitlement, credential, live admission/egress and production activation gates explicit. See [runbook51](docs/51-controlled-provider-journey.md) and [evidence](reports/em015f-validation.md).
+
 ## 2026-10-15 — EM-015e controlled executable provider gateway candidate
 
 - Execute canonical native PUT search and GET XML through the existing shared protected DNS/literal-peer/TLS boundary in explicit test composition.

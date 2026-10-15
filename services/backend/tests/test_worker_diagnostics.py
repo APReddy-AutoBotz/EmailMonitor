@@ -9,16 +9,40 @@ from uuid import UUID, uuid4
 
 import pytest
 from celery import signals
+from emailmonitor.fetching.safety import FetchDenied, IsolationUnavailable
 from emailmonitor.jobs.broker import FixtureWorkerConfig, create_worker
-from emailmonitor.jobs.diagnostics import MAX_SNAPSHOTS, PREFIX, STAGES, TASK, WorkerDiagnostics
+from emailmonitor.jobs.diagnostics import (
+    FAILURE_CLASSES,
+    FAILURE_REASONS,
+    MAX_SNAPSHOTS,
+    PREFIX,
+    STAGES,
+    TASK,
+    WorkerDiagnostics,
+)
 from emailmonitor.jobs.queues import owned_queues
 from emailmonitor.organizations.database import AuthorizationDenied
 from emailmonitor.progress.broker import process
 from emailmonitor.progress.service import Progress
-from operator_ui_protocol import WORKER_PREFIX, WORKER_STAGES, completion_worker_snapshot
+from operator_ui_protocol import (
+    WORKER_FAILURE_CLASSES,
+    WORKER_FAILURE_REASONS,
+    WORKER_PREFIX,
+    WORKER_STAGES,
+    completion_worker_snapshot,
+)
 
 ROOT = Path(__file__).resolve().parents[3]
 NAMESPACE = "em-fixture-diagnostics"
+
+
+class PrivateFailure(Exception):
+    pass
+
+
+class UnpickleableFailure(Exception):
+    def __reduce__(self) -> Any:
+        raise TypeError("synthetic non-pickleable exception")
 
 
 def body() -> dict[str, object]:
@@ -164,6 +188,11 @@ def test_supported_signals_emit_only_closed_cumulative_counters() -> None:
     snapshot = completion_worker_snapshot("".join(output).encode())
     assert snapshot["status"] == "available" and snapshot["last_stage"] == "task_postrun"
     assert sum(cast(dict[str, int], snapshot["counts"]).values()) == 5
+    assert snapshot["last_failure"] == {
+        "phase": "other",
+        "class": "RuntimeError",
+        "reason": "other",
+    }
     assert "secret" not in "".join(output) and NAMESPACE not in "".join(output)
     assert "ack" not in "".join(output).lower()
 
@@ -203,6 +232,7 @@ def test_foreign_task_signals_are_ignored(foreign: str) -> None:
     observer.postrun(sender=task)
     observer.failure(sender=task, exception=RuntimeError("secret"))
     assert output == []
+    assert observer.last_failure is None
 
 
 @pytest.mark.parametrize("foreign", ["app", "queues"])
@@ -231,7 +261,12 @@ def test_snapshots_are_bounded_and_cumulative_even_when_log_prefix_is_lost() -> 
 def sample() -> dict[str, object]:
     counts = dict.fromkeys(STAGES, 0)
     counts["worker_ready"] = 1
-    return {"counts": counts, "last_stage": "worker_ready", "saturated": False}
+    return {
+        "counts": counts,
+        "last_stage": "worker_ready",
+        "last_failure": None,
+        "saturated": False,
+    }
 
 
 def frame(value: dict[str, object]) -> bytes:
@@ -274,7 +309,13 @@ def test_snapshot_parser_refuses_invalid_fields_without_echoing_them(change: str
     else:
         value["saturated"] = True
     result = completion_worker_snapshot(frame(value))
-    assert result == {"status": "invalid", "counts": None, "last_stage": None, "saturated": None}
+    assert result == {
+        "status": "invalid",
+        "counts": None,
+        "last_stage": None,
+        "last_failure": None,
+        "saturated": None,
+    }
 
 
 @pytest.mark.parametrize(
@@ -367,6 +408,8 @@ def test_fixture_worker_diagnostics_are_explicitly_opt_in_and_queue_scoped(enabl
 
 def test_diagnostic_wire_parity_and_existing_ui_controls_are_unchanged() -> None:
     assert tuple(STAGES) == WORKER_STAGES and PREFIX.encode() == WORKER_PREFIX
+    assert tuple(label for _, label in FAILURE_CLASSES) + ("other",) == WORKER_FAILURE_CLASSES
+    assert FAILURE_REASONS + ("other",) == WORKER_FAILURE_REASONS
     source = (ROOT / "scripts/isolation/test_operator_ui_acceptance.py").read_text()
     assert "ui_diagnostics=True" in source
     assert "wait_for(complete, seconds=8)" in source
@@ -376,7 +419,9 @@ def test_diagnostic_wire_parity_and_existing_ui_controls_are_unchanged() -> None
     assert FixtureWorkerConfig.model_fields["ui_diagnostics"].default is False
 
 
-def _check_published_delivery(kind: str, outcome: str) -> None:
+def _check_published_delivery(
+    kind: str, outcome: str, failure_kind: str = "runtime", enabled: bool = True
+) -> None:
     """Pinned publication metadata, genuine Request and actual Celery trace signals."""
     import socket
     from contextlib import nullcontext
@@ -392,7 +437,18 @@ def _check_published_delivery(kind: str, outcome: str) -> None:
     confirmations: list[object] = []
     calls: list[str] = []
     org, job, item, event = (uuid4() for _ in range(4))
-    original = RuntimeError("synthetic-task-failure")
+    errors = {
+        "runtime": RuntimeError("synthetic-task-failure"),
+        "fetch": FetchDenied("source_entitlement_denied"),
+        "isolation": IsolationUnavailable("private synthetic reason"),
+        "unknown": PrivateFailure("synthetic-task-failure"),
+        "unpickleable": UnpickleableFailure("synthetic-task-failure"),
+    }
+    original = errors[failure_kind]
+    seen_failures: list[object] = []
+
+    def capture_failure(exception: object, **_: object) -> None:
+        seen_failures.append(exception)
 
     def no_socket(*_: object, **__: object) -> None:
         raise AssertionError("No network in publication/trace regression")
@@ -442,10 +498,12 @@ def _check_published_delivery(kind: str, outcome: str) -> None:
         organization=str(org),
         session_token="synthetic-session-only",
         queue=NAMESPACE,
-        ui_diagnostics=True,
+        ui_diagnostics=enabled,
     )
     app, _ = create_worker(config)
     monkeypatch.setattr(app, "producer_or_acquire", lambda _: nullcontext(Producer()))
+    task = app.tasks[TASK]
+    signals.task_failure.connect(capture_failure, sender=task, weak=False)
     try:
         assert publish(app, cast(Progress, progress), org) == 1
         assert confirmations == [(org, job, event)]
@@ -466,7 +524,6 @@ def _check_published_delivery(kind: str, outcome: str) -> None:
             properties={"correlation_id": options["correlation_id"]},
             delivery_info={"exchange": options["exchange"], "routing_key": options["routing_key"]},
         )
-        task = app.tasks[TASK]
         request = import_module("celery.worker.request").Request(message, app=app, task=task)
         assert request.app is app and request.task is task
         consumer = SignalObject(app=app)
@@ -475,6 +532,16 @@ def _check_published_delivery(kind: str, outcome: str) -> None:
             task, request.id, request.args, request.kwargs, request=request.request_dict, app=app
         )
         assert (traced.info is not None) is outcome.endswith("error")
+        if traced.info is not None:
+            assert traced.info.retval is original
+            assert len(seen_failures) == 1
+            if failure_kind == "unpickleable":
+                wrapper = import_module("celery.utils.serialization").UnpickleableExceptionWrapper
+                assert type(seen_failures[0]) is wrapper
+            else:
+                assert seen_failures[0] is original
+        else:
+            assert seen_failures == []
         expected = ["task_received", "execute_enter", "validated", "claim_enter"]
         if outcome == "empty":
             expected += ["claim_empty"]
@@ -489,16 +556,44 @@ def _check_published_delivery(kind: str, outcome: str) -> None:
             )
         expected += ["task_postrun"]
         snapshots = [json.loads(line.removeprefix(PREFIX)) for line in output]
-        assert [snapshot["last_stage"] for snapshot in snapshots] == expected
+        assert [snapshot["last_stage"] for snapshot in snapshots] == (expected if enabled else [])
         assert calls == (["claim"] if outcome in {"empty", "claim_error"} else ["claim", "process"])
         parsed = completion_worker_snapshot("".join(output).encode())
-        assert parsed["status"] == "available"
-        assert cast(dict[str, int], parsed["counts"])["task_postrun"] == 1
+        assert parsed["status"] == ("available" if enabled else "unavailable")
+        if enabled:
+            assert cast(dict[str, int], parsed["counts"])["task_postrun"] == 1
+        assert parsed["last_failure"] == (
+            {
+                "phase": "claim" if outcome == "claim_error" else "process",
+                "class": {
+                    "runtime": "RuntimeError",
+                    "fetch": "FetchDenied",
+                    "isolation": "IsolationUnavailable",
+                    "unknown": "other",
+                    "unpickleable": "other",
+                }[failure_kind],
+                "reason": "source_entitlement_denied" if failure_kind == "fetch" else "other",
+            }
+            if enabled and outcome.endswith("error")
+            else None
+        )
         assert not any(
             value in "".join(output)
-            for value in [str(org), str(job), str(item), str(event), queue, config.session_token]
+            for value in [
+                str(org),
+                str(job),
+                str(item),
+                str(event),
+                queue,
+                config.session_token,
+                "synthetic-task-failure",
+                "private synthetic reason",
+                "PrivateFailure",
+                "UnpickleableFailure",
+            ]
         )
     finally:
+        signals.task_failure.disconnect(capture_failure, sender=task)
         app.close()
         monkeypatch.undo()
 
@@ -518,3 +613,278 @@ def test_real_published_routing_and_celery_request_trace_signals(kind: str, outc
             child.kill()
             child.join(timeout=5)
         child.close()
+
+
+@pytest.mark.parametrize("kind", ["discover", "article"])
+@pytest.mark.parametrize("outcome", ["claim_error", "process_error"])
+@pytest.mark.parametrize("failure_kind", ["fetch", "isolation", "unknown", "unpickleable"])
+def test_real_trace_failure_metadata(kind: str, outcome: str, failure_kind: str) -> None:
+    child = multiprocessing.get_context("spawn").Process(
+        target=_check_published_delivery, args=(kind, outcome, failure_kind)
+    )
+    child.start()
+    try:
+        child.join(timeout=10)
+        assert child.exitcode == 0
+    finally:
+        if child.is_alive():
+            child.kill()
+            child.join(timeout=5)
+        child.close()
+
+
+@pytest.mark.parametrize("outcome", ["claim_error", "process_error"])
+def test_real_trace_failure_has_no_diagnostics_when_disabled(outcome: str) -> None:
+    child = multiprocessing.get_context("spawn").Process(
+        target=_check_published_delivery, args=("article", outcome, "fetch", False)
+    )
+    child.start()
+    try:
+        child.join(timeout=10)
+        assert child.exitcode == 0
+    finally:
+        if child.is_alive():
+            child.kill()
+            child.join(timeout=5)
+        child.close()
+
+
+@pytest.mark.parametrize("kind,label", FAILURE_CLASSES)
+def test_failure_class_mapping_uses_only_exact_types(kind: type[BaseException], label: str) -> None:
+    observer, task, _, _, output = recorder()
+    observer.record("claim_error")
+    observer.failure(sender=task, exception=kind("secret https://example.test/?token=private"))
+    snapshot = completion_worker_snapshot("".join(output).encode())
+    assert snapshot["last_failure"] == {"phase": "claim", "class": label, "reason": "other"}
+    assert "secret" not in "".join(output) and "private" not in "".join(output)
+
+
+@pytest.mark.parametrize("reason", FAILURE_REASONS)
+def test_exact_fetch_reasons_survive_success_and_truncated_tail(reason: str) -> None:
+    observer, task, _, _, output = recorder()
+    observer.record("process_error")
+    observer.failure(
+        sender=task, exception=FetchDenied(reason), traceback="secret", args=["secret"]
+    )
+    expected = {"phase": "process", "class": "FetchDenied", "reason": reason}
+    # A later successful task must not erase the previous failure or expose data.
+    for stage in ("task_postrun", "execute_enter", "process_return", "task_postrun"):
+        observer.record(stage)
+    parsed = completion_worker_snapshot("".join(output).encode())
+    assert parsed["last_failure"] == expected
+    tail = completion_worker_snapshot(b"partial secret\n" + output[-1].encode(), truncated=True)
+    assert tail["status"] == "truncated" and tail["last_failure"] == expected
+    assert "secret" not in "".join(output)
+    # A subsequent failure before claim/process must not inherit the old phase.
+    observer.record("execute_enter")
+    observer.failure(sender=task, exception=ValueError("private validation body"))
+    assert completion_worker_snapshot("".join(output).encode())["last_failure"] == {
+        "phase": "other",
+        "class": "ValueError",
+        "reason": "other",
+    }
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        (),
+        ("source_policy_denied", "secret"),
+        ("source_policy_denied secret",),
+        ("secret source_policy_denied",),
+        ("source_policy_denied\n",),
+        ("SOURCE_POLICY_DENIED",),
+        ("https://example.test/?token=secret",),
+        ({"source_policy_denied": "secret"},),
+        (b"source_policy_denied",),
+        ("source_policy_denied" * 10000,),
+    ],
+)
+def test_unknown_fetch_reason_arguments_are_never_emitted(arguments: tuple[object, ...]) -> None:
+    observer, task, _, _, output = recorder()
+    observer.failure(sender=task, exception=FetchDenied(*arguments))
+    assert completion_worker_snapshot("".join(output).encode())["last_failure"] == {
+        "phase": "other",
+        "class": "FetchDenied",
+        "reason": "other",
+    }
+    assert "secret" not in "".join(output)
+
+
+def test_unknown_exception_subclasses_and_argument_objects_are_not_inspected() -> None:
+    class HostileFetch(FetchDenied):
+        def __getattribute__(self, name: str) -> Any:
+            raise AssertionError("must not inspect unknown exception")
+
+        def __str__(self) -> str:
+            raise AssertionError("must not stringify unknown exception")
+
+        def __repr__(self) -> str:
+            raise AssertionError("must not repr unknown exception")
+
+    class HostileString(str):
+        def __eq__(self, other: object) -> bool:
+            raise AssertionError("must not compare unknown string type")
+
+    for error, label in [
+        (HostileFetch("secret"), "other"),
+        (type("FetchDenied", (Exception,), {})("source_policy_denied"), "other"),
+        (FetchDenied(HostileString("source_policy_denied")), "FetchDenied"),
+        (RuntimeError("source_policy_denied"), "RuntimeError"),
+        (IsolationUnavailable("source_policy_denied"), "IsolationUnavailable"),
+    ]:
+        observer, task, _, _, output = recorder()
+        observer.failure(sender=task, exception=error)
+        assert completion_worker_snapshot("".join(output).encode())["last_failure"] == {
+            "phase": "other",
+            "class": label,
+            "reason": "other",
+        }
+        assert "secret" not in "".join(output)
+
+
+@pytest.mark.parametrize("broken", ["writer", "classifier"])
+def test_failure_diagnostic_errors_are_isolated(
+    broken: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from emailmonitor.jobs import diagnostics
+
+    observer, task, _, _, output = recorder()
+
+    def fail(*_: object) -> Any:
+        raise RuntimeError("diagnostic failure")
+
+    if broken == "writer":
+        observer.writer = fail
+    else:
+        monkeypatch.setattr(diagnostics, "failure_metadata", fail)
+    original = FetchDenied("source_policy_denied")
+    observer.failure(sender=task, exception=original)
+    assert output == [] and original.args == ("source_policy_denied",)
+
+
+def test_failure_at_snapshot_cap_is_retained_without_further_output_or_mutation() -> None:
+    observer, task, _, _, output = recorder()
+    for _ in range(MAX_SNAPSHOTS - 2):
+        observer.record("claim_empty")
+    observer.record("process_error")
+    observer.failure(sender=task, exception=FetchDenied("source_resource_scope_denied"))
+    saved = observer.last_failure
+    observer.record("execute_enter")
+    observer.failure(sender=task, exception=ValueError("secret"))
+    assert len(output) == MAX_SNAPSHOTS and observer.last_failure is saved
+    assert max(len(line.encode()) for line in output) <= 1024
+    parsed = completion_worker_snapshot(
+        b"partial\n" + "".join(output[-2:]).encode(), truncated=True
+    )
+    assert parsed["status"] == "truncated" and parsed["saturated"] is True
+    assert parsed["last_failure"] == saved
+
+
+def failure_sample() -> dict[str, object]:
+    value = sample()
+    cast(dict[str, int], value["counts"]).update(process_error=1, task_failure=1)
+    value["last_stage"] = "task_failure"
+    value["last_failure"] = {
+        "phase": "process",
+        "class": "FetchDenied",
+        "reason": "source_policy_denied",
+    }
+    return value
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        "missing",
+        "null",
+        "extra",
+        "missing_field",
+        "phase",
+        "class",
+        "reason",
+        "type",
+        "list",
+        "no_failure",
+        "no_phase_error",
+        "reason_class",
+        "number",
+    ],
+)
+def test_failure_snapshot_schema_is_closed_and_consistent(change: str) -> None:
+    value = failure_sample()
+    failure = cast(dict[str, object], value["last_failure"])
+    counts = cast(dict[str, int], value["counts"])
+    if change == "missing":
+        del value["last_failure"]
+    elif change == "null":
+        value["last_failure"] = None
+    elif change == "extra":
+        failure["message"] = "secret"
+    elif change == "missing_field":
+        del failure["class"]
+    elif change in {"phase", "class", "reason"}:
+        failure[change] = "secret"
+    elif change == "type":
+        failure["class"] = True
+    elif change == "list":
+        value["last_failure"] = [failure]
+    elif change == "no_failure":
+        counts["task_failure"] = 0
+        value["last_stage"] = "process_error"
+    elif change == "no_phase_error":
+        counts["process_error"] = 0
+    elif change == "reason_class":
+        failure["class"] = "RuntimeError"
+    else:
+        failure["reason"] = 1
+    result = completion_worker_snapshot(frame(value))
+    assert result["status"] == "invalid" and result["last_failure"] is None
+    assert "secret" not in json.dumps(result)
+
+
+@pytest.mark.parametrize("change", ["clear", "replace", "wrong_phase", "duplicate"])
+def test_failure_snapshot_metadata_cannot_change_without_matching_failure(change: str) -> None:
+    first = failure_sample()
+    second = failure_sample()
+    counts = cast(dict[str, int], second["counts"])
+    second["last_stage"] = "task_postrun"
+    counts["task_postrun"] = 1
+    if change == "clear":
+        second["last_failure"] = None
+    elif change == "replace":
+        cast(dict[str, str], second["last_failure"])["reason"] = "source_entitlement_denied"
+    elif change == "wrong_phase":
+        second["last_stage"] = "task_failure"
+        counts["task_postrun"] = 0
+        counts["task_failure"] = 2
+    raw = frame(first) + frame(second)
+    if change == "duplicate":
+        raw = raw.replace(b'"phase": "process"', b'"phase": "process", "phase": "other"')
+    assert completion_worker_snapshot(raw)["status"] == "invalid"
+
+
+def test_foreign_failure_does_not_replace_prior_scoped_failure() -> None:
+    observer, task, _, _, output = recorder()
+    observer.record("process_error")
+    observer.failure(sender=task, exception=FetchDenied("source_policy_denied"))
+    before = "".join(output)
+    task.request.delivery_info["routing_key"] = "foreign"
+    observer.failure(sender=task, exception=ValueError("private"))
+    assert "".join(output) == before
+    assert observer.last_failure == {
+        "phase": "process",
+        "class": "FetchDenied",
+        "reason": "source_policy_denied",
+    }
+
+
+def test_incomplete_final_snapshot_preserves_last_known_failure() -> None:
+    observer, task, _, _, output = recorder()
+    observer.record("process_error")
+    observer.failure(sender=task, exception=FetchDenied("source_policy_denied"))
+    observer.postrun(sender=task)
+    raw = "".join(output[:-1]).encode() + output[-1].encode()[:-1]
+    parsed = completion_worker_snapshot(raw)
+    assert parsed["status"] == "truncated" and parsed["last_stage"] == "task_failure"
+    assert parsed["last_failure"] == observer.last_failure

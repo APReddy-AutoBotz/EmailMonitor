@@ -309,6 +309,11 @@ SELECT emailmonitor.execution_finish(:org, :job, :item, :token, :batch, :failure
     def process_fixture(
         self, work: Work, after_observation: Callable[[], None] | None = None
     ) -> str:
+        from emailmonitor.fetching.safety import IsolationUnavailable
+        from emailmonitor.sources.provider_documents import URLS
+
+        if work.url in URLS:
+            raise IsolationUnavailable("controlled_provider_dispatch_required")
         scope = work.lease
         with bound(scope):
             current = self.discovery.read(scope.organization, scope.job)

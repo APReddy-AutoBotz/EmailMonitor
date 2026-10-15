@@ -369,9 +369,14 @@ def test_source_policy_contract_catalog_fixture_parity(scenario: Scenario) -> No
         catalog = client.get(f"/api/v1/organizations/{scenario.organizations[0]}/sources").json()[0]
         html_routes = {"/" + path.name for path in (root / "fixtures/html").glob("*.html")}
         xml_route = "/article-xml.xml"
-        assert set(catalog["support"]["fixture_routes"]) == html_routes | {xml_route}
+        provider_routes = {"/provider-search-0.json", "/provider-doi.xml", "/provider-pii.xml"}
+        assert (
+            set(catalog["support"]["fixture_routes"]) == html_routes | {xml_route} | provider_routes
+        )
         operations = catalog["support"]["routes_by_operation"]
-        assert operations["fetch_xml"] == [xml_route]
+        assert set(operations["fetch_xml"]) == {xml_route, "/provider-doi.xml", "/provider-pii.xml"}
+        assert "/provider-search-0.json" in operations["search"]
+        assert not provider_routes & set(operations["fetch_html"])
         for operation in ("search", "fetch_html", "browser"):
             assert xml_route not in operations[operation]
         for operation in ("extract_contacts", "retain_excerpt", "export_contacts"):

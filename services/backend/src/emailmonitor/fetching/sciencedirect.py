@@ -43,11 +43,14 @@ class ProviderRequest(Contract):
 
     search: SearchRequest | None = None
     article: ArticleIdentifier | None = None
+    view: Literal["FULL"] | None = None
 
     @model_validator(mode="after")
     def one_route(self) -> "ProviderRequest":
         if (self.search is None) == (self.article is None):
             raise ValueError("Exactly one supported provider request required")
+        if self.search is not None and self.view is not None:
+            raise ValueError("Article view is not a search parameter")
         if self.article is not None:
             article_path(self.article)
         return self
@@ -56,7 +59,11 @@ class ProviderRequest(Contract):
         if self.search is not None:
             return self.search.plan()
         assert self.article is not None
-        return RequestPlan(method="GET", path=article_path(self.article), media_type="text/xml")
+        return RequestPlan(
+            method="GET",
+            path=article_path(self.article) + ("?view=FULL" if self.view == "FULL" else ""),
+            media_type="text/xml",
+        )
 
     @property
     def url(self) -> str:
