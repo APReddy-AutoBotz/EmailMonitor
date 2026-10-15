@@ -28,6 +28,7 @@ from operator_ui_protocol import (
     completion_failure_classes,
     completion_state_counts,
     completion_unit_counts,
+    completion_worker_snapshot,
 )
 from run_operator_ui_acceptance import run
 from sqlalchemy import text
@@ -83,7 +84,7 @@ def test_required_actual_keyboard_operator_ui(scenario: Scenario, tmp_path: Path
     assert token is not None
     progress = Progress(scenario.foundation.database, token, SETTINGS)
     results = Results(progress.database, token, SETTINGS)
-    cfg = config(scenario, Ledger(progress.database, token, SETTINGS))
+    cfg = config(scenario, Ledger(progress.database, token, SETTINGS), ui_diagnostics=True)
     broker, _ = create_worker(cfg)
     stop, release = threading.Event(), threading.Event()
     errors: list[str] = []
@@ -203,8 +204,11 @@ WHERE i.organization_id=:org AND j.kind='extraction' LIMIT 33
                     raise RuntimeError("Exact owned worker log required") from None
                 with logs[0].open("rb") as file:
                     file.seek(0, 2)
+                    truncated = file.tell() > 65536
                     file.seek(max(0, file.tell() - 65536))
-                    failure_classes = completion_failure_classes(file.read(65536))
+                    tail = file.read(65536)
+                    failure_classes = completion_failure_classes(tail)
+                    worker_snapshot = completion_worker_snapshot(tail, truncated=truncated)
                 queue_counts = observe_parse_queue(cfg.broker_url, cfg.queue)
                 print(
                     "operator-ui-control:wait_jobs "
@@ -216,6 +220,7 @@ WHERE i.organization_id=:org AND j.kind='extraction' LIMIT 33
                             "owned_parse_queue": queue_counts,
                             "units": units,
                             "matched_worker_failure_classes": failure_classes,
+                            "worker_stages": worker_snapshot,
                         },
                         sort_keys=True,
                     ),

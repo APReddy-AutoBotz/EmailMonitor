@@ -223,3 +223,6 @@ No application, live source connector, actual email collection, deployment, send
 - Feed a fixed bounded network-none container’s observations through current-authority retained persistence, conservative XML association evidence, human review and existing CSV/XLSX export.
 - Add migration0012 preserving lifecycle/RLS/lease/admission guards, separate retained XML schema/examples, actual-container/database CI acceptance and hostile XML/resource checks under the inherited profile.
 - No live source registration, real-wrapper certification, new dependency/credentials/grants/security setting, deployment or merge. [Runbook48](docs/48-synthetic-xml-pipeline.md) / [candidate evidence](reports/em015c-validation.md).
+
+- Preserve original PR25 build/UI failures; admit only the authored XML fixture to the deny-all parser build context and couple static allowlist checks to every fixture COPY input. Corrected-head runtime gates remain required.
+- Add opt-in synthetic UI worker readiness/task/claim/process counters and strict bounded cumulative-tail diagnostics; preserve original returns/exceptions and existing deadlines/readiness/queue/ACK/security behavior. No stall-fix or broker-acknowledgement claim.

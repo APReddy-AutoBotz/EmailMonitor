@@ -6,6 +6,7 @@ from uuid import UUID
 
 from pydantic import Field, field_validator
 
+from emailmonitor.jobs.diagnostics import Stage, emit
 from emailmonitor.jobs.models import StrictModel
 from emailmonitor.jobs.queues import phase_queue
 from emailmonitor.organizations.database import AuthorizationDenied
@@ -36,24 +37,41 @@ def process(
     *,
     seconds: int = 30,
     after_observation: Callable[[], None] | None = None,
+    diagnostic: Callable[[Stage], None] | None = None,
 ) -> bool:
     event = ExecutionEvent.model_validate(body)
     if event.organization_id != str(organization):
         raise AuthorizationDenied()
+    emit("validated", diagnostic)
     # PostgreSQL binds event/item/current generation and grants a current lease.
-    work = progress.claim(
-        organization,
-        UUID(event.job_id),
-        UUID(event.item_id),
-        UUID(event.event_id),
-        seconds,
-        event.generation,
-    )
+    # Admission may return before its inner delivery counter; zero is not proof
+    # that the broker never delivered this task.
+    emit("claim_enter", diagnostic)
+    try:
+        work = progress.claim(
+            organization,
+            UUID(event.job_id),
+            UUID(event.item_id),
+            UUID(event.event_id),
+            seconds,
+            event.generation,
+        )
+    except Exception:
+        emit("claim_error", diagnostic)
+        raise
     if work is None:
+        emit("claim_empty", diagnostic)
         return False
-    if work.lease.generation != event.generation:
-        raise AuthorizationDenied()
-    progress.process_fixture(work, after_observation)
+    emit("claim_acquired", diagnostic)
+    emit("process_enter", diagnostic)
+    try:
+        if work.lease.generation != event.generation:
+            raise AuthorizationDenied()
+        progress.process_fixture(work, after_observation)
+    except Exception:
+        emit("process_error", diagnostic)
+        raise
+    emit("process_return", diagnostic)
     return True
 
 

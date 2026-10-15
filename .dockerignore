@@ -38,6 +38,9 @@ fixtures/pdf/**
 !fixtures/pdf/encrypted.pdf
 !fixtures/pdf/page-cap.pdf
 !fixtures/pdf/corrupt.pdf
+!fixtures/xml/
+fixtures/xml/**
+!fixtures/xml/sciencedirect-article.xml
 !scripts/isolation/Dockerfile.operator-ui
 !scripts/isolation/operator_ui_acceptance.py
 !apps/

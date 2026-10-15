@@ -14,6 +14,7 @@ from pydantic import Field, model_validator
 from emailmonitor.config import Settings
 from emailmonitor.discovery.broker import process as discover_process
 from emailmonitor.discovery.service import Discovery
+from emailmonitor.jobs.diagnostics import TASK, WorkerDiagnostics, emit
 from emailmonitor.jobs.ledger import Ledger, Work
 from emailmonitor.jobs.models import StrictModel
 from emailmonitor.jobs.queues import owned_queues
@@ -35,6 +36,7 @@ class FixtureWorkerConfig(StrictModel):
     diagnostic_delay_seconds: int = Field(default=0, ge=0, le=30)
     exit_after_commit: bool = False
     exit_after_observation: bool = False
+    ui_diagnostics: bool = False
 
     @model_validator(mode="after")
     def synthetic_boundary(self) -> "FixtureWorkerConfig":
@@ -94,6 +96,10 @@ def create_worker(config: FixtureWorkerConfig) -> tuple[Any, Ledger]:
         worker_hijack_root_logger=False,
     )
 
+    diagnostic = WorkerDiagnostics(application, config.queue) if config.ui_diagnostics else None
+    if diagnostic is not None:
+        diagnostic.connect()
+
     def persist(body: dict[str, object]) -> None:
         work = Work.parse(body)
         if str(work.organization) != config.organization:
@@ -113,6 +119,13 @@ def create_worker(config: FixtureWorkerConfig) -> tuple[Any, Ledger]:
         discover_process(discovery, UUID(config.organization), body)
 
     def execute(body: dict[str, object]) -> None:
+        task = application.tasks[TASK]
+        callback = (
+            diagnostic.record
+            if diagnostic is not None and diagnostic.matches(task, task.request)
+            else None
+        )
+        emit("execute_enter", callback)
         progress = Progress(ledger.database, config.session_token, ledger.settings)
 
         def after_observation() -> None:
@@ -126,6 +139,7 @@ def create_worker(config: FixtureWorkerConfig) -> tuple[Any, Ledger]:
             UUID(config.organization),
             body,
             seconds=min(config.lease_seconds, 120),
+            diagnostic=callback,
             after_observation=after_observation
             if config.exit_after_observation or config.diagnostic_delay_seconds
             else None,
