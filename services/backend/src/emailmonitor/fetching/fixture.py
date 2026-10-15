@@ -106,7 +106,8 @@ class FixtureGateway:
             if response.status != 200:
                 # 401/403/429/challenges never trigger proxy, credential or retry fallback.
                 raise FetchDenied("source_response_denied")
-            if response.content_type.split(";", 1)[0].lower() != "text/html":
+            expected_media = "application/xml" if operation == Operation.XML else "text/html"
+            if response.content_type.split(";", 1)[0].lower() != expected_media:
                 raise FetchDenied("content_type_denied")
             if response.content_encoding not in (None, "identity"):
                 raise FetchDenied("compressed_fixture_denied")

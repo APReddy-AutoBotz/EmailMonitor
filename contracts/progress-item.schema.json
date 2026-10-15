@@ -45,7 +45,9 @@
         "lease_exhausted",
         "user_cancelled",
         "pagination_committed",
-        "quota_exhausted"
+        "quota_exhausted",
+        "xml_partial",
+        "xml_unsupported"
       ],
       "title": "Reason",
       "type": "string"

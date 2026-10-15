@@ -70,7 +70,8 @@ class Discovery:
             {"org": org, "job": job, "version": version},
         )
         policy = current_policy(c, org, "synthetic-publisher")
-        operations = (Operation.HTML, Operation.SEARCH) if search else (Operation.HTML,)
+        operation = Operation.XML if safe.path == "/article-xml.xml" else Operation.HTML
+        operations = (Operation.HTML, Operation.SEARCH) if search else (operation,)
         for operation in operations:
             if not policy_decision(
                 policy,

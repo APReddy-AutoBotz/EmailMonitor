@@ -29,3 +29,5 @@ EM-008 adds generated synthetic PDFs and parser tests. The baseline deliberately
 ## Synthetic Elsevier-shaped XML
 
 `xml/sciencedirect-article.xml` is newly authored content using reserved example domains and fictional names, institutions and identifiers. Its native XOCS structure follows official Elsevier documentation; the retrieval wrapper is a pinned compatibility assumption. It includes separated first/corresponding roles and irrelevant malicious/body/support text for exclusion tests. It is not a licensed article, actual researcher record or source certification sample. See [runbook47](../docs/47-sciencedirect-xml-observations.md).
+
+The EM-015c candidate uses this same authored XML at a separate fixed synthetic URL, `https://synthetic.publisher.example/article-xml.xml`, through an explicit `fetch_xml`/`application/xml` fixture path. Its identifier-derived API URL is retained only as canonical document metadata. It is not added to either existing search page. See [runbook48](../docs/48-synthetic-xml-pipeline.md) for isolated-worker, tenant/review/export and acceptance limits.

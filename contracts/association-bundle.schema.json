@@ -593,7 +593,8 @@
       "enum": [
         "html",
         "browser_dom",
-        "pdf"
+        "pdf",
+        "article_xml"
       ],
       "title": "Observation Route",
       "type": "string"
