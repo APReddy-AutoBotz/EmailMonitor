@@ -14,6 +14,7 @@ from pydantic import Field, model_validator
 from emailmonitor.config import Settings
 from emailmonitor.discovery.broker import process as discover_process
 from emailmonitor.discovery.service import Discovery
+from emailmonitor.jobs.callback_wake import FixtureCallbackWake
 from emailmonitor.jobs.diagnostics import TASK, WorkerDiagnostics, emit
 from emailmonitor.jobs.ledger import Ledger, Work
 from emailmonitor.jobs.models import StrictModel
@@ -63,6 +64,7 @@ def create_worker(config: FixtureWorkerConfig) -> tuple[Any, Ledger]:
         Settings(environment="test", fixture_mode=True),
     )
     application = Celery("emailmonitor_fixture", broker=config.broker_url, backend=None)
+    application.steps["consumer"].add(FixtureCallbackWake)
     application.conf.update(
         task_serializer="json",
         accept_content=["json"],

@@ -233,3 +233,9 @@ No application, live source connector, actual email collection, deployment, send
 - Preserve original PR25 build/UI failures; admit only the authored XML fixture to the deny-all parser build context and couple static allowlist checks to every fixture COPY input. Corrected-head runtime gates remain required.
 - Add opt-in synthetic UI worker readiness/task/claim/process counters and strict bounded cumulative-tail diagnostics; preserve original returns/exceptions and existing deadlines/readiness/queue/ACK/security behavior. No stall-fix or broker-acknowledgement claim.
 - Correct diagnostic filtering to the pinned publisher’s exact empty AMQP exchange and add genuine publication/request/trace-signal regressions. Correct XML catalog parity and replay the original durable event while preserving forged-event denial; retain second-head failures and unresolved UI/alias-warning evidence.
+
+## Synthetic solo-worker callback wake correction (candidate, 2026-10-15)
+
+- Wake the original synthetic solo worker's pinned event loop when a ready-snapshot callback queues more work, using one coalesced nonblocking pipe byte and two owned close-on-exec descriptors.
+- Preserve original callback/ACK execution, timeout/heartbeat/prefetch/pool settings, UI completion predicates, resource/security controls and diagnostic opt-in semantics; no dependency or migration.
+- Add actual Worker/handler/strategy/registered-task/solo no-network regression and bounded reconnect/cleanup/error tests. Preserve PR26's six successful gates and failed actual UI, inherited Pydantic warning and unproven exact CI cause. Own-head actual service/UI/isolation validation remains required; [evidence](reports/worker-callback-wake-validation.md).
