@@ -216,3 +216,14 @@ No application, live source connector, actual email collection, deployment, send
 - Add an inert standard-library Elsevier-shaped journal-head XML parser with native XOCS identity binding and an explicitly unverified retrieval-wrapper compatibility profile.
 - Preserve ordered first/corresponding authors, direct published email and affiliation evidence in a separate XML envelope using existing fact states; retain ambiguous/missing/unsupported outcomes.
 - Add newly authored synthetic source-shaped fixtures and positive/adversarial XML, resource, identity and provenance tests. No live source, worker/tenant integration, new dependency, migration, credential, activation or isolated XML runtime claim. See [runbook47](docs/47-sciencedirect-xml-observations.md) and [validation](reports/em015b-validation.md).
+
+## EM-015c — synthetic isolated XML pipeline (candidate, 2026-10-15)
+
+- Add one explicit synthetic XML URL job and `fetch_xml` policy/media path without changing the original four-article search fixtures or existing tenant approvals.
+- Feed a fixed bounded network-none container’s observations through current-authority retained persistence, conservative XML association evidence, human review and existing CSV/XLSX export.
+- Add migration0012 preserving lifecycle/RLS/lease/admission guards, separate retained XML schema/examples, actual-container/database CI acceptance and hostile XML/resource checks under the inherited profile.
+- No live source registration, real-wrapper certification, new dependency/credentials/grants/security setting, deployment or merge. [Runbook48](docs/48-synthetic-xml-pipeline.md) / [candidate evidence](reports/em015c-validation.md).
+
+- Preserve original PR25 build/UI failures; admit only the authored XML fixture to the deny-all parser build context and couple static allowlist checks to every fixture COPY input. Corrected-head runtime gates remain required.
+- Add opt-in synthetic UI worker readiness/task/claim/process counters and strict bounded cumulative-tail diagnostics; preserve original returns/exceptions and existing deadlines/readiness/queue/ACK/security behavior. No stall-fix or broker-acknowledgement claim.
+- Correct diagnostic filtering to the pinned publisher’s exact empty AMQP exchange and add genuine publication/request/trace-signal regressions. Correct XML catalog parity and replay the original durable event while preserving forged-event denial; retain second-head failures and unresolved UI/alias-warning evidence.

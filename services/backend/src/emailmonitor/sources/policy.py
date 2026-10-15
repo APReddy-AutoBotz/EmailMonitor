@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 class Operation(StrEnum):
     SEARCH = "search"
     HTML = "fetch_html"
+    XML = "fetch_xml"
     BROWSER = "browser"
     EXTRACT = "extract_contacts"
     EXCERPT = "retain_excerpt"
@@ -35,7 +36,7 @@ class PolicyProposal(BaseModel):
     execution_mode: Literal["fixture"] = "fixture"
     purpose: Literal["academic_contact_research"]
     allowed_hosts: list[Literal["synthetic.publisher.example"]] = Field(min_length=1, max_length=1)
-    allowed_operations: list[Operation] = Field(min_length=1, max_length=6)
+    allowed_operations: list[Operation] = Field(min_length=1, max_length=7)
     permission_reference: str | None = Field(default=None, pattern=r"^[a-zA-Z0-9_-]{1,100}$")
     credential_reference: None = None
     allowed_regions: list[Literal["test-only"]] = Field(min_length=1, max_length=1)

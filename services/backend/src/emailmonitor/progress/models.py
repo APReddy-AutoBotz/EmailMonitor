@@ -123,6 +123,8 @@ class Item(BaseModel):
         "no_contact",
         "requires_review",
         "browser_not_completed",
+        "xml_partial",
+        "xml_unsupported",
         "source_policy_changed",
         "worker_failure",
         "lease_exhausted",

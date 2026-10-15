@@ -394,3 +394,97 @@ def completion_queue_counts(ready: object, consumers: object) -> dict[str, int]:
     if type(consumers) is not int or not 0 <= consumers <= 16:
         raise ValueError("Bounded owned consumer count required")
     return {"ready": ready, "consumers": consumers}
+
+
+WORKER_PREFIX = b"EM_UI_WORKER_V1 "
+WORKER_STAGES = (
+    "worker_ready",
+    "task_received",
+    "execute_enter",
+    "validated",
+    "claim_enter",
+    "claim_empty",
+    "claim_acquired",
+    "claim_error",
+    "process_enter",
+    "process_return",
+    "process_error",
+    "task_postrun",
+    "task_failure",
+)
+
+
+class WorkerSnapshot(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    counts: dict[str, int]
+    last_stage: str
+    saturated: bool
+
+    @model_validator(mode="after")
+    def closed_cumulative_snapshot(self) -> "WorkerSnapshot":
+        if (
+            set(self.counts) != set(WORKER_STAGES)
+            or any(not 0 <= value <= 512 for value in self.counts.values())
+            or self.last_stage not in WORKER_STAGES
+            or self.counts.get(self.last_stage, 0) == 0
+            or not 1 <= sum(self.counts.values()) <= 512
+            or self.saturated != (sum(self.counts.values()) == 512)
+        ):
+            raise ValueError("Closed bounded worker counters required")
+        return self
+
+
+def completion_worker_snapshot(raw: bytes, *, truncated: bool = False) -> dict[str, object]:
+    """Parse only fixed-prefix cumulative records in the existing bounded owned tail.
+
+    Missing/truncated/invalid evidence never becomes zero counts. Ordinary log
+    text, task IDs, bodies, routes, exception messages and secrets are not echoed.
+    A task_postrun observation is not a broker acknowledgement.
+    """
+    import json
+
+    empty: dict[str, object] = {"counts": None, "last_stage": None, "saturated": None}
+    if len(raw) > 65536 or type(truncated) is not bool:
+        return {"status": "invalid", **empty}
+    lines = raw.splitlines(keepends=True)
+    if truncated and lines:
+        lines = lines[1:]  # A bounded tail may start in the middle of any log line.
+    last: WorkerSnapshot | None = None
+    incomplete = truncated
+
+    def unique(pairs: list[tuple[str, object]]) -> dict[str, object]:
+        value: dict[str, object] = {}
+        for key, item in pairs:
+            if key in value:
+                raise ValueError("Duplicate diagnostic key")
+            value[key] = item
+        return value
+
+    for line in lines:
+        if not line.startswith(WORKER_PREFIX):
+            continue
+        if not line.endswith(b"\n"):
+            incomplete = True
+            continue
+        if len(line) > 1024:
+            return {"status": "invalid", **empty}
+        try:
+            value = WorkerSnapshot.model_validate(
+                json.loads(line[len(WORKER_PREFIX) :], object_pairs_hook=unique)
+            )
+            if last is not None and (
+                any(
+                    value.counts[key] != last.counts[key] + int(key == value.last_stage)
+                    for key in WORKER_STAGES
+                )
+            ):
+                raise ValueError("Non-cumulative diagnostic counters")
+            last = value
+        except (ValueError, TypeError, UnicodeError, RecursionError):
+            return {"status": "invalid", **empty}
+    if last is None:
+        return {"status": "truncated" if incomplete else "unavailable", **empty}
+    return {
+        "status": "truncated" if incomplete or last.saturated else "available",
+        **last.model_dump(),
+    }

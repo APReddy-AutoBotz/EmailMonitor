@@ -66,9 +66,12 @@ jobs:
           uv sync --project services/backend --locked
           EM_MIGRATION_DATABASE_URL="$EM_TEST_ADMIN_DATABASE_URL" uv run --project services/backend alembic -c services/backend/alembic.ini upgrade head
           uv run --project services/backend python scripts/create_ci_runtime.py
+      - name: Build unchanged-profile XML parser for actual database integration
+        run: docker build --file scripts/isolation/Dockerfile.parser --tag emailmonitor-parser-diagnostic:local .
       - name: Execute offline scaffold and real tenant SQL/API checks
         env:
           EM_TEST_BROKER_CONTAINER: ${{ job.services.rabbitmq.id }}
           EM_TEST_POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
           EM_REQUIRE_SYNTHETIC_RESTORE: "true"
+          EM_REQUIRE_XML_ISOLATION: "true"
         run: scripts/check_tenant_foundation.sh

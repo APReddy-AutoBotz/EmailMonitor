@@ -49,3 +49,7 @@ The linked [XML example](https://dev.elsevier.com/payloads/retrieval/articleRetr
 See [validation evidence](../reports/em015b-validation.md). Run focused tests with `uv run --project services/backend pytest services/backend/tests/test_sciencedirect_article.py`, then the normal aggregate and a new empty Python environment. Skipped local services are pending actual CI, not passed tests.
 
 Rollback removes this standalone module, fixture and documentation; no durable state or schema is changed. The next executable slice is reviewed XML-worker integration with real network-none resource/refusal receipts and current tenant/policy binding. Protected acquisition/authentication and an authorized source pilot remain separate; verify the actual wrapper against an approved response before relying on that compatibility path. Full EM-015/016 and production extraction remain incomplete.
+
+## Subsequent synthetic integration candidate
+
+EM-015c adds a separate bounded isolated-parser→tenant persistence→review/export path for one authored synthetic XML URL. The original parser/profile limitations above remain in force. See [runbook48](48-synthetic-xml-pipeline.md) and [candidate evidence](../reports/em015c-validation.md) for the current integration boundary, exact checks and pending actual CI. This does not certify a real Article Retrieval wrapper or activate ScienceDirect.

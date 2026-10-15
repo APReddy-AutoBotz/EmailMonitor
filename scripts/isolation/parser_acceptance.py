@@ -17,6 +17,9 @@ from emailmonitor.discovery.state import DiscoveryState, advance
 from emailmonitor.extraction.html import parse_article
 from emailmonitor.extraction.pdf import PdfLimits, parse_pdf
 from emailmonitor.extraction.pdf_fixture import DIGESTS as PDF_DIGESTS
+from emailmonitor.extraction.sciencedirect import parse_article as parse_xml
+from emailmonitor.extraction.xml_retained import XML_IDENTIFIER
+from emailmonitor.fetching.safety import FetchDenied
 from emailmonitor.parsing.fixture import observe_fixture
 
 
@@ -44,7 +47,11 @@ def main() -> None:
         with socket.socket(family, socket.SOCK_STREAM) as stream:
             stream.settimeout(0.2)
             result = stream.connect_ex(target)
-            if result not in (errno.ENETUNREACH, errno.EHOSTUNREACH, errno.EAFNOSUPPORT):
+            if result not in (
+                errno.ENETUNREACH,
+                errno.EHOSTUNREACH,
+                errno.EAFNOSUPPORT,
+            ):
                 raise RuntimeError("Network-level denial not established")
             outcomes.append(result)
     payload = b'<p>synthetic parser observation</p><script>throw Error("must stay inert")</script>'
@@ -76,7 +83,12 @@ def main() -> None:
             "https://synthetic.publisher.example/" + name,
             Path("/app/fixtures", name).read_bytes(),
         )
-        for name in ("article-a.html", "article-b.html", "tooltip.html", "no-contact.html")
+        for name in (
+            "article-a.html",
+            "article-b.html",
+            "tooltip.html",
+            "no-contact.html",
+        )
     }
     if [(a.first, a.corresponding) for a in articles["article-a.html"].authors] != [
         (True, None),
@@ -155,7 +167,9 @@ def main() -> None:
         raise RuntimeError("PDF page cap incorrectly claimed full coverage")
     if (
         parse_pdf(
-            settings, "https://synthetic.publisher.example/article-a.pdf", b"%PDF-" + b"x" * 262144
+            settings,
+            "https://synthetic.publisher.example/article-a.pdf",
+            b"%PDF-" + b"x" * 262144,
         ).reason
         != "byte_cap"
     ):
@@ -170,6 +184,23 @@ def main() -> None:
         != "resource_limit"
     ):
         raise RuntimeError("Actual PDF stream ceiling not enforced")
+    xml_data = Path("/app/fixtures/xml/sciencedirect-article.xml").read_bytes()
+    xml = parse_xml(xml_data, XML_IDENTIFIER)
+    if xml.status != "observed" or len(xml.authors) != 3 or len(xml.candidates) != 2:
+        raise RuntimeError("Isolated XML observations failed")
+    for hostile in (
+        b'<!DOCTYPE x [<!ENTITY remote SYSTEM "http://192.0.2.1/">]><x>&remote;</x>',
+        b'<!DOCTYPE x [<!ENTITY a "1234"><!ENTITY b "&a;&a;">]><x>&b;</x>',
+        b"<x>" * 50 + b"</x>" * 50,
+        b"<x>" + b"a" * 1048577 + b"</x>",
+        b"x" * 2097153,
+    ):
+        try:
+            parse_xml(hostile, XML_IDENTIFIER)
+        except FetchDenied:
+            pass
+        else:
+            raise RuntimeError("Isolated hostile XML was not refused")
     print(
         json.dumps(
             {
@@ -178,6 +209,12 @@ def main() -> None:
                 "interfaces": interfaces,
                 "digest": observed.digest,
                 "contact_extraction": True,
+                "xml_observations": {
+                    "authors": len(xml.authors),
+                    "candidates": len(xml.candidates),
+                    "digest": xml.content_digest,
+                    "hostile_refusals": 5,
+                },
                 "pdf_resource_caps": True,
                 "pdf_observations": {
                     name: {

@@ -1,0 +1,453 @@
+{
+  "$defs": {
+    "ArticleIdentifier": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "doi",
+            "pii"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "value": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "value"
+      ],
+      "title": "ArticleIdentifier",
+      "type": "object"
+    },
+    "AuthorFact": {
+      "additionalProperties": false,
+      "properties": {
+        "position": {
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Position",
+          "type": "integer"
+        },
+        "display_name": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Display Name",
+          "type": "string"
+        },
+        "affiliations": {
+          "items": {
+            "maxLength": 1000,
+            "type": "string"
+          },
+          "maxItems": 20,
+          "title": "Affiliations",
+          "type": "array"
+        },
+        "orcid": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9]{4}-[0-9]{4}-[0-9]{4}-[0-9]{3}[0-9X]$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Orcid"
+        },
+        "author_kind": {
+          "default": "unknown",
+          "enum": [
+            "person",
+            "group",
+            "unknown"
+          ],
+          "title": "Author Kind",
+          "type": "string"
+        },
+        "first": {
+          "title": "First",
+          "type": "boolean"
+        },
+        "corresponding": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Corresponding"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/Evidence"
+          },
+          "maxItems": 20,
+          "minItems": 1,
+          "title": "Evidence",
+          "type": "array"
+        }
+      },
+      "required": [
+        "position",
+        "display_name",
+        "affiliations",
+        "first",
+        "corresponding",
+        "evidence"
+      ],
+      "title": "AuthorFact",
+      "type": "object"
+    },
+    "Evidence": {
+      "additionalProperties": false,
+      "properties": {
+        "locator": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Locator",
+          "type": "string"
+        },
+        "excerpt": {
+          "maxLength": 300,
+          "title": "Excerpt",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "structured_metadata",
+            "article_dom",
+            "mailto",
+            "public_attribute",
+            "browser_dom"
+          ],
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "locator",
+        "excerpt",
+        "kind"
+      ],
+      "title": "Evidence",
+      "type": "object"
+    },
+    "MetadataValues": {
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Title"
+        },
+        "journal": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Journal"
+        },
+        "publication_date": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Publication Date"
+        },
+        "doi": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Doi"
+        }
+      },
+      "title": "MetadataValues",
+      "type": "object"
+    },
+    "RetainedXmlCandidate": {
+      "additionalProperties": false,
+      "properties": {
+        "raw_address": {
+          "maxLength": 320,
+          "minLength": 1,
+          "title": "Raw Address",
+          "type": "string"
+        },
+        "author_positions": {
+          "items": {
+            "maximum": 100,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "maxItems": 100,
+          "title": "Author Positions",
+          "type": "array"
+        },
+        "association_status": {
+          "enum": [
+            "unmatched",
+            "needs_review"
+          ],
+          "title": "Association Status",
+          "type": "string"
+        },
+        "technical_status": {
+          "const": "not_checked",
+          "default": "not_checked",
+          "title": "Technical Status",
+          "type": "string"
+        },
+        "delivery_status": {
+          "const": "unverified",
+          "default": "unverified",
+          "title": "Delivery Status",
+          "type": "string"
+        },
+        "outreach_eligibility": {
+          "const": "not_assessed",
+          "default": "not_assessed",
+          "title": "Outreach Eligibility",
+          "type": "string"
+        },
+        "evidence": {
+          "$ref": "#/$defs/Evidence"
+        },
+        "association_evidence": {
+          "items": {
+            "$ref": "#/$defs/Evidence"
+          },
+          "maxItems": 100,
+          "title": "Association Evidence",
+          "type": "array"
+        }
+      },
+      "required": [
+        "raw_address",
+        "author_positions",
+        "association_status",
+        "evidence"
+      ],
+      "title": "RetainedXmlCandidate",
+      "type": "object"
+    },
+    "XmlBinding": {
+      "additionalProperties": false,
+      "properties": {
+        "organization": {
+          "format": "uuid",
+          "title": "Organization",
+          "type": "string"
+        },
+        "job": {
+          "format": "uuid",
+          "title": "Job",
+          "type": "string"
+        },
+        "item": {
+          "format": "uuid",
+          "title": "Item",
+          "type": "string"
+        },
+        "generation": {
+          "minimum": 1,
+          "title": "Generation",
+          "type": "integer"
+        },
+        "deletion_generation": {
+          "minimum": 1,
+          "title": "Deletion Generation",
+          "type": "integer"
+        },
+        "policy_version": {
+          "minimum": 1,
+          "title": "Policy Version",
+          "type": "integer"
+        },
+        "discovery_revision": {
+          "minimum": 1,
+          "title": "Discovery Revision",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "organization",
+        "job",
+        "item",
+        "generation",
+        "deletion_generation",
+        "policy_version",
+        "discovery_revision"
+      ],
+      "title": "XmlBinding",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "parser_version": {
+      "const": "elsevier-xml-head-v1",
+      "default": "elsevier-xml-head-v1",
+      "title": "Parser Version",
+      "type": "string"
+    },
+    "route": {
+      "const": "article_xml",
+      "default": "article_xml",
+      "title": "Route",
+      "type": "string"
+    },
+    "url": {
+      "const": "https://synthetic.publisher.example/article-xml.xml",
+      "default": "https://synthetic.publisher.example/article-xml.xml",
+      "title": "Url",
+      "type": "string"
+    },
+    "canonical_url": {
+      "maxLength": 2048,
+      "title": "Canonical Url",
+      "type": "string"
+    },
+    "requested_identifier": {
+      "$ref": "#/$defs/ArticleIdentifier"
+    },
+    "source_profile": {
+      "const": "article_retrieval_response",
+      "default": "article_retrieval_response",
+      "title": "Source Profile",
+      "type": "string"
+    },
+    "content_digest": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Content Digest",
+      "type": "string"
+    },
+    "acquisition_digest": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Acquisition Digest",
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "observed",
+        "no_contact",
+        "partial",
+        "unsupported"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "reasons": {
+      "items": {
+        "enum": [
+          "missing_full_text",
+          "unsupported_structure",
+          "missing_article_identity",
+          "missing_authors",
+          "unsupported_author",
+          "ambiguous_reference",
+          "unsupported_affiliation",
+          "unsupported_email",
+          "unstructured_contact"
+        ],
+        "type": "string"
+      },
+      "maxItems": 20,
+      "title": "Reasons",
+      "type": "array"
+    },
+    "authors": {
+      "items": {
+        "$ref": "#/$defs/AuthorFact"
+      },
+      "maxItems": 100,
+      "title": "Authors",
+      "type": "array"
+    },
+    "candidates": {
+      "items": {
+        "$ref": "#/$defs/RetainedXmlCandidate"
+      },
+      "maxItems": 100,
+      "title": "Candidates",
+      "type": "array"
+    },
+    "preferred_metadata": {
+      "$ref": "#/$defs/MetadataValues"
+    },
+    "binding": {
+      "$ref": "#/$defs/XmlBinding"
+    },
+    "excerpts_retained": {
+      "title": "Excerpts Retained",
+      "type": "boolean"
+    },
+    "isolation_profile": {
+      "const": "network-none-parser-v1",
+      "default": "network-none-parser-v1",
+      "title": "Isolation Profile",
+      "type": "string"
+    },
+    "identity_association_implemented": {
+      "const": false,
+      "default": false,
+      "title": "Identity Association Implemented",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "canonical_url",
+    "requested_identifier",
+    "content_digest",
+    "acquisition_digest",
+    "status",
+    "binding",
+    "excerpts_retained"
+  ],
+  "title": "RetainedXml",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.org/emailmonitor/schemas/xml-retained-observation.schema.json"
+}

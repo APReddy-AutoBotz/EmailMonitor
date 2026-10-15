@@ -9,6 +9,7 @@ from emailmonitor.associations.normalization import normalize
 from emailmonitor.config import Settings
 from emailmonitor.extraction.html import ArticleObservation, CandidateFact
 from emailmonitor.extraction.pdf import PdfCandidate, PdfObservation
+from emailmonitor.extraction.xml_retained import RetainedXml, RetainedXmlCandidate
 from emailmonitor.fetching.fixture import require_fixture
 
 NAMESPACE = UUID("a42e0727-8da5-4214-b8c3-ff41a8246800")
@@ -19,7 +20,7 @@ def identifier(org: UUID, kind: str, *parts: object) -> UUID:
 
 
 def map_observation(
-    settings: Settings, org: UUID, value: ArticleObservation | PdfObservation
+    settings: Settings, org: UUID, value: ArticleObservation | PdfObservation | RetainedXml
 ) -> Bundle:
     require_fixture(settings)
     if type(org) is not UUID or value.content_digest is None:
@@ -29,7 +30,8 @@ def map_observation(
     if value.content_digest is None:
         raise ValueError("Observed content digest required")
     source_candidates: list[CandidateFact | PdfCandidate] = [*value.candidates]
-    article = identifier(org, "article", value.url)
+    source_url = value.url
+    article = identifier(org, "article", source_url)
     prefix = (value.url, value.content_digest, value.parser_version)
     evidence: dict[UUID, Evidence] = {}
 
@@ -89,6 +91,8 @@ def map_observation(
             fact = source_candidates[index]
             facts = fact.evidence if isinstance(fact.evidence, list) else [fact.evidence]
             retained.extend(retain(e) for e in facts)
+            if isinstance(fact, RetainedXmlCandidate):
+                retained.extend(retain(e) for e in fact.association_evidence)
             positions.update(fact.author_positions)
         candidate = Candidate(
             id=identifier(org, "candidate", key),
@@ -143,7 +147,7 @@ def map_observation(
                 reason = "partial_document"
             elif not retained_text:
                 reason = "retained_locator_only"
-            elif explicit:
+            elif explicit and not isinstance(value, RetainedXml):
                 state, strength, reason = "accepted", "explicit", "explicit_observed_correspondence"
             associations.append(
                 Association.model_validate(
@@ -161,7 +165,7 @@ def map_observation(
     return Bundle(
         organization_id=org,
         article_id=article,
-        source_url=value.url,
+        source_url=source_url,
         content_digest=value.content_digest,
         parser_version=value.parser_version,
         observation_route=value.route,

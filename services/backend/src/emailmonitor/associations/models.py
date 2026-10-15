@@ -118,7 +118,7 @@ class Bundle(Record):
     source_url: str = Field(min_length=1, max_length=2048)
     content_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     parser_version: str = Field(min_length=1, max_length=64)
-    observation_route: Literal["html", "browser_dom", "pdf"]
+    observation_route: Literal["html", "browser_dom", "pdf", "article_xml"]
     observation_status: Literal[
         "observed", "no_contact", "requires_browser", "partial", "unsupported"
     ]

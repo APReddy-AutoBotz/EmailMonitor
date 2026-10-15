@@ -63,7 +63,7 @@ def plan_input(request: JobRequest) -> InputPlan:
         return InputPlan("needs_refinement", "homepage_requires_keyword_or_scoped_url")
     if url.path in SEARCH_PATHS:
         return InputPlan("search_results", "supported_fixture", url.normalized)
-    if url.path in ARTICLE_PATHS:
+    if url.path in ARTICLE_PATHS or url.path == "/article-xml.xml":
         return InputPlan("article", "supported_fixture", url.normalized)
     if url.path.lower().endswith(".pdf"):
         return InputPlan("unsupported", "fixture_pdf_unavailable")

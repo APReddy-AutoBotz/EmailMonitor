@@ -328,9 +328,16 @@ SELECT emailmonitor.execution_finish(:org, :job, :item, :token, :batch, :failure
                 None,
             )
             if existing is None:
-                existing = self.extraction.fixture(
-                    scope.organization, scope.job, work.url, int(str(current["revision"]))
-                )
+                if work.url == "https://synthetic.publisher.example/article-xml.xml":
+                    from emailmonitor.extraction.xml_service import XmlExtraction
+
+                    existing = XmlExtraction(
+                        self.database, self.token, self.settings
+                    ).isolated_fixture(scope.organization, scope.job, int(str(current["revision"])))
+                else:
+                    existing = self.extraction.fixture(
+                        scope.organization, scope.job, work.url, int(str(current["revision"]))
+                    )
             if after_observation is not None:
                 after_observation()
             batch = self.associations.derive(

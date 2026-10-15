@@ -1,0 +1,201 @@
+{
+  "schema_version": "1.0",
+  "parser_version": "elsevier-xml-head-v1",
+  "route": "article_xml",
+  "url": "https://synthetic.publisher.example/article-xml.xml",
+  "canonical_url": "https://api.elsevier.com/content/article/doi/10.9999/synthetic.1",
+  "requested_identifier": {
+    "kind": "doi",
+    "value": "10.9999/synthetic.1"
+  },
+  "source_profile": "article_retrieval_response",
+  "content_digest": "ecffa55455f07f6205a1bb2ab6bc30f7e2528845eae757a17c32d88c5fa4ec30",
+  "acquisition_digest": "ecffa55455f07f6205a1bb2ab6bc30f7e2528845eae757a17c32d88c5fa4ec30",
+  "status": "observed",
+  "reasons": [],
+  "authors": [
+    {
+      "position": 1,
+      "display_name": "Example First",
+      "affiliations": [
+        "Fictional Institute A & Research Unit"
+      ],
+      "orcid": null,
+      "author_kind": "person",
+      "first": true,
+      "corresponding": null,
+      "evidence": [
+        {
+          "locator": "xml:/1/2/1/2/1/1/2/1/1",
+          "excerpt": "Example",
+          "kind": "structured_metadata"
+        },
+        {
+          "locator": "xml:/1/2/1/2/1/1/2/1/2",
+          "excerpt": "First",
+          "kind": "structured_metadata"
+        },
+        {
+          "locator": "xml:/1/2/1/2/1/1/2/1/3/@refid",
+          "excerpt": "aff1",
+          "kind": "structured_metadata"
+        },
+        {
+          "locator": "xml:/1/2/1/2/1/1/2/4/2",
+          "excerpt": "Fictional Institute A & Research Unit",
+          "kind": "structured_metadata"
+        }
+      ]
+    },
+    {
+      "position": 2,
+      "display_name": "Example Second",
+      "affiliations": [
+        "Fictional Institute B"
+      ],
+      "orcid": null,
+      "author_kind": "person",
+      "first": false,
+      "corresponding": true,
+      "evidence": [
+        {
+          "locator": "xml:/1/2/1/2/1/1/2/2/1",
+          "excerpt": "Example",
+          "kind": "structured_metadata"
+        },
+        {
+          "locator": "xml:/1/2/1/2/1/1/2/2/2",
+          "excerpt": "Second",
+          "kind": "structured_metadata"
+        },
+        {
+          "locator": "xml:/1/2/1/2/1/1/2/2/3/@refid",
+          "excerpt": "aff2",
+          "kind": "structured_metadata"
+        },
+        {
+          "locator": "xml:/1/2/1/2/1/1/2/5/2",
+          "excerpt": "Fictional Institute B",
+          "kind": "structured_metadata"
+        },
+        {
+          "locator": "xml:/1/2/1/2/1/1/2/2/4/@refid",
+          "excerpt": "cor1",
+          "kind": "structured_metadata"
+        },
+        {
+          "locator": "xml:/1/2/1/2/1/1/2/6",
+          "excerpt": "*Corresponding author.",
+          "kind": "structured_metadata"
+        }
+      ]
+    },
+    {
+      "position": 3,
+      "display_name": "\u00c9xample Third",
+      "affiliations": [
+        "Fictional Institute A & Research Unit"
+      ],
+      "orcid": null,
+      "author_kind": "person",
+      "first": false,
+      "corresponding": true,
+      "evidence": [
+        {
+          "locator": "xml:/1/2/1/2/1/1/2/3/1",
+          "excerpt": "\u00c9xample",
+          "kind": "structured_metadata"
+        },
+        {
+          "locator": "xml:/1/2/1/2/1/1/2/3/2",
+          "excerpt": "Third",
+          "kind": "structured_metadata"
+        },
+        {
+          "locator": "xml:/1/2/1/2/1/1/2/3/3/@refid",
+          "excerpt": "aff1",
+          "kind": "structured_metadata"
+        },
+        {
+          "locator": "xml:/1/2/1/2/1/1/2/4/2",
+          "excerpt": "Fictional Institute A & Research Unit",
+          "kind": "structured_metadata"
+        },
+        {
+          "locator": "xml:/1/2/1/2/1/1/2/3/4/@refid",
+          "excerpt": "cor2",
+          "kind": "structured_metadata"
+        },
+        {
+          "locator": "xml:/1/2/1/2/1/1/2/7",
+          "excerpt": "**Corresponding author.",
+          "kind": "structured_metadata"
+        }
+      ]
+    }
+  ],
+  "candidates": [
+    {
+      "raw_address": "Second@example.org",
+      "author_positions": [
+        2
+      ],
+      "association_status": "needs_review",
+      "technical_status": "not_checked",
+      "delivery_status": "unverified",
+      "outreach_eligibility": "not_assessed",
+      "evidence": {
+        "locator": "xml:/1/2/1/2/1/1/2/2/5",
+        "excerpt": "Second@example.org",
+        "kind": "structured_metadata"
+      },
+      "association_evidence": [
+        {
+          "locator": "xml:/1/2/1/2/1/1/2/2",
+          "excerpt": "ExampleSecond b * Second@example.org",
+          "kind": "structured_metadata"
+        }
+      ]
+    },
+    {
+      "raw_address": "third@example.net",
+      "author_positions": [
+        3
+      ],
+      "association_status": "needs_review",
+      "technical_status": "not_checked",
+      "delivery_status": "unverified",
+      "outreach_eligibility": "not_assessed",
+      "evidence": {
+        "locator": "xml:/1/2/1/2/1/1/2/3/5",
+        "excerpt": "third@example.net",
+        "kind": "structured_metadata"
+      },
+      "association_evidence": [
+        {
+          "locator": "xml:/1/2/1/2/1/1/2/3",
+          "excerpt": "\u00c9xampleThird a ** third@example.net https://profile.example/third",
+          "kind": "structured_metadata"
+        }
+      ]
+    }
+  ],
+  "preferred_metadata": {
+    "title": null,
+    "journal": null,
+    "publication_date": null,
+    "doi": null
+  },
+  "binding": {
+    "organization": "00000000-0000-0000-0000-000000000001",
+    "job": "00000000-0000-0000-0000-000000000002",
+    "item": "00000000-0000-0000-0000-000000000003",
+    "generation": 1,
+    "deletion_generation": 1,
+    "policy_version": 1,
+    "discovery_revision": 1
+  },
+  "excerpts_retained": true,
+  "isolation_profile": "network-none-parser-v1",
+  "identity_association_implemented": false
+}

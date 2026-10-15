@@ -20,6 +20,7 @@ from emailmonitor.config import Settings
 from emailmonitor.discovery.service import Discovery
 from emailmonitor.extraction.html import ArticleObservation
 from emailmonitor.extraction.service import Extraction
+from emailmonitor.extraction.xml_retained import RetainedXml
 from emailmonitor.organizations.database import AuthorizationDenied, Database, RevisionConflict
 from emailmonitor.organizations.roles import Capability
 
@@ -130,7 +131,11 @@ article_url=:url FOR SHARE
                 source["generation"] != row["generation"] and not row["leased_execution"]
             ) or source["deletion_generation"] != row["deletion_generation"]:
                 raise AuthorizationDenied()
-            observed = ArticleObservation.model_validate(source["observation"])
+            observed = (
+                RetainedXml.model_validate_json(json.dumps(source["observation"]))
+                if source["observation"].get("route") == "article_xml"
+                else ArticleObservation.model_validate(source["observation"])
+            )
             if observed.route == "browser_dom":
                 self.extraction._scope(c, org, job, url, browser=True)
             bundle = map_observation(self.settings, org, observed)

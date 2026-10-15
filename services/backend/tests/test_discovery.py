@@ -1,5 +1,6 @@
 """Pure bounded discovery checks against authored fixtures, no source sockets."""
 
+import shlex
 from pathlib import Path
 
 import pytest
@@ -317,7 +318,7 @@ def test_only_exact_policy_sql_fence_is_classified_as_denial(
     assert policy_fence_denied(error) is denied
 
 
-def test_parser_build_context_only_adds_authored_search_fixtures() -> None:
+def test_parser_build_context_includes_only_authored_copy_fixtures() -> None:
     lines = (ROOT / ".dockerignore").read_text().splitlines()
     assert lines[0] == "**"
     assert [line for line in lines if line.startswith("!fixtures")] == [
@@ -339,6 +340,8 @@ def test_parser_build_context_only_adds_authored_search_fixtures() -> None:
         "!fixtures/pdf/encrypted.pdf",
         "!fixtures/pdf/page-cap.pdf",
         "!fixtures/pdf/corrupt.pdf",
+        "!fixtures/xml/",
+        "!fixtures/xml/sciencedirect-article.xml",
     ]
     # Docker matches both each path and its parents; admitting a parent alone
     # includes every descendant. Model the exact/** fixture rule subset with
@@ -378,6 +381,7 @@ def test_parser_build_context_only_adds_authored_search_fixtures() -> None:
         "fixtures/pdf/encrypted.pdf",
         "fixtures/pdf/page-cap.pdf",
         "fixtures/pdf/corrupt.pdf",
+        "fixtures/xml/sciencedirect-article.xml",
     }
     files = {str(p.relative_to(ROOT)) for p in (ROOT / "fixtures").rglob("*") if p.is_file()}
     assert {path for path in files if included(path, rules)} == expected
@@ -388,13 +392,32 @@ def test_parser_build_context_only_adds_authored_search_fixtures() -> None:
         "fixtures/pdf/manifest.json",
         "fixtures/pdf/nested/article-a.pdf",
         "fixtures/html/nested/search-page-1.html",
+        "fixtures/xml/unknown.xml",
+        "fixtures/xml/manifest.json",
+        "fixtures/xml/nested/sciencedirect-article.xml",
     ):
         assert not included(unexpected, rules)
     # Regression sensitivity: the prior parent admits must be shown to leak.
     prior_rules = [rule for rule in rules if rule not in {"fixtures/**", "fixtures/html/**"}]
     assert included("fixtures/expected/new-secret.json", prior_rules)
     assert included("fixtures/html/new-article.html", prior_rules)
+    # Couple the deny-all context to every explicit parser fixture COPY source,
+    # so a new Dockerfile input cannot silently be absent from the build context.
     dockerfile = (ROOT / "scripts/isolation/Dockerfile.parser").read_text()
+    copied = {
+        source
+        for line in dockerfile.splitlines()
+        if line.startswith("COPY ")
+        for source in shlex.split(line)[1:-1]
+        if source.startswith("fixtures/")
+    }
+    assert copied == expected
+    assert all((ROOT / source).is_file() and included(source, rules) for source in copied)
+    # Reproduce PR25's original missing-exception failure without invoking Docker.
+    missing_xml = [rule for rule in rules if rule != "!fixtures/xml/sciencedirect-article.xml"]
+    assert not included("fixtures/xml/sciencedirect-article.xml", missing_xml)
+    broad_xml = [rule for rule in rules if rule != "fixtures/xml/**"]
+    assert included("fixtures/xml/unknown.xml", broad_xml)
     assert (
         "COPY fixtures/html/search-page-1.html fixtures/html/search-page-2.html ./fixtures/"
         in dockerfile
