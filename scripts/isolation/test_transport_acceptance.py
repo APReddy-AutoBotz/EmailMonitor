@@ -81,8 +81,20 @@ def snapshot(topology: Topology, role: str = "fixture-a") -> dict[str, Any]:
     process.send({"kind": "snapshot"}, deadline)
     value = process.receive(deadline)
     assert value["kind"] == "snapshot" and not value["failures"]
-    assert all(set(call["headers"]) == {"Host", "Accept", "Connection"} for call in value["calls"])
+    for call in value["calls"]:
+        validate_receipt(call)
     return value
+
+
+def validate_receipt(call: dict[str, Any]) -> None:
+    expected = {"Host", "Accept", "Connection"}
+    if call["headers"].get("Host") == "api.elsevier.com":
+        assert call["method"] in ("PUT", "GET") and call["credential_valid"] is True
+        expected |= {"Accept-Encoding", "X-ELS-APIKey"}
+        assert call["headers"]["X-ELS-APIKey"] == "[synthetic-redacted]"
+        if call["method"] == "PUT":
+            expected |= {"Content-Type", "Content-Length"}
+    assert set(call["headers"]) == expected
 
 
 def proxy(

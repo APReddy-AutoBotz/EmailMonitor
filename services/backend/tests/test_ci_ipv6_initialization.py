@@ -112,7 +112,7 @@ def test_workflow_initializes_before_strict_acceptance_only() -> None:
         < start.index("self.network_created = True")
     )
     assert start.count("initialize()") == 1
-    assert "(^|[=[:space:]])14 passed([ ,]|$)" in workflow
+    assert "(^|[=[:space:]])31 passed([ ,]|$)" in workflow
     assert "[0-9]+ skipped|[0-9]+ warnings?" in workflow
 
 

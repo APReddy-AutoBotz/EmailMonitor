@@ -10,15 +10,22 @@ import secrets
 import socket
 import ssl
 import struct
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
 from emailmonitor.config import Settings
+from emailmonitor.fetching.credentials import (
+    CredentialLease,
+    CredentialResolver,
+    UnavailableCredentials,
+)
 from emailmonitor.fetching.fixture import FetchLimits, require_fixture
 from emailmonitor.fetching.plan import HopPlan, HopPlanner, PlanScope
 from emailmonitor.fetching.resources import HopResources
 from emailmonitor.fetching.safety import FetchDenied, SafeURL, public_addresses
+from emailmonitor.fetching.sciencedirect import AcquiredResponse, ProviderBoundary, ProviderResponse
 from emailmonitor.fetching.tls_fixture import TLSFixtureGateway
 from emailmonitor.sources.policy import Operation
 
@@ -167,7 +174,9 @@ class ProtectedGateway:
         self._tls = ssl.create_default_context(cafile=str(ca_file))
         self._tls.minimum_version = ssl.TLSVersion.TLSv1_2
 
-    def _request(self, planner: HopPlanner, plan: HopPlan) -> tuple[int, dict[str, str], bytes]:
+    @contextmanager
+    def _connection(self, planner: HopPlanner, plan: HopPlan) -> Iterator[ssl.SSLSocket]:
+        """The sole TCP/TLS path, shared by HTML and canonical provider requests."""
         if self._tls.verify_mode != ssl.CERT_REQUIRED or not self._tls.check_hostname:
             raise FetchDenied("tls_verification_required")
         family = socket.AF_INET6 if ":" in plan.selected_address else socket.AF_INET
@@ -181,40 +190,152 @@ class ProtectedGateway:
                     plan.validate_peer(stream.getpeername()[0])
                     self.peer_receipts.append((stream.getpeername()[0], plan.port, plan.url.host))
                     planner.before_connect(plan)
-                    stream.settimeout(planner.remaining())
-                    stream.sendall(
-                        (
-                            f"GET {plan.url.path} HTTP/1.1\r\nHost: {plan.url.host}\r\n"
-                            "Accept: text/html\r\nConnection: close\r\n\r\n"
+                    yield stream
+        except (OSError, UnicodeError):
+            raise FetchDenied("protected_connection_denied") from None
+
+    @staticmethod
+    def _receive(stream: ssl.SSLSocket, check: Callable[[], float], maximum: int) -> bytes:
+        stream.settimeout(check())
+        chunk = stream.recv(maximum)
+        check()
+        return chunk
+
+    def _response(
+        self, stream: ssl.SSLSocket, check: Callable[[], float], maximum: int
+    ) -> tuple[int, dict[str, str], Iterator[bytes]]:
+        header = bytearray()
+        while b"\r\n\r\n" not in header:
+            if len(header) >= 8192:
+                raise FetchDenied("headers_limit_exceeded")
+            chunk = self._receive(stream, check, min(4096, 8192 - len(header)))
+            if not chunk:
+                raise FetchDenied("response_framing_denied")
+            header.extend(chunk)
+        raw, _, initial = bytes(header).partition(b"\r\n\r\n")
+        status, headers = TLSFixtureGateway._headers(raw + b"\r\n\r\n")
+        length = headers.get("content-length", "")
+        if "transfer-encoding" in headers or not re.fullmatch(r"[0-9]{1,8}", length):
+            raise FetchDenied("response_framing_denied")
+        count = int(length)
+        if len(initial) > count:
+            raise FetchDenied("response_framing_denied")
+
+        def chunks() -> Iterator[bytes]:
+            if count > maximum:
+                raise FetchDenied("body_limit_exceeded")
+            consumed = len(initial)
+            if initial:
+                check()
+                yield initial
+            while consumed < count:
+                chunk = self._receive(stream, check, min(65536, count - consumed))
+                if not chunk:
+                    raise FetchDenied("response_framing_denied")
+                consumed += len(chunk)
+                yield chunk
+            # Each request asks Connection: close. Reject surplus/truncated framing,
+            # and bound a peer that refuses to close by the same absolute deadline.
+            if self._receive(stream, check, 1):
+                raise FetchDenied("response_framing_denied")
+
+        return status, headers, chunks()
+
+    def _request(self, planner: HopPlanner, plan: HopPlan) -> tuple[int, dict[str, str], bytes]:
+        with self._connection(planner, plan) as stream:
+            stream.settimeout(planner.remaining())
+            stream.sendall(
+                (
+                    f"GET {plan.url.path} HTTP/1.1\r\nHost: {plan.url.host}\r\n"
+                    "Accept: text/html\r\nConnection: close\r\n\r\n"
+                ).encode("ascii")
+            )
+            status, headers, chunks = self._response(
+                stream, planner.remaining, self._limits.max_bytes
+            )
+            return status, headers, b"".join(chunks)
+
+    def acquire_provider(
+        self, boundary: ProviderBoundary, credentials: CredentialResolver | None = None
+    ) -> AcquiredResponse:
+        """Closed PUT-search/GET-XML dispatch, still test-only and unregistered.
+
+        The boundary's current() is trusted composition, never HTTP/request authority.
+        No caller method, URL, headers, proxy, retries or redirect handling is exposed.
+        A real source admission adapter and secret-store resolver remain unavailable.
+        """
+        if type(boundary) is not ProviderBoundary:
+            raise FetchDenied("provider_boundary_denied")
+        boundary.check_current()
+        planner = boundary.planner
+        if planner.remaining() > self._limits.total_seconds:
+            raise FetchDenied("plan_deadline_denied")
+        request, binding = boundary.request, boundary.binding
+        canonical = request.plan()
+        url = planner.authorize_url(request.url)
+        ticket = self._resources.acquire(url, request.operation, binding.deadline)
+        status: int | None = None
+        headers: dict[str, str] = {}
+        try:
+            boundary.check_current()
+            # Default resolver refuses before DNS or TCP. Scoped handles are never
+            # returned, serialized or retained with the acquired response.
+            with (credentials or UnavailableCredentials()).open(
+                binding.credential, request.fingerprint
+            ) as credential:
+                if type(credential) is not CredentialLease:
+                    raise FetchDenied("provider_credential_scope_denied")
+                authentication = credential.header(binding.credential, request.fingerprint)
+                boundary.check_current()
+                records = self._resolver.resolve(url, planner)
+                plan = planner.snapshot(url, records, self._select(records))
+                with self._connection(planner, plan) as stream:
+                    boundary.check_current()
+                    # Revalidate scoped material after resolver/TLS latency.
+                    authentication = credential.header(binding.credential, request.fingerprint)
+                    packet = (
+                        f"{canonical.method} {canonical.path} HTTP/1.1\r\n"
+                        f"Host: {url.host}\r\nAccept: {canonical.media_type}\r\n"
+                        "Accept-Encoding: identity\r\nConnection: close\r\n"
+                    ).encode("ascii") + authentication
+                    if request.search is not None:
+                        packet += (
+                            "Content-Type: application/json\r\n"
+                            f"Content-Length: {len(canonical.body)}\r\n"
                         ).encode("ascii")
+                    stream.settimeout(planner.before_connect(plan))
+                    stream.sendall(packet + b"\r\n" + canonical.body)
+                    status, headers, chunks = self._response(
+                        stream,
+                        lambda: planner.before_connect(plan),
+                        min(request.max_bytes, self._limits.max_bytes),
                     )
-                    header = bytearray()
-                    while not header.endswith(b"\r\n\r\n"):
-                        if len(header) >= 8192:
-                            raise FetchDenied("headers_limit_exceeded")
-                        stream.settimeout(planner.remaining())
-                        chunk = stream.recv(1)
-                        if not chunk:
-                            raise FetchDenied("response_framing_denied")
-                        header.extend(chunk)
-                    status, headers = TLSFixtureGateway._headers(bytes(header))
-                    length = headers.get("content-length", "")
-                    if "transfer-encoding" in headers or not re.fullmatch(r"[0-9]{1,8}", length):
-                        raise FetchDenied("response_framing_denied")
-                    count = int(length)
-                    if count > self._limits.max_bytes:
-                        raise FetchDenied("body_limit_exceeded")
-                    body = bytearray()
-                    while len(body) < count:
-                        stream.settimeout(planner.remaining())
-                        chunk = stream.recv(min(65536, count - len(body)))
-                        if not chunk:
-                            raise FetchDenied("response_framing_denied")
-                        body.extend(chunk)
-                    planner.remaining()
-                    return status, headers, bytes(body)
-        except (OSError, UnicodeError) as error:
-            raise FetchDenied("protected_connection_denied") from error
+                    acquired = boundary.read_response(
+                        ProviderResponse(
+                            request.url,
+                            status,
+                            headers.get("content-type", ""),
+                            chunks,
+                            binding,
+                            int(headers["content-length"]),
+                            headers.get("content-encoding"),
+                        )
+                    )
+        except BaseException as error:
+            try:
+                self._resources.finish(ticket, status, headers.get("retry-after", ""))
+            except Exception:
+                error.add_note("Protected resource release failed; server lease remains bounded")
+            if isinstance(error, Exception):
+                raise FetchDenied("provider_dispatch_denied") from None
+            raise
+        else:
+            try:
+                self._resources.finish(ticket, status, headers.get("retry-after", ""))
+                boundary.require_response(acquired)
+            except Exception:
+                raise FetchDenied("provider_release_denied") from None
+        return acquired
 
     def _select(self, records: tuple[str, ...]) -> str:
         addresses = public_addresses(records)

@@ -1,3 +1,9 @@
+## 2026-10-15 — EM-015e controlled executable provider gateway candidate
+
+- Execute canonical native PUT search and GET XML through the existing shared protected DNS/literal-peer/TLS boundary in explicit test composition.
+- Add opaque dispatch-scoped credential resolution, bounded current-authority-checked streaming and once-only cleanup without real credential storage or live activation.
+- Require actual controlled IPv4/IPv6 HTTPS→network-none XML parsing and refusal/race cases; retain unchanged network/isolation/source/schema controls and explicit remaining production blockers.
+
 ## 2026-10-15 — EM-015d disabled provider-binding prerequisite
 
 - Rebuild closed ScienceDirect search/article request plans and compare full trusted dispatch scope before consuming bounded supplied response bytes; reuse existing hop planning and refuse all redirects/retries.

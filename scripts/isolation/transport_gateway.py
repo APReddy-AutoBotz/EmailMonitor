@@ -114,6 +114,11 @@ def main() -> None:
         if frame == {"kind": "stop"}:
             emit({"kind": "stopped"})
             return
+        if frame.get("kind") == "provider":
+            from transport_provider import serve_provider
+
+            serve_provider(frame, settings, resolver, emit, read_frame)
+            continue
         if (
             set(frame) != {"kind", "url", "scope", "family", "ca"}
             or frame["kind"] != "fetch"

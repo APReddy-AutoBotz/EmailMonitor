@@ -19,7 +19,9 @@ from emailmonitor.fetching.tls_fixture import SyntheticEndpoint
 HOST = "synthetic.publisher.example"
 
 
-def certificate(directory: Path, hostname: str = HOST) -> tuple[Path, Path]:
+def certificate(
+    directory: Path, hostname: str = HOST, *, extra_names: tuple[str, ...] = ()
+) -> tuple[Path, Path]:
     # Ephemeral test-only key/certificate, never an external account or saved grant.
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, hostname)])
@@ -31,7 +33,10 @@ def certificate(directory: Path, hostname: str = HOST) -> tuple[Path, Path]:
         .serial_number(x509.random_serial_number())
         .not_valid_before(datetime.now(UTC) - timedelta(minutes=1))
         .not_valid_after(datetime.now(UTC) + timedelta(hours=1))
-        .add_extension(x509.SubjectAlternativeName([x509.DNSName(hostname)]), critical=False)
+        .add_extension(
+            x509.SubjectAlternativeName([x509.DNSName(name) for name in (hostname, *extra_names)]),
+            critical=False,
+        )
         .add_extension(x509.BasicConstraints(ca=True, path_length=0), critical=True)
         .sign(key, hashes.SHA256())
     )

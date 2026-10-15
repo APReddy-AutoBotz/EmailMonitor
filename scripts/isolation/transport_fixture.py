@@ -19,6 +19,7 @@ from transport_routes import escape_evidence, evidence
 # Both family answers in each snapshot; every redirect gets fresh A+AAAA queries.
 # The first two queries select fixture A; subsequent pairs select fixture B.
 QNAME = b"\x09synthetic\x09publisher\x07example\0"
+PROVIDER_QNAME = b"\x03api\x08elsevier\x03com\0"
 
 
 @dataclass
@@ -61,7 +62,23 @@ def fixture_command(
         type(frame) is not dict
         or set(frame) != {"mode"}
         or frame["mode"]
-        not in ("normal", "redirect", "mixed", "private", "rebinding", "wrong_name", "slow")
+        not in (
+            "normal",
+            "redirect",
+            "mixed",
+            "private",
+            "rebinding",
+            "wrong_name",
+            "slow",
+            "provider_redirect",
+            "provider_forbidden",
+            "provider_throttle",
+            "provider_html",
+            "provider_duplicate",
+            "provider_short",
+            "provider_extra",
+            "provider_large",
+        )
     ):
         raise RuntimeError("Invalid fixture control")
     state.mode, state.count = frame["mode"], 0
@@ -111,9 +128,19 @@ def main() -> None:
 
     context.set_servername_callback(record_sni)
     page = Path("/app/synthetic-page.html").read_bytes()
+    xml = Path("/app/synthetic-article.xml").read_bytes()
 
     class Handler(BaseHTTPRequestHandler):
+        def do_PUT(self) -> None:
+            self.do_GET()
+
         def do_GET(self) -> None:
+            provider = self.headers.get("Host") == "api.elsevier.com"
+            content_length = self.headers.get("Content-Length", "0")
+            if not content_length.isdecimal() or not 0 <= int(content_length) <= 4096:
+                self.send_error(400)
+                return
+            data = self.rfile.read(int(content_length))
             with lock:
                 if len(calls) >= 64:
                     raise RuntimeError("Synthetic HTTP receipt cap exceeded")
@@ -123,7 +150,16 @@ def main() -> None:
                         "received_monotonic": time.monotonic(),
                         "family": cast(socket.socket, self.connection).family,
                         "path": self.path,
-                        "headers": dict(self.headers.items()),
+                        "headers": {
+                            name: "[synthetic-redacted]"
+                            if name.lower() == "x-els-apikey"
+                            else value
+                            for name, value in self.headers.items()
+                        },
+                        "method": self.command,
+                        "body": data.decode("ascii"),
+                        "credential_valid": self.headers.get("X-ELS-APIKey")
+                        == "em-synthetic-provider-only",
                         "sni": observed_sni.pop(id(self.connection), None),
                     }
                 )
@@ -143,9 +179,48 @@ def main() -> None:
                 status, body = 200, b"x" * 32769
             elif self.path != "/tooltip.html":
                 status, body = 404, b""
+            media = "text/html"
+            if provider:
+                media = "application/json" if self.command == "PUT" else "text/xml"
+                allowed = (
+                    self.command == "PUT"
+                    and self.path == "/content/search/sciencedirect"
+                    or self.command == "GET"
+                    and self.path == "/content/article/doi/10.9999/synthetic.1"
+                    and not data
+                )
+                status = (
+                    200
+                    if allowed and self.headers.get("X-ELS-APIKey") == "em-synthetic-provider-only"
+                    else 403
+                )
+                body = (
+                    json.dumps({"resultsFound": 0, "results": []}, separators=(",", ":")).encode()
+                    if self.command == "PUT"
+                    else xml
+                )
+                if state.mode == "provider_redirect":
+                    status, location = 307, "https://denied.fixture.example/"
+                elif state.mode == "provider_forbidden":
+                    status = 403
+                elif state.mode == "provider_throttle":
+                    status = 429
+                elif state.mode == "provider_html":
+                    media, body = "text/html", b"challenge"
+                elif state.mode == "provider_large":
+                    body = b"x" * 2_097_153
             self.send_response(status)
-            self.send_header("Content-Type", "text/html")
-            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Content-Type", media)
+            length = len(body)
+            if provider and state.mode == "provider_short":
+                length += 1
+            elif provider and state.mode == "provider_extra":
+                length -= 1
+            self.send_header("Content-Length", str(length))
+            if provider and state.mode == "provider_duplicate":
+                self.send_header("Content-Length", str(length))
+            if provider and state.mode == "provider_throttle":
+                self.send_header("Retry-After", "3")
             if location:
                 self.send_header("Location", location)
             self.end_headers()
@@ -189,7 +264,7 @@ def main() -> None:
                     kind, cls = struct.unpack("!HH", raw[-4:])
                     if (
                         (flags, questions, answers, authorities, additional) != (0, 1, 0, 0, 0)
-                        or raw[12:-4] != QNAME
+                        or raw[12:-4] not in (QNAME, PROVIDER_QNAME)
                         or kind not in (1, 28)
                         or cls != 1
                     ):
