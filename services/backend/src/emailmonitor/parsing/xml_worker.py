@@ -5,8 +5,8 @@ import os
 import sys
 from pathlib import Path
 
-from emailmonitor.extraction.sciencedirect import MAX_BYTES, parse_article
-from emailmonitor.extraction.xml_retained import MAX_ENVELOPE, XML_IDENTIFIER
+from emailmonitor.extraction.xml_retained import MAX_ENVELOPE
+from emailmonitor.parsing.xml_protocol import parse_input
 
 
 def main() -> None:
@@ -25,10 +25,7 @@ def main() -> None:
             or fields["Seccomp"].strip() != "2"
         ):
             raise ValueError("Isolation required")
-        data = sys.stdin.buffer.read(MAX_BYTES + 1)
-        if not data or len(data) > MAX_BYTES:
-            raise ValueError("Bounded input required")
-        observed = parse_article(data, XML_IDENTIFIER)
+        observed = parse_input(sys.stdin.buffer)
         output = (
             json.dumps(
                 {

@@ -1,3 +1,9 @@
+## 2026-10-15 — EM-015d disabled provider-binding prerequisite
+
+- Rebuild closed ScienceDirect search/article request plans and compare full trusted dispatch scope before consuming bounded supplied response bytes; reuse existing hop planning and refuse all redirects/retries.
+- Generalize the existing network-none XML worker with a bounded versioned identifier/digest/profile input frame, preserving fixed synthetic retention and tenant-service guards.
+- Add stream/scope/protocol refusal regressions and required actual generalized-container checks; preserve explicit unimplemented live acquisition/admission and unchanged source/security/schema controls.
+
 ## 2026-10-15 — Bounded owned-test cleanup and stage diagnostics
 
 - Guarantee once-only fixture-a held-response release and bounded future collection inside executor cleanup, preserving original failures and current control limits.
