@@ -35,7 +35,7 @@ No adapter registration, API/UI wiring, network client or secret access exists i
 
 ## Next executable integration
 
-Implement a reviewed network-none article XML-to-contact observation parser with synthetic source-shaped fixtures, including multiple corresponding authors, explicit author/email links, absent contacts, affiliations, hostile XML and provenance. Keep transport and activation separate. Then connect V2 discovery and article retrieval through the protected fetch layer, current tenant/policy/quota checks and secret references; never put keys in URLs, code, logs or repository files.
+The bounded XML contact observation candidate is now described in [runbook47](47-sciencedirect-xml-observations.md). Its pure byte parser does not establish network-none process acceptance. Next verify isolated XML-worker integration and actual authorized response compatibility. Keep transport and activation separate. Then connect V2 discovery and article retrieval through the protected fetch layer, current tenant/policy/quota checks and secret references; never put keys in URLs, code, logs or repository files.
 
 Before a bounded live pilot, establish the actual organization's approved API entitlement/authentication route, allowed use/retention/export and request budget, and certify an authorized sample. No claim is made that the user lacks an agreement or credentials; their existence and applicability remain unverified.
 

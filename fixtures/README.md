@@ -25,3 +25,7 @@ EM-008 adds generated synthetic PDFs and parser tests. The baseline deliberately
 ## EM-008 authored PDF candidate
 
 `pdf/` contains deterministic original standard-font text/layout fixtures, an authored one-pixel image-only page, insecure synthetic encrypted-refusal data and one deliberately corrupt input. No publisher PDF or embedded third-party font program is included. The [digest manifest](pdf/manifest.json) records authored bytes, not expected contact outcomes. `pdf_fixture_builder.py` generates fixtures using reviewed pypdf object/writer primitives; the byte parser never imports that generator or manually authored expected contacts. Actual parser isolation acceptance is required; see the [PDF runbook](../docs/37-offline-pdf-observation-runbook.md).
+
+## Synthetic Elsevier-shaped XML
+
+`xml/sciencedirect-article.xml` is newly authored content using reserved example domains and fictional names, institutions and identifiers. Its native XOCS structure follows official Elsevier documentation; the retrieval wrapper is a pinned compatibility assumption. It includes separated first/corresponding roles and irrelevant malicious/body/support text for exclusion tests. It is not a licensed article, actual researcher record or source certification sample. See [runbook47](../docs/47-sciencedirect-xml-observations.md).
