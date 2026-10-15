@@ -197,3 +197,10 @@ No application, live source connector, actual email collection, deployment, send
 - EM004c synthetic browser boundary under review: owner-approved scoped container profile, pinned current default plus three namespace syscall names, locked dev-only Playwright and bounded credential-free fixture IPC. Actual browser/sandbox CI pending; full EM004 partial, EM006 gated, production/live extraction unchanged.
 
 - EM-011 validation repair: bounded read-only settling for precisely owned IPv6 DAD before the unchanged strict controlled-transport gate; no settings or baseline changes.
+
+## 2026-10-15 — EM-015a ScienceDirect adapter prerequisite candidate
+
+- Add inert native V2 search plans, narrow DOI/PII normalization and bounded JSON-to-metadata parsing.
+- Preserve ordered author metadata and row provenance; explicitly report search contact fields unavailable.
+- Add DOI/PII deduplication and conservative pagination/conflict/resource-limit tests.
+- Keep live execution, credentials, source grants, runtime registration and deployment disabled; full EM-015 remains partial. See [runbook46](docs/46-sciencedirect-adapter-prerequisite.md).

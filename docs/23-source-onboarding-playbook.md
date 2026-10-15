@@ -33,6 +33,7 @@ Approve a limited live sample first. Scale only inside the agreed permission/usa
 | Synthetic publisher fixtures | Offline keyword/search/article/tooltip workflows | Included fixtures only; live execution never permitted |
 | Crossref REST API | Metadata/DOI discovery and approved API-backed search | Candidate; current API docs checked; not guaranteed author emails or identical publisher search [S08] |
 | PMC supported retrieval services | Permitted structured/full-text route where available | Candidate; use documented automated services, not arbitrary PMC crawling [S09] |
+| ScienceDirect / Elsevier API V2 | Selected first publisher; inert search parser prerequisite | No live certification or activation; see [runbook46](46-sciencedirect-adapter-prerequisite.md) |
 | One customer-authorized publisher website | Actual publisher keyword/search URL and article extraction | To be selected; authorization and structural assessment required |
 | Wiley TDM API | Example of a commercial/authorized publisher route | Candidate only; requires applicable permission/token; no browser crawler by default [S10] |
 | Europe PMC API | Potential scholarly search/full text | Candidate; official REST docs need re-verification; no capability claimed |
