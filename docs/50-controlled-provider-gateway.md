@@ -35,3 +35,7 @@ The transport workflow builds the existing parser diagnostic image before protec
 Still unimplemented/unverified: real-source tenant admission and entitlements; real secret-store integration; a reviewed usable live DNS/egress composition (the existing authoritative resolver rejects recursion/CNAME and long TTLs); provider route/API/worker registration; authorized response samples, full-text view/entitlement and wrapper compatibility; bounded pilot and held-out benchmark. Fixed synthetic persistence/review/export restrictions remain unchanged. This slice therefore does not make credentials the only remaining blocker.
 
 No migration, schema, dependency/license, source grant, live setting, production packaging, merge or deployment changes. Rollback reverts this source/test slice and rebuilds the matching diagnostics; no durable data is changed. The next step is reconcile immutable review and actual own-head 31-case controlled/all-seven gates, then implement separately scoped remaining activation prerequisites without fabricating permissions or requesting broad security changes.
+
+## Subsequent controlled integration
+
+[EM-015f/runbook51](51-controlled-provider-journey.md) adds explicit FULL plans and joins this gateway to trusted synthetic registry, actual SQL source accounting and retained review/export. This document's no-query/fixed-persistence statements describe the earlier EM-015e boundary. Real source entitlement, credential resolution and live activation remain gated.

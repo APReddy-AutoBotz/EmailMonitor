@@ -1,4 +1,6 @@
 {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.org/emailmonitor/schemas/xml-retained-observation.schema.json",
   "$defs": {
     "ArticleIdentifier": {
       "additionalProperties": false,
@@ -201,6 +203,45 @@
       "title": "MetadataValues",
       "type": "object"
     },
+    "ProviderProvenance": {
+      "additionalProperties": false,
+      "properties": {
+        "source_id": {
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,99}$",
+          "title": "Source Id",
+          "type": "string"
+        },
+        "acquisition_mode": {
+          "const": "controlled_fixture",
+          "default": "controlled_fixture",
+          "title": "Acquisition Mode",
+          "type": "string"
+        },
+        "transport_url": {
+          "maxLength": 2048,
+          "title": "Transport Url",
+          "type": "string"
+        },
+        "request_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Request Fingerprint",
+          "type": "string"
+        },
+        "requested_view": {
+          "const": "FULL",
+          "default": "FULL",
+          "title": "Requested View",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_id",
+        "transport_url",
+        "request_fingerprint"
+      ],
+      "title": "ProviderProvenance",
+      "type": "object"
+    },
     "RetainedXmlCandidate": {
       "additionalProperties": false,
       "properties": {
@@ -340,8 +381,8 @@
       "type": "string"
     },
     "url": {
-      "const": "https://synthetic.publisher.example/article-xml.xml",
       "default": "https://synthetic.publisher.example/article-xml.xml",
+      "maxLength": 2048,
       "title": "Url",
       "type": "string"
     },
@@ -354,10 +395,24 @@
       "$ref": "#/$defs/ArticleIdentifier"
     },
     "source_profile": {
-      "const": "article_retrieval_response",
       "default": "article_retrieval_response",
+      "enum": [
+        "article_retrieval_response",
+        "xocs_document"
+      ],
       "title": "Source Profile",
       "type": "string"
+    },
+    "provider": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ProviderProvenance"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "content_digest": {
       "pattern": "^[0-9a-f]{64}$",
@@ -447,7 +502,5 @@
     "excerpts_retained"
   ],
   "title": "RetainedXml",
-  "type": "object",
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://example.org/emailmonitor/schemas/xml-retained-observation.schema.json"
+  "type": "object"
 }

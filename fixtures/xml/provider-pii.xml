@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xocs:doc xmlns:xocs="http://www.elsevier.com/xml/xocs/dtd"
+ xmlns:ja="http://www.elsevier.com/xml/ja/dtd"
+ xmlns:ce="http://www.elsevier.com/xml/common/dtd">
+ <xocs:meta><xocs:pii-unformatted>S0000000000000002</xocs:pii-unformatted></xocs:meta>
+ <xocs:serial-item><ja:article><ja:head><ce:title>Second controlled synthetic document</ce:title>
+  <ce:author-group><ce:author id="one"><ce:given-name>Fixture</ce:given-name><ce:surname>Alpha</ce:surname><ce:cross-ref refid="aff"><ce:sup>a</ce:sup></ce:cross-ref></ce:author>
+   <ce:author id="two"><ce:given-name>Fixture</ce:given-name><ce:surname>Beta</ce:surname><ce:cross-ref refid="aff"><ce:sup>a</ce:sup></ce:cross-ref>
+    <ce:cross-ref refid="cor"><ce:sup>*</ce:sup></ce:cross-ref>
+    <ce:e-address>beta@example.org</ce:e-address></ce:author>
+   <ce:affiliation id="aff"><ce:textfn>Fictional Provider Journey Institute</ce:textfn></ce:affiliation>
+   <ce:correspondence id="cor"><ce:text>Corresponding author.</ce:text></ce:correspondence>
+  </ce:author-group>
+ </ja:head></ja:article></xocs:serial-item>
+</xocs:doc>

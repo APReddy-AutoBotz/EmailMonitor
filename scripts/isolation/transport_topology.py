@@ -396,6 +396,7 @@ class Topology:
         shutil.copy(
             root / "scripts/isolation/transport_provider.py", gateway / "transport_provider.py"
         )
+        shutil.copy(root / "fixtures/xml/provider-pii.xml", fixture / "provider-pii.xml")
         (fixture / "synthetic-page.html").write_bytes(PAGE)
         shutil.copy(root / "scripts/isolation/Dockerfile.transport-fixture", fixture / "Dockerfile")
         shutil.copytree(

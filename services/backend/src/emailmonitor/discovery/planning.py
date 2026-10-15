@@ -26,6 +26,8 @@ class InputPlan:
 
 
 def plan_input(request: JobRequest) -> InputPlan:
+    from emailmonitor.sources import provider_documents as provider
+
     value = request.input
     if any(request.filters.model_dump(exclude_none=True).values()):
         return InputPlan("unsupported", "fixture_filters_unavailable")
@@ -34,6 +36,15 @@ def plan_input(request: JobRequest) -> InputPlan:
         suggestion = DEFAULT_TOPIC if value.original_query == "Myocardial Infraction" else None
         if value.source_id != "synthetic-publisher":
             return InputPlan("unsupported", "source_onboarding_required")
+        if effective == provider.QUERY:
+            return InputPlan(
+                "search_results",
+                "controlled_provider_fixture",
+                provider.SEARCH_URL,
+                value.original_query,
+                effective,
+                suggestion,
+            )
         # The immutable fixture search index supports exactly this topic. Never
         # misrepresent arbitrary keywords as having the same fixture results.
         if effective != DEFAULT_TOPIC:
@@ -59,6 +70,12 @@ def plan_input(request: JobRequest) -> InputPlan:
         url = classify_url(value.url, HOSTS)
     except FetchDenied:
         return InputPlan("unsupported", "unsafe_or_unonboarded_url")
+    if url.normalized in provider.URLS:
+        return InputPlan(
+            "search_results" if url.normalized == provider.SEARCH_URL else "article",
+            "controlled_provider_fixture",
+            url.normalized,
+        )
     if url.path == "/":
         return InputPlan("needs_refinement", "homepage_requires_keyword_or_scoped_url")
     if url.path in SEARCH_PATHS:

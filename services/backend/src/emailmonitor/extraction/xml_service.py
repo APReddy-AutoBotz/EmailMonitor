@@ -47,11 +47,13 @@ def require_current_binding(
 
 
 class XmlExtraction(Extraction):
-    def binding(self, org: UUID, job: UUID, revision: int) -> tuple[XmlBinding, bool]:
+    def binding(
+        self, org: UUID, job: UUID, revision: int, url: str = XML_URL
+    ) -> tuple[XmlBinding, bool]:
         lease = CURRENT.get()
         if lease is None or lease.organization != org or lease.job != job:
             raise AuthorizationDenied()
-        context = self.prepare(org, job, XML_URL)
+        context = self.prepare(org, job, url)
         if context["revision"] != revision:
             raise HTTPException(409, "Discovery revision conflict")
         return XmlBinding(
@@ -97,8 +99,25 @@ class XmlExtraction(Extraction):
         if len(payload.encode()) > 131072:
             raise ValueError("Retained XML envelope exceeds bounded ceiling")
         with self.discovery._tenant(org, Capability.ACQUIRE_SOURCE) as (connection, _):
-            fence(connection, org, job, XML_URL)
-            context = self._scope(connection, org, job, XML_URL, browser=False)
+            fence(connection, org, job, value.url)
+            context = self._scope(connection, org, job, value.url, browser=False)
+            if value.provider is not None:
+                from emailmonitor.sources.access import current_policy
+                from emailmonitor.sources.provider_documents import documents
+
+                policy = current_policy(connection, org, str(context["source_id"]))
+                registry = documents(policy["support"], str(context["source_id"]))
+                registered = next((d for d in registry if d.source_url == value.url), None)
+                if (
+                    registered is None
+                    or registered.identifier != value.requested_identifier
+                    or registered.source_profile != value.source_profile
+                    or registered.content_digest != value.content_digest
+                    or registered.source_id != value.provider.source_id
+                    or registered.request.url != value.provider.transport_url
+                    or registered.request.fingerprint != value.provider.request_fingerprint
+                ):
+                    raise AuthorizationDenied()
             lease = CURRENT.get()
             if lease is None:
                 raise AuthorizationDenied()
@@ -116,7 +135,7 @@ class XmlExtraction(Extraction):
                 connection.execute(
                     text("""SELECT * FROM emailmonitor.article_observations
 WHERE organization_id=:org AND job_id=:job AND article_url=:url FOR UPDATE"""),
-                    {"org": org, "job": job, "url": XML_URL},
+                    {"org": org, "job": job, "url": value.url},
                 )
                 .mappings()
                 .first()
@@ -137,12 +156,12 @@ CAST(:document AS jsonb))"""),
                 {
                     "org": org,
                     "job": job,
-                    "url": XML_URL,
+                    "url": value.url,
                     "generation": expected.generation,
                     "deletion": expected.deletion_generation,
                     "policy": expected.policy_version,
                     "discovery": expected.discovery_revision,
-                    "digest": XML_DIGEST,
+                    "digest": value.content_digest,
                     "document": payload,
                 },
             )
@@ -151,7 +170,7 @@ CAST(:document AS jsonb))"""),
                 connection.execute(
                     text("""SELECT * FROM emailmonitor.article_observations
 WHERE organization_id=:org AND job_id=:job AND article_url=:url"""),
-                    {"org": org, "job": job, "url": XML_URL},
+                    {"org": org, "job": job, "url": value.url},
                 )
                 .mappings()
                 .one()

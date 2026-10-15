@@ -8,6 +8,7 @@ crosses this protocol. Existing frame, network and process bounds are unchanged.
 import base64
 import hashlib
 import json
+import sys
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -18,7 +19,8 @@ from emailmonitor.config import Settings
 from emailmonitor.fetching.credentials import CredentialLease
 from emailmonitor.fetching.fixture import FetchLimits
 from emailmonitor.fetching.protected import ProtectedGateway, SnapshotResolver
-from emailmonitor.fetching.safety import FetchDenied
+from emailmonitor.fetching.resources import HopResources
+from emailmonitor.fetching.safety import FetchDenied, classify_url
 from emailmonitor.fetching.sciencedirect import (
     AcquiredResponse,
     CredentialReference,
@@ -111,6 +113,7 @@ class ProviderProxy:
         self,
         boundary: ProviderBoundary,
         *,
+        resources: HopResources | None = None,
         family: int = 4,
         ca: str = "fixture",
         after_finish: Callable[[], None] = lambda: None,
@@ -122,6 +125,9 @@ class ProviderProxy:
         scope = scope_fields(boundary.planner.scope)
         active: str | None = None
         inflight = False
+        ticket: object | None = None
+        resource_admitted = False
+        resource_finished = False
         self.peers = []
         try:
             self.process.send(
@@ -156,13 +162,32 @@ class ProviderProxy:
                         type(identifier) is not str
                         or str(UUID(identifier)) != identifier
                         or active is not None
+                        or (resources is not None and resource_admitted)
                         or frame
-                        != {"kind": kind, "id": identifier, "scope": scope, "url": request.url}
+                        != {
+                            "kind": kind,
+                            "id": identifier,
+                            "scope": scope,
+                            "url": request.url,
+                        }
                     ):
                         raise RuntimeError("Provider resource scope mismatch")
                     boundary.check_current()
-                    active = identifier
-                    self.process.send({"admitted": True}, binding.deadline)
+                    try:
+                        if resources is not None:
+                            ticket = resources.acquire(
+                                classify_url(request.url, frozenset({"api.elsevier.com"})),
+                                request.operation,
+                                binding.deadline,
+                            )
+                            if ticket is None:
+                                raise RuntimeError("Owned provider resource ticket required")
+                            resource_admitted = True
+                    except FetchDenied:
+                        self.process.send({"admitted": False}, binding.deadline)
+                    else:
+                        active = identifier
+                        self.process.send({"admitted": True}, binding.deadline)
                 elif kind == "resource_finish":
                     status, retry = frame.get("status"), frame.get("retry_after")
                     if (
@@ -176,6 +201,10 @@ class ProviderProxy:
                     ):
                         raise RuntimeError("Provider resource release mismatch")
                     self.finished.append((status, retry))
+                    if resources is not None and ticket is not None:
+                        owned, ticket = ticket, None
+                        resources.finish(owned, status, retry)
+                        resource_finished = True
                     active = None
                     after_finish()
                     self.process.send({"finished": True}, binding.deadline)
@@ -187,7 +216,15 @@ class ProviderProxy:
                         raise FetchDenied("controlled_provider_denied")
                     if (
                         set(frame)
-                        != {"kind", "status", "request", "binding", "body", "digest", "peers"}
+                        != {
+                            "kind",
+                            "status",
+                            "request",
+                            "binding",
+                            "body",
+                            "digest",
+                            "peers",
+                        }
                         or frame["status"] != "ok"
                         or frame["request"] != request.model_dump(mode="json")
                         or not exact_binding(frame["binding"], binding)
@@ -202,13 +239,20 @@ class ProviderProxy:
                         ]
                     ):
                         raise RuntimeError("Provider dispatch response mismatch")
+                    if resources is not None and not (resource_admitted and resource_finished):
+                        raise RuntimeError("Provider resource lifecycle incomplete")
                     data = base64.b64decode(frame["body"], validate=True)
                     if hashlib.sha256(data).hexdigest() != frame["digest"]:
                         raise RuntimeError("Provider response digest mismatch")
                     inflight = False
                     acquired = boundary.read_response(
                         ProviderResponse(
-                            request.url, 200, request.plan().media_type, (data,), binding, len(data)
+                            request.url,
+                            200,
+                            request.plan().media_type,
+                            (data,),
+                            binding,
+                            len(data),
                         )
                     )
                     self.peers = frame["peers"]
@@ -217,5 +261,17 @@ class ProviderProxy:
                     raise RuntimeError("Unexpected provider protocol frame")
             raise RuntimeError("Provider callback limit exceeded")
         finally:
+            # Uncertain pipes are poisoned even if SQL cleanup itself is denied.
             if inflight or active is not None:
                 self.process.poisoned = True
+            if resources is not None and ticket is not None:
+                owned, ticket = ticket, None
+                original_error = sys.exception()
+                try:
+                    resources.finish(owned, None, "")
+                except Exception:
+                    if original_error is None:
+                        raise
+                    original_error.add_note(
+                        "Owned provider resource cleanup failed; lease remains bounded"
+                    )

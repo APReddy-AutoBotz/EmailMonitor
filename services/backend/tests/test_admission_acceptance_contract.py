@@ -230,12 +230,12 @@ def test_owned_keyword_admission_fixture_requests_its_asserted_full_frontier(
 @pytest.mark.parametrize(
     ("summary", "accepted"),
     [
-        ("================ 31 passed in 77.65s ================", True),
-        ("31 passed in 77.65s", True),
+        ("================ 41 passed in 77.65s ================", True),
+        ("41 passed in 77.65s", True),
         ("12 passed in 77.65s", False),
         ("13 passed in 77.65s", False),
-        ("131 passed in 77.65s", False),
-        ("31 passed_extra", False),
+        ("141 passed in 77.65s", False),
+        ("41 passed_extra", False),
     ],
 )
 def test_transport_workflow_requires_exact_expanded_case_count(
@@ -243,7 +243,7 @@ def test_transport_workflow_requires_exact_expanded_case_count(
 ) -> None:
     root = Path(__file__).resolve().parents[3]
     workflow = (root / ".github/workflows/transport-isolation.yml").read_text()
-    pattern = "(^|[=[:space:]])31 passed([ ,]|$)"
+    pattern = "(^|[=[:space:]])41 passed([ ,]|$)"
     assert f"grep -Eq '{pattern}'" in workflow
     result = subprocess.run(
         ["grep", "-Eq", pattern], input=summary, text=True, check=False, timeout=1

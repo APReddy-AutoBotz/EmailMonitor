@@ -31,11 +31,23 @@ def classify_url(value: str, allowed_hosts: frozenset[str]) -> SafeURL:
         host = parts.hostname
         if parts.scheme != "https" or not host or parts.username is not None:
             raise FetchDenied("url_origin_denied")
+        # Only the typed Article Retrieval FULL selector is supported. This is
+        # request syntax, never source permission; every other query stays denied.
+        full_view = (
+            host == "api.elsevier.com"
+            and parts.query == "view=FULL"
+            and value.count("?") == 1
+            and re.fullmatch(
+                r"/content/article/(?:doi/10\.[0-9]{4,9}/[A-Za-z0-9._;()/:-]+|pii/(?:S[A-Z0-9]{16}|B[A-Z0-9]{19}))",
+                parts.path,
+            )
+            is not None
+        )
         if (
             parts.port not in (None, 443)
             or parts.fragment
-            or parts.query
-            or "?" in value
+            or (bool(parts.query) and not full_view)
+            or ("?" in value and not full_view)
             or "#" in value
         ):
             raise FetchDenied("url_scope_denied")
@@ -63,7 +75,11 @@ def classify_url(value: str, allowed_hosts: frozenset[str]) -> SafeURL:
         path = parts.path or "/"
         if "%" in path or any(segment in (".", "..") for segment in path.split("/")):
             raise FetchDenied("path_denied")
-        return SafeURL(urlunsplit(("https", host, path, "", "")), host, path)
+        return SafeURL(
+            urlunsplit(("https", host, path, parts.query if full_view else "", "")),
+            host,
+            path + ("?view=FULL" if full_view else ""),
+        )
     except ValueError:
         raise FetchDenied("url_shape_denied") from None
 

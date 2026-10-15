@@ -7,6 +7,8 @@ from pydantic import Field, model_validator
 
 from emailmonitor.extraction.html import AuthorFact, CandidateFact, Evidence, Fact, MetadataValues
 from emailmonitor.extraction.sciencedirect import Reason, XmlObservation
+from emailmonitor.fetching.sciencedirect import ProviderRequest
+from emailmonitor.sources.provider_documents import ProviderDocument
 from emailmonitor.sources.sciencedirect import API_ORIGIN, ArticleIdentifier, article_path
 
 XML_URL = "https://synthetic.publisher.example/article-xml.xml"
@@ -30,16 +32,25 @@ class RetainedXmlCandidate(CandidateFact):
     association_evidence: list[Evidence] = Field(default_factory=list, max_length=100)
 
 
+class ProviderProvenance(Fact):
+    source_id: str = Field(pattern=r"^[a-z0-9][a-z0-9_-]{0,99}$")
+    acquisition_mode: Literal["controlled_fixture"] = "controlled_fixture"
+    transport_url: str = Field(max_length=2048)
+    request_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
+    requested_view: Literal["FULL"] = "FULL"
+
+
 class RetainedXml(Fact):
     schema_version: Literal["1.0"] = "1.0"
     parser_version: Literal["elsevier-xml-head-v1"] = "elsevier-xml-head-v1"
     route: Literal["article_xml"] = "article_xml"
-    url: Literal["https://synthetic.publisher.example/article-xml.xml"] = (
-        "https://synthetic.publisher.example/article-xml.xml"
-    )
+    url: str = Field(default=XML_URL, max_length=2048)
     canonical_url: str = Field(max_length=2048)
     requested_identifier: ArticleIdentifier
-    source_profile: Literal["article_retrieval_response"] = "article_retrieval_response"
+    source_profile: Literal["article_retrieval_response", "xocs_document"] = (
+        "article_retrieval_response"
+    )
+    provider: ProviderProvenance | None = None
     content_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     acquisition_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     status: Literal["observed", "no_contact", "partial", "unsupported"]
@@ -54,8 +65,20 @@ class RetainedXml(Fact):
 
     @model_validator(mode="after")
     def retained_integrity(self) -> "RetainedXml":
-        if (
-            self.requested_identifier != XML_IDENTIFIER
+        if self.provider is not None:
+            request = ProviderRequest(article=self.requested_identifier, view="FULL")
+            if (
+                self.canonical_url != API_ORIGIN + article_path(self.requested_identifier)
+                or self.content_digest != self.acquisition_digest
+                or self.provider.transport_url != request.url
+                or self.provider.request_fingerprint != request.fingerprint
+                or self.preferred_metadata != MetadataValues()
+            ):
+                raise ValueError("Provider acquisition provenance required")
+        elif (
+            self.url != XML_URL
+            or self.source_profile != XML_PROFILE
+            or self.requested_identifier != XML_IDENTIFIER
             or self.canonical_url != API_ORIGIN + article_path(XML_IDENTIFIER)
             or self.content_digest != XML_DIGEST
             or self.acquisition_digest != XML_DIGEST
@@ -103,18 +126,37 @@ class RetainedXml(Fact):
         return self
 
 
-def retain_xml(observed: XmlObservation, binding: XmlBinding, excerpts: bool) -> RetainedXml:
+def retain_xml(
+    observed: XmlObservation,
+    binding: XmlBinding,
+    excerpts: bool,
+    *,
+    registered: ProviderDocument | None = None,
+) -> RetainedXml:
     # Validate literal evidence before policy-driven stripping. Never attempt to
     # validate a locator-only retained record as raw XmlObservation.
     observed = XmlObservation.model_validate_json(observed.model_dump_json())
+    if registered is not None and (
+        observed.requested_identifier != registered.identifier
+        or observed.content_digest != registered.content_digest
+        or observed.source_profile != registered.source_profile
+    ):
+        raise ValueError("Registered provider document required")
     document = observed.model_dump(mode="json")
     document.update(
         canonical_url=document.pop("url"),
-        url=XML_URL,
+        url=registered.source_url if registered else XML_URL,
         acquisition_digest=observed.content_digest,
         binding=binding.model_dump(mode="json"),
         excerpts_retained=excerpts and bool(observed.authors or observed.candidates),
     )
+
+    if registered is not None:
+        document["provider"] = ProviderProvenance(
+            source_id=registered.source_id,
+            transport_url=registered.request.url,
+            request_fingerprint=registered.request.fingerprint,
+        ).model_dump(mode="json")
 
     def strip(value: object) -> None:
         if isinstance(value, dict):
