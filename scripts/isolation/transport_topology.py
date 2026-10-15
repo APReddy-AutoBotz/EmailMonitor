@@ -342,7 +342,7 @@ class Topology:
         self.suffix = suffix
 
     def _build(self, root: Path, directory: Path, suffix: str) -> None:
-        cert, key = certificate(directory)
+        cert, key = certificate(directory, extra_names=("api.elsevier.com",))
         untrusted_directory = directory / "untrusted"
         untrusted_directory.mkdir()
         untrusted_cert, _ = certificate(untrusted_directory)
@@ -389,6 +389,12 @@ class Topology:
         shutil.copy(key, fixture / "fixture-key.pem")
         shutil.copy(
             root / "scripts/isolation/transport_fixture.py", fixture / "transport_fixture.py"
+        )
+        shutil.copy(
+            root / "fixtures/xml/sciencedirect-article.xml", fixture / "synthetic-article.xml"
+        )
+        shutil.copy(
+            root / "scripts/isolation/transport_provider.py", gateway / "transport_provider.py"
         )
         (fixture / "synthetic-page.html").write_bytes(PAGE)
         shutil.copy(root / "scripts/isolation/Dockerfile.transport-fixture", fixture / "Dockerfile")

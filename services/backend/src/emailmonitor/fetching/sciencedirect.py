@@ -213,6 +213,29 @@ class ProviderBoundary:
             raise FetchDenied("provider_current_binding_denied")
 
     def check_current(self) -> None:
+        try:
+            request = ProviderRequest.model_validate(self.request.model_dump())
+            binding = ProviderBinding.model_validate(self.binding.model_dump())
+            if (
+                type(self.request) is not ProviderRequest
+                or type(self.binding) is not ProviderBinding
+                or request != self.request
+                or binding != self.binding
+                or binding.request_fingerprint != request.fingerprint
+                or self.planner.scope
+                != PlanScope(
+                    binding.organization,
+                    SOURCE,
+                    binding.policy_version,
+                    request.operation,
+                    HOSTS,
+                    binding.deadline,
+                    0,
+                )
+            ):
+                raise ValueError
+        except (ValueError, TypeError, AttributeError):
+            raise FetchDenied("provider_request_binding_denied") from None
         self.planner.authorize_url(self.request.url)
 
     def read_response(self, response: ProviderResponse) -> AcquiredResponse:

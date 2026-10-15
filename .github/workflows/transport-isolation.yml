@@ -47,9 +47,11 @@ jobs:
           "$RUNNER_TEMP/tooling/bin/uv" sync --project services/backend --locked
           EM_MIGRATION_DATABASE_URL="$EM_TEST_ADMIN_DATABASE_URL" "$RUNNER_TEMP/tooling/bin/uv" run --project services/backend alembic -c services/backend/alembic.ini upgrade head
           "$RUNNER_TEMP/tooling/bin/uv" run --project services/backend python scripts/create_ci_runtime.py
+      - name: Build unchanged-profile isolated XML parser
+        run: docker build --file scripts/isolation/Dockerfile.parser --tag emailmonitor-parser-diagnostic:local .
       - name: Trusted image preparation, approved initialization and protected transport acceptance
         run: |
           set -euo pipefail
-          uv run --project services/backend pytest -c services/backend/pyproject.toml scripts/isolation/test_transport_acceptance.py -ra -s | tee "$RUNNER_TEMP/transport-acceptance.log"
-          grep -Eq '(^|[=[:space:]])14 passed([ ,]|$)' "$RUNNER_TEMP/transport-acceptance.log"
+          uv run --project services/backend pytest -c services/backend/pyproject.toml scripts/isolation/test_transport_acceptance.py scripts/isolation/test_provider_transport_acceptance.py -ra -s | tee "$RUNNER_TEMP/transport-acceptance.log"
+          grep -Eq '(^|[=[:space:]])31 passed([ ,]|$)' "$RUNNER_TEMP/transport-acceptance.log"
           ! grep -Eq '[0-9]+ skipped|[0-9]+ warnings?' "$RUNNER_TEMP/transport-acceptance.log"

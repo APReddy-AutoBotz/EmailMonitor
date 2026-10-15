@@ -1,5 +1,7 @@
 # 49 — Disabled ScienceDirect request and parser binding (EM-015d)
 
+Historical EM-015d boundary: the subsequent [controlled provider gateway candidate](50-controlled-provider-gateway.md) extends transport execution in explicit test composition only.
+
 Status: local candidate, partial EM-015. These are reusable production prerequisites tested with supplied synthetic bytes. Live acquisition, provider admission, credential resolution, source certification and production execution remain unimplemented. No source policy, schema, migration, dependency, API/UI registration or permission changes.
 
 ## Canonical request and response boundary
