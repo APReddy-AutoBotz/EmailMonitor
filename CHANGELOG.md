@@ -258,3 +258,7 @@ No application, live source connector, actual email collection, deployment, send
 - Wake the original synthetic solo worker's pinned event loop when a ready-snapshot callback queues more work, using one coalesced nonblocking pipe byte and two owned close-on-exec descriptors.
 - Preserve original callback/ACK execution, timeout/heartbeat/prefetch/pool settings, UI completion predicates, resource/security controls and diagnostic opt-in semantics; no dependency or migration.
 - Add actual Worker/handler/strategy/registered-task/solo no-network regression and bounded reconnect/cleanup/error tests. Preserve PR26's six successful gates and failed actual UI, inherited Pydantic warning and unproven exact CI cause. Own-head actual service/UI/isolation validation remains required; [evidence](reports/worker-callback-wake-validation.md).
+
+## EM-015g controlled normal-worker/operator candidate
+
+Add a trusted Python-only executor factory to the normal claimed Celery path, retaining default provider refusal and identifier-only task bodies. Add separate normal operator keyboard→outbox→RabbitMQ→protected HTTPS→isolated XML→review→CSV/XLSX acceptance with explicit synthetic source-policy API preconditions and revocable sole-thread pipe ownership. Existing static UI8s, live-source refusal and isolation/resource controls remain unchanged. Candidate local/actual gate status: [validation](reports/em015g-validation.md).

@@ -361,6 +361,135 @@ async def main() -> None:
                 ).index(setup["initial_organization"]),
             )
             await page.get_by_role("heading", name="Synthetic tenant 0", exact=True).wait_for()
+            if setup.get("journey") == "controlled_provider":
+                checkpoint("keyword_plan")
+                await activate(page, page.get_by_role("button", name="New extraction", exact=True))
+                await type_text(
+                    page, page.get_by_label("Keyword", exact=True), "Controlled provider journey"
+                )
+                await activate(
+                    page, page.get_by_role("button", name="Create and validate plan", exact=True)
+                )
+                await page.get_by_role("region", name="Server source plan").wait_for()
+                await activate(
+                    page, page.get_by_role("button", name="Launch extraction", exact=True)
+                )
+                await page.get_by_role(
+                    "heading", name=re.compile(r"^Job [0-9a-f-]{36}$")
+                ).wait_for()
+                checkpoint("keyword_worker")
+                await channel.request({"kind": "control", "action": "publish"})
+                # Separate provider acceptance: three real acquisitions retain enforced
+                # source spacing plus HTTPS/parser work. The static wait remains 8s.
+                await page.get_by_text("completed", exact=True).first.wait_for(timeout=75000)
+                checkpoint("evidence_review")
+                await activate(page, page.get_by_role("button", name="Review queue", exact=True))
+                for address in ("Second@example.org", "beta@example.org"):
+                    row = page.get_by_role("row").filter(has_text=address)
+                    await expect(row).to_have_count(1)
+                    await activate(
+                        page, row.get_by_role("button", name="Evidence and review", exact=True)
+                    )
+                    await page.get_by_role(
+                        "heading", name="Actual retained citation", exact=True
+                    ).wait_for()
+                    await type_text(
+                        page,
+                        page.get_by_label("Reason", exact=True),
+                        "Inspected controlled XML citation through keyboard UI",
+                    )
+                    await activate(page, page.get_by_role("button", name="Save review", exact=True))
+                    await page.get_by_role("dialog").wait_for(state="hidden")
+                await activate(page, page.get_by_role("button", name="Contacts", exact=True))
+                for address in ("Second@example.org", "beta@example.org"):
+                    await expect(page.get_by_role("row").filter(has_text=address)).to_have_count(1)
+                checkpoint("export_preview")
+                await activate(page, page.get_by_role("button", name="Exports", exact=True))
+                for index in (0, 1):
+                    await select_index(page, page.get_by_label("Format", exact=True), index)
+                    await activate(
+                        page,
+                        page.get_by_role(
+                            "button", name="Preview eligible export counts", exact=True
+                        ),
+                    )
+                    await page.get_by_role("region", name="Current export preview").wait_for()
+                    await activate(
+                        page,
+                        page.get_by_role("button", name="Create asynchronous export", exact=True),
+                    )
+                    await (
+                        page.get_by_role("row")
+                        .filter(has_text=" · " + ("xlsx" if index == 0 else "csv"))
+                        .wait_for()
+                    )
+                    await channel.request({"kind": "control", "action": "wait_exports"})
+                    await activate(
+                        page, page.get_by_role("button", name="Refresh current view", exact=True)
+                    )
+                    download_seen.clear()
+                    export_row = page.get_by_role("row").filter(
+                        has_text=" · " + ("xlsx" if index == 0 else "csv")
+                    )
+                    await activate(
+                        page, export_row.get_by_role("button", name="Download", exact=True)
+                    )
+                    await asyncio.wait_for(download_seen.wait(), timeout=5)
+                checkpoint("readonly_role")
+                await select_index(
+                    page,
+                    page.get_by_role("combobox", name="Active organization", exact=True),
+                    (
+                        await page.get_by_role("combobox", name="Active organization", exact=True)
+                        .locator("option")
+                        .evaluate_all("nodes => nodes.map(node => node.value)")
+                    ).index(setup["other_organization"]),
+                )
+                await page.get_by_role("heading", name="Synthetic tenant 1", exact=True).wait_for()
+                await page.get_by_text(
+                    "No jobs yet. Create a bounded extraction plan.", exact=True
+                ).wait_for()
+                body = await page.locator("body").inner_text()
+                if any(address in body for address in ("Second@example.org", "beta@example.org")):
+                    raise RuntimeError("Provider contacts survived tenant switch")
+                await activate(page, page.get_by_role("button", name="Exports", exact=True))
+                await page.get_by_text(
+                    "Export capability is not available for this role.", exact=False
+                ).wait_for()
+
+                if context.service_workers or await page.evaluate(
+                    "navigator.serviceWorker.getRegistrations().then(rows=>rows.length)"
+                ):
+                    raise RuntimeError("UI service workers must remain absent")
+
+                async def provider_settled() -> None:
+                    while channel.pending:
+                        await asyncio.sleep(0.05)
+
+                await asyncio.wait_for(provider_settled(), timeout=10)
+                checkpoint("final_cleanup")
+                print(
+                    json.dumps(
+                        {
+                            "kind": "result",
+                            "diagnostic": "synthetic-operator-ui",
+                            "journey": "controlled_provider",
+                            "keyboard": True,
+                            "built_assets": accepted,
+                            "sandbox": sandbox,
+                            "network_errno": network,
+                            "interfaces": interfaces,
+                            "review": True,
+                            "formats": ["xlsx", "csv"],
+                            "tenant_switch": True,
+                            "download_cancelled": True,
+                        }
+                    ),
+                    flush=True,
+                )
+                await context.close()
+                await browser.close()
+                return
             checkpoint("source_review")
             # Every action below is activated or entered through keyboard events.
             await activate(page, page.get_by_role("button", name="Sources", exact=True))

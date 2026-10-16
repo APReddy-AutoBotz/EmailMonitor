@@ -10,6 +10,7 @@ from emailmonitor.jobs.diagnostics import Stage, emit
 from emailmonitor.jobs.models import StrictModel
 from emailmonitor.jobs.queues import phase_queue
 from emailmonitor.organizations.database import AuthorizationDenied
+from emailmonitor.progress.execution import ExecutionDispatcher, ExecutorFactory
 from emailmonitor.progress.service import Progress
 
 
@@ -38,6 +39,7 @@ def process(
     seconds: int = 30,
     after_observation: Callable[[], None] | None = None,
     diagnostic: Callable[[Stage], None] | None = None,
+    executor_factory: ExecutorFactory = ExecutionDispatcher,
 ) -> bool:
     event = ExecutionEvent.model_validate(body)
     if event.organization_id != str(organization):
@@ -67,7 +69,7 @@ def process(
     try:
         if work.lease.generation != event.generation:
             raise AuthorizationDenied()
-        progress.process_fixture(work, after_observation)
+        executor_factory(progress).process(work, after_observation=after_observation)
     except Exception:
         emit("process_error", diagnostic)
         raise

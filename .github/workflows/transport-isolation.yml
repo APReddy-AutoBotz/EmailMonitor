@@ -18,6 +18,18 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     services:
+      rabbitmq:
+        image: rabbitmq:4.3.6@sha256:42b190dffdd0cdb656f989f5404c30e1049d6b7d9c987089669b1905e5e3a1a6
+        env:
+          RABBITMQ_DEFAULT_USER: em_fixture
+          RABBITMQ_DEFAULT_PASS: emailmonitor-ci-broker-only
+        ports:
+          - 5672:5672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 18
       postgres:
         image: postgres:17.11-bookworm@sha256:3645570cccdfa447589da9f57dd740faa29b30938e861289a5574b6ca6b03826
         env:
@@ -30,6 +42,10 @@ jobs:
           --health-timeout 5s
           --health-retries 12
     env:
+      EM_REQUIRE_OPERATOR_UI: "true"
+      EM_REQUIRE_REAL_BROKER: "true"
+      EM_TEST_DISPOSABLE_BROKER: "true"
+      EM_TEST_BROKER_URL: pyamqp://em_fixture:emailmonitor-ci-broker-only@127.0.0.1:5672//
       EM_REQUIRE_CONTROLLED_NETWORK: "true"
       EM_TEST_ADMIN_DATABASE_URL: postgresql+pg8000://postgres:emailmonitor-ci-only@127.0.0.1:5432/postgres
       EM_TEST_AUTH_DATABASE_URL: postgresql+pg8000://em_ci_authenticator:emailmonitor-ci-auth-only@127.0.0.1:5432/postgres
@@ -39,6 +55,9 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.19.0
       - name: Install locked diagnostic dependencies and create disposable tenant roles
         run: |
           python3 -m venv "$RUNNER_TEMP/tooling"
@@ -47,6 +66,11 @@ jobs:
           "$RUNNER_TEMP/tooling/bin/uv" sync --project services/backend --locked
           EM_MIGRATION_DATABASE_URL="$EM_TEST_ADMIN_DATABASE_URL" "$RUNNER_TEMP/tooling/bin/uv" run --project services/backend alembic -c services/backend/alembic.ini upgrade head
           "$RUNNER_TEMP/tooling/bin/uv" run --project services/backend python scripts/create_ci_runtime.py
+      - name: Build actual locked operator UI
+        run: |
+          npm install --global pnpm@11.25.0
+          pnpm --dir apps/web install --frozen-lockfile --strict-peer-dependencies
+          pnpm --dir apps/web build
       - name: Build unchanged-profile isolated XML parser
         run: docker build --file scripts/isolation/Dockerfile.parser --tag emailmonitor-parser-diagnostic:local .
       - name: Trusted image preparation, approved initialization and protected transport acceptance
@@ -55,3 +79,10 @@ jobs:
           uv run --project services/backend pytest -c services/backend/pyproject.toml scripts/isolation/test_transport_acceptance.py scripts/isolation/test_provider_transport_acceptance.py scripts/isolation/test_provider_journey_acceptance.py -ra -s | tee "$RUNNER_TEMP/transport-acceptance.log"
           grep -Eq '(^|[=[:space:]])41 passed([ ,]|$)' "$RUNNER_TEMP/transport-acceptance.log"
           ! grep -Eq '[0-9]+ skipped|[0-9]+ warnings?' "$RUNNER_TEMP/transport-acceptance.log"
+      - name: Normal operator provider journey through registered RabbitMQ worker
+        run: |
+          set -euo pipefail
+          uv run --project services/backend pytest -c services/backend/pyproject.toml scripts/isolation/test_operator_provider_acceptance.py -v -s | tee "$RUNNER_TEMP/provider-operator.log"
+          grep -F 'NORMAL_OPERATOR_RABBITMQ_PROVIDER_ISOLATED_REVIEW_EXPORT' "$RUNNER_TEMP/provider-operator.log"
+          grep -Eq '(^|[=[:space:]])1 passed([ ,]|$)' "$RUNNER_TEMP/provider-operator.log"
+          ! grep -Eq '[0-9]+ skipped' "$RUNNER_TEMP/provider-operator.log"

@@ -21,6 +21,7 @@ from emailmonitor.jobs.models import StrictModel
 from emailmonitor.jobs.queues import owned_queues
 from emailmonitor.organizations.database import Database
 from emailmonitor.progress.broker import process as execute_process
+from emailmonitor.progress.execution import ExecutionDispatcher, ExecutorFactory
 from emailmonitor.progress.service import Progress
 from emailmonitor.results.broker import process as export_process
 from emailmonitor.results.service import Results
@@ -56,8 +57,12 @@ class FixtureWorkerConfig(StrictModel):
         return self
 
 
-def create_worker(config: FixtureWorkerConfig) -> tuple[Any, Ledger]:
+def create_worker(
+    config: FixtureWorkerConfig, *, executor_factory: ExecutorFactory = ExecutionDispatcher
+) -> tuple[Any, Ledger]:
     """No global tenant grant: every transaction resolves the current configured test session."""
+    if not callable(executor_factory):
+        raise TypeError("Trusted Python executor factory required")
     ledger = Ledger(
         Database(config.database_url),
         config.session_token,
@@ -142,6 +147,7 @@ def create_worker(config: FixtureWorkerConfig) -> tuple[Any, Ledger]:
             body,
             seconds=min(config.lease_seconds, 120),
             diagnostic=callback,
+            executor_factory=executor_factory,
             after_observation=after_observation
             if config.exit_after_observation or config.diagnostic_delay_seconds
             else None,
