@@ -285,3 +285,7 @@ AT-03/05/06/10/15/17/18/20/21/22/24 and tenant/isolation controls map to `test_e
 ## EM-WARN-01 compatibility regression
 
 AT-02's actual concurrent last-owner-removal test retains two independent pools, two authenticated request threads, barrier and one200/one409 result. Serial app assembly avoids the causally reproduced pinned-framework warning-context race. `test_app_construction_warning.py` supplies subprocess controls for three historical aliases and a setup-structure guard; these pure cases are not database concurrency evidence. See [validation](../reports/em-warn01-validation.md) for exact scope and required own-head gates.
+
+## Missing-popup failure evidence
+
+The actual browser acceptance retains its exact three-second popup-close/download-cancel predicate. `test_popup_failure_evidence.py` verifies fixed-category non-disclosure, verified synthetic-parent scoping, bounded read-only diagnostic collection and sticky failure when events arrive late. Pure mocked CDP is not actual browser or cause-fix evidence. [Validation](../reports/browser-popup-evidence-validation.md) preserves the original failure and unchanged successful repeat.

@@ -1,3 +1,9 @@
+## 2026-10-16 — Bounded popup failure evidence candidate
+
+- Preserve the original missing-popup CI failure and its unchanged successful repeat without claiming a cause fix.
+- Add failure-only, fixed-category synthetic child-target evidence under one bounded read-only CDP budget; keep the original three-second completion gate and sticky failure.
+- Add adversarial non-disclosure and late-event regressions without changing isolation, permissions or dependencies. See [validation](reports/browser-popup-evidence-validation.md).
+
 ## 2026-10-16 — EM-WARN-01 test assembly compatibility candidate
 
 - Reproduce the pinned FastAPI/Python warning-context interleaving through actual application construction in isolated no-database probes.

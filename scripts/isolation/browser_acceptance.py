@@ -10,14 +10,16 @@ import socket
 import sys
 from collections.abc import Awaitable
 from pathlib import Path
-from typing import BinaryIO, TextIO
+from typing import Any, BinaryIO, TextIO
 
 from emailmonitor.config import Settings
 from emailmonitor.extraction.html import parse_article
-from playwright.async_api import Error, Route, WebSocketRoute, async_playwright
+from playwright.async_api import CDPSession, Error, Route, WebSocketRoute, async_playwright
 
 URL = "https://synthetic.publisher.example/tooltip.html"
 NETWORK_DIAGNOSTIC_URL = "http://192.0.2.1:443/"
+POPUP_URL = "https://denied.fixture.example/popup"
+POPUP_EVIDENCE_LIMIT = 16
 
 
 def sandbox_status(text: str, evaluation: str) -> dict[str, bool]:
@@ -163,6 +165,99 @@ async def wait_artifact_completion(
     )
 
 
+def popup_target_summary(parent: object, targets: object) -> dict[str, object]:
+    """Emit no target metadata, only closed categories for this synthetic parent."""
+    if not isinstance(parent, dict) or not isinstance(targets, dict):
+        return {"status": "malformed"}
+    info, rows = parent.get("targetInfo"), targets.get("targetInfos")
+    if not isinstance(info, dict) or not isinstance(rows, list):
+        return {"status": "malformed"}
+    identifier = info.get("targetId")
+    if (
+        info.get("type") != "page"
+        or info.get("url") != URL
+        or type(identifier) is not str
+        or not 0 < len(identifier) <= 128
+    ):
+        return {"status": "parent_unverified"}
+    if len(rows) > POPUP_EVIDENCE_LIMIT:
+        return {"status": "over_cap"}
+    classes = {"synthetic_popup": 0, "blank": 0, "initial": 0, "error_document": 0, "other": 0}
+    for row in rows:
+        if not isinstance(row, dict):
+            return {"status": "malformed"}
+        kind, opener = row.get("type"), row.get("openerId")
+        if (
+            type(kind) is not str
+            or not 0 < len(kind) <= 64
+            or "openerId" in row
+            and (type(opener) is not str or not 0 < len(opener) <= 128)
+        ):
+            return {"status": "malformed"}
+        # Never disclose unrelated targets, titles, IDs, or their URL classes.
+        if kind != "page" or opener != identifier:
+            continue
+        value = row.get("url")
+        if type(value) is not str or len(value) > 4096:
+            return {"status": "malformed"}
+        category = (
+            "synthetic_popup"
+            if value == POPUP_URL
+            else "blank"
+            if value == "about:blank"
+            else "initial"
+            if value in {"", ":"}
+            else "error_document"
+            if value == "chrome-error://chromewebdata/"
+            else "other"
+        )
+        classes[category] += 1
+    return {"status": "observed", "children": sum(classes.values()), "classes": classes}
+
+
+async def popup_failure_message(cdp: CDPSession, **observations: Any) -> str:
+    """Failure-only, one-second read-only snapshot; late events cannot make it pass."""
+    counts = {
+        "popup_count",
+        "download_count",
+        "popup_route_seen",
+        "popup_abort_completed",
+        "context_page_events",
+        "context_pages",
+    }
+    flags = {"popup_closed", "download_cancelled"}
+    if (
+        set(observations) != counts | flags
+        or any(type(observations[key]) is not bool for key in flags)
+        or any(type(observations[key]) is not int or observations[key] < 0 for key in counts)
+    ):
+        safe: dict[str, object] = {"observations": "invalid"}
+    else:
+        safe = {key: min(observations[key], POPUP_EVIDENCE_LIMIT) for key in counts}
+        safe.update({key: observations[key] for key in flags})
+        safe["count_over_cap"] = any(observations[key] > POPUP_EVIDENCE_LIMIT for key in counts)
+
+    async def snapshot() -> dict[str, object]:
+        parent = await cdp.send("Target.getTargetInfo")
+        verified = popup_target_summary(parent, {"targetInfos": []})
+        if verified["status"] != "observed":
+            return verified
+        # Page-only query, no discovery subscription or browser/target mutation.
+        targets = await cdp.send(
+            "Target.getTargets", {"filter": [{"type": "page", "exclude": False}, {"exclude": True}]}
+        )
+        return popup_target_summary(parent, targets)
+
+    try:
+        evidence = await asyncio.wait_for(snapshot(), timeout=1)
+    except TimeoutError:
+        evidence = {"status": "timeout"}
+    except Exception:
+        evidence = {"status": "unavailable"}
+    safe["target_snapshot"] = evidence
+    return "Popup/download completion missing: " + json.dumps(safe, sort_keys=True)
+
+
 async def main() -> None:
     if os.environ.get("EM_ISOLATION_DIAGNOSTIC") != "synthetic-browser-only":
         raise RuntimeError("Explicit browser diagnostic required")
@@ -211,16 +306,24 @@ async def main() -> None:
     acquisition_digest: str | None = None
     popup_count = 0
     download_count = 0
+    popup_route_seen = 0
+    popup_abort_completed = 0
+    context_page_events = 0
     popup_closed = asyncio.Event()
     download_cancelled = asyncio.Event()
 
     async def route_request(route: Route) -> None:
-        nonlocal allowed, acquisition_digest
+        nonlocal allowed, acquisition_digest, popup_route_seen, popup_abort_completed
         incoming = route.request
+        is_popup = incoming.url == POPUP_URL and incoming.resource_type == "document"
+        if is_popup:
+            popup_route_seen += 1
         reply = await channel.request(incoming.url, incoming.method, incoming.resource_type)
         if reply.get("status") != "ok":
             denied.append(incoming.resource_type)
             await route.abort("blockedbyclient")
+            if is_popup:
+                popup_abort_completed += 1
             return
         encoded = reply.get("body")
         if not isinstance(encoded, str) or reply.get("type") != "text/html":
@@ -306,6 +409,12 @@ async def main() -> None:
             await item.cancel()
             download_cancelled.set()
 
+        def context_page(_: object) -> None:
+            nonlocal context_page_events
+            context_page_events += 1
+
+        # Registered after our initial page: counts only subsequently reported pages.
+        context.on("page", context_page)
         page.on("popup", popup)
         page.on("download", download)
         trace_stage("routes_registered")
@@ -336,15 +445,19 @@ async def main() -> None:
         try:
             await wait_artifact_completion(popup_closed, download_cancelled)
         except TimeoutError as error:
+            # Values are captured before the diagnostic await. Even if a late
+            # callback completes meanwhile, this original timeout stays failed.
             raise RuntimeError(
-                "Popup/download completion missing: "
-                + json.dumps(
-                    {
-                        "popup_closed": popup_closed.is_set(),
-                        "download_cancelled": download_cancelled.is_set(),
-                        "popup_count": popup_count,
-                        "download_count": download_count,
-                    }
+                await popup_failure_message(
+                    cdp,
+                    popup_closed=popup_closed.is_set(),
+                    download_cancelled=download_cancelled.is_set(),
+                    popup_count=popup_count,
+                    download_count=download_count,
+                    popup_route_seen=popup_route_seen,
+                    popup_abort_completed=popup_abort_completed,
+                    context_page_events=context_page_events,
+                    context_pages=len(context.pages),
                 )
             ) from error
         if await page.locator("#marker").inner_text() != "synthetic marker revealed":
