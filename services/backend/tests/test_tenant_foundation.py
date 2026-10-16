@@ -533,6 +533,7 @@ def test_registered_membership_addition_is_tenant_scoped(scenario: Scenario) -> 
 
 def test_concurrent_last_owner_removal_is_serialized(scenario: Scenario) -> None:
     from concurrent.futures import ThreadPoolExecutor
+    from contextlib import ExitStack
     from threading import Barrier
 
     barrier = Barrier(2)
@@ -549,26 +550,38 @@ def test_concurrent_last_owner_removal_is_serialized(scenario: Scenario) -> None
             == 200
         )
 
-    def remove(role: str, revision: int) -> int:
-        db = Database(scenario.foundation.database.engine.url.render_as_string(hide_password=False))
-        isolated = Foundation(db, scenario.foundation.provider, scenario.foundation.authentication)
-        try:
-            with APIClient(
-                create_app(Settings(environment="test", identity_stub=True), isolated), ORIGIN
-            ) as client:
-                csrf = scenario.login(client, role)
-                barrier.wait(timeout=10)
-                return client.patch(
-                    f"/api/v1/organizations/{org}/members/{scenario.identities[role]}",
-                    headers={"Origin": ORIGIN, "X-CSRF-Token": csrf},
-                    json={"role": "admin", "status": "active", "expected_revision": revision},
-                ).status_code
-        finally:
-            db.engine.dispose()
+    # FastAPI's pinned field-adapter assembly uses process-global warning
+    # contexts on Python 3.12. Prepare independent applications serially;
+    # authentication and the barrier-synchronized SQL race remain concurrent.
+    with ExitStack() as resources:
+        clients: dict[str, APIClient] = {}
+        for role in ("owner", "admin"):
+            db = Database(
+                scenario.foundation.database.engine.url.render_as_string(hide_password=False)
+            )
+            resources.callback(db.engine.dispose)
+            isolated = Foundation(
+                db, scenario.foundation.provider, scenario.foundation.authentication
+            )
+            clients[role] = resources.enter_context(
+                APIClient(
+                    create_app(Settings(environment="test", identity_stub=True), isolated), ORIGIN
+                )
+            )
 
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        results = list(pool.map(lambda item: remove(*item), [("owner", 1), ("admin", 2)]))
-    assert sorted(results) == [200, 409]
+        def remove(role: str, revision: int) -> int:
+            client = clients[role]
+            csrf = scenario.login(client, role)
+            barrier.wait(timeout=10)
+            return client.patch(
+                f"/api/v1/organizations/{org}/members/{scenario.identities[role]}",
+                headers={"Origin": ORIGIN, "X-CSRF-Token": csrf},
+                json={"role": "admin", "status": "active", "expected_revision": revision},
+            ).status_code
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(lambda item: remove(*item), [("owner", 1), ("admin", 2)]))
+        assert sorted(results) == [200, 409]
 
 
 def test_database_runtime_is_direct_login_and_revision_body_is_strict(scenario: Scenario) -> None:
