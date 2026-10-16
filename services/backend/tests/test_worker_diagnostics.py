@@ -2,9 +2,10 @@
 
 import json
 import multiprocessing
+from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, cast
+from typing import Any, TypedDict, cast
 from uuid import UUID, uuid4
 
 import pytest
@@ -18,6 +19,7 @@ from emailmonitor.jobs.diagnostics import (
     PREFIX,
     STAGES,
     TASK,
+    Stage,
     WorkerDiagnostics,
 )
 from emailmonitor.jobs.queues import owned_queues
@@ -34,6 +36,10 @@ from operator_ui_protocol import (
 
 ROOT = Path(__file__).resolve().parents[3]
 NAMESPACE = "em-fixture-diagnostics"
+
+
+class DiagnosticArguments(TypedDict, total=False):
+    diagnostic: Callable[[Stage], None]
 
 
 class PrivateFailure(Exception):
@@ -81,7 +87,7 @@ def test_process_stage_observations_preserve_returns_and_exact_errors(
             raise original
 
     progress = cast(Progress, SimpleNamespace(claim=claim, process_fixture=fixture))
-    arguments = {"diagnostic": stages.append} if enabled else {}
+    arguments: DiagnosticArguments = {"diagnostic": stages.append} if enabled else {}
     if outcome.endswith("error"):
         with pytest.raises(RuntimeError) as caught:
             process(
