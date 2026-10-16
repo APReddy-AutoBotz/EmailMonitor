@@ -36,3 +36,8 @@ jobs:
         env:
           EM_REQUIRE_METADATA_PACKAGING: synthetic-test-only
         run: uv run --project services/backend python scripts/packaging/run_acceptance.py
+      - name: Two uncached XML worker builds and network-none protocol checks
+        env:
+          EM_REQUIRE_METADATA_PACKAGING: synthetic-test-only
+          PYTHONPATH: services/backend/src
+        run: uv run --project services/backend python scripts/packaging/run_xml_acceptance.py

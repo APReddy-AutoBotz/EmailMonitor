@@ -1,3 +1,8 @@
+## 2026-10-16 — EM-017c isolated XML worker packaging candidate
+
+- Prepare an independently reproducible, explicitly synthetic-only artifact for the existing XML worker, with an allowlisted source closure and no embedded fixture assets.
+- Preserve the existing command/protocol/isolation and metadata image; require actual two-build, network-none and stdin/refusal evidence. See [validation](reports/em017c-validation.md).
+
 ## 2026-10-16 — Bounded popup failure evidence candidate
 
 - Preserve the original missing-popup CI failure and its unchanged successful repeat without claiming a cause fix.
