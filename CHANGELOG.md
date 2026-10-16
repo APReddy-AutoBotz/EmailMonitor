@@ -1,3 +1,9 @@
+## 2026-10-16 — EM-WARN-01 test assembly compatibility candidate
+
+- Reproduce the pinned FastAPI/Python warning-context interleaving through actual application construction in isolated no-database probes.
+- Prepare independent apps serially in the owner-removal SQL race test; retain concurrent authenticated requests, barrier, cleanup and one-success/one-conflict acceptance.
+- Add three-alias serial/interleaved controls without changing runtime behavior, dependencies or warning suppression. See [evidence](reports/em-warn01-validation.md).
+
 ## 2026-10-15 — Opt-in bounded worker failure evidence
 
 - Retain closed phase/class/reason categories from the scoped Celery failure signal in later cumulative UI diagnostic snapshots, with exact known FetchDenied reasons and conservative unknown/wrapper handling.
