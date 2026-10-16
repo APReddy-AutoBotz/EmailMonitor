@@ -289,3 +289,7 @@ AT-02's actual concurrent last-owner-removal test retains two independent pools,
 ## Missing-popup failure evidence
 
 The actual browser acceptance retains its exact three-second popup-close/download-cancel predicate. `test_popup_failure_evidence.py` verifies fixed-category non-disclosure, verified synthetic-parent scoping, bounded read-only diagnostic collection and sticky failure when events arrive late. Pure mocked CDP is not actual browser or cause-fix evidence. [Validation](../reports/browser-popup-evidence-validation.md) preserves the original failure and unchanged successful repeat.
+
+## EM-017c isolated XML worker artifact
+
+EM-017/document13 worker-packaging requirements map to the explicit XML source manifest, additive packaging workflow and pure `test_xml_packaging.py` cases. Own-head actual acceptance must verify two uncached builds with equal defined content, absent fixture assets, exact source/dependency inventory, unchanged worker protocol and synthetic-only guard, actual network-none kernel restrictions and owned cleanup. Existing metadata/parser/controlled/operator gates remain mandatory. [Runbook53](53-isolated-xml-worker-package.md) and [validation](../reports/em017c-validation.md) distinguish artifact preparation from production/live activation.

@@ -27,3 +27,5 @@ Pure tests cover deterministic metadata, tamper/path/link refusal, migration cha
 ## Remaining EM-017/018 work
 
 This prerequisite is not a working extraction service or production release. Real IdP/tenant runtime assembly, HTTP/browser/parser/export worker packaging, regional private storage and secrets, supported environment configuration, signed provenance/SBOM/system attribution/vulnerability review, owner-selected distribution license, staging migrations/upgrades/smokes, production backup infrastructure and measured RPO/RTO remain unmet. Migration credentials stay separate; no migration runs at API startup and destructive downgrade is unsupported. EM-015/016 publisher permission/sample gates and EM-WARN-01/intermittent UI cause uncertainty remain unchanged.
+
+The subsequent [EM-017c XML worker package](53-isolated-xml-worker-package.md) is a bounded synthetic-only worker artifact candidate. It adds no embedded repository fixture assets and leaves the metadata image and production refusals unchanged. It does not close the remaining full-service runtime, identity, storage, deployment or source-certification gates above.
