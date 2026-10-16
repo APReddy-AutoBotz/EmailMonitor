@@ -176,3 +176,29 @@ def test_provider_start_uses_unique_workspace_button_with_dashboard_shortcut() -
         compile(ast.Expression(action.args[1]), "<owned-selector>", "eval"), {"page": page}
     )
     assert isinstance(target, Locator) and target.nodes == ("navigation",)
+
+
+def test_provider_format_selector_includes_wrapped_option_label_text() -> None:
+    import ast
+    import re
+
+    source = (ROOT / "scripts/isolation/operator_ui_acceptance.py").read_text()
+    calls = [
+        node
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "get_by_label"
+        and "Format" in ast.unparse(node)
+    ]
+    assert len(calls) == 1 and not calls[0].keywords
+    pattern = eval(compile(ast.Expression(calls[0].args[0]), "<owned-label>", "eval"), {"re": re})
+    # Playwright's label selector includes descendant option text for a wrapped
+    # select. Check the actual authored label, not an invented exact short name.
+    view = (ROOT / "apps/web/src/views.tsx").read_text()
+    label = re.search(r"<label>Format<select.*?</label>", view)
+    assert label is not None
+    text = "Format" + "".join(re.findall(r"<option[^>]*>([^<]*)</option>", label.group()))
+    assert text == "FormatXLSX · literal stringsCSV · conservative formula refusal"
+    assert text != "Format" and pattern.search(text)
+    assert not pattern.search("Author filter") and not pattern.search("Requested expiry in seconds")

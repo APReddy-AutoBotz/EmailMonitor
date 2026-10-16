@@ -411,7 +411,7 @@ async def main() -> None:
                 checkpoint("export_preview")
                 await activate(page, page.get_by_role("button", name="Exports", exact=True))
                 for index in (0, 1):
-                    await select_index(page, page.get_by_label("Format", exact=True), index)
+                    await select_index(page, page.get_by_label(re.compile(r"^Format")), index)
                     await activate(
                         page,
                         page.get_by_role(
