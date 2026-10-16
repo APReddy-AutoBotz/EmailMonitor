@@ -729,3 +729,32 @@ def test_create_registers_owned_name_before_ambiguous_result(
             True,
         )
     assert owned.containers == ["em-xml-" + "a" * 32 + "-1-valid"]
+
+
+def test_standalone_workflow_entrypoint_imports_then_refuses_non_ci_context() -> None:
+    import os
+    import re
+
+    workflow = (ROOT / ".github/workflows/metadata-packaging.yml").read_text()
+    step = workflow.split(
+        "- name: Two uncached XML worker builds and network-none protocol checks\n"
+    )[1]
+    match = re.search(r"^\s+PYTHONPATH: ([^\n]+)$", step, re.MULTILINE)
+    assert match is not None and match.group(1) == "services/backend/src"
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if key not in {"GITHUB_ACTIONS", "EM_REQUIRE_METADATA_PACKAGING", "PYTHONPATH", "PATH"}
+    }
+    env.update(PYTHONPATH=match.group(1), PATH="")
+    result = subprocess.run(
+        [sys.executable, "scripts/packaging/run_xml_acceptance.py"],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        timeout=10,
+        check=False,
+    )
+    assert result.returncode == 1
+    assert result.stdout == b""
+    assert result.stderr == b"XML_PACKAGING_ACCEPTANCE_REFUSED\n"
