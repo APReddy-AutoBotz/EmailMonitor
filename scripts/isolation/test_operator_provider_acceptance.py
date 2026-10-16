@@ -35,6 +35,7 @@ from test_tenant_foundation import scenario as scenario
 from test_transport_acceptance import configure, snapshot
 from test_transport_acceptance import topology as topology
 from transport_topology import Topology
+from xml_image_evidence import require_packaged_image
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -52,6 +53,7 @@ def test_actual_provider_operator_ui(
 
     def verified(metadata: Mapping[str, object]) -> None:
         verify(metadata)
+        require_packaged_image(metadata)
         profiles.append(metadata)
 
     monkeypatch.setattr(xml_channel, "verify_profile", verified)
@@ -277,6 +279,7 @@ def test_actual_provider_operator_ui(
                 "proof": "NORMAL_OPERATOR_RABBITMQ_PROVIDER_ISOLATED_REVIEW_EXPORT",
                 "articles": 2,
                 "source_tickets": 3,
+                "parser_image_ids": sorted({str(p["Image"]) for p in profiles}),
                 "actual_parser_profiles": len(profiles),
                 "formats": ["csv", "xlsx"],
                 "artifact_digests": digests,

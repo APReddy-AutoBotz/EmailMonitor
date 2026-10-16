@@ -279,3 +279,9 @@ No application, live source connector, actual email collection, deployment, send
 ## EM-015g controlled normal-worker/operator candidate
 
 Add a trusted Python-only executor factory to the normal claimed Celery path, retaining default provider refusal and identifier-only task bodies. Add separate normal operator keyboard→outbox→RabbitMQ→protected HTTPS→isolated XML→review→CSV/XLSX acceptance with explicit synthetic source-policy API preconditions and revocable sole-thread pipe ownership. Existing static UI8s, live-source refusal and isolation/resource controls remain unchanged. Candidate local/actual gate status: [validation](reports/em015g-validation.md).
+
+## EM-017d — controlled curated XML consumption (candidate)
+
+- Prepare and verify the existing synthetic XML package for fixed application and transport/operator CI gates, retaining unchanged runtime/profile/protocol and separate PDF/parser diagnostics.
+- Bind actual parser-container evidence to the prepared immutable image and owner; retain strict alias collision/cleanup handling and all existing acceptance predicates.
+- No live-source activation, production assembly, migration, registry publication, deployment or merge. See [runbook54](docs/54-curated-xml-integration.md) and [validation](reports/em017d-validation.md).
