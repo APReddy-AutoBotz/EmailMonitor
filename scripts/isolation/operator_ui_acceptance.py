@@ -363,7 +363,12 @@ async def main() -> None:
             await page.get_by_role("heading", name="Synthetic tenant 0", exact=True).wait_for()
             if setup.get("journey") == "controlled_provider":
                 checkpoint("keyword_plan")
-                await activate(page, page.get_by_role("button", name="New extraction", exact=True))
+                await activate(
+                    page,
+                    page.get_by_role("navigation", name="Workspace", exact=True).get_by_role(
+                        "button", name="New extraction", exact=True
+                    ),
+                )
                 await type_text(
                     page, page.get_by_label("Keyword", exact=True), "Controlled provider journey"
                 )

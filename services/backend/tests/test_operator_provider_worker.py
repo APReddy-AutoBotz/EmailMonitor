@@ -134,3 +134,45 @@ def test_worker_and_ui_keep_separate_bounded_controls_and_isolation() -> None:
     assert '"/policies"' in actual and '"/policy-state"' in actual
     assert '"fetch_xml"' in actual
     assert "journey.process(" not in actual and "claim(progress" not in actual
+
+
+def test_provider_start_uses_unique_workspace_button_with_dashboard_shortcut() -> None:
+    import ast
+
+    source = (ROOT / "scripts/isolation/operator_ui_acceptance.py").read_text()
+    module = ast.parse(source)
+    branch = next(
+        node
+        for node in ast.walk(module)
+        if isinstance(node, ast.If)
+        and ast.unparse(node.test) == "setup.get('journey') == 'controlled_provider'"
+    )
+    statement = branch.body[1]
+    assert isinstance(statement, ast.Expr) and isinstance(statement.value, ast.Await)
+    action = statement.value.value
+    assert isinstance(action, ast.Call) and isinstance(action.func, ast.Name)
+    assert action.func.id == "activate"
+    # Two actual authored UI controls share this exact accessible name: the
+    # Workspace navigation and Dashboard shortcut. Exercise the source selector
+    # against that bounded structure, rather than accepting an unscoped .first().
+    assert '<nav aria-label="Workspace">' in (ROOT / "apps/web/src/App.tsx").read_text()
+    dashboard = (ROOT / "apps/web/src/views.tsx").read_text().split("const defaultOptions")[0]
+    assert ">New extraction</button>" in dashboard
+
+    class Locator:
+        def __init__(self, nodes: tuple[str, ...]) -> None:
+            self.nodes = nodes
+
+        def get_by_role(self, role: str, *, name: str, exact: bool) -> "Locator":
+            assert exact is True
+            if role == "navigation" and name == "Workspace":
+                return Locator(tuple(n for n in self.nodes if n == "navigation"))
+            assert role == "button" and name == "New extraction"
+            return self
+
+    page = Locator(("navigation", "dashboard"))
+    assert len(page.get_by_role("button", name="New extraction", exact=True).nodes) == 2
+    target = eval(
+        compile(ast.Expression(action.args[1]), "<owned-selector>", "eval"), {"page": page}
+    )
+    assert isinstance(target, Locator) and target.nodes == ("navigation",)
