@@ -243,10 +243,15 @@ def test_transport_workflow_requires_exact_expanded_case_count(
 ) -> None:
     root = Path(__file__).resolve().parents[3]
     workflow = (root / ".github/workflows/transport-isolation.yml").read_text()
+    assert "run_xml_integration.py transport" in workflow
+    wrapper = (root / "scripts/packaging/run_xml_integration.py").read_text()
+    assert '"transport": ("bash", "scripts/packaging/check_xml_transport.sh")' in wrapper
+    assert '(MODES[mode] + ("transport",), MODES[mode] + ("operator",))' in wrapper
+    gate = (root / "scripts/packaging/check_xml_transport.sh").read_text()
     pattern = "(^|[=[:space:]])41 passed([ ,]|$)"
-    assert f"grep -Eq '{pattern}'" in workflow
+    assert f"grep -Eq '{pattern}'" in gate
     result = subprocess.run(
         ["grep", "-Eq", pattern], input=summary, text=True, check=False, timeout=1
     )
     assert (result.returncode == 0) is accepted
-    assert "[0-9]+ skipped|[0-9]+ warnings?" in workflow
+    assert "[0-9]+ skipped|[0-9]+ warnings?" in gate

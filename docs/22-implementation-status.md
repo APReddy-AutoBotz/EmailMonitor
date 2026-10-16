@@ -321,3 +321,11 @@ Final local normal and genuinely new-empty Python aggregates return exit 0: 2064
 PR32 first head 833dbc1a / tree 7d997caa passed the original metadata image checks but its added XML step failed before Docker: the standalone runner lacked the source-layout import path. A narrow new-step PYTHONPATH correction and subprocess startup regression leave runtime/protocol/isolation unchanged. Required own-head application count becomes 2325/no skips; all local/review/actual gates remain required and the original failure is preserved in the report.
 
 Corrected local normal/new-empty checks return exit 0 with 2065/260 explicit skips in 77.14s/78.64s, 31 React and all aggregate gates. Independent review clears the narrow startup correction and passes 91 focused cases. Actual corrected-head packaging and all seven workflows remain required.
+
+## EM-017d curated XML consumption candidate (2026-10-16)
+
+PR32 corrected head ba2bc151 / tree f2e87c0a completed all seven first-attempt gates: 2325 actual backend tests/no skips, 31 React, controlled 41/provider 1, original static UI/browser/parser/docs, and both metadata/XML reproducibility acceptance. Independent final source, log and published-body review passed. The original startup failure remains preserved.
+
+The next bounded slice substitutes the verified curated XML artifact only in existing controlled application/operator acceptance. Host-only image/owner expectations bind actual parser metadata to the prepared artifact, while runtime protocol/isolation/source policy remain unchanged. At the initial proposal checkpoint, local/review/actual gates were pending; the following paragraph records completed local validation. [Runbook54](54-curated-xml-integration.md) / [validation](../reports/em017d-validation.md). Production assembly and real-source gates remain unmet.
+
+EM-017d clean normal/new-empty aggregates pass with verified exit 0: 2124/260 explicit service skips in 76.49s/75.56s, 31 React and all aggregate gates. Independent review passes 122 focused cases. Initial nine workflow-location contract failures and the incomplete interrupted aggregate remain preserved. Exact-tree actual 2384/no-skip application and all seven CI gates remain pending.

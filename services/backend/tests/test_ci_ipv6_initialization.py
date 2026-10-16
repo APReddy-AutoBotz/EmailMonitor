@@ -103,6 +103,11 @@ def test_value_reader_has_fixed_paths_and_rejects_malformed_evidence(
 def test_workflow_initializes_before_strict_acceptance_only() -> None:
     workflow = Path(".github/workflows/transport-isolation.yml").read_text()
     assert "Trusted image preparation, approved initialization" in workflow
+    assert "run_xml_integration.py transport" in workflow
+    wrapper = (Path(".") / "scripts/packaging/run_xml_integration.py").read_text()
+    assert '"transport": ("bash", "scripts/packaging/check_xml_transport.sh")' in wrapper
+    assert '(MODES[mode] + ("transport",), MODES[mode] + ("operator",))' in wrapper
+    gate = (Path(".") / "scripts/packaging/check_xml_transport.sh").read_text()
     topology = Path("scripts/isolation/transport_topology.py").read_text()
     start = topology.split("    def start(self) -> None:", 1)[1].split("    def browser", 1)[0]
     assert (
@@ -112,8 +117,8 @@ def test_workflow_initializes_before_strict_acceptance_only() -> None:
         < start.index("self.network_created = True")
     )
     assert start.count("initialize()") == 1
-    assert "(^|[=[:space:]])41 passed([ ,]|$)" in workflow
-    assert "[0-9]+ skipped|[0-9]+ warnings?" in workflow
+    assert "(^|[=[:space:]])41 passed([ ,]|$)" in gate
+    assert "[0-9]+ skipped|[0-9]+ warnings?" in gate
 
 
 def test_state_evidence_uses_only_bounded_read_only_ip_commands(

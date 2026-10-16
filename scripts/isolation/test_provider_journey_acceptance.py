@@ -40,6 +40,7 @@ from test_transport_acceptance import topology as topology
 from test_xml_pipeline_tenant import mutate_authority
 from transport_provider import ProviderProxy
 from transport_topology import Topology
+from xml_image_evidence import require_packaged_image
 
 
 class ControlledDispatch:
@@ -72,6 +73,7 @@ def test_actual_keyword_to_same_database_review_and_exports(
 
     def verified(metadata: Mapping[str, object]) -> None:
         original_verify(metadata)
+        require_packaged_image(metadata)
         profiles.append(metadata)
 
     monkeypatch.setattr(xml_channel, "verify_profile", verified)
@@ -242,6 +244,7 @@ def test_actual_keyword_to_same_database_review_and_exports(
                 "view": "FULL",
                 "articles": 2,
                 "duplicate_entries": 1,
+                "parser_image_ids": sorted({str(p["Image"]) for p in profiles}),
                 "actual_parser_profiles": 2,
                 "recovery_refetched": False,
                 "effects": 2,

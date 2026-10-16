@@ -42,6 +42,7 @@ from test_results_tenant import ready
 from test_source_foundation import policy_body, source_path
 from test_tenant_foundation import ORIGIN, Scenario
 from test_tenant_foundation import scenario as scenario
+from xml_image_evidence import require_packaged_image
 
 
 def planned_xml(s: Scenario, *, excerpts: bool = True, html: bool = False) -> tuple[Progress, UUID]:
@@ -104,6 +105,7 @@ def test_actual_container_output_persists_review_and_both_exports(
 
     def verified(metadata: Mapping[str, object]) -> None:
         original_verify(metadata)
+        require_packaged_image(metadata)
         profiles.append(metadata)
 
     monkeypatch.setattr(xml_channel, "verify_profile", verified)

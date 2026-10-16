@@ -128,7 +128,12 @@ def test_worker_and_ui_keep_separate_bounded_controls_and_isolation() -> None:
     assert 'pool="solo"' in helper and "app.WorkController(" in helper
     assert "wait_for(complete, seconds=8)" in static
     assert "RPC_DEADLINE = 10.0" in guest and "timeout=75000" in guest
-    assert "test_operator_provider_acceptance.py" in workflow
+    assert "run_xml_integration.py transport" in workflow
+    wrapper = (ROOT / "scripts/packaging/run_xml_integration.py").read_text()
+    assert '"transport": ("bash", "scripts/packaging/check_xml_transport.sh")' in wrapper
+    assert '(MODES[mode] + ("transport",), MODES[mode] + ("operator",))' in wrapper
+    gate = (ROOT / "scripts/packaging/check_xml_transport.sh").read_text()
+    assert "test_operator_provider_acceptance.py" in gate
     assert "EM_REQUIRE_REAL_BROKER" in workflow and "EM_REQUIRE_CONTROLLED_NETWORK" in workflow
     assert "consumer_count > 0" in actual and "for q in owned_queues(cfg.queue)" in actual
     assert '"/policies"' in actual and '"/policy-state"' in actual

@@ -293,3 +293,7 @@ The actual browser acceptance retains its exact three-second popup-close/downloa
 ## EM-017c isolated XML worker artifact
 
 EM-017/document13 worker-packaging requirements map to the explicit XML source manifest, additive packaging workflow and pure `test_xml_packaging.py` cases. Own-head actual acceptance must verify two uncached builds with equal defined content, absent fixture assets, exact source/dependency inventory, unchanged worker protocol and synthetic-only guard, actual network-none kernel restrictions and owned cleanup. Existing metadata/parser/controlled/operator gates remain mandatory. [Runbook53](53-isolated-xml-worker-package.md) and [validation](../reports/em017c-validation.md) distinguish artifact preparation from production/live activation.
+
+## EM-017d controlled curated XML consumption
+
+[Runbook54](54-curated-xml-integration.md) binds the prepared XML artifact to actual application/provider/operator parser metadata, retaining prior tenant/source/protocol controls. New identity and orchestration tests require normal/new-empty aggregates, independent source review and all seven own-head workflows; actual image consumption cannot be inferred from local mocks/skips. [Validation](../reports/em017d-validation.md).
