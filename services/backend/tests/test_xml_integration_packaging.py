@@ -431,8 +431,13 @@ def test_success_requires_consumer_and_cleanup_before_success_receipt(
 
 
 @pytest.fixture
-def preparation(monkeypatch: pytest.MonkeyPatch) -> tuple[Any, Any, list[list[str]]]:
+def preparation(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> tuple[Any, Any, list[list[str]]]:
     import run_xml_acceptance as real
+    from test_base_inventory import valid_base_inventory
+
+    system_inventory = valid_base_inventory(tmp_path / "base")
 
     calls: list[list[str]] = []
 
@@ -503,6 +508,7 @@ def preparation(monkeypatch: pytest.MonkeyPatch) -> tuple[Any, Any, list[list[st
                     runtime.collect(ROOT, "a" * 40, {"pydantic": "2.14.0"})["manifest.json"]
                 ),
                 "image_content_sha256": "c" * 64,
+                "base_inventory": system_inventory,
             }
             if self.mutation == "manifest":
                 result["manifest_sha256"] = "0" * 64
@@ -514,6 +520,10 @@ def preparation(monkeypatch: pytest.MonkeyPatch) -> tuple[Any, Any, list[list[st
                 result["unexpected"] = True
             elif self.mutation == "content":
                 result["image_content_sha256"] = "not-a-digest"
+            elif self.mutation == "inventory_missing":
+                del result["base_inventory"]
+            elif self.mutation == "inventory_invalid":
+                result["base_inventory"] = {"inventory_sha256": "a" * 64}
             return result
 
     return runtime, PreparedOwned(), calls
@@ -531,11 +541,27 @@ def test_preparation_verifies_exact_curated_image_before_return(
     assert "--locked" in calls[5] and "--no-dev" in calls[5]
 
 
-@pytest.mark.parametrize("mutation", ["manifest", "runtime", "network", "extra", "content"])
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "manifest",
+        "runtime",
+        "network",
+        "extra",
+        "content",
+        "inventory_missing",
+        "inventory_invalid",
+    ],
+)
 def test_invalid_probe_never_returns_an_integration_image(
     preparation: tuple[Any, Any, list[list[str]]], mutation: str
 ) -> None:
     runtime, owned, _ = preparation
     owned.mutation = mutation
-    with pytest.raises(integration.IntegrationRefused, match="^xml_integration_probe_refused$"):
+    expected_error = (
+        "base_inventory_refused"
+        if mutation.startswith("inventory_")
+        else "xml_integration_probe_refused"
+    )
+    with pytest.raises(RuntimeError, match="^" + expected_error + "$"):
         integration.prepare_image(runtime, owned)

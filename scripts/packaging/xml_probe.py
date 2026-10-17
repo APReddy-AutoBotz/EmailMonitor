@@ -9,6 +9,10 @@ import re
 import socket
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from base_inventory import collect_base_inventory
 
 ROOT = Path("/opt/emailmonitor")
 # Independent expected layout. Acceptance tests require parity with the collector.
@@ -239,6 +243,7 @@ def main() -> None:
                     (ROOT / "manifest.json").read_bytes()
                 ).hexdigest(),
                 "image_content_sha256": content_digest(),
+                "base_inventory": collect_base_inventory(),
             },
             sort_keys=True,
         ),

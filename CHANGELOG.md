@@ -285,3 +285,8 @@ Add a trusted Python-only executor factory to the normal claimed Celery path, re
 - Prepare and verify the existing synthetic XML package for fixed application and transport/operator CI gates, retaining unchanged runtime/profile/protocol and separate PDF/parser diagnostics.
 - Bind actual parser-container evidence to the prepared immutable image and owner; retain strict alias collision/cleanup handling and all existing acceptance predicates.
 - No live-source activation, production assembly, migration, registry publication, deployment or merge. See [runbook54](docs/54-curated-xml-integration.md) and [validation](reports/em017d-validation.md).
+
+## EM-017e — observed packaged-base inventory (candidate)
+
+- Add bounded read-only Debian/upstream-Python inventory and attribution hashes to existing metadata/XML probes, with strict host validation and canonical equality across builds.
+- Preserve image/runtime/dependency/isolation and existing actual operator/packaging gates. No complete SBOM, vulnerability/license clearance, new scanner, deployment or source activation. [Runbook55](docs/55-packaged-base-inventory.md) / [validation](reports/em017e-validation.md).

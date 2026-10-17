@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from base_inventory import validate_base_inventory
+from inventory_probe import inventory_probe
 from packaging.markers import default_environment
 from packaging.requirements import InvalidRequirement, Requirement
 from packaging.utils import canonicalize_name
@@ -328,7 +330,7 @@ def main() -> None:
         ]
     ).stdout
     runtime = runtime_versions(exported)
-    probe = (ROOT / "scripts/packaging/probe.py").read_text()
+    probe = inventory_probe(ROOT, "metadata")
     dockerfile = (ROOT / "scripts/packaging/Metadata.Dockerfile").read_bytes()
     if dockerfile.count(BASE.encode()) != 2:
         raise PackagingRefused("package_base_refused")
@@ -350,6 +352,7 @@ def main() -> None:
                 (context / ".dockerignore").write_text("migrations\nstatic-web\ncontracts\n")
                 image, identifier = owned.build(context, ordinal)
                 smoke = owned.smoke(image, probe, ordinal)
+                system = validate_base_inventory(smoke.get("base_inventory"))
                 expected = {
                     "scope": "metadata-only-offline-prerequisite",
                     "working_extraction_service": False,
@@ -365,7 +368,7 @@ def main() -> None:
                 }
                 if (
                     {key: smoke.get(key) for key in expected} != expected
-                    or set(smoke) != set(expected) | {"image_content_sha256"}
+                    or set(smoke) != set(expected) | {"image_content_sha256", "base_inventory"}
                     or not re.fullmatch(r"[a-f0-9]{64}", smoke["image_content_sha256"])
                 ):
                     raise PackagingRefused("package_smoke_output_refused")
@@ -375,11 +378,17 @@ def main() -> None:
                         "manifest_sha256": digest(files["manifest.json"]),
                         "image_id": identifier,
                         "image_content_sha256": smoke["image_content_sha256"],
+                        "base_inventory": system,
                     }
                 )
             if any(
                 receipts[0][key] != receipts[1][key]
-                for key in ("archive_sha256", "manifest_sha256", "image_content_sha256")
+                for key in (
+                    "archive_sha256",
+                    "manifest_sha256",
+                    "image_content_sha256",
+                    "base_inventory",
+                )
             ):
                 raise PackagingRefused("package_reproducibility_refused")
     finally:
@@ -390,6 +399,9 @@ def main() -> None:
             {
                 "scope": "metadata-only-offline-prerequisite",
                 "source_tree": tree_sha,
+                "declared_base_image": BASE,
+                "declared_platform": PLATFORM,
+                "base_inventory_equal": True,
                 "two_uncached_builds": True,
                 "artifacts_equal": True,
                 "image_contents_equal": True,

@@ -329,3 +329,9 @@ PR32 corrected head ba2bc151 / tree f2e87c0a completed all seven first-attempt g
 The next bounded slice substitutes the verified curated XML artifact only in existing controlled application/operator acceptance. Host-only image/owner expectations bind actual parser metadata to the prepared artifact, while runtime protocol/isolation/source policy remain unchanged. At the initial proposal checkpoint, local/review/actual gates were pending; the following paragraph records completed local validation. [Runbook54](54-curated-xml-integration.md) / [validation](../reports/em017d-validation.md). Production assembly and real-source gates remain unmet.
 
 EM-017d clean normal/new-empty aggregates pass with verified exit 0: 2124/260 explicit service skips in 76.49s/75.56s, 31 React and all aggregate gates. Independent review passes 122 focused cases. Initial nine workflow-location contract failures and the incomplete interrupted aggregate remain preserved. Exact-tree actual 2384/no-skip application and all seven CI gates remain pending.
+
+## EM-017e packaged-base inventory candidate (2026-10-17)
+
+PR33 head f7dd9092 / tree eef3775a completed all seven first-attempt gates: 2384 actual backend tests/no skips, 31 React, controlled 41/provider 1 and original static UI/browser/parser/docs/packaging. Prepared and actually consumed XML identities matched; artifact hashes reconciled across consumer and independent builds, with owned cleanup. Independent final source/log/body review passed.
+
+The next bounded deployment prerequisite records observed Debian/upstream-Python metadata and attribution-file hashes for the existing metadata/XML artifacts, using their current network-none probes. No complete SBOM, legal/security clearance or release claim is made. Local aggregates and independent source review passed; final exact-tree review and actual CI gates remain pending. [Runbook55](55-packaged-base-inventory.md) / [validation](../reports/em017e-validation.md).
