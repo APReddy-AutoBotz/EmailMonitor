@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from base_inventory import validate_base_inventory
 from emailmonitor.extraction.sciencedirect import parse_article
 from emailmonitor.fetching.safety import IsolationUnavailable
 from emailmonitor.parsing.xml_channel import (
@@ -24,6 +25,7 @@ from emailmonitor.parsing.xml_channel import (
     verify_profile,
 )
 from emailmonitor.parsing.xml_protocol import encode_header, encode_input
+from inventory_probe import inventory_probe
 from xml_artifacts import SCOPE, XML_FILES, archive, collect, digest, materialize, verify_archive
 
 from artifacts import BASE, PLATFORM, PackagingRefused, read
@@ -429,7 +431,7 @@ def main() -> None:
         ]
     ).decode("utf-8")
     runtime = runtime_versions(exported)
-    probe_text = read(ROOT, "scripts/packaging/xml_probe.py").decode("utf-8")
+    probe_text = inventory_probe(ROOT, "xml")
     dockerfile = read(ROOT, "scripts/packaging/XmlWorker.Dockerfile")
     data = read(ROOT, "fixtures/xml/sciencedirect-article.xml")
     worker_cases(data)  # Fixture digest verified on host; never enters build context.
@@ -452,6 +454,7 @@ def main() -> None:
                 # assets ever reach either builder or runtime image layers.
                 _, identifier = owned.build(context, ordinal)
                 smoke = owned.probe(identifier, probe_text, ordinal)
+                system = validate_base_inventory(smoke.get("base_inventory"))
                 expected = {
                     "scope": SCOPE,
                     "synthetic_test_only": True,
@@ -469,7 +472,7 @@ def main() -> None:
                 }
                 if (
                     {key: smoke.get(key) for key in expected} != expected
-                    or set(smoke) != set(expected) | {"image_content_sha256"}
+                    or set(smoke) != set(expected) | {"image_content_sha256", "base_inventory"}
                     or not re.fullmatch(r"[a-f0-9]{64}", smoke["image_content_sha256"])
                 ):
                     raise PackagingRefused("xml_package_probe_output_refused")
@@ -481,11 +484,17 @@ def main() -> None:
                         "image_id": identifier,
                         "image_content_sha256": smoke["image_content_sha256"],
                         "worker_cases": cases,
+                        "base_inventory": system,
                     }
                 )
             if any(
                 receipts[0][key] != receipts[1][key]
-                for key in ("archive_sha256", "manifest_sha256", "image_content_sha256")
+                for key in (
+                    "archive_sha256",
+                    "manifest_sha256",
+                    "image_content_sha256",
+                    "base_inventory",
+                )
             ):
                 raise PackagingRefused("xml_package_reproducibility_refused")
     finally:
@@ -496,6 +505,9 @@ def main() -> None:
             {
                 "scope": SCOPE,
                 "source_tree": tree_sha,
+                "declared_base_image": BASE,
+                "declared_platform": PLATFORM,
+                "base_inventory_equal": True,
                 "two_uncached_builds": True,
                 "artifacts_equal": True,
                 "image_contents_equal": True,

@@ -31,3 +31,5 @@ This prerequisite is not a working extraction service or production release. Rea
 The subsequent [EM-017c XML worker package](53-isolated-xml-worker-package.md) is a bounded synthetic-only worker artifact candidate. It adds no embedded repository fixture assets and leaves the metadata image and production refusals unchanged. It does not close the remaining full-service runtime, identity, storage, deployment or source-certification gates above.
 
 [EM-017d controlled consumption](54-curated-xml-integration.md) connects the curated XML image to existing synthetic application/operator acceptance. This is a CI integration prerequisite; it leaves the full-service and production gates above open.
+
+[EM-017e observed base inventory](55-packaged-base-inventory.md) adds bounded installed-system/interpreter evidence for these two packaged artifacts. This is a partial attribution prerequisite; complete SBOM, security/legal review and signed release provenance remain open.

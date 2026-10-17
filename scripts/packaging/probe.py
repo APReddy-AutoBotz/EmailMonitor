@@ -11,7 +11,10 @@ import subprocess
 import sys
 from collections.abc import MutableMapping
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from base_inventory import collect_base_inventory
 
 ROOT = Path("/opt/emailmonitor")
 
@@ -215,6 +218,7 @@ async def main() -> None:
                 "kernel_restrictions": True,
                 "network_errno": network_errno,
                 "image_content_sha256": content_digest(),
+                "base_inventory": collect_base_inventory(),
             },
             sort_keys=True,
         ),

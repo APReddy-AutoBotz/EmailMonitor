@@ -297,3 +297,7 @@ EM-017/document13 worker-packaging requirements map to the explicit XML source m
 ## EM-017d controlled curated XML consumption
 
 [Runbook54](54-curated-xml-integration.md) binds the prepared XML artifact to actual application/provider/operator parser metadata, retaining prior tenant/source/protocol controls. New identity and orchestration tests require normal/new-empty aggregates, independent source review and all seven own-head workflows; actual image consumption cannot be inferred from local mocks/skips. [Validation](../reports/em017d-validation.md).
+
+## EM-017e packaged-base inventory
+
+[Runbook55](55-packaged-base-inventory.md) adds bounded observed system-package/interpreter attribution evidence and canonical equality to the existing metadata/XML probes. Strict schema/path/size/refusal tests, normal/new-empty aggregates, independent review and all seven own-head gates are required. It does not certify whole-image security/licensing. [Validation](../reports/em017e-validation.md).

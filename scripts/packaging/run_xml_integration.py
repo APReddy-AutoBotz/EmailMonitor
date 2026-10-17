@@ -81,6 +81,9 @@ class OwnedAlias:
 
 
 def prepare_image(runtime: Any, owned: OwnedXmlBuilds) -> tuple[str, dict[str, object]]:
+    from base_inventory import validate_base_inventory
+    from inventory_probe import inventory_probe
+
     versions = {
         name: runtime.command([name, "--version"]).decode("ascii").strip()
         for name in ("uv", "pnpm", "node")
@@ -111,7 +114,7 @@ def prepare_image(runtime: Any, owned: OwnedXmlBuilds) -> tuple[str, dict[str, o
     if runtime.verify_archive(bundle, tree, versions) != files:
         raise IntegrationRefused("xml_integration_archive_refused")
     dockerfile = runtime.read(ROOT, "scripts/packaging/XmlWorker.Dockerfile")
-    probe = runtime.read(ROOT, "scripts/packaging/xml_probe.py").decode("utf-8")
+    probe = inventory_probe(ROOT, "xml")
     if dockerfile.count(runtime.BASE.encode()) != 2:
         raise IntegrationRefused("xml_integration_base_refused")
     with tempfile.TemporaryDirectory(prefix="em-xml-integration-") as temporary:
@@ -120,6 +123,7 @@ def prepare_image(runtime: Any, owned: OwnedXmlBuilds) -> tuple[str, dict[str, o
         (context / "Dockerfile").write_bytes(dockerfile)
         _, image_id = owned.build(context, 1)
     result = owned.probe(image_id, probe, 1)
+    system = validate_base_inventory(result.get("base_inventory"))
     expected = {
         "scope": runtime.SCOPE,
         "synthetic_test_only": True,
@@ -137,13 +141,16 @@ def prepare_image(runtime: Any, owned: OwnedXmlBuilds) -> tuple[str, dict[str, o
     }
     if (
         {key: result.get(key) for key in expected} != expected
-        or set(result) != set(expected) | {"image_content_sha256"}
+        or set(result) != set(expected) | {"image_content_sha256", "base_inventory"}
         or not isinstance(result["image_content_sha256"], str)
         or not re.fullmatch(r"[a-f0-9]{64}", result["image_content_sha256"])
     ):
         raise IntegrationRefused("xml_integration_probe_refused")
     return image_id, {
         "source_tree": tree,
+        "declared_base_image": runtime.BASE,
+        "declared_platform": "linux/amd64",
+        "base_inventory": system,
         "image_id": image_id,
         "manifest_sha256": expected["manifest_sha256"],
         "image_content_sha256": result["image_content_sha256"],
