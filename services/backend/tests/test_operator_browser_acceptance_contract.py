@@ -295,3 +295,47 @@ def test_combined_journey_keeps_separate_guest_and_four_pass_gate() -> None:
     guest = (ROOT / "scripts/isolation/operator_ui_acceptance.py").read_text()
     assert 'page.get_by_label("Keyword", exact=True), "Myocardial Infarction"' in guest
     assert '"Inspected combined keyword citation for " + address' in guest
+
+
+def test_stored_keyword_request_requires_validated_defaults_not_raw_ui_equality() -> None:
+    from emailmonitor.jobs.models import JobRequest
+    from test_job_contracts import request_body
+    from test_operator_browser_acceptance import _assert_stored_operator_request
+
+    submitted = request_body()
+    raw_input = {
+        "type": "keyword",
+        "source_id": "synthetic-publisher",
+        "original_query": "Myocardial Infarction",
+    }
+    submitted["input"] = raw_input
+    stored = JobRequest.model_validate(submitted).model_dump(mode="json", exclude_none=True)
+    assert stored["input"] == {**raw_input, "query_change_confirmed": False}
+    # Reproduce the failed gate's assumption: canonical persistence is not the
+    # omitted-default UI payload. The host must validate both representations.
+    assert stored["input"] != raw_input
+    host = ast.parse((ROOT / "scripts/isolation/test_operator_browser_acceptance.py").read_text())
+    persistence_check = next(
+        node
+        for node in ast.walk(host)
+        if isinstance(node, (ast.Assert, ast.Expr)) and "rows[0].request" in ast.unparse(node)
+    )
+    # Execute the actual host assertion with the canonical SQL value. Restoring
+    # its old raw-input equality fails here without needing SQL or a browser.
+    exec(
+        compile(ast.Module(body=[persistence_check], type_ignores=[]), "<stored-request>", "exec"),
+        {
+            "rows": [SimpleNamespace(request=stored)],
+            "job_requests": [submitted],
+            "expected_input": raw_input,
+            "_assert_stored_operator_request": _assert_stored_operator_request,
+        },
+    )
+    _assert_stored_operator_request(stored, submitted)
+    for incorrect in (
+        raw_input,
+        {**stored["input"], "query_change_confirmed": True},
+        {**stored["input"], "original_query": "different topic"},
+    ):
+        with pytest.raises(AssertionError):
+            _assert_stored_operator_request({**stored, "input": incorrect}, submitted)

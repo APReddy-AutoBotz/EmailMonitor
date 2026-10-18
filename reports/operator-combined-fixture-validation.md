@@ -50,3 +50,41 @@ Independent corrected source review passed, with 144 focused tests. Three stale
 contract tests now include all four receipts and reject missing-combined and
 stale-three-pass summaries. Required actual acceptance remains 2800 backend/no
 skips, 41 controlled transport plus four operator cases and all seven workflows.
+
+## Preserved first-head actual failures
+
+First head `e407aada6e7f6b97af558466ef86ed82c08b1435`, tree
+`cfcc441eaceb16344cfd869f15b01830e156655c`:
+[controlled run39105822918](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/39105822918)
+passed 41 transport cases (210.76s) and all three original operator journeys. The
+new combined UI completed its reviews/exports, then its host assertion compared
+the durable validated keyword request with the raw keyboard payload. Durable
+input correctly includes the model default `query_change_confirmed=false`, which
+the UI omits. The operator aggregate was three passed/one failed (188.34s).
+Canonical-model test comparison and a causal regression are required; no product
+input semantics are changed.
+
+[Parser run39105822899](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/39105822899)
+attempt one completed fixture/network-none checks but observed stopped/exit137
+with OOMKilled=false in all 11 bounded inspections. Its strict memory gate failed.
+One independently reviewed unchanged failed-job retry passed with OOMKilled=true
+and exit137. Both outcomes are preserved; the earlier cause and recurrence remain
+unproven. No deadline, memory profile or acceptance predicate was changed.
+
+## Canonical request correction
+
+The host now retains the exact raw UI-payload assertion and compares the complete
+durable request with JobRequest's validated JSON serialization, matching Ledger.
+Independent causal regression passes and restoring the old raw comparison fails.
+No product behavior, model default or input permission changed.
+
+Corrected normal/new-empty aggregates exit 0: 2498 passed/303 explicit service
+skips in 100.76s/108.31s, 48 React, mypy 263 files and all existing gates. Fresh
+Python environment absence was verified; shared caches/frontend dependencies
+were reused. Independent corrected source review and 23 focused cases pass.
+
+First-head application completed 2800 actual backend/no skips in 622.38s,
+including all five real broker replay cases, 48 React and owned XML cleanup.
+Six workflow outcomes succeeded (parser on its unchanged second attempt), while
+the controlled failure remains preserved. All runs ended before corrected
+publication. Corrected 2801/no-skips/all-seven actual acceptance remains required.

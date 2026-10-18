@@ -444,3 +444,12 @@ review and 144 focused cases passed. Preserved initial failures include three
 stale contract expectations and an unchanged intermittent DNS timing assertion;
 no timing predicate was changed. Actual 2800/no-skips and all seven own-head gates
 remain required.
+
+PR40 first head `e407aada6e7f6b97af558466ef86ed82c08b1435` passed 2800 actual
+backend/no skips, 48 React and six workflow outcomes (parser on an unchanged
+second attempt after absent OOM flag). Controlled 41 and three original operators
+passed; combined UI completed but the host expected raw rather than canonical
+stored keyword input. The corrected complete-model assertion retains exact raw
+payload checks; independent original mutation fails. Corrected normal/new-empty
+2498/303 skips and 48 React pass. All prior runs ended; new-head actual gates remain
+required. Earlier parser/DNS failures remain unresolved and preserved.

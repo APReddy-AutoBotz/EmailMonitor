@@ -19,6 +19,7 @@ import pytest
 from api_client import APIClient
 from emailmonitor.extraction.html import ArticleObservation
 from emailmonitor.jobs.ledger import Ledger
+from emailmonitor.jobs.models import JobRequest
 from emailmonitor.jobs.queues import owned_queues
 from emailmonitor.organizations.roles import Capability
 from emailmonitor.progress.service import Progress
@@ -343,7 +344,7 @@ def _browser_operator_journey(
         ).all()
         assert len(rows) == 1 and rows[0].state == "completed"
         job = UUID(str(rows[0].id))
-        assert rows[0].request["input"] == expected_input
+        _assert_stored_operator_request(rows[0].request, job_requests[0])
         discovery = c.execute(
             text(
                 "SELECT plan,checkpoint FROM emailmonitor.discovery "
@@ -734,3 +735,12 @@ def _assert_keyword_tenant_denials(
         row.revision == next(c.revision for c in contacts if c.association_id == row.association_id)
         for row in results.contacts(org, Filters(job_id=job)).items
     )
+
+
+def _assert_stored_operator_request(
+    stored: dict[str, Any],
+    submitted: dict[str, object],
+) -> None:
+    # The UI request assertion above checks the exact submitted fields. Persistence
+    # uses the validated model, retaining defaults and omitting only None fields.
+    assert stored == JobRequest.model_validate(submitted).model_dump(mode="json", exclude_none=True)
