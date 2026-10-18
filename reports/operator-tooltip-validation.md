@@ -110,3 +110,35 @@ local gates. The fresh Python environment was absent before creation; shared
 package caches/frontend dependencies were reused. Independent corrected source
 review is clear. Corrected actual application target is 2789/no skips; controlled
 41 plus all three operator proofs and all seven own-head workflows remain required.
+
+## Second controlled-head result and review-entry correction
+
+Head `1230acab789d623b60d62ce4673e0851cd705fff`, tree
+`2c4850b4be70d75dad09b5cc603981b844f36505`, passed 41 transport cases in
+198.17s and both original keyword/direct-XML operator journeys in
+[run 39102632181](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/39102632181).
+The new tooltip job reached completed but its review-list row assertion failed;
+operator aggregate was two passed/one failed in 122.01s. Cleanup was verified.
+This failed run is also preserved.
+
+The actual pure browser observation and existing association mapper produce one
+accepted explicit observed correspondence for Elena Park. Review queue defaults
+to needs_review, so the copied XML journey selected a list that correctly excludes
+that association. XML intentionally has different conservative mapping rules.
+The browser-only correction opens Contacts (accepted default), then performs the
+same evidence dialog, reason and Save review action. The host still requires its
+durable review receipt. A causal regression binds real observation/mapping to the
+actual guest navigation and UI default, rejecting the original Review queue
+mutation. Association rules, human review and all timing/safety predicates remain
+unchanged. Another corrected own-head acceptance is required.
+
+Second-head application completed 2789 actual backend cases/no skips in 717.83s,
+48 React and verified XML cleanup. All seven second-head runs are terminal:
+six success and the preserved controlled review-entry failure.
+
+Review-entry correction passes normal/new-empty aggregates with explicit exit 0:
+2488 passed/302 service skips in 101.42s/112.09s, 48 React, mypy 262 files and all
+local gates. The fresh Python environment was absent before creation; shared
+caches/frontend dependencies were reused. Independent review passes 49 focused
+cases and rejects the original navigation mutation. Actual own-head target is
+2790/no skips, controlled 41/three operator cases and all seven workflows.

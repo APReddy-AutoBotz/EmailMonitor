@@ -407,3 +407,17 @@ Independent corrected source/mutation review passes. First-head application also
 completed 2786 actual cases/no skips, leaving six successful gates and the
 preserved controlled failure. Corrected 2789/no-skips/all-seven acceptance remains
 required; no first-head run was interrupted.
+
+PR39 second head `1230acab789d623b60d62ce4673e0851cd705fff` / tree
+`2c4850b4be70d75dad09b5cc603981b844f36505` passed transport 41 and both XML
+operator journeys. Tooltip reached completed but its copied needs-review list
+expectation excluded the already accepted explicit browser association. The
+browser-only test now opens accepted Contacts before the same genuine evidence
+review/save. Rules and deadlines remain unchanged; the second failed controlled
+run is preserved and all corrected gates remain required.
+
+The review-entry correction passes normal/new-empty aggregates: 2488 passed/302
+explicit skips in 101.42s/112.09s, 48 React, mypy 262 files and all local gates.
+Independent source/mutation review is clear. Second-head application completed
+2789 actual cases/no skips; all seven runs ended before further publication.
+Final corrected 2790/no-skips/all-seven acceptance remains required.

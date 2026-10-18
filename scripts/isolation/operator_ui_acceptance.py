@@ -438,7 +438,8 @@ async def main() -> None:
                 # retain source spacing. Existing static/provider waits are unchanged.
                 await page.get_by_text("completed", exact=True).first.wait_for(timeout=75000)
                 checkpoint("evidence_review")
-                await activate(page, page.get_by_role("button", name="Review queue", exact=True))
+                # Explicit tooltip correspondence is already accepted; still save a human review.
+                await activate(page, page.get_by_role("button", name="Contacts", exact=True))
                 for address in browser_expected_addresses:
                     row = page.get_by_role("row").filter(has_text=address)
                     await expect(row).to_have_count(1)
