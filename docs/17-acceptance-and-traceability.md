@@ -313,3 +313,7 @@ The [publisher prerequisite](57-owned-test-publisher.md) maps EM-017 lifecycle a
 ## EM-003 / EM-012 operator synthetic policy profiles
 
 [Runbook58](58-operator-synthetic-policy-profiles.md) maps closed HTML/XML selection and actual-record approval to seven frontend cases, nine real SQL/API governance cases, and the actual provider keyboard journey starting without a policy. Browser request/SQL/audit checks must precede existing normal-worker review/export acceptance. The original static HTML path and all deadlines/isolation remain unchanged. [Validation](../reports/operator-xml-policy-validation.md) separates local skips from required own-head actual gates.
+
+## EM-006 / EM-012 direct controlled XML URL
+
+[Direct-URL validation](../reports/operator-direct-url-validation.md) tests the normal operator path for the existing catalog article URL. A separate keyboard case requires exact URL request/plan, one protected GET/parser/effect/review/source ticket, no search/PII work, safe exports and tenant denial. Eighteen pure selector/gate regressions and four frontend help cases complement actual services; the shell gate requires both original keyword and new direct-URL proofs.

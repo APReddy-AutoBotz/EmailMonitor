@@ -21,3 +21,7 @@ Nine additional real SQL/API cases exercise XML-shaped authorized/denied roles, 
 These profiles authorize only synthetic fixture work. XML still requires the separately composed trusted controlled worker; the default worker refuses provider routes. No real publisher rights, credentials, production runtime or source certification follow from policy approval. Full EM-015/016 source inputs and EM-017 production choices remain outstanding.
 
 Reverting the UI does not erase existing policy history or approval audit. Existing governance actions are required to change a current policy; do not rewrite history or silently restore older permissions. See [validation](../reports/operator-xml-policy-validation.md).
+
+## Direct controlled article input
+
+The subsequent EM-006/012 acceptance uses the same explicit XML policy review for a separate exact synthetic article-URL journey. It requires no search or unrelated article acquisition, one durable article/effect/review and both exports, retaining the original keyword journey and every timeout/isolation bound. [Direct-URL validation](../reports/operator-direct-url-validation.md) distinguishes durable source URL from provider canonical identity and records pending actual gates.
