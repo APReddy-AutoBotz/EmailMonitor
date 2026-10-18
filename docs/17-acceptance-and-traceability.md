@@ -305,3 +305,7 @@ EM-017/document13 worker-packaging requirements map to the explicit XML source m
 ## EM-017f owned test runtime composition
 
 The [runtime prerequisite](56-owned-test-runtime.md) maps EM-017 composition/lifecycle to pure startup/cleanup/refusal tests, actual SQL role/session/tenant checks and the existing normal controlled operator journey. [Evidence](../reports/em017f-validation.md) keeps local skips distinct from seven required actual own-head workflows. No production/runtime/source gate is inferred from test-only composition.
+
+## EM-017g owned test outbox publisher
+
+The [publisher prerequisite](57-owned-test-publisher.md) maps EM-017 lifecycle and EM-005/010/011 durable replay to pure boundary/cleanup/protocol tests, actual SQL/RabbitMQ partial-publication and duplicate-effect checks, and unchanged normal controlled operator acceptance. [Evidence](../reports/em017g-validation.md) must distinguish local service skips from actual own-head execution. No production identity or source certification follows from this test-only composition.

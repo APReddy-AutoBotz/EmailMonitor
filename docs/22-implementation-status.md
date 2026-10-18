@@ -341,3 +341,11 @@ The next bounded deployment prerequisite records observed Debian/upstream-Python
 Accepted Draft PR34 head `ecf314a09f9ec2c07f02714802a95ad123f14515` / tree `453edbeb8c532c23b618b9a196baf54f95f8cebb` passed all seven first-attempt workflows, including 2473 actual backend/no skips, 31 React, controlled 41/operator 1 and matching installed inventory evidence. Its reviewed description summarizes acceptance bound to that exact head/tree and verified workflow runs; older pending entries are historical.
 
 The next bounded EM-017 slice explicitly owns test-only API/runtime/authentication/publisher SQL composition and consumes it in normal controlled operator acceptance. It does not activate production identity, storage/secrets or real sources. Independent design/source review is clear; normal/new-empty aggregates pass 2336/264 explicit service skips plus 31 React and mypy over 249 files. Final exact-tree review and actual 2600/no-skips/all-seven acceptance remain pending. [Runbook56](56-owned-test-runtime.md) / [validation](../reports/em017f-validation.md).
+
+## EM-017g owned test publisher candidate
+
+Draft PR35 head `a13748ea3496e02caa17a433060ffa0bffb45f3d` / tree `42d742292520102c41f6c4545c52a6ff3cf518d0` completed all seven first-attempt workflows: 2600 actual backend cases/no skips, 31 React, actual runtime SQL cases, controlled 41/operator 1, existing browser/static UI/parser/docs and both package builds. Independent source/evidence/final-description review passed; prior pending text records historical checkpoints.
+
+The next bounded runtime slice owns one finite publisher connection/channel and reuses existing Celery/publication semantics. Independent design is approved; implementation and candidate gates remain pending. No supervisor, provisioning, production identity or real-source gate is introduced. [Runbook57](57-owned-test-publisher.md) / [validation](../reports/em017g-validation.md).
+
+EM-017g corrected normal/new-empty aggregates pass with explicit exit 0: 2411 passed/268 explicit service skips in 100.59s/131.63s, 31 React and mypy over 252 files. Independent corrected source review and 85 focused cases pass. Earlier import formatting and unchanged channel-deadline test failures remain preserved; no channel fix is claimed. Final exact-tree review and actual 2679/no-skips/all-seven own-head gates remain required.

@@ -35,3 +35,5 @@ The subsequent [EM-017c XML worker package](53-isolated-xml-worker-package.md) i
 [EM-017e observed base inventory](55-packaged-base-inventory.md) adds bounded installed-system/interpreter evidence for these two packaged artifacts. This is a partial attribution prerequisite; complete SBOM, security/legal review and signed release provenance remain open.
 
 [EM-017f owned test runtime](56-owned-test-runtime.md) advances application composition/lifecycle separately from packaging. It preserves metadata defaults and test-only authority while actual operator acceptance uses independent API/authentication/publisher SQL pools; production assembly remains open.
+
+[EM-017g owned test publication](57-owned-test-publisher.md) is a bounded lifecycle continuation: a finite caller-owned publication pass with explicit broker transport cleanup, retaining durable replay and synthetic-only operation. It does not add production runtime or source authorization.

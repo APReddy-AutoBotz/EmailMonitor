@@ -295,3 +295,9 @@ Add a trusted Python-only executor factory to the normal claimed Celery path, re
 
 - Add explicit test-only authenticated API composition with independent API, authentication and publisher SQL pools and owned failure/shutdown cleanup.
 - Exercise it in existing controlled operator acceptance; preserve worker/source/isolation semantics and private SQL artifacts. Production assembly and live-source gates remain open.
+
+## EM-017g owned test outbox publisher candidate
+
+- Own one finite synthetic publisher connection/channel while reusing existing confirmed JSON task publication and durable outbox replay.
+- Test partial publication, uncertain SQL marking, cleanup and caller-resource survival; consume the helper in the existing controlled operator journey.
+- No migration, new service identity, supervisor, deployment or real-source activation. [Validation](reports/em017g-validation.md).
