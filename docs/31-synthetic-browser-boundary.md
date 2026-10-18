@@ -54,3 +54,10 @@ The guest uses the public async Playwright API so its WebSocket refusal awaits c
 ### Verified synthetic CI checkpoint
 
 Reviewed tree f1a88580 / Draft PR #7 head 99d700ea passed all four exact-head workflows: 264 application tests without skips, docs, actual sandboxed synthetic browser mediation and actual network-none parser/OOM checks. The browser emitted its raw affirmative pinned sandbox table/evaluation, independent kernel/namespace evidence, eleven mediated requests/two approved verified-TLS source requests, declared resource denials, zero workers/registrations and popup/download cleanup. See the [exact results and retained historical failures](../reports/em004c-validation.md#exact-head-synthetic-diagnostic-acceptance). This checkpoint supersedes earlier pending diagnostic acceptance statements only for that exact synthetic tree; full EM-004 remains PARTIAL and production/live/browser acquisition unavailable. Generalized controlled DNS/rebinding/connection-time approved-domain HTTP/browser egress still needs bounded implementation and actual tests before EM-006 can begin.
+
+## Normal operator composition
+
+The subsequent [tooltip integration](59-operator-tooltip-browser.md) composes
+this same synthetic boundary into normal claimed Celery work and a separate
+operator acceptance case. It preserves this guest protocol, sandbox, deadline and
+sticky popup predicate; explicit policy/job opt-in and owned cleanup are required.

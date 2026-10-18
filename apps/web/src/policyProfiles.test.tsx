@@ -20,13 +20,17 @@ describe('closed synthetic policy proposals', () => {
   it('preserves the exact original HTML default and bounded expiry', () => {
     expect(defaultSyntheticPolicyProfile).toBe('html')
     expect(syntheticPolicy(undefined, now)).toEqual(html)
-    expect(syntheticPolicyProfiles.map(p => p.id)).toEqual(['html', 'xml'])
+    expect(syntheticPolicyProfiles.map(p => p.id)).toEqual(['html', 'xml', 'html_browser'])
   })
   it('uses the exact explicit XML profile without unioning HTML rights', () => {
     expect(syntheticPolicy('xml', now)).toEqual({ ...html,
       allowed_operations: ['search', 'fetch_xml', 'extract_contacts', 'retain_excerpt', 'export_contacts'],
       retention: { raw_hours: 0, excerpt_days: 30, contact_days: 90 },
     })
+  })
+  it('adds only the explicit browser operation to the bounded HTML profile', () => {
+    expect(syntheticPolicy('html_browser', now)).toEqual({ ...html, allowed_operations: [...html.allowed_operations, 'browser'] })
+    expect(syntheticPolicy('html_browser', now).allowed_operations).not.toContain('fetch_xml')
   })
   it('refuses unknown runtime profile values rather than falling back', () => {
     for (const value of ['', 'provider_xml', 'fetch_xml', '__proto__', null, undefined, {}, 1]) {
@@ -63,6 +67,8 @@ describe('synthetic policy proposal form', () => {
     expect(markup).toContain('<label>Synthetic policy profile<select>')
     expect(markup).toContain('<option value="html" selected="">Static HTML fixtures</option>')
     expect(markup).toContain('<option value="xml">Controlled provider XML</option>')
+    expect(markup).toContain('<option value="html_browser">HTML + synthetic tooltip browser</option>')
+    expect(markup).toContain('explicit job opt-in and a separately composed trusted browser worker')
     expect(markup).toContain('Proposed operations: search, fetch_html, extract_contacts, retain_excerpt, export_contacts.')
     expect(markup).toContain('raw 24 hours; excerpts 30 days; contacts 90 days')
     expect(markup).toContain('24 hours from submission')

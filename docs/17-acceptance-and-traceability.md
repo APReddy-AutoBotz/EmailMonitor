@@ -317,3 +317,12 @@ The [publisher prerequisite](57-owned-test-publisher.md) maps EM-017 lifecycle a
 ## EM-006 / EM-012 direct controlled XML URL
 
 [Direct-URL validation](../reports/operator-direct-url-validation.md) tests the normal operator path for the existing catalog article URL. A separate keyboard case requires exact URL request/plan, one protected GET/parser/effect/review/source ticket, no search/PII work, safe exports and tenant denial. Eighteen pure selector/gate regressions and four frontend help cases complement actual services; the shell gate requires both original keyword and new direct-URL proofs.
+
+## EM-007 / EM-010 / EM-012 normal-worker tooltip
+
+[Runbook59](59-operator-tooltip-browser.md) maps explicit policy/job browser opt-in,
+trusted claimed execution, current tenant/source/lease fences, no-I/O replay and
+owned guest/pipe lifecycle to pure and SQL tests. A separate actual keyboard
+journey requires durable outbox/RabbitMQ, protected HTTPS/browser evidence,
+review/export, source accounting and tenant denial. Original cases and deadlines
+remain required. [Validation](../reports/operator-tooltip-validation.md).

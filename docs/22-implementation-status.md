@@ -369,3 +369,55 @@ Draft PR37 head `a20d289cdbb57dec2a60482ad0cdef700815e47c` / tree `6f5948bd0f6aa
 The next bounded operator closure exercises an existing direct synthetic XML article URL through the normal UI/registered worker. Original keyword/static cases and controls remain unchanged. Independent design is clear; source review corrected a test identity assertion. Focused 78 and frontend 42 cases pass; normal/new-empty/exact-tree and actual 2706/no-skip/all-seven gates remain pending. [Validation](../reports/operator-direct-url-validation.md).
 
 Normal and genuinely new-empty Python aggregates each return exit 0: 2429 passed/277 explicit service skips, 42 React cases, mypy over 254 files and every existing docs/lint/format/inventory/type/build gate. The fresh Python environment was absent before creation; shared caches/frontend dependencies were reused. Independent corrected source review passes 32 focused Python and four frontend help cases. Final exact-tree review and actual 2706/no-skip/all-seven gates, including two provider operator cases, remain required.
+
+## EM-007 / EM-010 / EM-012 tooltip operator candidate
+
+Draft PR38 head `415a41dda6b39282e4a47af6dc1400ce59de0078` / tree
+`cdcf5cf41cf436251181d0b347ec7131ea876cc2` completed all seven first-attempt
+workflows: 2706 actual backend/no skips, 42 React, controlled 41 and two operator
+journeys, plus original static UI/browser/parser/docs/packaging. Independent final
+source/evidence/description readback passed. Earlier pending text is historical.
+
+The next bounded slice joins existing synthetic tooltip browser acquisition to
+the normal claimed worker and explicit operator opt-in. Independent design is
+clear; source review, normal/new-empty and all seven actual gates remain pending.
+[Runbook59](59-operator-tooltip-browser.md) /
+[validation](../reports/operator-tooltip-validation.md). Live source rights and
+production runtime remain unmet.
+
+Tooltip candidate normal/new-empty aggregates both return exit 0: 2484 passed
+and 302 explicit service skips in 99.42s/107.48s, 48 React cases and mypy over
+261 files, with all existing local gates. Independent source/delta review is
+clear. Initial annotation/test-fixture failures and the corrected late-SQL
+revocation finding are preserved in the report. Actual 2786/no-skips and all
+seven own-head gates remain required.
+
+PR39 first head `3b94fe4ea53f3b85d85fbc972ec0504875d64ff7` / tree
+`5472d3802c266e0e8c0a4f64b441dfe7a9528a97` passed controlled transport 41 and
+the original keyword operator, but failed the new checkbox keyboard assertion
+before execution and the existing direct-XML export's envelope/config authority
+check. Native Space activation and app-local Celery closure registration address
+the independently reproduced mechanisms without weakening predicates or fences.
+Original failure is preserved; corrected local/review/all-seven gates remain
+required.
+
+Corrected tooltip normal/new-empty aggregates pass with explicit exit 0:
+2487 passed/302 service skips, 48 React and mypy 262 files, all local gates.
+Independent corrected source/mutation review passes. First-head application also
+completed 2786 actual cases/no skips, leaving six successful gates and the
+preserved controlled failure. Corrected 2789/no-skips/all-seven acceptance remains
+required; no first-head run was interrupted.
+
+PR39 second head `1230acab789d623b60d62ce4673e0851cd705fff` / tree
+`2c4850b4be70d75dad09b5cc603981b844f36505` passed transport 41 and both XML
+operator journeys. Tooltip reached completed but its copied needs-review list
+expectation excluded the already accepted explicit browser association. The
+browser-only test now opens accepted Contacts before the same genuine evidence
+review/save. Rules and deadlines remain unchanged; the second failed controlled
+run is preserved and all corrected gates remain required.
+
+The review-entry correction passes normal/new-empty aggregates: 2488 passed/302
+explicit skips in 101.42s/112.09s, 48 React, mypy 262 files and all local gates.
+Independent source/mutation review is clear. Second-head application completed
+2789 actual cases/no skips; all seven runs ended before further publication.
+Final corrected 2790/no-skips/all-seven acceptance remains required.

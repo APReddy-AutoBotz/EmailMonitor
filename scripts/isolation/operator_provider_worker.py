@@ -2,7 +2,7 @@
 
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from importlib import import_module
 from typing import Any, cast
@@ -11,7 +11,7 @@ from emailmonitor.fetching.resources import HopResources
 from emailmonitor.fetching.sciencedirect import AcquiredResponse, ProviderBoundary
 from emailmonitor.jobs.broker import FixtureWorkerConfig, create_worker
 from emailmonitor.jobs.queues import owned_queues
-from emailmonitor.progress.execution import ExecutionDispatcher
+from emailmonitor.progress.execution import ExecutionDispatcher, Executor
 from emailmonitor.progress.service import Progress
 from transport_provider import ProviderProxy
 from transport_rpc import OwnedProcess
@@ -72,15 +72,19 @@ class PipeOwner:
 
 
 @contextmanager
-def provider_worker(config: FixtureWorkerConfig, gateway: OwnedProcess) -> Iterator[Any]:
+def controlled_worker(
+    config: FixtureWorkerConfig,
+    gateway: OwnedProcess,
+    compose: Callable[[Progress, PipeOwner], Executor],
+) -> Iterator[Any]:
     ready = threading.Event()
     failures: list[BaseException] = []
     pipe = PipeOwner(gateway)
 
-    def executor(progress: Progress) -> ExecutionDispatcher:
+    def executor(progress: Progress) -> Executor:
         if pipe.owner != threading.get_ident():
             raise RuntimeError("Controlled gateway belongs exclusively to the solo worker")
-        return ExecutionDispatcher(progress, pipe)
+        return compose(progress, pipe)
 
     app, ledger = create_worker(config, executor_factory=executor)
     controller: Any = None
@@ -121,25 +125,35 @@ def provider_worker(config: FixtureWorkerConfig, gateway: OwnedProcess) -> Itera
             raise RuntimeError("Controlled solo worker stopped unexpectedly")
     finally:
         state.should_terminate = 0
-        pipe.revoke()
-        if thread.ident is not None:
-            thread.join(timeout=150)
-        if thread.is_alive():
-            # Its revoked I/O capability cannot touch the pipe, even if a SQL
-            # callback returns late. Report failed worker cleanup, never success.
-            raise RuntimeError("Controlled solo worker did not release gateway ownership")
-        state.should_terminate = previous_termination
         try:
-            with app.connection_for_write() as connection:
-                channel = connection.channel()
-                try:
-                    for queue in owned_queues(config.queue):
-                        channel.queue_delete(queue=queue)
-                        channel.exchange_delete(exchange=queue)
-                finally:
-                    channel.close()
+            pipe.revoke()
         finally:
+            # Revocation failure must not skip the bounded join. Never dispose
+            # resources while their worker is still alive or undo its stop flag.
+            if thread.ident is not None:
+                thread.join(timeout=150)
+            if thread.is_alive():
+                raise RuntimeError("Controlled solo worker did not release gateway ownership")
+            state.should_terminate = previous_termination
             try:
-                app.close()
+                with app.connection_for_write() as connection:
+                    channel = connection.channel()
+                    try:
+                        for queue in owned_queues(config.queue):
+                            channel.queue_delete(queue=queue)
+                            channel.exchange_delete(exchange=queue)
+                    finally:
+                        channel.close()
             finally:
-                ledger.database.engine.dispose()
+                try:
+                    app.close()
+                finally:
+                    ledger.database.engine.dispose()
+
+
+@contextmanager
+def provider_worker(config: FixtureWorkerConfig, gateway: OwnedProcess) -> Iterator[Any]:
+    with controlled_worker(
+        config, gateway, lambda progress, pipe: ExecutionDispatcher(progress, pipe)
+    ) as app:
+        yield app

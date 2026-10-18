@@ -181,11 +181,12 @@ def create_worker(
             body,
         )
 
-    application.task(name="emailmonitor.fixture.retention", typing=False)(retention)
-    application.task(name="emailmonitor.fixture.export", typing=False)(export)
-    application.task(name="emailmonitor.fixture.execute", typing=False)(execute)
-    application.task(name="emailmonitor.fixture.discover", typing=False)(discover)
-    application.task(name="emailmonitor.fixture.persist", typing=False)(persist)
+    # These closures own one config/session/ledger, never another app's worker identity.
+    application.task(name="emailmonitor.fixture.retention", typing=False, shared=False)(retention)
+    application.task(name="emailmonitor.fixture.export", typing=False, shared=False)(export)
+    application.task(name="emailmonitor.fixture.execute", typing=False, shared=False)(execute)
+    application.task(name="emailmonitor.fixture.discover", typing=False, shared=False)(discover)
+    application.task(name="emailmonitor.fixture.persist", typing=False, shared=False)(persist)
     return application, ledger
 
 

@@ -25,3 +25,10 @@ Reverting the UI does not erase existing policy history or approval audit. Exist
 ## Direct controlled article input
 
 The subsequent EM-006/012 acceptance uses the same explicit XML policy review for a separate exact synthetic article-URL journey. It requires no search or unrelated article acquisition, one durable article/effect/review and both exports, retaining the original keyword journey and every timeout/isolation bound. [Direct-URL validation](../reports/operator-direct-url-validation.md) distinguishes durable source URL from provider canonical identity and records pending actual gates.
+
+## Subsequent tooltip profile integration
+
+[Runbook59](59-operator-tooltip-browser.md) adds a third closed HTML-plus-browser
+synthetic profile with explicit job opt-in and separately composed trusted worker.
+The original HTML default, XML proposal and separate current-record approval are
+unchanged. Its actual acceptance is tracked separately from this XML milestone.

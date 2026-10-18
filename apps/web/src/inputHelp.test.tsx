@@ -42,7 +42,10 @@ describe('bounded synthetic input help', () => {
     expect(markup).toContain('a separately composed trusted worker; the default worker refuses it')
     expect(markup).toContain('First authors never inherit a correspondent’s address')
     expect(markup).toContain('<button type="submit" disabled="">Create and validate plan</button>')
-    for (const limit of ['PDF acquisition unavailable', 'Browser acquisition unavailable in this operator worker', 'OCR unavailable', 'Wider web unavailable']) expect(markup).toContain(limit)
+    for (const limit of ['PDF acquisition unavailable', 'OCR unavailable', 'Wider web unavailable']) expect(markup).toContain(limit)
+    expect(markup).toContain('Allow synthetic tooltip-only browser work')
+    expect(markup).toContain('The default worker does not execute browser work')
+    expect(markup).toContain('This opt-in grants no live source access')
     expect(c.act).not.toHaveBeenCalled()
   })
 
