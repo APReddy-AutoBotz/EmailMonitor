@@ -280,7 +280,9 @@ def test_real_partial_batch_broker_failure_preserves_mark_and_caller(
         with app.connection_for_write() as caller:
             caller_channel = caller.channel()
             caller_queue = "em-fixture-caller-" + uuid4().hex
-            caller_channel.queue_declare(queue=caller_queue, durable=False, auto_delete=False)
+            caller_channel.queue_declare(
+                queue=caller_queue, durable=False, exclusive=True, auto_delete=False
+            )
             try:
                 with pytest.raises(publisher.PublisherError):
                     publisher.publish_once(publisher_config(cfg), app, progress, results, org)
