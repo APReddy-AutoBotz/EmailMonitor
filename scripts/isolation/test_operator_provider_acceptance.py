@@ -13,7 +13,6 @@ from zipfile import ZipFile
 
 import pytest
 from api_client import APIClient
-from emailmonitor.api import create_app
 from emailmonitor.extraction.xml_retained import RetainedXml
 from emailmonitor.jobs.ledger import Ledger
 from emailmonitor.jobs.queues import owned_queues
@@ -23,6 +22,8 @@ from emailmonitor.progress.service import Progress
 from emailmonitor.results.broker import publish as publish_exports
 from emailmonitor.results.models import Filters
 from emailmonitor.results.service import Results
+from emailmonitor.runtime.assembly import RuntimeBundle, owned_test_runtime
+from emailmonitor.runtime.assembly import TestRuntimeConfig as RuntimeConfig
 from operator_provider_worker import provider_worker
 from operator_ui_protocol import RequestFrame, asset_manifest
 from run_operator_ui_acceptance import run
@@ -45,6 +46,26 @@ def test_actual_provider_operator_ui(
 ) -> None:
     if os.environ.get("EM_REQUIRE_OPERATOR_UI") != "true":
         pytest.fail("Required controlled operator acceptance marker missing")
+    cfg = RuntimeConfig(
+        settings=SETTINGS.model_copy(update={"identity_stub": True}),
+        runtime_database_url=os.environ["EM_TEST_DATABASE_URL"],
+        authentication_database_url=os.environ["EM_TEST_AUTH_DATABASE_URL"],
+    )
+    with owned_test_runtime(cfg, scenario.foundation.provider) as runtime:
+        assert runtime.api_database is not scenario.foundation.database
+        assert runtime.publisher_database is not runtime.api_database
+        _provider_operator_journey(topology, scenario, monkeypatch, runtime)
+    with APIClient(runtime.app, ORIGIN) as closed:
+        assert closed.get("/healthz").status_code == 503
+    print(
+        json.dumps({"owned_test_runtime_closed": True, "separate_api_publisher_pools": True}),
+        flush=True,
+    )
+
+
+def _provider_operator_journey(
+    topology: Topology, scenario: Scenario, monkeypatch: pytest.MonkeyPatch, runtime: RuntimeBundle
+) -> None:
     from emailmonitor.parsing import xml_channel
 
     configure(topology)
@@ -57,7 +78,7 @@ def test_actual_provider_operator_ui(
         profiles.append(metadata)
 
     monkeypatch.setattr(xml_channel, "verify_profile", verified)
-    app = create_app(SETTINGS.model_copy(update={"identity_stub": True}), scenario.foundation)
+    app = runtime.app
     org, other = scenario.organizations
     with APIClient(app, ORIGIN) as owner, scenario.client() as other_owner:
         csrf = scenario.login(other_owner, "owner_b")
@@ -111,7 +132,7 @@ def test_actual_provider_operator_ui(
             for c in owner.cookies.jar
         ]
         token = str(owner.cookies["__Host-emailmonitor_session"])
-    progress = Progress(scenario.foundation.database, token, SETTINGS)
+    progress = Progress(runtime.publisher_database, token, SETTINGS)
     results = Results(progress.database, token, SETTINGS)
     cfg = config(scenario, Ledger(progress.database, token, SETTINGS), lease_seconds=120)
     stop, release = threading.Event(), threading.Event()
@@ -265,7 +286,7 @@ def test_actual_provider_operator_ui(
     assert {
         path for method, path in requests if method == "GET" and path.endswith("/download")
     } == {base + f"/exports/{export.id}/download" for export in exports}
-    with scenario.client() as client:
+    with APIClient(runtime.app, ORIGIN) as client:
         scenario.login(client, "owner_b")
         assert client.get(f"/api/v1/organizations/{org}/jobs/{job}").status_code == 404
         for export in exports:

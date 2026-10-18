@@ -33,3 +33,5 @@ The subsequent [EM-017c XML worker package](53-isolated-xml-worker-package.md) i
 [EM-017d controlled consumption](54-curated-xml-integration.md) connects the curated XML image to existing synthetic application/operator acceptance. This is a CI integration prerequisite; it leaves the full-service and production gates above open.
 
 [EM-017e observed base inventory](55-packaged-base-inventory.md) adds bounded installed-system/interpreter evidence for these two packaged artifacts. This is a partial attribution prerequisite; complete SBOM, security/legal review and signed release provenance remain open.
+
+[EM-017f owned test runtime](56-owned-test-runtime.md) advances application composition/lifecycle separately from packaging. It preserves metadata defaults and test-only authority while actual operator acceptance uses independent API/authentication/publisher SQL pools; production assembly remains open.

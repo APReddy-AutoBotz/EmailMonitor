@@ -301,3 +301,7 @@ EM-017/document13 worker-packaging requirements map to the explicit XML source m
 ## EM-017e packaged-base inventory
 
 [Runbook55](55-packaged-base-inventory.md) adds bounded observed system-package/interpreter attribution evidence and canonical equality to the existing metadata/XML probes. Strict schema/path/size/refusal tests, normal/new-empty aggregates, independent review and all seven own-head gates are required. It does not certify whole-image security/licensing. [Validation](../reports/em017e-validation.md).
+
+## EM-017f owned test runtime composition
+
+The [runtime prerequisite](56-owned-test-runtime.md) maps EM-017 composition/lifecycle to pure startup/cleanup/refusal tests, actual SQL role/session/tenant checks and the existing normal controlled operator journey. [Evidence](../reports/em017f-validation.md) keeps local skips distinct from seven required actual own-head workflows. No production/runtime/source gate is inferred from test-only composition.
