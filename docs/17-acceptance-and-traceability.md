@@ -326,3 +326,16 @@ owned guest/pipe lifecycle to pure and SQL tests. A separate actual keyboard
 journey requires durable outbox/RabbitMQ, protected HTTPS/browser evidence,
 review/export, source accounting and tenant denial. Original cases and deadlines
 remain required. [Validation](../reports/operator-tooltip-validation.md).
+
+## Combined fixture operator demonstration and separate replay
+
+The original first-product demonstration in CODEX_START_HERE and EM-005–012 map
+to a separate combined keyword/browser operator case: two pages, duplicate
+suppression, four article outcomes, four evidence-backed associations, human
+review, exports and complete tenant-negative access checks. Static/search reads
+remain authored fixture transport; only the tooltip uses protected HTTPS and
+an isolated browser. An independent existing subprocess-worker case checks
+accepted-contact identity/accounting after post-effect crash and original
+unacknowledged delivery. It is not combined browser crash recovery.
+[Runbook60](60-combined-fixture-demonstration.md) /
+[validation](../reports/operator-combined-fixture-validation.md).

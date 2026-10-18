@@ -550,9 +550,14 @@ def completion_worker_snapshot(raw: bytes, *, truncated: bool = False) -> dict[s
 def validate_journey(setup: dict[str, object]) -> None:
     """Closed built-in journeys only; no caller-supplied browser destinations."""
     journey = setup.get("journey")
-    if journey not in (None, "controlled_provider", "controlled_browser"):
+    if journey not in (
+        None,
+        "controlled_provider",
+        "controlled_browser",
+        "controlled_keyword_browser",
+    ):
         raise ValueError("Fixed controlled operator journey required")
-    if journey == "controlled_browser" and set(setup) != {
+    if journey in ("controlled_browser", "controlled_keyword_browser") and set(setup) != {
         "kind",
         "origin",
         "journey",

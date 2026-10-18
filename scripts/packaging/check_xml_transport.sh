@@ -10,11 +10,12 @@ case "${1-}" in
     ! grep -Eq '[0-9]+ skipped|[0-9]+ warnings?' "$RUNNER_TEMP/transport-acceptance.log"
     ;;
   operator)
-    uv run --project services/backend pytest -c services/backend/pyproject.toml scripts/isolation/test_operator_provider_acceptance.py scripts/isolation/test_operator_browser_acceptance.py -v -s | tee "$RUNNER_TEMP/provider-operator.log"
+    uv run --project services/backend pytest -c services/backend/pyproject.toml scripts/isolation/test_operator_provider_acceptance.py scripts/isolation/test_operator_browser_acceptance.py scripts/isolation/test_operator_keyword_browser_acceptance.py -v -s | tee "$RUNNER_TEMP/provider-operator.log"
     grep -F 'NORMAL_OPERATOR_RABBITMQ_PROVIDER_ISOLATED_REVIEW_EXPORT' "$RUNNER_TEMP/provider-operator.log"
     grep -F 'NORMAL_OPERATOR_DIRECT_XML_URL_ISOLATED_REVIEW_EXPORT' "$RUNNER_TEMP/provider-operator.log"
     grep -F 'NORMAL_OPERATOR_TOOLTIP_BROWSER_ISOLATED_REVIEW_EXPORT' "$RUNNER_TEMP/provider-operator.log"
-    grep -Eq '(^|[=[:space:]])3 passed([ ,]|$)' "$RUNNER_TEMP/provider-operator.log"
+    grep -F 'NORMAL_OPERATOR_KEYWORD_BROWSER_ISOLATED_REVIEW_EXPORT' "$RUNNER_TEMP/provider-operator.log"
+    grep -Eq '(^|[=[:space:]])4 passed([ ,]|$)' "$RUNNER_TEMP/provider-operator.log"
     ! grep -Eq '[0-9]+ skipped' "$RUNNER_TEMP/provider-operator.log"
     ;;
   *) printf '%s\n' 'XML_INTEGRATION_GATE_REFUSED' >&2; exit 1 ;;
