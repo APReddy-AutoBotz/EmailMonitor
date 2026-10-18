@@ -1,3 +1,9 @@
+## 2026-10-18 — Operator synthetic policy integration candidate
+
+- Add explicit closed HTML/XML policy proposals to Sources with unchanged HTML defaults and separate current-record approval.
+- Start controlled provider acceptance without a host-created policy; require keyboard proposal/approval and durable policy/audit evidence before normal-worker extraction/review/export.
+- Add frontend and real SQL governance regression coverage. See [validation](reports/operator-xml-policy-validation.md).
+
 ## 2026-10-16 — EM-017c isolated XML worker packaging candidate
 
 - Prepare an independently reproducible, explicitly synthetic-only artifact for the existing XML worker, with an allowlisted source closure and no embedded fixture assets.

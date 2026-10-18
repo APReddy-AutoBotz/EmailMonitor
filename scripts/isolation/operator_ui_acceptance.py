@@ -362,6 +362,37 @@ async def main() -> None:
             )
             await page.get_by_role("heading", name="Synthetic tenant 0", exact=True).wait_for()
             if setup.get("journey") == "controlled_provider":
+                checkpoint("source_review")
+                await activate(page, page.get_by_role("button", name="Sources", exact=True))
+                profile = page.get_by_role("combobox", name="Synthetic policy profile", exact=True)
+                await expect(profile).to_have_value("html")
+                await select_index(page, profile, 1)
+                await expect(profile).to_have_value("xml")
+                await activate(
+                    page,
+                    page.get_by_role("button", name="Request synthetic source review", exact=True),
+                )
+                await page.get_by_role(
+                    "button", name="Approve synthetic policy", exact=True
+                ).wait_for()
+                # Changing an unsubmitted proposal must not alter the pending record
+                # that the separate approval dialog actually authorizes.
+                await select_index(page, profile, 0)
+                await expect(profile).to_have_value("html")
+                await activate(
+                    page, page.get_by_role("button", name="Approve synthetic policy", exact=True)
+                )
+                dialog = page.get_by_role("dialog")
+                await expect(dialog).to_contain_text("version 1, revision 1")
+                await expect(dialog).to_contain_text("fetch_xml")
+                await expect(dialog).to_contain_text(
+                    '"raw_hours":0,"excerpt_days":30,"contact_days":90'
+                )
+                await activate(
+                    page,
+                    page.get_by_role("button", name="Confirm approve synthetic policy", exact=True),
+                )
+                await dialog.wait_for(state="hidden")
                 checkpoint("keyword_plan")
                 await activate(
                     page,
@@ -457,6 +488,22 @@ async def main() -> None:
                 body = await page.locator("body").inner_text()
                 if any(address in body for address in ("Second@example.org", "beta@example.org")):
                     raise RuntimeError("Provider contacts survived tenant switch")
+                await activate(page, page.get_by_role("button", name="Sources", exact=True))
+                await page.get_by_text(
+                    "Source management unavailable for this role.", exact=True
+                ).wait_for()
+                await page.get_by_text(
+                    "Approval needed. No current source policy.", exact=True
+                ).wait_for()
+                await expect(
+                    page.get_by_role("combobox", name="Synthetic policy profile", exact=True)
+                ).to_have_count(0)
+                await expect(
+                    page.get_by_role("button", name="Request synthetic source review", exact=True)
+                ).to_have_count(0)
+                await expect(
+                    page.get_by_role("button", name="Approve synthetic policy", exact=True)
+                ).to_have_count(0)
                 await activate(page, page.get_by_role("button", name="Exports", exact=True))
                 await page.get_by_text(
                     "Export capability is not available for this role.", exact=False
@@ -479,6 +526,7 @@ async def main() -> None:
                             "kind": "result",
                             "diagnostic": "synthetic-operator-ui",
                             "journey": "controlled_provider",
+                            "source_policy_review": True,
                             "keyboard": True,
                             "built_assets": accepted,
                             "sandbox": sandbox,
@@ -498,6 +546,9 @@ async def main() -> None:
             checkpoint("source_review")
             # Every action below is activated or entered through keyboard events.
             await activate(page, page.get_by_role("button", name="Sources", exact=True))
+            await expect(
+                page.get_by_role("combobox", name="Synthetic policy profile", exact=True)
+            ).to_have_value("html")
             await activate(
                 page, page.get_by_role("button", name="Request synthetic source review", exact=True)
             )
