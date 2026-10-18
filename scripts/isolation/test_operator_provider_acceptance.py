@@ -17,13 +17,13 @@ from emailmonitor.extraction.xml_retained import RetainedXml
 from emailmonitor.jobs.ledger import Ledger
 from emailmonitor.jobs.queues import owned_queues
 from emailmonitor.organizations.roles import Capability
-from emailmonitor.progress.broker import publish as publish_execution
 from emailmonitor.progress.service import Progress
-from emailmonitor.results.broker import publish as publish_exports
 from emailmonitor.results.models import Filters
 from emailmonitor.results.service import Results
 from emailmonitor.runtime.assembly import RuntimeBundle, owned_test_runtime
 from emailmonitor.runtime.assembly import TestRuntimeConfig as RuntimeConfig
+from emailmonitor.runtime.publisher import TestPublisherConfig as PublisherConfig
+from emailmonitor.runtime.publisher import publish_once
 from operator_provider_worker import provider_worker
 from operator_ui_protocol import RequestFrame, asset_manifest
 from run_operator_ui_acceptance import run
@@ -135,6 +135,10 @@ def _provider_operator_journey(
     progress = Progress(runtime.publisher_database, token, SETTINGS)
     results = Results(progress.database, token, SETTINGS)
     cfg = config(scenario, Ledger(progress.database, token, SETTINGS), lease_seconds=120)
+    publisher_config = PublisherConfig(
+        environment="test", broker_url=cfg.broker_url, queue=cfg.queue
+    )
+    publication_counts = [0, 0]
     stop, release = threading.Event(), threading.Event()
     errors: list[str] = []
     requests: list[tuple[str, str]] = []
@@ -158,8 +162,9 @@ def _provider_operator_journey(
             while not stop.wait(0.2):
                 if release.is_set():
                     try:
-                        publish_execution(broker, progress, org)
-                        publish_exports(broker, results, org)
+                        published = publish_once(publisher_config, broker, progress, results, org)
+                        publication_counts[0] += published.execution
+                        publication_counts[1] += published.exports
                     except Exception as error:
                         errors.append(type(error).__name__)
                         stop.set()
@@ -201,6 +206,11 @@ def _provider_operator_journey(
             if publisher_thread.ident is not None:
                 publisher_thread.join(timeout=10)
                 assert not publisher_thread.is_alive()
+    assert publication_counts[0] >= 3 and publication_counts[1] == 2
+    print(
+        json.dumps({"owned_publisher_passes_closed": True, "published_exports": 2}),
+        flush=True,
+    )
     # The pipe returns to the host only AFTER the real solo worker has joined.
     assert len(profiles) == 2
     calls = snapshot(topology)["calls"]
