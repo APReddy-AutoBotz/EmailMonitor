@@ -12,7 +12,8 @@ case "${1-}" in
   operator)
     uv run --project services/backend pytest -c services/backend/pyproject.toml scripts/isolation/test_operator_provider_acceptance.py -v -s | tee "$RUNNER_TEMP/provider-operator.log"
     grep -F 'NORMAL_OPERATOR_RABBITMQ_PROVIDER_ISOLATED_REVIEW_EXPORT' "$RUNNER_TEMP/provider-operator.log"
-    grep -Eq '(^|[=[:space:]])1 passed([ ,]|$)' "$RUNNER_TEMP/provider-operator.log"
+    grep -F 'NORMAL_OPERATOR_DIRECT_XML_URL_ISOLATED_REVIEW_EXPORT' "$RUNNER_TEMP/provider-operator.log"
+    grep -Eq '(^|[=[:space:]])2 passed([ ,]|$)' "$RUNNER_TEMP/provider-operator.log"
     ! grep -Eq '[0-9]+ skipped' "$RUNNER_TEMP/provider-operator.log"
     ;;
   *) printf '%s\n' 'XML_INTEGRATION_GATE_REFUSED' >&2; exit 1 ;;

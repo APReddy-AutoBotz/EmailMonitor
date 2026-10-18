@@ -362,6 +362,14 @@ async def main() -> None:
             )
             await page.get_by_role("heading", name="Synthetic tenant 0", exact=True).wait_for()
             if setup.get("journey") == "controlled_provider":
+                direct_url = setup.get("direct_article_url", False)
+                if type(direct_url) is not bool:
+                    raise ValueError("Fixed controlled operator input required")
+                expected_addresses = (
+                    ("Second@example.org",)
+                    if direct_url
+                    else ("Second@example.org", "beta@example.org")
+                )
                 checkpoint("source_review")
                 await activate(page, page.get_by_role("button", name="Sources", exact=True))
                 profile = page.get_by_role("combobox", name="Synthetic policy profile", exact=True)
@@ -393,16 +401,26 @@ async def main() -> None:
                     page.get_by_role("button", name="Confirm approve synthetic policy", exact=True),
                 )
                 await dialog.wait_for(state="hidden")
-                checkpoint("keyword_plan")
+                checkpoint("url_plan" if direct_url else "keyword_plan")
                 await activate(
                     page,
                     page.get_by_role("navigation", name="Workspace", exact=True).get_by_role(
                         "button", name="New extraction", exact=True
                     ),
                 )
-                await type_text(
-                    page, page.get_by_label("Keyword", exact=True), "Controlled provider journey"
-                )
+                if direct_url:
+                    await activate(page, page.get_by_role("button", name="URL", exact=True))
+                    await type_text(
+                        page,
+                        page.get_by_label("Search-results or article URL", exact=True),
+                        "https://synthetic.publisher.example/provider-doi.xml",
+                    )
+                else:
+                    await type_text(
+                        page,
+                        page.get_by_label("Keyword", exact=True),
+                        "Controlled provider journey",
+                    )
                 await activate(
                     page, page.get_by_role("button", name="Create and validate plan", exact=True)
                 )
@@ -413,14 +431,14 @@ async def main() -> None:
                 await page.get_by_role(
                     "heading", name=re.compile(r"^Job [0-9a-f-]{36}$")
                 ).wait_for()
-                checkpoint("keyword_worker")
+                checkpoint("url_worker" if direct_url else "keyword_worker")
                 await channel.request({"kind": "control", "action": "publish"})
                 # Separate provider acceptance: three real acquisitions retain enforced
                 # source spacing plus HTTPS/parser work. The static wait remains 8s.
                 await page.get_by_text("completed", exact=True).first.wait_for(timeout=75000)
                 checkpoint("evidence_review")
                 await activate(page, page.get_by_role("button", name="Review queue", exact=True))
-                for address in ("Second@example.org", "beta@example.org"):
+                for address in expected_addresses:
                     row = page.get_by_role("row").filter(has_text=address)
                     await expect(row).to_have_count(1)
                     await activate(
@@ -437,8 +455,12 @@ async def main() -> None:
                     await activate(page, page.get_by_role("button", name="Save review", exact=True))
                     await page.get_by_role("dialog").wait_for(state="hidden")
                 await activate(page, page.get_by_role("button", name="Contacts", exact=True))
-                for address in ("Second@example.org", "beta@example.org"):
+                for address in expected_addresses:
                     await expect(page.get_by_role("row").filter(has_text=address)).to_have_count(1)
+                if direct_url:
+                    await expect(
+                        page.get_by_role("row").filter(has_text="beta@example.org")
+                    ).to_have_count(0)
                 checkpoint("export_preview")
                 await activate(page, page.get_by_role("button", name="Exports", exact=True))
                 for index in (0, 1):
@@ -526,6 +548,7 @@ async def main() -> None:
                             "kind": "result",
                             "diagnostic": "synthetic-operator-ui",
                             "journey": "controlled_provider",
+                            "direct_article_url": direct_url,
                             "source_policy_review": True,
                             "keyboard": True,
                             "built_assets": accepted,

@@ -24,6 +24,7 @@ from emailmonitor.runtime.assembly import RuntimeBundle, owned_test_runtime
 from emailmonitor.runtime.assembly import TestRuntimeConfig as RuntimeConfig
 from emailmonitor.runtime.publisher import TestPublisherConfig as PublisherConfig
 from emailmonitor.runtime.publisher import publish_once
+from emailmonitor.sources import provider_documents as catalog
 from operator_provider_worker import provider_worker
 from operator_ui_protocol import RequestFrame, asset_manifest
 from run_operator_ui_acceptance import run
@@ -44,6 +45,22 @@ ROOT = Path(__file__).resolve().parents[2]
 def test_actual_provider_operator_ui(
     topology: Topology, scenario: Scenario, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    _run_provider_operator_ui(topology, scenario, monkeypatch)
+
+
+def test_actual_provider_direct_article_url_operator_ui(
+    topology: Topology, scenario: Scenario, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _run_provider_operator_ui(topology, scenario, monkeypatch, direct_url=True)
+
+
+def _run_provider_operator_ui(
+    topology: Topology,
+    scenario: Scenario,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    direct_url: bool = False,
+) -> None:
     if os.environ.get("EM_REQUIRE_OPERATOR_UI") != "true":
         pytest.fail("Required controlled operator acceptance marker missing")
     cfg = RuntimeConfig(
@@ -54,7 +71,7 @@ def test_actual_provider_operator_ui(
     with owned_test_runtime(cfg, scenario.foundation.provider) as runtime:
         assert runtime.api_database is not scenario.foundation.database
         assert runtime.publisher_database is not runtime.api_database
-        _provider_operator_journey(topology, scenario, monkeypatch, runtime)
+        _provider_operator_journey(topology, scenario, monkeypatch, runtime, direct_url=direct_url)
     with APIClient(runtime.app, ORIGIN) as closed:
         assert closed.get("/healthz").status_code == 503
     print(
@@ -64,10 +81,21 @@ def test_actual_provider_operator_ui(
 
 
 def _provider_operator_journey(
-    topology: Topology, scenario: Scenario, monkeypatch: pytest.MonkeyPatch, runtime: RuntimeBundle
+    topology: Topology,
+    scenario: Scenario,
+    monkeypatch: pytest.MonkeyPatch,
+    runtime: RuntimeBundle,
+    *,
+    direct_url: bool = False,
 ) -> None:
     from emailmonitor.parsing import xml_channel
 
+    assert type(direct_url) is bool
+    expected_articles = 1 if direct_url else 2
+    expected_tickets = 1 if direct_url else 3
+    expected_addresses = (
+        {"Second@example.org"} if direct_url else {"Second@example.org", "beta@example.org"}
+    )
     configure(topology)
     profiles: list[Mapping[str, object]] = []
     verify = xml_channel.verify_profile
@@ -120,9 +148,12 @@ def _provider_operator_journey(
     errors: list[str] = []
     requests: list[tuple[str, str]] = []
     policy_requests: list[tuple[str, dict[str, object]]] = []
+    job_requests: list[dict[str, object]] = []
 
     def observe(request: RequestFrame) -> bool:
         requests.append((request.method, request.url.split("?")[0]))
+        if request.method == "POST" and request.url == f"{ORIGIN}/api/v1/organizations/{org}/jobs":
+            job_requests.append(json.loads(request.body))
         if request.method == "POST" and request.url in (
             ORIGIN + source_path(scenario) + "/policies",
             ORIGIN + source_path(scenario) + "/policy-state",
@@ -134,6 +165,7 @@ def _provider_operator_journey(
         "kind": "bootstrap",
         "origin": ORIGIN,
         "journey": "controlled_provider",
+        "direct_article_url": direct_url,
         "cookies": cookies,
         "assets": asset_manifest(ROOT / "apps/web/dist"),
         "initial_organization": str(org),
@@ -189,16 +221,29 @@ def _provider_operator_journey(
             if publisher_thread.ident is not None:
                 publisher_thread.join(timeout=10)
                 assert not publisher_thread.is_alive()
-    assert publication_counts[0] >= 3 and publication_counts[1] == 2
+    assert publication_counts[0] >= expected_tickets and publication_counts[1] == 2
     print(
         json.dumps({"owned_publisher_passes_closed": True, "published_exports": 2}),
         flush=True,
     )
     # The pipe returns to the host only AFTER the real solo worker has joined.
-    assert len(profiles) == 2
+    assert len(profiles) == expected_articles
     calls = snapshot(topology)["calls"]
-    assert len(calls) == 3 and calls[0]["method"] == "PUT"
-    assert all(c["method"] == "GET" and c["path"].endswith("?view=FULL") for c in calls[1:])
+    if direct_url:
+        assert len(calls) == 1
+        assert calls[0]["method"] == "GET"
+        assert calls[0]["path"] == "/content/article/doi/10.9999/synthetic.1?view=FULL"
+    else:
+        assert len(calls) == 3 and calls[0]["method"] == "PUT"
+        assert all(c["method"] == "GET" and c["path"].endswith("?view=FULL") for c in calls[1:])
+    assert evidence["direct_article_url"] is direct_url
+    assert len(job_requests) == 1
+    expected_input = (
+        {"type": "url", "url": catalog.DOI_URL}
+        if direct_url
+        else {"type": "keyword", "source_id": catalog.SOURCE, "original_query": catalog.QUERY}
+    )
+    assert job_requests[0]["input"] == expected_input
     assert evidence["journey"] == "controlled_provider" and evidence["keyboard"] is True
     assert evidence["network_errno"] == [101, 101] and evidence["interfaces"] == ["lo"]
     assert evidence["source_policy_review"] is True
@@ -272,13 +317,39 @@ def _provider_operator_journey(
         assert all(row.actor_id == scenario.identities["owner"] for row in policy_audit)
         rows = c.execute(
             text(
-                "SELECT id,state FROM emailmonitor.jobs "
+                "SELECT id,state,request FROM emailmonitor.jobs "
                 "WHERE organization_id=:org AND kind='extraction'"
             ),
             {"org": org},
         ).all()
         assert len(rows) == 1 and rows[0].state == "completed"
         job = UUID(str(rows[0].id))
+        if direct_url:
+            assert rows[0].request["input"] == expected_input
+            discovery = c.execute(
+                text(
+                    "SELECT plan,checkpoint FROM emailmonitor.discovery "
+                    "WHERE organization_id=:org AND job_id=:job"
+                ),
+                {"org": org, "job": job},
+            ).one()
+            assert discovery.plan["classification"] == "article"
+            assert discovery.checkpoint["pages"] == []
+            assert discovery.checkpoint["articles"] == [catalog.DOI_URL]
+            assert discovery.checkpoint["next_url"] is None
+            assert discovery.checkpoint["discovery_complete"] is True
+            assert discovery.checkpoint["completeness"] == "single_article"
+            assert discovery.checkpoint["reason"] == "single_article"
+            items = c.execute(
+                text(
+                    "SELECT work_kind,input_url FROM emailmonitor.execution_items "
+                    "WHERE organization_id=:org AND job_id=:job"
+                ),
+                {"org": org, "job": job},
+            ).all()
+            assert [(item.work_kind, item.input_url) for item in items] == [
+                ("article", catalog.DOI_URL)
+            ]
         assert (
             c.execute(
                 text(
@@ -287,7 +358,7 @@ def _provider_operator_journey(
                 ),
                 {"org": org, "job": job},
             ).scalar_one()
-            == 2
+            == expected_articles
         )
         assert (
             c.execute(
@@ -297,7 +368,7 @@ def _provider_operator_journey(
                 ),
                 {"org": org},
             ).scalar_one()
-            == 2
+            == expected_articles
         )
         tickets = c.execute(
             text(
@@ -306,12 +377,14 @@ def _provider_operator_journey(
             ),
             {"org": org, "job": job},
         ).all()
-        assert len(tickets) == 3 and all(t.state == "finished" for t in tickets)
-        assert {t.operation for t in tickets} == {"search", "fetch_xml"}
+        assert len(tickets) == expected_tickets and all(t.state == "finished" for t in tickets)
+        assert {t.operation for t in tickets} == (
+            {"fetch_xml"} if direct_url else {"search", "fetch_xml"}
+        )
         usage: dict[str, Any] = c.execute(
             text("SELECT emailmonitor.administration_usage(:org)"), {"org": org}
         ).scalar_one()
-        assert usage["source_resource_attempts"] == 3
+        assert usage["source_resource_attempts"] == expected_tickets
         assert usage["active_units"].get("http", 0) == 0
         assert (
             c.execute(
@@ -321,16 +394,29 @@ def _provider_operator_journey(
                 ),
                 {"org": org, "job": job},
             ).scalar_one()
-            >= 3
+            >= expected_tickets
         )
     retained = [
         RetainedXml.model_validate_json(json.dumps(r["observation"]))
         for r in progress.extraction.read(org, job)
     ]
-    assert len(retained) == 2 and {r.requested_identifier.kind for r in retained} == {"doi", "pii"}
+    assert len(retained) == expected_articles
+    assert {r.requested_identifier.kind for r in retained} == (
+        {"doi"} if direct_url else {"doi", "pii"}
+    )
+    if direct_url:
+        assert retained[0].url == catalog.DOI_URL
+        assert (
+            retained[0].canonical_url
+            == "https://api.elsevier.com/content/article/doi/10.9999/synthetic.1"
+        )
+        assert retained[0].requested_identifier.value == "10.9999/synthetic.1"
     assert all(r.provider is not None and r.provider.requested_view == "FULL" for r in retained)
     contacts = results.contacts(org, Filters(job_id=job)).items
-    assert len(contacts) == 2
+    assert len(contacts) == expected_articles
+    assert {contact.raw_address for contact in contacts} == expected_addresses
+    if direct_url:
+        assert {contact.source_url for contact in contacts} == {catalog.DOI_URL}
     exports = results.exports(org)
     assert len(exports) == 2 and {e.format for e in exports} == {"csv", "xlsx"}
     digests = []
@@ -338,7 +424,11 @@ def _provider_operator_journey(
         artifact = results.download(org, export.id)
         with ZipFile(io.BytesIO(artifact.body)) as archive:
             joined = b"\n".join(archive.read(name) for name in archive.namelist())
-            assert b"Second@example.org" in joined and b"beta@example.org" in joined
+            assert all(address.encode() in joined for address in expected_addresses)
+            if direct_url:
+                assert b"beta@example.org" not in joined
+                assert catalog.PII_URL.encode() not in joined
+                assert catalog.SEARCH_URL.encode() not in joined
             assert all(contact.source_url.encode() in joined for contact in contacts)
         digests.append(hashlib.sha256(artifact.body).hexdigest())
     base = f"{ORIGIN}/api/v1/organizations/{org}"
@@ -358,9 +448,12 @@ def _provider_operator_journey(
     print(
         json.dumps(
             {
-                "proof": "NORMAL_OPERATOR_RABBITMQ_PROVIDER_ISOLATED_REVIEW_EXPORT",
-                "articles": 2,
-                "source_tickets": 3,
+                "proof": "NORMAL_OPERATOR_DIRECT_XML_URL_ISOLATED_REVIEW_EXPORT"
+                if direct_url
+                else "NORMAL_OPERATOR_RABBITMQ_PROVIDER_ISOLATED_REVIEW_EXPORT",
+                "articles": expected_articles,
+                "source_tickets": expected_tickets,
+                "direct_article_url": direct_url,
                 "policy_approved_through_keyboard": True,
                 "parser_image_ids": sorted({str(p["Image"]) for p in profiles}),
                 "actual_parser_profiles": len(profiles),

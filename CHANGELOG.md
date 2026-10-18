@@ -1,3 +1,9 @@
+## 2026-10-18 — Direct controlled XML URL operator candidate
+
+- Exercise the existing exact catalog article-URL input through separate keyboard source review, registered worker, protected acquisition, isolated parsing, review and exports.
+- Require one article and no search/unrelated article work; preserve original keyword/static journeys and all controls.
+- Clarify exact synthetic inputs and worker/policy prerequisites. See [validation](reports/operator-direct-url-validation.md).
+
 ## 2026-10-18 — Operator synthetic policy integration candidate
 
 - Add explicit closed HTML/XML policy proposals to Sources with unchanged HTML defaults and separate current-record approval.
