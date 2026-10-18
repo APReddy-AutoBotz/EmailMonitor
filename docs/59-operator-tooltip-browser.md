@@ -17,7 +17,9 @@ invalidates the plan, including stale asynchronous planning/launch reads.
 ## Durable execution and authority
 
 Only trusted Python composition injects the tooltip adapter into the ordinary
-registered Celery task after its normal ID-only durable claim. Default workers
+registered Celery task after its normal ID-only durable claim. All five configured
+closure tasks are app-local (`shared=False`), so finalizing another worker cannot
+substitute an earlier tenant/session/factory closure under the same task name. Default workers
 retain truthful `requires_browser` results. Opt-out never invokes the adapter.
 The bound execution lease, current source policy, job options, tenant and deletion
 fences remain authoritative. Observations and association/effect accounting use

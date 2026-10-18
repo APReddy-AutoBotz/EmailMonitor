@@ -1,7 +1,10 @@
 """Pure closed browser operator grammar and opt-in assertions; no service proof."""
 
 import ast
+import asyncio
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
 
 import pytest
 from operator_ui_protocol import validate_journey
@@ -52,9 +55,10 @@ def test_browser_journey_has_fixed_url_and_keyboard_only_explicit_opt_in() -> No
     code = ast.unparse(branch)
     assert "https://synthetic.publisher.example/tooltip.html" in code
     assert "await expect(browser_opt_in).not_to_be_checked()" in code
-    assert "await activate(page, browser_opt_in)" in code
+    assert "await focus(page, browser_opt_in)" in code
+    assert "await page.keyboard.press('Space')" in code
     assert "await expect(browser_opt_in).to_be_checked()" in code
-    assert code.index("not_to_be_checked") < code.index("activate(page, browser_opt_in)")
+    assert code.index("not_to_be_checked") < code.index("focus(page, browser_opt_in)")
     assert "'html_browser'" in code and "'allow_browser': True" in code
     assert "wait_for(timeout=75000)" in code
     assert "elena.park@example.org" in code
@@ -66,3 +70,75 @@ def test_browser_journey_has_fixed_url_and_keyboard_only_explicit_opt_in() -> No
     assert "topology.browser()" in host and host.count("topology.browser()") == 1
     assert "with browser_worker(" in host
     assert '"guest_stopped"' in host
+
+
+def test_guest_opt_in_uses_checkbox_key_without_submitting_the_plan() -> None:
+    module = ast.parse((ROOT / "scripts/isolation/operator_ui_acceptance.py").read_text())
+    branch = next(
+        node
+        for node in ast.walk(module)
+        if isinstance(node, ast.If)
+        and ast.unparse(node.test) == "setup.get('journey') == 'controlled_browser'"
+    )
+    start = next(
+        index
+        for index, node in enumerate(branch.body)
+        if ast.unparse(node) == "await expect(browser_opt_in).not_to_be_checked()"
+    )
+    end = next(
+        index
+        for index, node in enumerate(branch.body)
+        if ast.unparse(node) == "await expect(browser_opt_in).to_be_checked()"
+    )
+    state = {"checked": False, "focused": False, "submissions": 0}
+    keys: list[str] = []
+    target = object()
+
+    class Keyboard:
+        async def press(self, key: str) -> None:
+            assert state["focused"]
+            keys.append(key)
+            if key == "Space":
+                state["checked"] = not state["checked"]
+            elif key == "Enter":
+                state["submissions"] += 1
+
+    class Expect:
+        def __init__(self, value: object) -> None:
+            assert value is target
+
+        async def not_to_be_checked(self) -> None:
+            assert not state["checked"]
+
+        async def to_be_checked(self) -> None:
+            assert state["checked"]
+
+    page = SimpleNamespace(keyboard=Keyboard())
+
+    async def focus(value: object, control: object) -> None:
+        assert value is page and control is target
+        state["focused"] = True
+
+    # Preserve the real generic activation behavior so the old checkbox call
+    # reproduces its unintended form submission and fails the checked assertion.
+    activate = next(
+        node
+        for node in module.body
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "activate"
+    )
+    wrapper = ast.parse("async def exercise():\n    pass\n")
+    function = wrapper.body[0]
+    assert isinstance(function, ast.AsyncFunctionDef)
+    function.body = branch.body[start : end + 1]
+    namespace: dict[str, Any] = {
+        "page": page,
+        "browser_opt_in": target,
+        "expect": Expect,
+        "focus": focus,
+        "Page": object,
+        "Locator": object,
+    }
+    exec(compile(ast.Module(body=[activate], type_ignores=[]), "<activation>", "exec"), namespace)
+    exec(compile(ast.fix_missing_locations(wrapper), "<checkbox-input>", "exec"), namespace)
+    asyncio.run(namespace["exercise"]())
+    assert keys == ["Space"] and state["checked"] and state["submissions"] == 0

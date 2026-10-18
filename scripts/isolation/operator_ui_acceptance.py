@@ -416,7 +416,9 @@ async def main() -> None:
                     exact=True,
                 )
                 await expect(browser_opt_in).not_to_be_checked()
-                await activate(page, browser_opt_in)
+                # Native checkboxes toggle with Space; Enter submits this form.
+                await focus(page, browser_opt_in)
+                await page.keyboard.press("Space")
                 await expect(browser_opt_in).to_be_checked()
                 await activate(
                     page,

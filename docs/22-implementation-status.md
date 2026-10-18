@@ -391,3 +391,19 @@ and 302 explicit service skips in 99.42s/107.48s, 48 React cases and mypy over
 clear. Initial annotation/test-fixture failures and the corrected late-SQL
 revocation finding are preserved in the report. Actual 2786/no-skips and all
 seven own-head gates remain required.
+
+PR39 first head `3b94fe4ea53f3b85d85fbc972ec0504875d64ff7` / tree
+`5472d3802c266e0e8c0a4f64b441dfe7a9528a97` passed controlled transport 41 and
+the original keyword operator, but failed the new checkbox keyboard assertion
+before execution and the existing direct-XML export's envelope/config authority
+check. Native Space activation and app-local Celery closure registration address
+the independently reproduced mechanisms without weakening predicates or fences.
+Original failure is preserved; corrected local/review/all-seven gates remain
+required.
+
+Corrected tooltip normal/new-empty aggregates pass with explicit exit 0:
+2487 passed/302 service skips, 48 React and mypy 262 files, all local gates.
+Independent corrected source/mutation review passes. First-head application also
+completed 2786 actual cases/no skips, leaving six successful gates and the
+preserved controlled failure. Corrected 2789/no-skips/all-seven acceptance remains
+required; no first-head run was interrupted.

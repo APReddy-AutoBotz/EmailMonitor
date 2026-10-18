@@ -58,3 +58,55 @@ test delta review are clear. Actual application target is 2786/no skips, with
 controlled 41 plus all three separate operator journeys and all seven exact-head
 workflows still required. No actual-service success is inferred from these local
 runs.
+
+## First actual head failure and bounded corrections
+
+PR39 first head `3b94fe4ea53f3b85d85fbc972ec0504875d64ff7`, tree
+`5472d3802c266e0e8c0a4f64b441dfe7a9528a97`, failed
+[controlled run 39101590581](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/39101590581).
+Its 41 transport cases passed in 207.93s and original keyword operator passed;
+operator aggregate was one passed/two failed in 121.57s. Owned topology/XML
+cleanup was verified. This failed run is preserved, not rerun or treated as
+acceptance.
+
+The new tooltip guest pressed Enter on an unchecked native checkbox. That
+implicitly submitted the form instead of toggling it, then the unchanged checked
+assertion failed at url_plan before browser execution. The correction focuses
+that checkbox and presses Space. A causal regression executes the actual guest
+statements against native key semantics and rejects the original Enter mutation;
+original provider/static activation and all success/time bounds remain unchanged.
+
+The existing direct-XML case reached exports but a worker refused its envelope
+organization before SQL/session lookup (results/broker.py). Independent source
+analysis found five configured closure tasks registered with Celery's default
+shared=True. Real Celery finalization of two differently configured apps, using
+an inert Database constructor and no task/SQL/network execution, deterministically
+bound both apps to the same callable for each name, guaranteeing five incorrect
+bindings. The CI log does not expose closure identity or the stale organization;
+the causal reproduction establishes the mechanism matching its envelope/config
+refusal. This was a latent multi-app bug, not evidence of expanded authority.
+
+The bounded correction registers all five tasks app-locally with shared=False.
+Isolated simultaneous and sequential lifecycle regressions require each task's
+own config/ledger and the execute task's own trusted factory. Envelope matching,
+SQL authorization, source permissions and all tenant fences remain unchanged.
+Corrected local/review/exact-tree and all seven actual gates are required.
+
+Independent corrected-delta review passes 53 focused cases and confirms both
+original mutations (shared registration and Enter checkbox activation) fail their
+new regressions. The worker-focused suite passes 168 cases. The first corrected
+normal aggregate stopped at Ruff before tests because single-file import
+classification differed from the full aggregate target set; the standard full
+Ruff invocation corrected that test-only spacing. Its exit-1 receipt is retained.
+
+The first head's application run completed successfully with 2786 actual backend
+cases/no skips in 724.09s, 48 React and verified XML cleanup. All 25 new SQL cases
+executed. Six workflows passed; the controlled operator failure remains blocking.
+All first-head runs reached terminal state before any corrected publication.
+
+Corrected normal/new-empty aggregates both return exit 0: 2487 passed and 302
+explicit service skips, 48 React tests and mypy over 262 files, plus all existing
+local gates. The fresh Python environment was absent before creation; shared
+package caches/frontend dependencies were reused. Independent corrected source
+review is clear. Corrected actual application target is 2789/no skips; controlled
+41 plus all three operator proofs and all seven own-head workflows remain required.
