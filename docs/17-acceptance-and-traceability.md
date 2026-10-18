@@ -309,3 +309,7 @@ The [runtime prerequisite](56-owned-test-runtime.md) maps EM-017 composition/lif
 ## EM-017g owned test outbox publisher
 
 The [publisher prerequisite](57-owned-test-publisher.md) maps EM-017 lifecycle and EM-005/010/011 durable replay to pure boundary/cleanup/protocol tests, actual SQL/RabbitMQ partial-publication and duplicate-effect checks, and unchanged normal controlled operator acceptance. [Evidence](../reports/em017g-validation.md) must distinguish local service skips from actual own-head execution. No production identity or source certification follows from this test-only composition.
+
+## EM-003 / EM-012 operator synthetic policy profiles
+
+[Runbook58](58-operator-synthetic-policy-profiles.md) maps closed HTML/XML selection and actual-record approval to seven frontend cases, nine real SQL/API governance cases, and the actual provider keyboard journey starting without a policy. Browser request/SQL/audit checks must precede existing normal-worker review/export acceptance. The original static HTML path and all deadlines/isolation remain unchanged. [Validation](../reports/operator-xml-policy-validation.md) separates local skips from required own-head actual gates.

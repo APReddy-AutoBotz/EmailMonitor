@@ -30,7 +30,7 @@ from run_operator_ui_acceptance import run
 from sqlalchemy import text
 from test_durable_jobs import SETTINGS
 from test_real_broker_jobs import config, wait_for
-from test_source_foundation import policy_body, source_path
+from test_source_foundation import source_path
 from test_tenant_foundation import ORIGIN, Scenario
 from test_tenant_foundation import scenario as scenario
 from test_transport_acceptance import configure, snapshot
@@ -91,34 +91,11 @@ def _provider_operator_journey(
             == 201
         )
         assert other_owner.get(f"/api/v1/organizations/{org}").status_code == 404
-        csrf = scenario.login(owner, "owner")
-        headers = {"Origin": ORIGIN, "X-CSRF-Token": csrf}
-        # Explicit reviewed synthetic precondition through the existing governance API.
-        # Never alter the UI's HTML default, a historical policy, or live permissions.
-        policy = policy_body(
-            allowed_operations=[
-                "search",
-                "fetch_xml",
-                "extract_contacts",
-                "retain_excerpt",
-                "export_contacts",
-            ],
-            retention={"raw_hours": 0, "excerpt_days": 30, "contact_days": 90},
-        )
-        response = owner.post(
-            source_path(scenario) + "/policies",
-            headers=headers,
-            json={"expected_version": 0, "policy": policy},
-        )
-        assert response.status_code == 201, response.text
-        assert (
-            owner.post(
-                source_path(scenario) + "/policy-state",
-                headers=headers,
-                json={"expected_version": 1, "expected_revision": 1, "state": "approved"},
-            ).status_code
-            == 200
-        )
+        scenario.login(owner, "owner")
+        # The browser must propose and approve the policy itself. Host setup
+        # establishes identity only, never the XML acquisition permission.
+        initial = owner.get(source_path(scenario) + "/policies")
+        assert initial.status_code == 200 and initial.json() == []
         cookies = [
             {
                 "name": c.name,
@@ -142,9 +119,15 @@ def _provider_operator_journey(
     stop, release = threading.Event(), threading.Event()
     errors: list[str] = []
     requests: list[tuple[str, str]] = []
+    policy_requests: list[tuple[str, dict[str, object]]] = []
 
     def observe(request: RequestFrame) -> bool:
         requests.append((request.method, request.url.split("?")[0]))
+        if request.method == "POST" and request.url in (
+            ORIGIN + source_path(scenario) + "/policies",
+            ORIGIN + source_path(scenario) + "/policy-state",
+        ):
+            policy_requests.append((request.url.rsplit("/", 1)[-1], json.loads(request.body)))
         return False
 
     setup: dict[str, object] = {
@@ -218,7 +201,75 @@ def _provider_operator_journey(
     assert all(c["method"] == "GET" and c["path"].endswith("?view=FULL") for c in calls[1:])
     assert evidence["journey"] == "controlled_provider" and evidence["keyboard"] is True
     assert evidence["network_errno"] == [101, 101] and evidence["interfaces"] == ["lo"]
+    assert evidence["source_policy_review"] is True
+    assert [kind for kind, _ in policy_requests] == ["policies", "policy-state"]
+    assert policy_requests[0][1]["expected_version"] == 0
+    requested_policy = policy_requests[0][1]["policy"]
+    assert isinstance(requested_policy, dict)
+    assert requested_policy["allowed_operations"] == [
+        "search",
+        "fetch_xml",
+        "extract_contacts",
+        "retain_excerpt",
+        "export_contacts",
+    ]
+    assert requested_policy["retention"] == {"raw_hours": 0, "excerpt_days": 30, "contact_days": 90}
+    assert requested_policy["allowed_hosts"] == ["synthetic.publisher.example"]
+    assert requested_policy["execution_mode"] == "fixture"
+    assert requested_policy["credential_reference"] is None
+    assert requested_policy["permission_reference"] == "synthetic-fixtures-only"
+    assert requested_policy["allowed_regions"] == ["test-only"]
+    assert requested_policy["robots_handling"] == "fixture_no_network"
+    assert requested_policy["purpose"] == "academic_contact_research"
+    assert requested_policy["export_contacts_allowed"] is True
+    assert requested_policy["limits"] == {
+        "max_concurrent_requests": 1,
+        "min_request_interval_seconds": 5,
+        "max_articles_per_job": 500,
+    }
+    assert policy_requests[1][1] == {
+        "expected_version": 1,
+        "expected_revision": 1,
+        "state": "approved",
+    }
     with progress.database.tenant(token, org, Capability.READ_ORGANIZATION) as (c, _):
+        approved_policy = c.execute(
+            text(
+                "SELECT version,row_version,state,policy,created_by,reviewed_by "
+                "FROM emailmonitor.source_policies WHERE organization_id=:org "
+                "AND source_id='synthetic-publisher'"
+            ),
+            {"org": org},
+        ).one()
+        assert (approved_policy.version, approved_policy.row_version, approved_policy.state) == (
+            1,
+            2,
+            "approved",
+        )
+        assert (
+            approved_policy.created_by
+            == approved_policy.reviewed_by
+            == scenario.identities["owner"]
+        )
+        # SQL stores the validated policy, including the same explicit permissions.
+        assert (
+            approved_policy.policy["allowed_operations"] == requested_policy["allowed_operations"]
+        )
+        assert approved_policy.policy["retention"] == requested_policy["retention"]
+        policy_audit = c.execute(
+            text(
+                "SELECT action,actor_id FROM emailmonitor.audit_events "
+                "WHERE organization_id=:org AND action IN "
+                "('source.policy.proposed','source.policy.approved')"
+            ),
+            {"org": org},
+        ).all()
+        assert {row.action for row in policy_audit} == {
+            "source.policy.proposed",
+            "source.policy.approved",
+        }
+        assert len(policy_audit) == 2
+        assert all(row.actor_id == scenario.identities["owner"] for row in policy_audit)
         rows = c.execute(
             text(
                 "SELECT id,state FROM emailmonitor.jobs "
@@ -310,6 +361,7 @@ def _provider_operator_journey(
                 "proof": "NORMAL_OPERATOR_RABBITMQ_PROVIDER_ISOLATED_REVIEW_EXPORT",
                 "articles": 2,
                 "source_tickets": 3,
+                "policy_approved_through_keyboard": True,
                 "parser_image_ids": sorted({str(p["Image"]) for p in profiles}),
                 "actual_parser_profiles": len(profiles),
                 "formats": ["csv", "xlsx"],

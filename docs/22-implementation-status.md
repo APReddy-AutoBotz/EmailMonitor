@@ -353,3 +353,11 @@ EM-017g corrected normal/new-empty aggregates pass with explicit exit 0: 2411 pa
 PR36 first head `130124def467baab13141beaf7ef018e0292e9ac` / tree `b639e9e823272257e7fe011e8527832ac4c34318` passed six gates and 2678 actual backend cases, but one new caller-survival fixture failed before publisher execution: RabbitMQ 4.3.6 rejects transient non-exclusive queues. The test-only correction makes the separate caller's uniquely named queue exclusive; durable publisher queues and all controls are unchanged. Original failure is preserved; corrected local/review/all-seven gates remain required.
 
 The exclusive caller-queue correction passes normal/new-empty aggregates with explicit exit 0: 2411/268 explicit skips in 90.89s/101.35s, 31 React and all existing local gates. Independent corrected source/focused review passes. Corrected exact-tree and actual own-head acceptance remain required.
+
+## EM-003 / EM-012 operator synthetic policy integration candidate
+
+Corrected Draft PR36 head `2ec9db1c012c10e416fab6f21ab81a09e017138d` / tree `2b0e8ebd04c33c85aefe49db2a7b063e242ee776` completed all seven workflows: 2679 actual backend/no skips, 31 React, controlled 41/operator 1 and all existing browser/static UI/parser/docs/packaging gates. Independent final evidence and description review passed. Earlier pending paragraphs are historical; original failures remain preserved.
+
+The next existing operator integration exposes closed HTML/XML synthetic policy proposals, preserves HTML defaults and separate review, and moves controlled XML policy creation/approval into the actual keyboard journey. Independent design is clear; candidate aggregate/source/exact-tree and actual gates remain pending. [Runbook58](58-operator-synthetic-policy-profiles.md) / [validation](../reports/operator-xml-policy-validation.md). Real source rights and production runtime remain unmet.
+
+Corrected normal/new-empty Python aggregates both return exit 0: 2411 passed and 277 explicit service skips, 38 React cases and mypy over 253 files; all existing docs/lint/format/inventory/type/build gates pass. The new-empty Python environment was absent before creation; shared package caches and frontend dependencies are reused. Independent source review and 14 focused provider-worker cases pass. Actual 2688/no-skip application and all seven own-head workflows remain required.

@@ -152,11 +152,23 @@ def test_provider_start_uses_unique_workspace_button_with_dashboard_shortcut() -
         if isinstance(node, ast.If)
         and ast.unparse(node.test) == "setup.get('journey') == 'controlled_provider'"
     )
-    statement = branch.body[1]
-    assert isinstance(statement, ast.Expr) and isinstance(statement.value, ast.Await)
-    action = statement.value.value
-    assert isinstance(action, ast.Call) and isinstance(action.func, ast.Name)
-    assert action.func.id == "activate"
+    actions = [
+        node
+        for node in ast.walk(branch)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "activate"
+        and len(node.args) == 2
+        and any(
+            isinstance(child, ast.keyword)
+            and child.arg == "name"
+            and isinstance(child.value, ast.Constant)
+            and child.value.value == "New extraction"
+            for child in ast.walk(node.args[1])
+        )
+    ]
+    assert len(actions) == 1
+    action = actions[0]
     # Two actual authored UI controls share this exact accessible name: the
     # Workspace navigation and Dashboard shortcut. Exercise the source selector
     # against that bounded structure, rather than accepting an unscoped .first().
