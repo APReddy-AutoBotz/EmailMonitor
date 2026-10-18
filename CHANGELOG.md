@@ -1,3 +1,9 @@
+## 2026-10-18 — Combined fixture operator demonstration candidate
+
+- Add a separate keyword demonstration covering both fixture pages, duplicate suppression, static and tooltip evidence, no-contact results, review and exports.
+- Extend tenant-negative acceptance and separately verify accepted-contact subprocess crash/replay without duplicate effects or accounting.
+- Preserve existing cases and isolation; see [validation](reports/operator-combined-fixture-validation.md).
+
 ## 2026-10-18 — Synthetic tooltip normal-worker operator candidate
 
 - Add explicit closed browser policy/job opt-in for the existing synthetic tooltip.

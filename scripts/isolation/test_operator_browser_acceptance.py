@@ -1,5 +1,7 @@
 """Normal authenticated UI and registered RabbitMQ task, not manual journey execution."""
 
+import asyncio
+import csv
 import hashlib
 import io
 import json
@@ -9,8 +11,10 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 from uuid import UUID
+from xml.etree import ElementTree as ET
 from zipfile import ZipFile
 
+import httpx
 import pytest
 from api_client import APIClient
 from emailmonitor.extraction.html import ArticleObservation
@@ -18,7 +22,7 @@ from emailmonitor.jobs.ledger import Ledger
 from emailmonitor.jobs.queues import owned_queues
 from emailmonitor.organizations.roles import Capability
 from emailmonitor.progress.service import Progress
-from emailmonitor.results.models import Filters
+from emailmonitor.results.models import Contact, ExportState, Filters
 from emailmonitor.results.service import Results
 from emailmonitor.runtime.assembly import RuntimeBundle, owned_test_runtime
 from emailmonitor.runtime.assembly import TestRuntimeConfig as RuntimeConfig
@@ -72,10 +76,19 @@ def _browser_operator_journey(
     topology: Topology,
     scenario: Scenario,
     runtime: RuntimeBundle,
+    *,
+    keyword: bool = False,
 ) -> None:
     url = "https://synthetic.publisher.example/tooltip.html"
-    expected_articles, expected_tickets = 1, 2
+    expected_articles, expected_tickets = (4 if keyword else 1), 2
     expected_addresses = {"elena.park@example.org"}
+    if keyword:
+        expected_addresses |= {
+            "alex.chen@example.org",
+            "ravi.das@example.org",
+            "noor.ibrahim@example.org",
+        }
+    journey = "controlled_keyword_browser" if keyword else "controlled_browser"
     configure(topology)
     browser_evidence: list[dict[str, Any]] = []
     app = runtime.app
@@ -124,11 +137,17 @@ def _browser_operator_journey(
     requests: list[tuple[str, str]] = []
     policy_requests: list[tuple[str, dict[str, object]]] = []
     job_requests: list[dict[str, object]] = []
+    review_requests: list[dict[str, Any]] = []
 
     def observe(request: RequestFrame) -> bool:
         requests.append((request.method, request.url.split("?")[0]))
         if request.method == "POST" and request.url == f"{ORIGIN}/api/v1/organizations/{org}/jobs":
             job_requests.append(json.loads(request.body))
+        if (
+            request.method == "POST"
+            and request.url == f"{ORIGIN}/api/v1/organizations/{org}/reviews"
+        ):
+            review_requests.append(json.loads(request.body))
         if request.method == "POST" and request.url in (
             ORIGIN + source_path(scenario) + "/policies",
             ORIGIN + source_path(scenario) + "/policy-state",
@@ -139,7 +158,7 @@ def _browser_operator_journey(
     setup: dict[str, object] = {
         "kind": "bootstrap",
         "origin": ORIGIN,
-        "journey": "controlled_browser",
+        "journey": journey,
         "cookies": cookies,
         "assets": asset_manifest(ROOT / "apps/web/dist"),
         "initial_organization": str(org),
@@ -222,12 +241,20 @@ def _browser_operator_journey(
         for c in calls
     )
     assert len(job_requests) == 1
-    expected_input = {"type": "url", "url": url}
+    expected_input = (
+        {
+            "type": "keyword",
+            "source_id": "synthetic-publisher",
+            "original_query": "Myocardial Infarction",
+        }
+        if keyword
+        else {"type": "url", "url": url}
+    )
     assert job_requests[0]["input"] == expected_input
     options = job_requests[0]["options"]
     assert isinstance(options, dict) and options["allow_browser"] is True
     assert evidence["allow_browser"] is True
-    assert evidence["journey"] == "controlled_browser" and evidence["keyboard"] is True
+    assert evidence["journey"] == journey and evidence["keyboard"] is True
     assert evidence["network_errno"] == [101, 101] and evidence["interfaces"] == ["lo"]
     assert evidence["source_policy_review"] is True
     assert [kind for kind, _ in policy_requests] == ["policies", "policy-state"]
@@ -324,13 +351,16 @@ def _browser_operator_journey(
             ),
             {"org": org, "job": job},
         ).one()
-        assert discovery.plan["classification"] == "article"
-        assert discovery.checkpoint["pages"] == []
-        assert discovery.checkpoint["articles"] == [url]
-        assert discovery.checkpoint["next_url"] is None
-        assert discovery.checkpoint["discovery_complete"] is True
-        assert discovery.checkpoint["completeness"] == "single_article"
-        assert discovery.checkpoint["reason"] == "single_article"
+        if keyword:
+            _assert_keyword_checkpoint(discovery.plan, discovery.checkpoint)
+        else:
+            assert discovery.plan["classification"] == "article"
+            assert discovery.checkpoint["pages"] == []
+            assert discovery.checkpoint["articles"] == [url]
+            assert discovery.checkpoint["next_url"] is None
+            assert discovery.checkpoint["discovery_complete"] is True
+            assert discovery.checkpoint["completeness"] == "single_article"
+            assert discovery.checkpoint["reason"] == "single_article"
         items = c.execute(
             text(
                 "SELECT work_kind,input_url FROM emailmonitor.execution_items "
@@ -338,12 +368,21 @@ def _browser_operator_journey(
             ),
             {"org": org, "job": job},
         ).all()
-        assert [(item.work_kind, item.input_url) for item in items] == [("article", url)]
+        if keyword:
+            assert {item.input_url for item in items if item.work_kind == "article"} == set(
+                discovery.checkpoint["articles"]
+            )
+            assert len([item for item in items if item.work_kind == "article"]) == 4
+            assert len([item for item in items if item.work_kind == "discover"]) == 2
+        else:
+            assert [(item.work_kind, item.input_url) for item in items] == [("article", url)]
         assert (
             c.execute(
                 text(
-                    "SELECT count(*) FROM emailmonitor.execution_effects "
-                    "WHERE organization_id=:org AND job_id=:job"
+                    "SELECT count(*) FROM emailmonitor.execution_effects e "
+                    "JOIN emailmonitor.execution_items i ON "
+                    "(i.organization_id,i.job_id,i.id)=(e.organization_id,e.job_id,e.item_id) "
+                    "WHERE e.organization_id=:org AND e.job_id=:job AND i.work_kind='article'"
                 ),
                 {"org": org, "job": job},
             ).scalar_one()
@@ -388,6 +427,10 @@ def _browser_operator_journey(
         ArticleObservation.model_validate(r["observation"])
         for r in progress.extraction.read(org, job)
     ]
+    assert len(retained) == expected_articles
+    if keyword:
+        _assert_keyword_results(progress, results, org, job, retained)
+    retained = [row for row in retained if row.url == url]
     assert len(retained) == 1
     assert retained[0].route == "browser_dom" and retained[0].status == "observed"
     assert retained[0].url == url
@@ -395,7 +438,18 @@ def _browser_operator_journey(
     contacts = results.contacts(org, Filters(job_id=job)).items
     assert len(contacts) == expected_articles
     assert {contact.raw_address for contact in contacts} == expected_addresses
-    assert {contact.source_url for contact in contacts} == {url}
+    assert {contact.source_url for contact in contacts} == (
+        {
+            "https://synthetic.publisher.example/" + name
+            for name in ("article-a.html", "article-b.html", "tooltip.html")
+        }
+        if keyword
+        else {url}
+    )
+    assert len(review_requests) == expected_articles
+    assert {row["association_id"] for row in review_requests} == {
+        str(contact.association_id) for contact in contacts
+    }
     exports = results.exports(org)
     assert len(exports) == 2 and {e.format for e in exports} == {"csv", "xlsx"}
     digests = []
@@ -405,6 +459,9 @@ def _browser_operator_journey(
             joined = b"\n".join(archive.read(name) for name in archive.namelist())
             assert all(address.encode() in joined for address in expected_addresses)
             assert all(contact.source_url.encode() in joined for contact in contacts)
+        if keyword:
+            assert export.contacts == 4 and export.article_outcomes == 4
+            _assert_exact_export(artifact.body, export.format, contacts)
         digests.append(hashlib.sha256(artifact.body).hexdigest())
     base = f"{ORIGIN}/api/v1/organizations/{org}"
     for suffix in (
@@ -426,10 +483,16 @@ def _browser_operator_journey(
                 client.get(f"/api/v1/organizations/{org}/exports/{export.id}/download").status_code
                 == 404
             )
+    if keyword:
+        _assert_keyword_tenant_denials(runtime, scenario, progress, results, job, contacts, exports)
     print(
         json.dumps(
             {
-                "proof": "NORMAL_OPERATOR_TOOLTIP_BROWSER_ISOLATED_REVIEW_EXPORT",
+                "proof": (
+                    "NORMAL_OPERATOR_KEYWORD_BROWSER_ISOLATED_REVIEW_EXPORT"
+                    if keyword
+                    else "NORMAL_OPERATOR_TOOLTIP_BROWSER_ISOLATED_REVIEW_EXPORT"
+                ),
                 "articles": expected_articles,
                 "source_tickets": expected_tickets,
                 "policy_approved_through_keyboard": True,
@@ -443,4 +506,231 @@ def _browser_operator_journey(
             }
         ),
         flush=True,
+    )
+
+
+def _assert_keyword_checkpoint(plan: dict[str, Any], checkpoint: dict[str, Any]) -> None:
+    origin = "https://synthetic.publisher.example/"
+    assert plan["classification"] == "search_results"
+    assert plan["original_query"] == plan["effective_query"] == "Myocardial Infarction"
+    assert checkpoint == {
+        "schema_version": "1.0",
+        "status": "completed",
+        "reason": "pagination_exhausted",
+        "next_url": None,
+        "pages": [origin + f"search-page-{n}.html" for n in (1, 2)],
+        "digests": [
+            hashlib.sha256((ROOT / f"fixtures/html/search-page-{n}.html").read_bytes()).hexdigest()
+            for n in (1, 2)
+        ],
+        "articles": [
+            origin + name
+            for name in ("article-a.html", "article-b.html", "tooltip.html", "no-contact.html")
+        ],
+        "raw_entries": 5,
+        "duplicates": 1,
+        "reported_total": 5,
+        "completeness": "pagination_exhausted",
+        "api_fallback": "unavailable_not_attempted",
+        "discovery_complete": True,
+        "extraction_implemented": False,
+    }
+
+
+def _assert_keyword_results(
+    progress: Progress,
+    results: Results,
+    org: UUID,
+    job: UUID,
+    retained: list[ArticleObservation],
+) -> None:
+    final = progress.snapshot(org, job)
+    assert final.state == "completed" and final.progress_percent == 100
+    assert final.discovery_pages == 2 and final.source_reported_total == 5
+    assert final.unique_articles == 4 and final.duplicates == 1
+    assert final.discovery_complete and final.completeness == "pagination_exhausted"
+    assert final.discovery_stop_reason == "pagination_exhausted"
+    assert final.counts.model_dump() == {
+        "discovered": 4,
+        "pending": 0,
+        "active": 0,
+        "retry_wait": 0,
+        "terminal": 4,
+        "by_outcome": {"succeeded": 3, "no_contact": 1},
+    }
+    assert final.accepted_associations == 4 and final.review_needed_associations == 0
+    by_name = {row.url.rsplit("/", 1)[-1]: row for row in retained}
+    for name in ("article-a.html", "article-b.html", "no-contact.html"):
+        observation = by_name[name]
+        digest = hashlib.sha256((ROOT / "fixtures/html" / name).read_bytes()).hexdigest()
+        assert observation.route == "html"
+        assert observation.content_digest == observation.acquisition_digest == digest
+    first = by_name["article-a.html"].authors[0]
+    assert first.display_name == "Mira Rao" and first.first
+    no_contact = by_name["no-contact.html"]
+    assert no_contact.status == "no_contact" and no_contact.candidates == []
+    assert no_contact.authors[0].display_name == "Leena Shah"
+    contacts = results.contacts(org, Filters(job_id=job)).items
+    assert {(row.author_name, row.raw_address) for row in contacts} == {
+        ("Alex Chen", "alex.chen@example.org"),
+        ("Ravi Das", "ravi.das@example.org"),
+        ("Noor Ibrahim", "noor.ibrahim@example.org"),
+        ("Elena Park", "elena.park@example.org"),
+    }
+    assert not next(row for row in contacts if row.author_name == "Alex Chen").first_author
+    assert all(
+        row.state == "accepted" and row.association_reason == "reviewed_evidence"
+        for row in contacts
+    )
+    assert all(
+        candidate.raw_address != "support@example.org"
+        for row in retained
+        for candidate in row.candidates
+    )
+    with progress.database.tenant(progress.token, org, Capability.READ_ORGANIZATION) as (c, _):
+        reviews = c.execute(
+            text(
+                "SELECT r.association_id,r.reason,r.action,r.expected_revision,r.new_record,"
+                "array_agg(e.evidence_id) AS evidence_ids FROM emailmonitor.association_reviews r "
+                "JOIN emailmonitor.association_review_evidence e ON "
+                "(e.organization_id,e.batch_id,e.review_id)=(r.organization_id,r.batch_id,r.id) "
+                "WHERE r.organization_id=:org GROUP BY r.organization_id,r.batch_id,r.id"
+            ),
+            {"org": org},
+        ).all()
+        assert len(reviews) == 4
+        for contact in contacts:
+            review = next(row for row in reviews if row.association_id == contact.association_id)
+            assert review.reason == "Inspected combined keyword citation for " + contact.raw_address
+            assert review.action == "accept" and review.expected_revision == contact.revision - 1
+            assert set(review.evidence_ids) == set(contact.evidence_ids)
+        assert len({row.reason for row in reviews}) == 4
+
+
+def _assert_exact_export(body: bytes, format: str, contacts: tuple[Contact, ...]) -> None:
+    with ZipFile(io.BytesIO(body)) as archive:
+        if format == "csv":
+            rows = list(csv.reader(io.StringIO(archive.read("contacts.csv").decode())))
+        else:
+            namespace = {"s": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+            sheet = ET.fromstring(archive.read("xl/worksheets/sheet1.xml"))
+            rows = [
+                [
+                    cell.findtext("s:is/s:t", default="", namespaces=namespace)
+                    for cell in row.findall("s:c", namespace)
+                ]
+                for row in sheet.findall("s:sheetData/s:row", namespace)
+            ]
+    assert len(rows) == 5
+    values = [dict(zip(rows[0], row, strict=True)) for row in rows[1:]]
+    assert {row["Association ID"] for row in values} == {str(c.association_id) for c in contacts}
+    assert {row["Observed address"] for row in values} == {c.raw_address for c in contacts}
+    assert {(row["Association ID"], row["Observed address"], row["Author"]) for row in values} == {
+        (str(c.association_id), c.raw_address, c.author_name) for c in contacts
+    }
+    assert all(row["Association state"] == "accepted" for row in values)
+    assert all(row["Author"] not in {"Mira Rao", "Leena Shah"} for row in values)
+
+
+def _assert_keyword_tenant_denials(
+    runtime: RuntimeBundle,
+    scenario: Scenario,
+    progress: Progress,
+    results: Results,
+    job: UUID,
+    contacts: tuple[Contact, ...],
+    exports: tuple[ExportState, ...],
+) -> None:
+    org, other = scenario.organizations
+    cursor = f"{org}/{job}:{progress.snapshot(org, job).last_sequence}"
+    contact_cursor = results.contacts(org, Filters(job_id=job), limit=1).next_cursor
+    assert contact_cursor
+    batches = progress.associations.batches(org, job)
+    assert len(batches) == 4
+    with APIClient(runtime.app, ORIGIN) as client:
+        csrf = scenario.login(client, "owner_b")
+        assert client.get(f"/api/v1/organizations/{other}").status_code == 200
+        assert client.get(f"/api/v1/organizations/{org}").status_code == 404
+        headers = {"Origin": ORIGIN, "X-CSRF-Token": csrf}
+        for context in (org, other):
+            base = f"/api/v1/organizations/{context}"
+            for suffix in (
+                f"/jobs/{job}",
+                f"/jobs/{job}/progress",
+                f"/jobs/{job}/progress/items",
+                f"/jobs/{job}/associations",
+            ):
+                assert client.get(base + suffix).status_code == 404
+            for batch in batches:
+                for suffix in (
+                    f"/association-batches/{batch['id']}",
+                    f"/association-batches/{batch['id']}/reviews",
+                ):
+                    assert client.get(base + suffix).status_code == 404
+            for suffix in ("/contacts", "/article-outcomes"):
+                assert client.get(base + suffix, params={"job_id": str(job)}).status_code == 404
+            for contact in contacts:
+                for suffix in (
+                    f"/contacts/{contact.association_id}?batch_id={contact.batch_id}",
+                    f"/association-batches/{contact.batch_id}",
+                    f"/association-batches/{contact.batch_id}/reviews",
+                    *(f"/evidence/{e}?batch_id={contact.batch_id}" for e in contact.evidence_ids),
+                ):
+                    assert client.get(base + suffix).status_code == 404
+                assert (
+                    client.post(
+                        base + "/reviews",
+                        headers=headers,
+                        json={
+                            "batch_id": str(contact.batch_id),
+                            "association_id": str(contact.association_id),
+                            "expected_revision": contact.revision,
+                            "action": "accept",
+                            "author_id": str(contact.author_id),
+                            "evidence_ids": [str(e) for e in contact.evidence_ids],
+                            "reason": "Cross-tenant mutation must be refused",
+                        },
+                    ).status_code
+                    == 404
+                )
+            for export in exports:
+                assert (
+                    client.post(
+                        base + f"/exports/{export.id}/revoke",
+                        headers=headers,
+                        json={"expected_revision": export.revision},
+                    ).status_code
+                    == 404
+                )
+                for suffix in (f"/exports/{export.id}", f"/exports/{export.id}/download"):
+                    assert client.get(base + suffix).status_code == 404
+            response = client.get(
+                base + "/contacts", params={"job_id": str(job), "cursor": contact_cursor}
+            )
+            assert response.status_code == (404 if context == org else 422)
+
+            async def bounded_events(base: str = base, context: UUID = context) -> None:
+                async with httpx.AsyncClient(
+                    transport=httpx.ASGITransport(app=runtime.app),
+                    base_url=ORIGIN,
+                    cookies=client.cookies,
+                ) as stream:
+                    for replay in (None, cursor):
+                        response = await asyncio.wait_for(
+                            stream.get(
+                                base + f"/jobs/{job}/events",
+                                headers={} if replay is None else {"Last-Event-ID": replay},
+                            ),
+                            timeout=5,
+                        )
+                        expected = 409 if context == other and replay is not None else 404
+                        assert response.status_code == expected
+                        assert "text/event-stream" not in response.headers.get("content-type", "")
+
+            asyncio.run(bounded_events())
+    assert all(results.state(org, export.id).state == "ready" for export in exports)
+    # The denied, valid mutation bodies leave all four saved reviews unchanged.
+    assert all(
+        row.revision == next(c.revision for c in contacts if c.association_id == row.association_id)
+        for row in results.contacts(org, Filters(job_id=job)).items
     )

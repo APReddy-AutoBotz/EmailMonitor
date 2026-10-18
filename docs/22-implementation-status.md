@@ -421,3 +421,26 @@ explicit skips in 101.42s/112.09s, 48 React, mypy 262 files and all local gates.
 Independent source/mutation review is clear. Second-head application completed
 2789 actual cases/no skips; all seven runs ended before further publication.
 Final corrected 2790/no-skips/all-seven acceptance remains required.
+
+PR39 final head `2e90c6dcc686a8b354440669ea8e4422b586a9c7` / tree
+`3fdc20880ebaf8914cce9760497c88a7ff6f1ecd` completed all seven attempt-one
+workflows: 2790 actual backend/no skips, 48 React, controlled 41 plus all three
+operator journeys and existing static UI/browser/parser/docs/packaging gates.
+Independent final source, actual-log and factual-description review passed;
+public Draft body readback matched. Both earlier controlled failures remain
+preserved in the report. No live-source or production gate is closed.
+
+The next independently design-reviewed acceptance slice covers the original
+combined synthetic keyword demonstration and a separate accepted-contact
+subprocess crash/replay regression. Existing source, isolation and timing limits
+remain unchanged. [Runbook60](60-combined-fixture-demonstration.md) and
+[validation](../reports/operator-combined-fixture-validation.md) define the proof
+boundaries. At initial scoping, implementation and own-head acceptance were
+pending; subsequent local receipts follow.
+
+Combined-demo normal/new-empty aggregates passed with exit 0: 2497 backend / 303
+explicit service skips, 48 React and mypy 263 files. Independent corrected source
+review and 144 focused cases passed. Preserved initial failures include three
+stale contract expectations and an unchanged intermittent DNS timing assertion;
+no timing predicate was changed. Actual 2800/no-skips and all seven own-head gates
+remain required.

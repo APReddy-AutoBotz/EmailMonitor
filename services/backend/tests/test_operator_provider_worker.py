@@ -195,7 +195,9 @@ def test_provider_start_uses_unique_workspace_button_with_dashboard_shortcut() -
     assert isinstance(target, Locator) and target.nodes == ("navigation",)
 
 
-@pytest.mark.parametrize("journey", ["controlled_provider", "controlled_browser"])
+@pytest.mark.parametrize(
+    "journey", ["controlled_provider", "controlled_browser", "controlled_keyword_browser"]
+)
 def test_provider_format_selector_includes_wrapped_option_label_text(journey: str) -> None:
     import ast
     import re
@@ -205,7 +207,12 @@ def test_provider_format_selector_includes_wrapped_option_label_text(journey: st
         node
         for node in ast.walk(ast.parse(source))
         if isinstance(node, ast.If)
-        and ast.unparse(node.test) == f"setup.get('journey') == {journey!r}"
+        and ast.unparse(node.test)
+        == (
+            "setup.get('journey') == 'controlled_provider'"
+            if journey == "controlled_provider"
+            else "setup.get('journey') in ('controlled_browser', 'controlled_keyword_browser')"
+        )
     )
     calls = [
         node

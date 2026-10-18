@@ -51,7 +51,8 @@ def test_browser_journey_has_fixed_url_and_keyboard_only_explicit_opt_in() -> No
         node
         for node in ast.walk(ast.parse(guest))
         if isinstance(node, ast.If)
-        and ast.unparse(node.test) == "setup.get('journey') == 'controlled_browser'"
+        and ast.unparse(node.test)
+        == "setup.get('journey') in ('controlled_browser', 'controlled_keyword_browser')"
     )
     code = ast.unparse(branch)
     assert "https://synthetic.publisher.example/tooltip.html" in code
@@ -79,7 +80,8 @@ def test_guest_opt_in_uses_checkbox_key_without_submitting_the_plan() -> None:
         node
         for node in ast.walk(module)
         if isinstance(node, ast.If)
-        and ast.unparse(node.test) == "setup.get('journey') == 'controlled_browser'"
+        and ast.unparse(node.test)
+        == "setup.get('journey') in ('controlled_browser', 'controlled_keyword_browser')"
     )
     start = next(
         index
@@ -165,7 +167,8 @@ def test_tooltip_review_navigation_matches_observed_association_and_ui_filter() 
         node
         for node in ast.walk(module)
         if isinstance(node, ast.If)
-        and ast.unparse(node.test) == "setup.get('journey') == 'controlled_browser'"
+        and ast.unparse(node.test)
+        == "setup.get('journey') in ('controlled_browser', 'controlled_keyword_browser')"
     )
     checkpoint = next(
         index
@@ -210,3 +213,85 @@ def test_tooltip_review_navigation_matches_observed_association_and_ui_filter() 
     )
     assert reviewed.associations[0].reason == "reviewed_evidence"
     assert reviewed.associations[0].revision == association.revision + 1
+
+
+@pytest.mark.parametrize("journey", ["controlled_browser", "controlled_keyword_browser"])
+def test_both_browser_journeys_have_closed_bootstrap(journey: str) -> None:
+    setup = {**bootstrap(), "journey": journey}
+    validate_journey(setup)
+    for field in ("url", "route", "profile", "allow_browser", "keyword", "addresses"):
+        with pytest.raises(ValueError, match="Fixed controlled browser bootstrap"):
+            validate_journey({**setup, field: "untrusted"})
+    for field in set(setup) - {"journey"}:
+        with pytest.raises(ValueError):
+            validate_journey({key: value for key, value in setup.items() if key != field})
+
+
+def test_combined_keyword_checkpoint_matches_actual_authored_pages() -> None:
+    from dataclasses import asdict
+
+    from emailmonitor.discovery.planning import plan_input
+    from emailmonitor.discovery.state import advance
+    from test_discovery import initial, page, request
+    from test_operator_browser_acceptance import _assert_keyword_checkpoint
+
+    state = advance(advance(initial(), page(1), 2, 500), page(2), 2, 500)
+    _assert_keyword_checkpoint(asdict(plan_input(request())), state.model_dump())
+    for key, wrong in (("raw_entries", 4), ("duplicates", 0), ("reported_total", 4)):
+        with pytest.raises(AssertionError):
+            _assert_keyword_checkpoint(
+                asdict(plan_input(request())), {**state.model_dump(), key: wrong}
+            )
+
+
+@pytest.mark.parametrize("format", ["csv", "xlsx"])
+def test_combined_export_assertion_requires_exact_four_associations(format: str) -> None:
+    from uuid import uuid4
+
+    from emailmonitor.results.models import Contact
+    from emailmonitor.results.render import csv_bytes, package, xlsx_bytes
+    from test_operator_browser_acceptance import _assert_exact_export
+    from test_result_serialization import contact
+
+    contacts = tuple(
+        Contact.model_validate(
+            {
+                **contact().model_dump(),
+                "association_id": uuid4(),
+                "raw_address": name + "@example.org",
+                "author_name": name,
+            }
+        )
+        for name in ("alex.chen", "ravi.das", "noor.ibrahim", "elena.park")
+    )
+    rows = [["Association ID", "Observed address", "Association state", "Author"]]
+    rows += [
+        [str(c.association_id), c.raw_address, "accepted", c.raw_address.split("@")[0]]
+        for c in contacts
+    ]
+
+    def render(values: list[list[str]]) -> bytes:
+        return (
+            package({"contacts.csv": csv_bytes(values)})
+            if format == "csv"
+            else xlsx_bytes([("Contacts", values)])
+        )
+
+    _assert_exact_export(render(rows), format, contacts)
+    for wrong in (rows[:-1], rows + [rows[-1]], rows[:-1] + [rows[1]]):
+        with pytest.raises(AssertionError):
+            _assert_exact_export(render(wrong), format, contacts)
+
+
+def test_combined_journey_keeps_separate_guest_and_four_pass_gate() -> None:
+    module = (ROOT / "scripts/isolation/test_operator_keyword_browser_acceptance.py").read_text()
+    assert 'scope="module"' in module and module.count("topology.browser()") == 1
+    assert "from test_transport_acceptance import topology as topology" in module
+    assert "keyword=True" in module
+    gate = (ROOT / "scripts/packaging/check_xml_transport.sh").read_text()
+    assert "test_operator_keyword_browser_acceptance.py" in gate
+    assert "NORMAL_OPERATOR_KEYWORD_BROWSER_ISOLATED_REVIEW_EXPORT" in gate
+    assert "4 passed" in gate and "41 passed" in gate
+    guest = (ROOT / "scripts/isolation/operator_ui_acceptance.py").read_text()
+    assert 'page.get_by_label("Keyword", exact=True), "Myocardial Infarction"' in guest
+    assert '"Inspected combined keyword citation for " + address' in guest

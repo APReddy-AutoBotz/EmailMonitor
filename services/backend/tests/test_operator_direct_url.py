@@ -108,28 +108,35 @@ def test_keyboard_input_branch_uses_only_fixed_authored_inputs(direct: bool) -> 
         "keyword_only",
         "direct_only",
         "browser_missing",
+        "combined_missing",
+        "three_passes",
         "one_pass",
         "skipped",
         "pytest_failure",
     ],
 )
-def test_operator_gate_requires_all_actual_receipts_and_three_passes(
+def test_operator_gate_requires_all_actual_receipts_and_four_passes(
     tmp_path: Path, kind: str
 ) -> None:
     keyword = "NORMAL_OPERATOR_RABBITMQ_PROVIDER_ISOLATED_REVIEW_EXPORT"
     direct = "NORMAL_OPERATOR_DIRECT_XML_URL_ISOLATED_REVIEW_EXPORT"
     browser = "NORMAL_OPERATOR_TOOLTIP_BROWSER_ISOLATED_REVIEW_EXPORT"
-    lines = [keyword, direct, browser, "3 passed in 1.00s"]
+    combined = "NORMAL_OPERATOR_KEYWORD_BROWSER_ISOLATED_REVIEW_EXPORT"
+    lines = [keyword, direct, browser, combined, "4 passed in 1.00s"]
     if kind == "keyword_only":
         lines.remove(direct)
     elif kind == "direct_only":
         lines.remove(keyword)
     elif kind == "browser_missing":
         lines.remove(browser)
+    elif kind == "combined_missing":
+        lines.remove(combined)
+    elif kind == "three_passes":
+        lines[-1] = "3 passed in 1.00s"
     elif kind == "one_pass":
         lines[-1] = "1 passed in 1.00s"
     elif kind == "skipped":
-        lines[-1] = "3 passed, 1 skipped in 1.00s"
+        lines[-1] = "4 passed, 1 skipped in 1.00s"
     executable = tmp_path / "uv"
     # This owned stub exercises only the shell guard, never service acceptance.
     executable.write_text(

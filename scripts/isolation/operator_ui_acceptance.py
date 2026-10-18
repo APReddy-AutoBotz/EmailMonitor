@@ -24,7 +24,15 @@ from operator_ui_protocol import (
     route_headers_reason,
     validate_journey,
 )
-from playwright.async_api import Error, Locator, Page, Request, Route, async_playwright, expect
+from playwright.async_api import (
+    Error,
+    Locator,
+    Page,
+    Request,
+    Route,
+    async_playwright,
+    expect,
+)
 
 ORIGIN = "https://app.example.test"
 HEADERS = {
@@ -363,8 +371,18 @@ async def main() -> None:
                 ).index(setup["initial_organization"]),
             )
             await page.get_by_role("heading", name="Synthetic tenant 0", exact=True).wait_for()
-            if setup.get("journey") == "controlled_browser":
-                browser_expected_addresses = ("elena.park@example.org",)
+            if setup.get("journey") in ("controlled_browser", "controlled_keyword_browser"):
+                keyword_browser = setup["journey"] == "controlled_keyword_browser"
+                browser_expected_addresses = (
+                    (
+                        "alex.chen@example.org",
+                        "ravi.das@example.org",
+                        "noor.ibrahim@example.org",
+                        "elena.park@example.org",
+                    )
+                    if keyword_browser
+                    else ("elena.park@example.org",)
+                )
                 checkpoint("source_review")
                 await activate(page, page.get_by_role("button", name="Sources", exact=True))
                 profile = page.get_by_role("combobox", name="Synthetic policy profile", exact=True)
@@ -404,12 +422,17 @@ async def main() -> None:
                         "button", name="New extraction", exact=True
                     ),
                 )
-                await activate(page, page.get_by_role("button", name="URL", exact=True))
-                await type_text(
-                    page,
-                    page.get_by_label("Search-results or article URL", exact=True),
-                    "https://synthetic.publisher.example/tooltip.html",
-                )
+                if keyword_browser:
+                    await type_text(
+                        page, page.get_by_label("Keyword", exact=True), "Myocardial Infarction"
+                    )
+                else:
+                    await activate(page, page.get_by_role("button", name="URL", exact=True))
+                    await type_text(
+                        page,
+                        page.get_by_label("Search-results or article URL", exact=True),
+                        "https://synthetic.publisher.example/tooltip.html",
+                    )
                 browser_opt_in = page.get_by_role(
                     "checkbox",
                     name="Allow synthetic tooltip-only browser work",
@@ -453,7 +476,11 @@ async def main() -> None:
                     await type_text(
                         page,
                         page.get_by_label("Reason", exact=True),
-                        "Inspected controlled tooltip citation through keyboard UI",
+                        (
+                            "Inspected combined keyword citation for " + address
+                            if keyword_browser
+                            else "Inspected controlled tooltip citation through keyboard UI"
+                        ),
                     )
                     await activate(page, page.get_by_role("button", name="Save review", exact=True))
                     await page.get_by_role("dialog").wait_for(state="hidden")
@@ -548,7 +575,7 @@ async def main() -> None:
                         {
                             "kind": "result",
                             "diagnostic": "synthetic-operator-ui",
-                            "journey": "controlled_browser",
+                            "journey": setup["journey"],
                             "allow_browser": True,
                             "source_policy_review": True,
                             "keyboard": True,

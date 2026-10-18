@@ -142,3 +142,21 @@ local gates. The fresh Python environment was absent before creation; shared
 caches/frontend dependencies were reused. Independent review passes 49 focused
 cases and rejects the original navigation mutation. Actual own-head target is
 2790/no skips, controlled 41/three operator cases and all seven workflows.
+
+## Final actual acceptance
+
+[PR39](https://github.com/APReddy-AutoBotz/EmailMonitor/pull/39) final head
+`2e90c6dcc686a8b354440669ea8e4422b586a9c7`, tree
+`3fdc20880ebaf8914cce9760497c88a7ff6f1ecd`, completed all seven attempt-one
+workflows. The tested GitHub merge commit
+`9210f683270eaf243d01e9df367062a56747f545` has that exact tree and parents
+accepted PR38 plus the final head.
+
+- [Application](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/39103717471): 2790 passed/no skips in 498.15s, 48 React, owned cleanup.
+- [Controlled](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/39103717443): 41 passed in 213.17s and all three operator cases in 133.27s; all proof markers and owned cleanup verified.
+- [Browser](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/39103717493), [static UI](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/39103717473), [parser](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/39103717486), [packaging](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/39103717506) and [docs](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/39103717481): success, actual logs independently reviewed.
+
+Independent exact-tree, final actual-evidence and factual-description review
+passed. Public description readback matched. Earlier failed runs remain above;
+no successful rerun erases them. This closes the scoped synthetic integration,
+not real-source rights or production/deployment acceptance.
