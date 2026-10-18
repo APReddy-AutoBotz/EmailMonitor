@@ -290,3 +290,8 @@ Add a trusted Python-only executor factory to the normal claimed Celery path, re
 
 - Add bounded read-only Debian/upstream-Python inventory and attribution hashes to existing metadata/XML probes, with strict host validation and canonical equality across builds.
 - Preserve image/runtime/dependency/isolation and existing actual operator/packaging gates. No complete SBOM, vulnerability/license clearance, new scanner, deployment or source activation. [Runbook55](docs/55-packaged-base-inventory.md) / [validation](reports/em017e-validation.md).
+
+## EM-017f owned test runtime composition candidate
+
+- Add explicit test-only authenticated API composition with independent API, authentication and publisher SQL pools and owned failure/shutdown cleanup.
+- Exercise it in existing controlled operator acceptance; preserve worker/source/isolation semantics and private SQL artifacts. Production assembly and live-source gates remain open.
