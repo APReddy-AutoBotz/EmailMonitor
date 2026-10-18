@@ -1,0 +1,101 @@
+import { isValidElement, type ReactElement, type ReactNode } from 'react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { ApiScope } from './client'
+import type { Context } from './ui'
+import { Wizard } from './views'
+
+// Exercise real form handlers without adding a DOM/browser dependency.
+const hooks = vi.hoisted(() => ({ values: [] as unknown[], index: 0 }))
+vi.mock('react', async importOriginal => ({
+  ...await importOriginal<typeof import('react')>(),
+  useState: (initial?: unknown) => {
+    const index = hooks.index++
+    if (!(index in hooks.values)) hooks.values[index] = initial
+    return [hooks.values[index], (value: unknown) => { hooks.values[index] = value }]
+  },
+  useRef: (initial: unknown) => {
+    const index = hooks.index++
+    if (!(index in hooks.values)) hooks.values[index] = { current: initial }
+    return hooks.values[index]
+  },
+}))
+vi.mock('./ui', async importOriginal => ({
+  ...await importOriginal<typeof import('./ui')>(),
+  useResource: () => ({ loading: false, data: [{ state: 'approved', valid_until: '2099-01-01T00:00:00Z', version: 1 }] }),
+}))
+type Props = { children?: ReactNode; type?: string; checked?: boolean; disabled?: boolean; onClick?: () => void; 'aria-label'?: string; onChange?: (event: { target: { checked: boolean } }) => void }
+function elements(node: ReactNode): ReactElement<Props>[] {
+  if (Array.isArray(node)) return node.flatMap(elements)
+  if (!isValidElement<Props>(node)) return []
+  return [node, ...elements(node.props.children)]
+}
+function setup(canAcquire = true) {
+  const scope = new ApiScope('00000000-0000-0000-0000-000000000001', 'test-only')
+  const job = { id: '00000000-0000-0000-0000-000000000002', state: 'draft', row_version: 1 }
+  const write = vi.spyOn(scope, 'write').mockImplementation(async path => path === '/jobs' ? job : { classification: 'article' })
+  vi.spyOn(scope, 'request').mockResolvedValue(job)
+  let pending: Promise<unknown> = Promise.resolve()
+  const context: Context = { scope, revision: 0, refresh: vi.fn(), confirm: vi.fn(), identity: 'test', zone: 'UTC', openJob: vi.fn(), can: () => canAcquire,
+    act: vi.fn((_label, work) => { pending = work(); return pending.then(() => undefined) }),
+  }
+  const render = () => { hooks.index = 0; return Wizard({ context }) }
+  const checkbox = () => elements(render()).find(element => element.type === 'input' && element.props.type === 'checkbox' && element.props.onChange && element.props.checked !== undefined)!
+  const toggle = (checked: boolean) => { checkbox().props.onChange!({ target: { checked } }); render() }
+  const submit = () => { render().props.onSubmit({ preventDefault: vi.fn() }); return pending }
+  const hasPlan = () => elements(render()).some(element => element.props['aria-label'] === 'Server source plan')
+  const launch = () => { elements(render()).find(element => element.type === 'button' && element.props.children === 'Launch extraction')!.props.onClick!(); return pending }
+  return { checkbox, toggle, submit, hasPlan, launch, write, context }
+}
+beforeEach(() => { hooks.values = []; hooks.index = 0; vi.restoreAllMocks() })
+
+describe('explicit synthetic browser job opt-in', () => {
+  it('starts unchecked and sends false by default, then true only after opt-in', async () => {
+    const form = setup()
+    expect(form.checkbox().props.checked).toBe(false)
+    await form.submit()
+    expect(form.write.mock.calls[0][1]).toMatchObject({ options: { allow_browser: false, allow_pdf: false, allow_ocr: false, allow_wider_web: false } })
+    const firstKey = form.write.mock.calls[0][3]
+    form.toggle(true)
+    await form.submit()
+    const creates = form.write.mock.calls.filter(([path]) => path === '/jobs')
+    expect(creates[1][1]).toMatchObject({ options: { allow_browser: true } })
+    expect(creates[1][3]).not.toBe(firstKey)
+  })
+  it('clears an existing launch plan when toggled on or off', async () => {
+    const form = setup()
+    await form.submit(); expect(form.hasPlan()).toBe(true)
+    form.toggle(true); expect(form.hasPlan()).toBe(false)
+    await form.submit(); expect(form.hasPlan()).toBe(true)
+    form.toggle(false); expect(form.hasPlan()).toBe(false)
+  })
+  it('rejects a late plan response for the previous opt-in value', async () => {
+    const form = setup()
+    let release!: (value: { classification: string }) => void
+    form.write.mockImplementation(async path => path === '/jobs' ? { id: '00000000-0000-0000-0000-000000000002' } : new Promise(resolve => { release = resolve }))
+    const submitted = form.submit()
+    await vi.waitFor(() => expect(release).toBeTypeOf('function'))
+    form.toggle(true)
+    release({ classification: 'article' })
+    await submitted
+    expect(form.hasPlan()).toBe(false)
+    expect(form.context.openJob).not.toHaveBeenCalled()
+  })
+  it('does not launch the previous plan if opt-in changes during the launch revision read', async () => {
+    const form = setup()
+    await form.submit()
+    let release!: (value: { row_version: number }) => void
+    vi.mocked(form.context.scope.request).mockImplementationOnce(() => new Promise(resolve => { release = resolve }))
+    const launching = form.launch()
+    form.toggle(true)
+    release({ row_version: 2 })
+    await launching
+    expect(form.write.mock.calls.some(([path]) => path.endsWith('/start'))).toBe(false)
+    expect(form.context.openJob).not.toHaveBeenCalled()
+  })
+  it('keeps the opt-in disabled for roles without acquisition authority', () => {
+    const form = setup(false)
+    expect(form.checkbox().props.disabled).toBe(true)
+    expect(form.checkbox().props.checked).toBe(false)
+    expect(form.write).not.toHaveBeenCalled()
+  })
+})

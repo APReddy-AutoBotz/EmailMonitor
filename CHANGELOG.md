@@ -1,3 +1,9 @@
+## 2026-10-18 — Synthetic tooltip normal-worker operator candidate
+
+- Add explicit closed browser policy/job opt-in for the existing synthetic tooltip.
+- Compose the existing protected browser through ordinary claimed Celery work with current authority, replay and owned cleanup.
+- Add separate actual keyboard review/export acceptance while preserving original cases and deadlines. See [validation](reports/operator-tooltip-validation.md).
+
 ## 2026-10-18 — Direct controlled XML URL operator candidate
 
 - Exercise the existing exact catalog article-URL input through separate keyboard source review, registered worker, protected acquisition, isolated parsing, review and exports.

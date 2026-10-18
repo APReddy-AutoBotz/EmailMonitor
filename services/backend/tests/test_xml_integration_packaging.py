@@ -366,8 +366,8 @@ def test_fixed_transport_script_keeps_original_acceptance_predicates() -> None:
         "test_transport_acceptance.py scripts/isolation/test_provider_transport_acceptance.py "
         "scripts/isolation/test_provider_journey_acceptance.py -ra -s" in script
     )
-    assert "test_operator_provider_acceptance.py -v -s" in script
-    assert "41 passed([ ,]|$)" in script and "1 passed([ ,]|$)" in script
+    assert "test_operator_browser_acceptance.py -v -s" in script
+    assert "41 passed([ ,]|$)" in script and "3 passed([ ,]|$)" in script
     assert "[0-9]+ skipped|[0-9]+ warnings?" in script
     assert "NORMAL_OPERATOR_RABBITMQ_PROVIDER_ISOLATED_REVIEW_EXPORT" in script
     assert "[0-9]+ skipped" in script

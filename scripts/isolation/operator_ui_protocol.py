@@ -545,3 +545,20 @@ def completion_worker_snapshot(raw: bytes, *, truncated: bool = False) -> dict[s
         "status": "truncated" if incomplete or last.saturated else "available",
         **last.model_dump(by_alias=True),
     }
+
+
+def validate_journey(setup: dict[str, object]) -> None:
+    """Closed built-in journeys only; no caller-supplied browser destinations."""
+    journey = setup.get("journey")
+    if journey not in (None, "controlled_provider", "controlled_browser"):
+        raise ValueError("Fixed controlled operator journey required")
+    if journey == "controlled_browser" and set(setup) != {
+        "kind",
+        "origin",
+        "journey",
+        "cookies",
+        "assets",
+        "initial_organization",
+        "other_organization",
+    }:
+        raise ValueError("Fixed controlled browser bootstrap required")

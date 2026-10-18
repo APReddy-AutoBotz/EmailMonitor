@@ -22,6 +22,7 @@ from operator_ui_protocol import (
     failure_reason,
     route_failure_reason,
     route_headers_reason,
+    validate_journey,
 )
 from playwright.async_api import Error, Locator, Page, Request, Route, async_playwright, expect
 
@@ -201,6 +202,7 @@ async def main() -> None:
     setup = json.loads(raw)
     if setup.get("kind") != "bootstrap" or setup.get("origin") != ORIGIN:
         raise RuntimeError("Fixed synthetic UI origin required")
+    validate_journey(setup)
     root = Path("/app/operator-web")
     manifest = asset_manifest(root)
     if manifest != setup.get("assets") or "index.html" not in manifest:
@@ -361,6 +363,207 @@ async def main() -> None:
                 ).index(setup["initial_organization"]),
             )
             await page.get_by_role("heading", name="Synthetic tenant 0", exact=True).wait_for()
+            if setup.get("journey") == "controlled_browser":
+                browser_expected_addresses = ("elena.park@example.org",)
+                checkpoint("source_review")
+                await activate(page, page.get_by_role("button", name="Sources", exact=True))
+                profile = page.get_by_role("combobox", name="Synthetic policy profile", exact=True)
+                await expect(profile).to_have_value("html")
+                await select_index(page, profile, 2)
+                await expect(profile).to_have_value("html_browser")
+                await activate(
+                    page,
+                    page.get_by_role("button", name="Request synthetic source review", exact=True),
+                )
+                await page.get_by_role(
+                    "button", name="Approve synthetic policy", exact=True
+                ).wait_for()
+                # Changing an unsubmitted proposal must not alter the pending record
+                # that the separate approval dialog actually authorizes.
+                await select_index(page, profile, 0)
+                await expect(profile).to_have_value("html")
+                await activate(
+                    page,
+                    page.get_by_role("button", name="Approve synthetic policy", exact=True),
+                )
+                dialog = page.get_by_role("dialog")
+                await expect(dialog).to_contain_text("version 1, revision 1")
+                await expect(dialog).to_contain_text("browser")
+                await expect(dialog).to_contain_text(
+                    '"raw_hours":24,"excerpt_days":30,"contact_days":90'
+                )
+                await activate(
+                    page,
+                    page.get_by_role("button", name="Confirm approve synthetic policy", exact=True),
+                )
+                await dialog.wait_for(state="hidden")
+                checkpoint("url_plan")
+                await activate(
+                    page,
+                    page.get_by_role("navigation", name="Workspace", exact=True).get_by_role(
+                        "button", name="New extraction", exact=True
+                    ),
+                )
+                await activate(page, page.get_by_role("button", name="URL", exact=True))
+                await type_text(
+                    page,
+                    page.get_by_label("Search-results or article URL", exact=True),
+                    "https://synthetic.publisher.example/tooltip.html",
+                )
+                browser_opt_in = page.get_by_role(
+                    "checkbox",
+                    name="Allow synthetic tooltip-only browser work",
+                    exact=True,
+                )
+                await expect(browser_opt_in).not_to_be_checked()
+                await activate(page, browser_opt_in)
+                await expect(browser_opt_in).to_be_checked()
+                await activate(
+                    page,
+                    page.get_by_role("button", name="Create and validate plan", exact=True),
+                )
+                await page.get_by_role("region", name="Server source plan").wait_for()
+                await activate(
+                    page,
+                    page.get_by_role("button", name="Launch extraction", exact=True),
+                )
+                await page.get_by_role(
+                    "heading", name=re.compile(r"^Job [0-9a-f-]{36}$")
+                ).wait_for()
+                checkpoint("url_worker")
+                await channel.request({"kind": "control", "action": "publish"})
+                # Separate controlled browser wait: HTTP plus isolated DOM acquisitions
+                # retain source spacing. Existing static/provider waits are unchanged.
+                await page.get_by_text("completed", exact=True).first.wait_for(timeout=75000)
+                checkpoint("evidence_review")
+                await activate(page, page.get_by_role("button", name="Review queue", exact=True))
+                for address in browser_expected_addresses:
+                    row = page.get_by_role("row").filter(has_text=address)
+                    await expect(row).to_have_count(1)
+                    await activate(
+                        page,
+                        row.get_by_role("button", name="Evidence and review", exact=True),
+                    )
+                    await page.get_by_role(
+                        "heading", name="Actual retained citation", exact=True
+                    ).wait_for()
+                    await type_text(
+                        page,
+                        page.get_by_label("Reason", exact=True),
+                        "Inspected controlled tooltip citation through keyboard UI",
+                    )
+                    await activate(page, page.get_by_role("button", name="Save review", exact=True))
+                    await page.get_by_role("dialog").wait_for(state="hidden")
+                await activate(page, page.get_by_role("button", name="Contacts", exact=True))
+                for address in browser_expected_addresses:
+                    await expect(page.get_by_role("row").filter(has_text=address)).to_have_count(1)
+                checkpoint("export_preview")
+                await activate(page, page.get_by_role("button", name="Exports", exact=True))
+                for index in (0, 1):
+                    await select_index(page, page.get_by_label(re.compile(r"^Format")), index)
+                    await activate(
+                        page,
+                        page.get_by_role(
+                            "button", name="Preview eligible export counts", exact=True
+                        ),
+                    )
+                    await page.get_by_role("region", name="Current export preview").wait_for()
+                    await activate(
+                        page,
+                        page.get_by_role("button", name="Create asynchronous export", exact=True),
+                    )
+                    await (
+                        page.get_by_role("row")
+                        .filter(has_text=" · " + ("xlsx" if index == 0 else "csv"))
+                        .wait_for()
+                    )
+                    await channel.request({"kind": "control", "action": "wait_exports"})
+                    await activate(
+                        page,
+                        page.get_by_role("button", name="Refresh current view", exact=True),
+                    )
+                    download_seen.clear()
+                    export_row = page.get_by_role("row").filter(
+                        has_text=" · " + ("xlsx" if index == 0 else "csv")
+                    )
+                    await activate(
+                        page,
+                        export_row.get_by_role("button", name="Download", exact=True),
+                    )
+                    await asyncio.wait_for(download_seen.wait(), timeout=5)
+                checkpoint("readonly_role")
+                await select_index(
+                    page,
+                    page.get_by_role("combobox", name="Active organization", exact=True),
+                    (
+                        await page.get_by_role("combobox", name="Active organization", exact=True)
+                        .locator("option")
+                        .evaluate_all("nodes => nodes.map(node => node.value)")
+                    ).index(setup["other_organization"]),
+                )
+                await page.get_by_role("heading", name="Synthetic tenant 1", exact=True).wait_for()
+                await page.get_by_text(
+                    "No jobs yet. Create a bounded extraction plan.", exact=True
+                ).wait_for()
+                body = await page.locator("body").inner_text()
+                if any(address in body for address in browser_expected_addresses):
+                    raise RuntimeError("Browser contacts survived tenant switch")
+                await activate(page, page.get_by_role("button", name="Sources", exact=True))
+                await page.get_by_text(
+                    "Source management unavailable for this role.", exact=True
+                ).wait_for()
+                await page.get_by_text(
+                    "Approval needed. No current source policy.", exact=True
+                ).wait_for()
+                await expect(
+                    page.get_by_role("combobox", name="Synthetic policy profile", exact=True)
+                ).to_have_count(0)
+                await expect(
+                    page.get_by_role("button", name="Request synthetic source review", exact=True)
+                ).to_have_count(0)
+                await expect(
+                    page.get_by_role("button", name="Approve synthetic policy", exact=True)
+                ).to_have_count(0)
+                await activate(page, page.get_by_role("button", name="Exports", exact=True))
+                await page.get_by_text(
+                    "Export capability is not available for this role.", exact=False
+                ).wait_for()
+
+                if context.service_workers or await page.evaluate(
+                    "navigator.serviceWorker.getRegistrations().then(rows=>rows.length)"
+                ):
+                    raise RuntimeError("UI service workers must remain absent")
+
+                async def browser_settled() -> None:
+                    while channel.pending:
+                        await asyncio.sleep(0.05)
+
+                await asyncio.wait_for(browser_settled(), timeout=10)
+                checkpoint("final_cleanup")
+                print(
+                    json.dumps(
+                        {
+                            "kind": "result",
+                            "diagnostic": "synthetic-operator-ui",
+                            "journey": "controlled_browser",
+                            "allow_browser": True,
+                            "source_policy_review": True,
+                            "keyboard": True,
+                            "built_assets": accepted,
+                            "sandbox": sandbox,
+                            "network_errno": network,
+                            "interfaces": interfaces,
+                            "review": True,
+                            "formats": ["xlsx", "csv"],
+                            "tenant_switch": True,
+                            "download_cancelled": True,
+                        }
+                    ),
+                    flush=True,
+                )
+                await context.close()
+                await browser.close()
+                return
             if setup.get("journey") == "controlled_provider":
                 direct_url = setup.get("direct_article_url", False)
                 if type(direct_url) is not bool:

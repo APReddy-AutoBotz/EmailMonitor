@@ -369,3 +369,25 @@ Draft PR37 head `a20d289cdbb57dec2a60482ad0cdef700815e47c` / tree `6f5948bd0f6aa
 The next bounded operator closure exercises an existing direct synthetic XML article URL through the normal UI/registered worker. Original keyword/static cases and controls remain unchanged. Independent design is clear; source review corrected a test identity assertion. Focused 78 and frontend 42 cases pass; normal/new-empty/exact-tree and actual 2706/no-skip/all-seven gates remain pending. [Validation](../reports/operator-direct-url-validation.md).
 
 Normal and genuinely new-empty Python aggregates each return exit 0: 2429 passed/277 explicit service skips, 42 React cases, mypy over 254 files and every existing docs/lint/format/inventory/type/build gate. The fresh Python environment was absent before creation; shared caches/frontend dependencies were reused. Independent corrected source review passes 32 focused Python and four frontend help cases. Final exact-tree review and actual 2706/no-skip/all-seven gates, including two provider operator cases, remain required.
+
+## EM-007 / EM-010 / EM-012 tooltip operator candidate
+
+Draft PR38 head `415a41dda6b39282e4a47af6dc1400ce59de0078` / tree
+`cdcf5cf41cf436251181d0b347ec7131ea876cc2` completed all seven first-attempt
+workflows: 2706 actual backend/no skips, 42 React, controlled 41 and two operator
+journeys, plus original static UI/browser/parser/docs/packaging. Independent final
+source/evidence/description readback passed. Earlier pending text is historical.
+
+The next bounded slice joins existing synthetic tooltip browser acquisition to
+the normal claimed worker and explicit operator opt-in. Independent design is
+clear; source review, normal/new-empty and all seven actual gates remain pending.
+[Runbook59](59-operator-tooltip-browser.md) /
+[validation](../reports/operator-tooltip-validation.md). Live source rights and
+production runtime remain unmet.
+
+Tooltip candidate normal/new-empty aggregates both return exit 0: 2484 passed
+and 302 explicit service skips in 99.42s/107.48s, 48 React cases and mypy over
+261 files, with all existing local gates. Independent source/delta review is
+clear. Initial annotation/test-fixture failures and the corrected late-SQL
+revocation finding are preserved in the report. Actual 2786/no-skips and all
+seven own-head gates remain required.
