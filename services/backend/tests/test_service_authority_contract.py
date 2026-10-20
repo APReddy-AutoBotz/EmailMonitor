@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 from uuid import UUID, uuid4
 
 import pytest
+from emailmonitor.results.broker import ExportEvent
 from emailmonitor.runtime.authority import (
     MAX_WORK_SECONDS,
     ServiceProcess,
@@ -16,6 +17,7 @@ from emailmonitor.runtime.authority import (
 )
 from pydantic import ValidationError
 from sqlalchemy.exc import DBAPIError
+from test_service_runtime_broker import ExportClaimBarrier
 
 
 @pytest.mark.parametrize("seconds", [0, -1, 21_601, True, "21600", 21_600.0])
@@ -325,3 +327,103 @@ def test_service_publisher_defers_null_but_preserves_post_send_failure(
     for owned in (application, connection, channel):
         owned.close.assert_called_once_with()
     database.engine.dispose.assert_called_once_with()
+
+
+def export_barrier_case() -> tuple[ExportClaimBarrier, list[dict[str, object]]]:
+    barrier = ExportClaimBarrier(
+        "synthetic_db",
+        "worker_owned",
+        "publisher_owned",
+        ExportEvent(
+            organization_id=str(uuid4()),
+            export_id=str(uuid4()),
+            event_id=str(uuid4()),
+            generation=1,
+        ),
+    )
+    worker: dict[str, object] = {
+        "pid": 11,
+        "usename": "worker_owned",
+        "datname": "synthetic_db",
+        "backend_type": "client backend",
+        "state": "active",
+        "wait_event_type": "Lock",
+        "query": "SELECT emailmonitor.exports_claim($1,$2,$3,$4,$5,$6)",
+        "blockers": [21],
+    }
+    publisher: dict[str, object] = {
+        **worker,
+        "pid": 21,
+        "usename": "publisher_owned",
+        "state": "idle in transaction",
+        "wait_event_type": "Client",
+        "query": "SELECT emailmonitor.service_publish_event($1,$2,$3,$4,$5,$6,$7)",
+        "blockers": [],
+    }
+    idle = {**worker, "pid": 12, "state": "idle", "query": "ROLLBACK", "blockers": []}
+    return barrier, [worker, publisher, idle]
+
+
+def test_export_barrier_never_releases_on_empty_predelivery_gap() -> None:
+    barrier, rows = export_barrier_case()
+    waiting = rows[0].copy()
+    rows[0].update(state="idle", query="ROLLBACK", blockers=[])
+    drained = MagicMock(return_value=True)
+    assert not barrier.settled(rows, drained)
+    assert barrier.observed_pid is None
+    drained.assert_not_called()
+    rows[0] = waiting
+    assert not barrier.settled(rows, drained)
+    assert barrier.observed_pid == 11
+    drained.assert_not_called()
+    rows[0].update(state="idle", query="ROLLBACK", blockers=[])
+    drained.return_value = False
+    assert not barrier.settled(rows, drained)
+    drained.return_value = True
+    assert barrier.settled(rows, drained)
+
+
+@pytest.mark.parametrize(
+    "index,field,value",
+    [
+        (0, "usename", "worker_unrelated"),
+        (0, "datname", "other_db"),
+        (0, "backend_type", "parallel worker"),
+        (0, "state", "idle"),
+        (0, "wait_event_type", "Client"),
+        (0, "query", "SELECT emailmonitor.execution_claim($1,$2,$3,$4,$5,$6,$7)"),
+        (0, "blockers", [22]),
+        (1, "usename", "publisher_unrelated"),
+        (1, "datname", "other_db"),
+        (1, "backend_type", "parallel worker"),
+        (1, "state", "idle"),
+        (1, "query", "SELECT emailmonitor.service_pending($1,$2)"),
+    ],
+)
+def test_export_barrier_refuses_unrelated_activity(index: int, field: str, value: object) -> None:
+    barrier, rows = export_barrier_case()
+    rows[index][field] = value
+    drained = MagicMock(return_value=True)
+    assert not barrier.settled(rows, drained)
+    assert barrier.observed_pid is None
+    drained.assert_not_called()
+
+
+@pytest.mark.parametrize("index", [0, 1])
+def test_export_barrier_refuses_duplicate_matching_backends(index: int) -> None:
+    barrier, rows = export_barrier_case()
+    rows.append({**rows[index], "pid": 31})
+    assert not barrier.settled(rows, lambda: True)
+    assert barrier.observed_pid is None
+
+
+@pytest.mark.parametrize("field", ["organization_id", "export_id", "event_id", "generation"])
+def test_export_barrier_rejects_a_different_outgoing_event(field: str) -> None:
+    barrier, _ = export_barrier_case()
+    body = barrier.event.model_dump()
+    barrier.check_event("emailmonitor.service.export", [body])
+    body[field] = 2 if field == "generation" else str(uuid4())
+    with pytest.raises(AssertionError, match="Unexpected export publication event"):
+        barrier.check_event("emailmonitor.service.export", [body])
+    with pytest.raises(AssertionError, match="Unexpected export publication event"):
+        barrier.check_event("emailmonitor.service.execute", [barrier.event.model_dump()])

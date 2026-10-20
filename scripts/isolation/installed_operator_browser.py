@@ -14,8 +14,8 @@ from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit
 
 from browser_acceptance import sandbox_status
-from installed_operator_redirects import LoginRedirects
-from operator_ui_protocol import ORIGIN
+from installed_operator_redirects import InstalledDiagnostics, LoginRedirects
+from operator_ui_protocol import ORIGIN, InstalledLoginPhase, InstalledReason
 from playwright.async_api import Error, Request, Route, async_playwright, expect
 
 if TYPE_CHECKING:
@@ -96,6 +96,10 @@ async def main() -> None:
     callback_index_seen = False
     download_seen = asyncio.Event()
     stage = "browser_launch"
+    diagnostics = InstalledDiagnostics()
+    login_phase: InstalledLoginPhase | None = None
+    login_reason: InstalledReason = "installed_login_failed"
+    active_redirects: LoginRedirects | None = None
 
     def checkpoint(value: str) -> None:
         nonlocal stage
@@ -146,6 +150,7 @@ async def main() -> None:
             # This coordinator is available only after the original OS/browser
             # isolation checks. It cannot recover arbitrary failed navigations.
             redirects = LoginRedirects(api, issuer)
+            active_redirects = redirects
 
             def failed_navigation(incoming: Request) -> None:
                 if not redirects.active or not incoming.is_navigation_request():
@@ -160,14 +165,16 @@ async def main() -> None:
                         redirected_from=incoming.redirected_from,
                         failure=incoming.failure,
                     )
-                except RuntimeError:
+                except RuntimeError as error:
                     # The permanent latch wakes the bounded login and prevents
                     # any success receipt. Never print an authentication URL.
-                    pass
+                    diagnostics.capture(
+                        error, redirects.failure_reason or "installed_redirect_order", login_phase
+                    )
 
             page.on("requestfailed", failed_navigation)
 
-            async def route_request(route: Route) -> None:
+            async def route_request(route: Route, operation: list[InstalledReason]) -> None:
                 nonlocal callback_index_seen
                 incoming = route.request
                 parsed = urlsplit(incoming.url)
@@ -175,6 +182,7 @@ async def main() -> None:
                 if origin not in {api, issuer} or parsed.fragment:
                     await route.abort("blockedbyclient")
                     return
+                operation[0] = "installed_route_headers"
                 headers = {
                     key: value
                     for key, value in (await incoming.all_headers()).items()
@@ -192,6 +200,7 @@ async def main() -> None:
                 if static:
                     size = setup["asset_sizes"][asset]
                     for offset in range(0, size, CHUNK):
+                        operation[0] = "installed_route_relay"
                         response = await exchange(
                             {
                                 "target": incoming.url,
@@ -201,10 +210,12 @@ async def main() -> None:
                                 "offset": offset,
                             }
                         )
+                        operation[0] = "installed_static_range"
                         piece = base64.b64decode(response["body"], validate=True)
                         if response["status"] != 206 or len(piece) != min(CHUNK, size - offset):
                             raise RuntimeError("Actual installed static range missing")
                         output.extend(piece)
+                    operation[0] = "installed_static_hash"
                     if hashlib.sha256(output).hexdigest() != assets[asset]:
                         raise RuntimeError(
                             "Actual installed web asset differs from package receipt"
@@ -214,6 +225,7 @@ async def main() -> None:
                     response["headers"].pop("content-range", None)
                     response["status"] = 200
                 else:
+                    operation[0] = "installed_route_relay"
                     response = await exchange(
                         {
                             "target": incoming.url,
@@ -230,6 +242,7 @@ async def main() -> None:
                         or incoming.url == api + "/api/v1/auth/start"
                         or (origin == issuer and parsed.path == "/authorize")
                     ):
+                        operation[0] = "installed_redirect_arm"
                         redirects.arm(
                             incoming,
                             source=incoming.url,
@@ -242,13 +255,15 @@ async def main() -> None:
                             status=response["status"],
                             headers=response["headers"],
                         )
+                operation[0] = "installed_route_fulfill"
                 await route.fulfill(
                     status=response["status"], headers=response["headers"], body=bytes(output)
                 )
 
             async def safe_route(route: Route) -> None:
+                operation: list[InstalledReason] = ["installed_route_headers"]
                 try:
-                    await route_request(route)
+                    await route_request(route, operation)
                 except Exception as error:
                     if isinstance(error, Error) and route.request.failure == "net::ERR_ABORTED":
                         # Same observed navigation-abort allowance as the existing UI harness.
@@ -260,8 +275,11 @@ async def main() -> None:
                             {
                                 "kind": "failure",
                                 "stage": stage,
-                                "error": "RuntimeError",
-                                "reason": "unknown",
+                                **diagnostics.capture(
+                                    error,
+                                    redirects.failure_reason or operation[0],
+                                    login_phase,
+                                ),
                                 "api_statuses": statuses,
                             }
                         ),
@@ -286,10 +304,13 @@ async def main() -> None:
             page.on("download", download)
 
             async def login() -> None:
+                nonlocal login_phase, login_reason
                 async with asyncio.timeout(10):
+                    login_phase = "initial_session"
                     await expect(
                         page.get_by_role("button", name="Retry connection", exact=True)
                     ).to_be_enabled()
+                    login_phase = "start_activation"
                     redirects.begin()
                     await activate(
                         page,
@@ -297,25 +318,33 @@ async def main() -> None:
                             "link", name="Sign in with configured identity", exact=True
                         ),
                     )
+                    login_phase = "authorize_failure"
                     authorization = await redirects.next_target()
+                    login_phase = "authorize_navigation"
                     try:
                         await page.goto(authorization, wait_until="domcontentloaded")
                     except Error:
                         # Only the separately observed exact failed child of the
                         # real issuer 303 can release its one-use callback target.
+                        login_phase = "callback_failure"
                         callback = await redirects.next_target()
                     else:
+                        login_reason = "installed_expected_navigation_mismatch"
                         raise RuntimeError("Expected isolated redirect failure missing")
+                    login_phase = "callback_document"
                     await page.goto(callback, wait_until="domcontentloaded")
+                    login_phase = "callback_session"
                     await expect(
                         page.get_by_role("button", name="Retry connection", exact=True)
                     ).to_be_enabled()
+                    login_phase = "callback_complete"
                     await activate(
                         page, page.get_by_role("button", name="Complete sign-in", exact=True)
                     )
                     await page.get_by_role(
                         "combobox", name="Active organization", exact=True
                     ).wait_for()
+                    login_phase = "organization"
                     organization = page.get_by_role(
                         "combobox", name="Active organization", exact=True
                     )
@@ -329,6 +358,7 @@ async def main() -> None:
                         "heading", name="Synthetic tenant 0", exact=True
                     ).wait_for()
                     redirects.finish()
+                    login_phase = None
 
             checkpoint("assets_session")
             await page.goto(api, wait_until="domcontentloaded")
@@ -530,19 +560,28 @@ async def main() -> None:
                 flush=True,
             )
     except BaseException as error:
+        reason: str = (
+            active_redirects.failure_reason
+            if active_redirects is not None and active_redirects.failure_reason is not None
+            else "installed_login_deadline"
+            if login_phase is not None and type(error) is TimeoutError
+            else login_reason
+            if login_phase is not None
+            else "unknown"
+        )
+        fixed = diagnostics.capture(error, reason, login_phase)
         print(
             json.dumps(
                 {
                     "kind": "failure",
                     "stage": stage,
-                    "error": "RuntimeError",
-                    "reason": "unknown",
+                    **fixed,
                     "api_statuses": statuses,
                 }
             ),
             flush=True,
         )
-        raise RuntimeError("Installed browser journey failed: " + type(error).__name__) from None
+        raise RuntimeError("Installed browser journey failed: " + fixed["error"]) from None
     finally:
         receiver.cancel()
         await asyncio.gather(receiver, return_exceptions=True)

@@ -4,8 +4,9 @@ import os
 import shutil
 import subprocess
 import sys
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from uuid import UUID, uuid4
 
@@ -14,6 +15,7 @@ from emailmonitor.jobs.queues import owned_queues
 from emailmonitor.organizations.database import AuthorizationDenied, digest
 from emailmonitor.organizations.roles import Capability
 from emailmonitor.progress.service import Progress
+from emailmonitor.results.broker import ExportEvent
 from emailmonitor.runtime.authority import ServiceProcess
 from emailmonitor.runtime.database import ServiceDatabase
 from emailmonitor.runtime.publisher import PublisherError
@@ -90,6 +92,68 @@ def durable_job_state(case: ServiceCase) -> str:
                 {"org": case.scope.organization, "job": case.scope.resource},
             ).scalar_one()
         )
+
+
+@dataclass
+class ExportClaimBarrier:
+    """Only this event's owned, publisher-blocked claim establishes the race."""
+
+    database: str
+    worker_login: str
+    publisher_login: str
+    event: ExportEvent
+    observed_pid: int | None = None
+
+    def check_event(self, name: object, arguments: object) -> None:
+        if name != "emailmonitor.service.export" or arguments != [self.event.model_dump()]:
+            raise AssertionError("Unexpected export publication event")
+
+    def settled(self, rows: Sequence[Mapping[str, object]], drained: Callable[[], bool]) -> bool:
+        owned = [
+            row
+            for row in rows
+            if row["datname"] == self.database and row["backend_type"] == "client backend"
+        ]
+        workers = [row for row in owned if row["usename"] == self.worker_login]
+        publishers = [
+            row
+            for row in owned
+            if row["usename"] == self.publisher_login
+            and row["state"] == "idle in transaction"
+            and row["query"] == "SELECT emailmonitor.service_publish_event($1,$2,$3,$4,$5,$6,$7)"
+        ]
+        if len(publishers) != 1:
+            return False
+        publisher = publishers[0]
+        waiters = [
+            row
+            for row in workers
+            if row["state"] == "active"
+            and row["query"] == "SELECT emailmonitor.exports_claim($1,$2,$3,$4,$5,$6)"
+            and row["wait_event_type"] == "Lock"
+            and isinstance(row["blockers"], list)
+            and publisher["pid"] in row["blockers"]
+            and type(row["pid"]) is int
+        ]
+        if len(waiters) > 1:
+            return False
+        if waiters:
+            pid = waiters[0]["pid"]
+            assert type(pid) is int
+            if self.observed_pid is None:
+                self.observed_pid = pid
+            return False
+        previous = [row for row in workers if row["pid"] == self.observed_pid]
+        if (
+            self.observed_pid is None
+            or len(previous) != 1
+            or (
+                previous[0]["state"] == "active"
+                and previous[0]["query"] == "SELECT emailmonitor.exports_claim($1,$2,$3,$4,$5,$6)"
+            )
+        ):
+            return False
+        return drained()
 
 
 @pytest.fixture
@@ -455,6 +519,27 @@ def test_service_real_export_publish_claim_race_recovers_without_manual_delivery
     queue = phase_queue(config.queue, "export")
     original = broker_application
     barrier_observed = False
+    worker_url, publisher_url = make_url(case.url), make_url(config.database_url)
+    assert worker_url.database and worker_url.username and publisher_url.username
+    with case.admin.connect() as c:
+        event = c.execute(
+            text(
+                "SELECT event_id,generation FROM emailmonitor.export_outbox "
+                "WHERE organization_id=:org AND export_id=:id"
+            ),
+            {"org": org, "id": artifact.id},
+        ).one()
+    claim_barrier = ExportClaimBarrier(
+        worker_url.database,
+        worker_url.username,
+        publisher_url.username,
+        ExportEvent(
+            organization_id=str(org),
+            export_id=str(artifact.id),
+            event_id=str(event.event_id),
+            generation=event.generation,
+        ),
+    )
 
     def wrapped(configuration: ServiceRuntimeConfig) -> Any:
         app = original(configuration)
@@ -462,9 +547,34 @@ def test_service_real_export_publish_claim_race_recovers_without_manual_delivery
 
         def barrier(*args: Any, **kwargs: Any) -> Any:
             nonlocal barrier_observed
+            claim_barrier.check_event(args[0] if len(args) == 1 else None, kwargs.get("args"))
             receipt = send(*args, **kwargs)
+
             # Held publisher SQL transaction still owns the export SHARE lock.
-            wait_for(lambda: broker_counts(queue)[:2] == (0, 0), seconds=20)
+            # Empty broker counts before delivery do not prove a claim occurred.
+            def claim_settled() -> bool:
+                with case.admin.connect() as c:
+                    rows = (
+                        c.execute(
+                            text(
+                                "SELECT pid,usename,datname,backend_type,state,wait_event_type,"
+                                "btrim(query) AS query,pg_blocking_pids(pid) AS blockers "
+                                "FROM pg_stat_activity WHERE datname=current_database() "
+                                "AND usename IN (:worker,:publisher)"
+                            ),
+                            {
+                                "worker": claim_barrier.worker_login,
+                                "publisher": claim_barrier.publisher_login,
+                            },
+                        )
+                        .mappings()
+                        .all()
+                    )
+                return claim_barrier.settled(
+                    [dict(row) for row in rows], lambda: broker_counts(queue)[:2] == (0, 0)
+                )
+
+            wait_for(claim_settled, seconds=20)
             with case.admin.connect() as c:
                 row = c.execute(
                     text(

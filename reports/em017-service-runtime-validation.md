@@ -245,3 +245,47 @@ test retains its 30-second lease, before-expiry redelivery proof and unchanged
 job-share-lock conflict with active worker writes. Export-race failure remains
 separately unresolved pending the focused real-service failure stack; that test
 was not changed. Focused checks: 36 passed, 12 explicit actual-service skips.
+
+## Second correction hosted evidence (in progress)
+
+Head `fe59987a084cc3c66f534c7d1eab6d184c018932` used independently reviewed tree
+`8730e22b16fd1fc37b50e0f9b996a800777ecfad`. Both full local normal and genuinely
+fresh-environment gates passed **3386 backend tests / 375 explicit infrastructure
+skips and 57 React tests**, with all aggregate checks.
+
+[Actual packaging job 118675986076](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/39436846819/job/118675986076)
+passed: two independent web/image builds had matching artifacts, base inventories
+and image contents; fourteen network-none containers passed, five actual CLI
+production refusals per image passed, and owned cleanup was verified. OCI archive
+bit-reproducibility and production readiness remain explicitly false. This closes
+the packaging acceptance failure without proving the earlier hosted OOM hypothesis.
+
+[Focused service and installed browser job 118675985594](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/39436846819/job/118675985594)
+retains **11 actual service-broker passes and one failure** in 141.32 seconds.
+Installed extraction through session expiry/restart, extraction crash/redelivery,
+contention and revocation cases passed. The export race failed at its
+`wait_for(unpublished)` observation, before its rendering-completion loop. Its
+prior empty-queue predicate did not prove claim contention: zero ready/unacked
+also describes a pre-delivery gap. The bounded test correction now requires
+observing the exact worker's active claim Lock wait blocked by the uniquely owned
+publisher, within the same shared twenty-second barrier, before accepting drain
+and queued/attempts-zero observations. No production fence or lease changes.
+
+Installed browser acceptance still failed at `assets_session`, with API reply
+statuses 401/303/303. That establishes the first routed issuer hop, but callback
+static replies are absent from this list and the failure reason remains unknown.
+No callback or ancestry cause is inferred. A closed diagnostics-only refinement
+will distinguish fixed login phases and rejection causes without recording URLs,
+headers, cookies, codes, state, exception messages or DOM content. Actual browser
+completion remains unmet.
+
+The diagnostics refinement adds only finite source-authored reasons and an
+optional nine-value installed-login phase on failure frames at the two existing
+login stages. Old absent-field frames and host text remain compatible. The first
+fixed reason/class/phase is immutable; unknown exception classes map to the
+existing UnexpectedError value, including terminal stderr. Phase clears after
+successful login. No new awaits, retries, deadlines, navigation predicates or
+success-receipt changes are introduced. Focused checks passed 227 tests with one
+explicit unavailable-service skip. The deterministic export barrier's focused
+checks passed 55 tests with twelve actual SQL/broker skips. Hosted evidence for
+both remains pending.

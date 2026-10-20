@@ -15,7 +15,12 @@ from api_client import APIClient
 from emailmonitor.identity.oidc import AuthenticationDenied
 from emailmonitor.runtime.api_entrypoint import ReferenceExchange, ReferenceIdentity
 from installed_operator_issuer import synthetic_issuer
-from installed_operator_redirects import FLOW_COOKIE, NAVIGATION, LoginRedirects
+from installed_operator_redirects import (
+    FLOW_COOKIE,
+    NAVIGATION,
+    InstalledDiagnostics,
+    LoginRedirects,
+)
 from installed_operator_relay import CHUNK, application, validate_target
 from test_installed_operator_acceptance import require_installed_ci
 from test_service_api_entrypoint import certificate
@@ -111,6 +116,100 @@ def test_installed_redirects_preserve_responses_and_require_four_observed_one_us
     asyncio.run(exercise())
 
 
+def test_installed_first_failure_is_immutable_and_contains_only_fixed_values() -> None:
+    diagnostics = InstalledDiagnostics()
+    first = diagnostics.capture(
+        RuntimeError("private state/code/cookie"), "installed_redirect_ancestry", "callback_failure"
+    )
+    assert first == {
+        "error": "RuntimeError",
+        "reason": "installed_redirect_ancestry",
+        "installed_login_phase": "callback_failure",
+    }
+    assert (
+        diagnostics.capture(
+            TimeoutError("later private deadline"),
+            "installed_login_deadline",
+            "callback_document",
+        )
+        == first
+    )
+    assert diagnostics.capture(ValueError("cleanup private"), "unknown", None) == first
+    assert "private" not in repr(diagnostics.first)
+    assert "private" not in json.dumps(first)
+
+
+def test_installed_unknown_exception_class_is_not_disclosed() -> None:
+    class PrivateExceptionName(Exception):
+        pass
+
+    diagnostics = InstalledDiagnostics()
+    assert diagnostics.capture(PrivateExceptionName("private"), "unknown", None) == {
+        "error": "UnexpectedError",
+        "reason": "unknown",
+    }
+
+
+@pytest.mark.parametrize(
+    ("reason", "phase"),
+    [
+        ("private state/code/cookie", None),
+        ("installed_redirect_ancestry private", "callback_failure"),
+        ("unknown", "private state/code/cookie"),
+    ],
+)
+def test_installed_diagnostic_capture_refuses_nonliteral_values(
+    reason: str, phase: str | None
+) -> None:
+    diagnostics = InstalledDiagnostics()
+    with pytest.raises(ValueError, match="Closed installed diagnostic"):
+        diagnostics.capture(RuntimeError("private"), reason, phase)  # type: ignore[arg-type]
+    assert diagnostics.first is None
+
+
+def test_installed_redirect_first_rejection_cause_survives_secondary_order_failure() -> None:
+    coordinator = LoginRedirects(API, ISSUER)
+    coordinator.begin()
+    original = object()
+    headers = arm_login(coordinator, original)
+    with pytest.raises(RuntimeError):
+        observe_redirect(coordinator, object(), headers["location"])
+    assert coordinator.failure_reason == "installed_redirect_ancestry"
+    with pytest.raises(RuntimeError):
+        coordinator.begin()
+    assert coordinator.failure_reason == "installed_redirect_ancestry"
+    assert coordinator.failed
+
+
+@pytest.mark.parametrize(
+    ("failure", "reason"),
+    [
+        ("net::ERR_ABORTED", "installed_redirect_aborted"),
+        ("net::ERR_CERT_AUTHORITY_INVALID", "installed_redirect_certificate"),
+        ("net::ERR_TIMED_OUT", "installed_redirect_timeout"),
+        ("private failure with state/code/cookie", "installed_redirect_network"),
+        (None, "installed_redirect_network"),
+    ],
+)
+def test_installed_redirect_network_diagnostics_are_finite(
+    failure: str | None, reason: str
+) -> None:
+    coordinator = LoginRedirects(API, ISSUER)
+    coordinator.begin()
+    original = object()
+    headers = arm_login(coordinator, original)
+    with pytest.raises(RuntimeError):
+        coordinator.observe_failure(
+            target=headers["location"],
+            method="GET",
+            main_frame=True,
+            redirected_from=original,
+            failure=failure,
+        )
+    assert coordinator.failure_reason == reason
+    assert "private" not in coordinator.failure_reason
+
+
 @pytest.mark.parametrize(
     ("key", "value"),
     [
@@ -140,6 +239,13 @@ def test_installed_redirect_response_identity_is_exact(key: str, value: object) 
     with pytest.raises(RuntimeError, match="redirect refused"):
         coordinator.arm(object(), **arguments)  # type: ignore[arg-type]
     assert coordinator.failed
+    assert coordinator.failure_reason == (
+        "installed_redirect_source"
+        if key == "source"
+        else "installed_redirect_status"
+        if key == "status"
+        else "installed_redirect_request_identity"
+    )
     with pytest.raises(RuntimeError, match="redirect refused"):
         coordinator.receipt()
 
@@ -546,6 +652,12 @@ def test_installed_browser_image_keeps_original_security_profile_and_no_assets_c
     assert login.index('name="Retry connection"') < login.index("redirects.begin()")
     assert 'status=response["status"], headers=response["headers"], body=bytes(output)' in guest
     assert guest.index("redirects.arm(") < guest.index("await route.fulfill(")
+    assert login.index("redirects.finish()") < login.index("login_phase = None")
+    assert "finally:" not in login
+    assert "type(error) is TimeoutError" in guest
+    assert 'isinstance(error, Error) and route.request.failure == "net::ERR_ABORTED"' in guest
+    assert '"Installed browser journey failed: " + fixed["error"]' in guest
+    assert "type(error).__name__" not in guest
     assert 'name="no contact", exact=True' in guest
     assert json.loads(json.dumps(ASSETS)) == ASSETS
 
