@@ -544,3 +544,92 @@ explicit infrastructure skips and 60 React tests**, with all documentation,
 Ruff/format, mypy, inventory, frontend types/lint/build passing. Backend time was
 166.78 seconds. Genuinely fresh full validation and hosted acceptance remain
 pending.
+
+## Seventh correction hosted evidence (in progress)
+
+Head `3ca76bf0901f3ace5cdff21ef8fc06cc547f6b7c` uses reviewed tree
+`df32fbea3bb36df8cee79e3c4703c83b5f3ca217` with matching synthetic merge tree and
+expected parents. Both full local normal/fresh gates passed **3580 backend / 375
+explicit infrastructure skips and 60 React tests**, all aggregate checks; fresh
+backend time was 151.03 seconds.
+
+[Service run 39458102765](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/39458102765)
+passed all **12 actual broker tests in 114.33 seconds** and the **complete installed
+operator test in 111.96 seconds**, including its post-receipt teardown checks.
+It exercised actual HTTPS callback, keyboard source review, keyword extraction
+through natural session expiry and reauthentication, evidence review, XLSX/CSV
+downloads, direct-URL no-contact outcome and cross-tenant denial. The exact
+installed archive SHA256 `f29897bb4fc3cb1d872ab880dbbcff4a06805948fc5e57100e4c55550ec1989f`
+matches both packaging builds. Packaging passed fourteen confined containers,
+five production refusals per image, matching artifacts/base inventories/measured
+contents and verified owned cleanup. OCI byte reproducibility remains unverified.
+Independent receipt review confirms the bounded synthetic runtime milestone;
+no production/live-source readiness, SLA or complete security attestation follows.
+The prior packaging failure's cause remains unknown.
+
+[Controlled transport run 39458102573](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/39458102573)
+failed independently after **41 + 1 + 1 curated passes**. Its legacy operator group
+finished **3 passed, 1 failed, 1 error**: the dynamic-tooltip browser reached
+`boundary_ready` and completed popup/download handling, then timed out on the
+unchanged authored marker locator. The owned channel was deliberately poisoned
+on failure, producing a secondary cleanup error; XML owned cleanup was verified.
+No source-proven marker-removal or main-frame-navigation cause is established.
+This remains a failed PR gate. Full application acceptance is still running.
+
+### Seventh correction terminal aggregate
+
+[Application run 39458102582](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/39458102582)
+passed **3955 backend tests, no skips/failures**, in 934.12 seconds, **60 React
+tests**, all aggregate checks and XML owned cleanup. All eight workflows are
+terminal: seven passed, only the separately retained controlled-transport legacy
+dynamic-tooltip case failed. Installed runtime/operator/packaging acceptance
+passed at the same exact head; this does not override the failed transport gate.
+
+### Eighth correction diagnostics-only scope
+
+The legacy dynamic browser's original marker check, exception and deadlines are
+preserved. A failure-only snapshot reduces current URL to fixed categories,
+marker count to a cap, marker-text equality to a boolean, boundary field state to
+fixed types and main-frame object identity to a boolean. Frame identity is not
+claimed as document identity. One bounded snapshot of at most one second is
+allowed only after failure; original exceptions are re-raised even if diagnostic
+capture or output fails. No success-path awaits, listeners, navigation, retries,
+CDP commands or installed-service source changes are added. Focused validation:
+**139 passed** in 4.51 seconds; Ruff/format/mypy passed. Exact source review and
+full normal/fresh validation are running; actual marker failure cause is unknown.
+
+Exact independent source review approved the two diagnostic files and verified
+that normalized original main/helpers, the installed journey and boundary host
+are unchanged. Full eighth-correction normal validation passed **3625 backend
+tests / 375 explicit infrastructure skips and 60 React tests**, all aggregate
+checks; backend time was 142.88 seconds. Genuinely fresh validation is running.
+
+The first eighth-correction fresh gate is a retained failure: **3624 passed, 375
+skipped, one failed** in 194.26 seconds. The unchanged standard-library refusal
+entrypoint exceeded its five-second subprocess deadline; captured stdout already
+contained the expected fixed refusal. No acquisition was triggered. The entire
+unchanged refusal-test module subsequently passed **130 tests in 1.21 seconds**
+in isolation. No deadline or assertion was relaxed; exact scheduling cause is
+not established. Another genuinely new-empty full environment gate is running.
+
+The next new-empty gate also retained a failure: **3624 passed, 375 skipped, one
+failed** in 221.69 seconds. A different unchanged production-import refusal child
+exceeded its ten-second subprocess deadline with no captured output. Both
+refusal modules then passed together: **145 tests in 3.60 seconds**. No deadline
+or assertion changed. A point-in-time resource snapshot showed available memory
+and temporary storage, but cannot establish or exclude transient scheduling
+pressure. Source review is checking diagnostic-test isolation before another
+full gate; neither failed aggregate is counted as accepted.
+
+Read-only isolation review found no diagnostic-test leak or child import coupling:
+namespace-local overrides, awaited cancellation and reaped subprocesses are used;
+no global asyncio/environment/signal mutation or detached task is introduced.
+The empty-environment refusal exits before optional application imports, and the
+production API import does not load the browser diagnostic. Both timed-out paths
+are unchanged. This does not prove the scheduling cause. A further genuinely
+new-empty full gate is running on unchanged implementation/tests.
+
+The subsequent genuinely new-empty full gate passed unchanged: **3625 backend
+tests / 375 explicit infrastructure skips and 60 React tests**, all aggregate
+checks; backend elapsed 201.58 seconds. Both earlier failed fresh receipts and
+isolated diagnoses remain above; no failure was reclassified as acceptance.
