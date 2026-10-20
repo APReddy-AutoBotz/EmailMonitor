@@ -474,3 +474,27 @@ Normal/new-empty aggregates exit 0 with 2552 passed/303 explicit service skips,
 48 React and mypy 266 files. All seven actual own-head gates, including the new
 synthetic private-entry isolation case, remain required. Real-sample rights and
 local Docker availability remain unresolved.
+
+
+## 2026-10-20 — One scoped Elsevier sample candidate
+
+Partial EM-015: a dedicated one-initial-event runner is implemented for one exact
+immutable article representation. A specific CC BY 3.0 article-level decision,
+including attribution and legacy contradictory wording, is documented in
+[runbook62](62-elsevier-one-sample-validation.md). This grants no unrelated source,
+live API, tenant storage, export or outreach capability.
+
+The runner builds/probes the existing owned curated artifact before its single
+anonymous pinned-address HTTPS request, verifies exact length/digest and calls
+the unchanged private admission/isolated parser. A mode-0700 temporary directory
+outside the checkout is removed before bounded owned-image/container cleanup.
+Only closed status/reason/count results can be emitted after cleanup verification.
+Existing seven synthetic workflows, application source and protocols are unchanged.
+
+Focused synthetic checks after cleanup-review correction: 296 passed, including
+57 new runner cases; full mypy
+268 files, changed-source Ruff and documentation checks passed. No real sample
+was acquired or parsed locally. Independent exact-tree review, full normal/fresh
+aggregates, existing actual gates and the dedicated initial-event outcome remain
+pending. See [evidence](../reports/elsevier-one-sample-validation.md). Counts alone
+will not establish extraction accuracy or a representative benchmark.
