@@ -8,6 +8,10 @@ case "${1-}" in
     uv run --project services/backend pytest -c services/backend/pyproject.toml scripts/isolation/test_transport_acceptance.py scripts/isolation/test_provider_transport_acceptance.py scripts/isolation/test_provider_journey_acceptance.py -ra -s | tee "$RUNNER_TEMP/transport-acceptance.log"
     grep -Eq '(^|[=[:space:]])41 passed([ ,]|$)' "$RUNNER_TEMP/transport-acceptance.log"
     ! grep -Eq '[0-9]+ skipped|[0-9]+ warnings?' "$RUNNER_TEMP/transport-acceptance.log"
+    uv run --project services/backend pytest -c services/backend/pyproject.toml scripts/isolation/test_private_sample_acceptance.py -ra -s | tee "$RUNNER_TEMP/private-sample-acceptance.log"
+    grep -F 'PRIVATE_OFFLINE_SYNTHETIC_NETWORK_NONE_REDACTED_COUNTS' "$RUNNER_TEMP/private-sample-acceptance.log"
+    grep -Eq '(^|[=[:space:]])1 passed([ ,]|$)' "$RUNNER_TEMP/private-sample-acceptance.log"
+    ! grep -Eq '[0-9]+ skipped|[0-9]+ warnings?' "$RUNNER_TEMP/private-sample-acceptance.log"
     ;;
   operator)
     uv run --project services/backend pytest -c services/backend/pyproject.toml scripts/isolation/test_operator_provider_acceptance.py scripts/isolation/test_operator_browser_acceptance.py scripts/isolation/test_operator_keyword_browser_acceptance.py -v -s | tee "$RUNNER_TEMP/provider-operator.log"

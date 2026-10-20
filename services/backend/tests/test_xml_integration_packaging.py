@@ -361,7 +361,7 @@ def test_stop_consumer_signals_only_owned_group_and_reaps(monkeypatch: pytest.Mo
 def test_fixed_transport_script_keeps_original_acceptance_predicates() -> None:
     script = (ROOT / "scripts/packaging/check_xml_transport.sh").read_text()
     assert "set -euo pipefail" in script
-    assert script.count("uv run --project services/backend pytest") == 2
+    assert script.count("uv run --project services/backend pytest") == 3
     assert (
         "test_transport_acceptance.py scripts/isolation/test_provider_transport_acceptance.py "
         "scripts/isolation/test_provider_journey_acceptance.py -ra -s" in script
@@ -569,3 +569,11 @@ def test_invalid_probe_never_returns_an_integration_image(
     )
     with pytest.raises(RuntimeError, match="^" + expected_error + "$"):
         integration.prepare_image(runtime, owned)
+
+
+def test_private_sample_gate_is_separate_and_synthetic_only() -> None:
+    script = (ROOT / "scripts/packaging/check_xml_transport.sh").read_text()
+    assert "scripts/isolation/test_private_sample_acceptance.py -ra -s" in script
+    assert "PRIVATE_OFFLINE_SYNTHETIC_NETWORK_NONE_REDACTED_COUNTS" in script
+    assert "1 passed([ ,]|$)" in script
+    assert "[0-9]+ skipped|[0-9]+ warnings?" in script

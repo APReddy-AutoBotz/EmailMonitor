@@ -10,14 +10,30 @@ from emailmonitor.parsing.xml_protocol import parse_input
 
 
 def main() -> None:
+    _run(private_offline=False)
+
+
+def private_main() -> None:
+    """Separate offline entry; rights remain the trusted host composition's responsibility."""
+    _run(private_offline=True)
+
+
+def _run(*, private_offline: bool) -> None:
     try:
+        marker_ok = (
+            os.environ.get("EM_PRIVATE_OFFLINE_XML") == "one-file-private-evaluation"
+            and "EM_ISOLATION_DIAGNOSTIC" not in os.environ
+            if private_offline
+            else os.environ.get("EM_ISOLATION_DIAGNOSTIC") == "synthetic-test-only"
+            and "EM_PRIVATE_OFFLINE_XML" not in os.environ
+        )
         fields = dict(
             line.split(":", 1)
             for line in Path("/proc/self/status").read_text().splitlines()
             if ":" in line
         )
         if (
-            os.environ.get("EM_ISOLATION_DIAGNOSTIC") != "synthetic-test-only"
+            not marker_ok
             or os.geteuid() != 65532
             or sorted(p.name for p in Path("/sys/class/net").iterdir()) != ["lo"]
             or int(fields["CapEff"].strip(), 16) != 0
@@ -47,4 +63,10 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    if sys.argv[1:] == []:
+        main()
+    elif sys.argv[1:] == ["--private-offline"]:
+        private_main()
+    else:
+        sys.stderr.write("XML_PARSER_REFUSED\n")
+        raise SystemExit(1)

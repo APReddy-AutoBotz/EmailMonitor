@@ -339,3 +339,12 @@ accepted-contact identity/accounting after post-effect crash and original
 unacknowledged delivery. It is not combined browser crash recovery.
 [Runbook60](60-combined-fixture-demonstration.md) /
 [validation](../reports/operator-combined-fixture-validation.md).
+
+## EM-015 private offline sample admission prerequisite
+
+[Runbook61](61-private-offline-sample-admission.md) maps bounded authorized sample
+handling to strict provenance/rights decisions, immutable byte/identity binding,
+existing isolated parser controls and redacted evaluation summaries. Public
+regressions and actual private-entry isolation checks use synthetic input only.
+[Validation](../reports/private-sample-admission-validation.md) distinguishes this
+harness prerequisite from unperformed real extraction and live access.
