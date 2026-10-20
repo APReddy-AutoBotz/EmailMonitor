@@ -1,3 +1,9 @@
+## 2026-10-20 — Private offline sample admission candidate
+
+- Prepare bounded provenance/rights-based one-file admission through an explicitly private isolated parser entry.
+- Retain synthetic defaults and public synthetic regressions; restrict evaluation summaries to fixed categories and counts.
+- Actual real-sample rights and Docker execution remain gated. See [validation](reports/private-sample-admission-validation.md).
+
 ## 2026-10-18 — Combined fixture operator demonstration candidate
 
 - Add a separate keyword demonstration covering both fixture pages, duplicate suppression, static and tooltip evidence, no-contact results, review and exports.

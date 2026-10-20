@@ -103,8 +103,9 @@ def test_actual_container_output_persists_review_and_both_exports(
     profiles: list[Mapping[str, object]] = []
     original_verify = xml_channel.verify_profile
 
-    def verified(metadata: Mapping[str, object]) -> None:
-        original_verify(metadata)
+    def verified(metadata: Mapping[str, object], *, private_offline: bool = False) -> None:
+        assert private_offline is False
+        original_verify(metadata, private_offline=private_offline)
         require_packaged_image(metadata)
         profiles.append(metadata)
 

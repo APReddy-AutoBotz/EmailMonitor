@@ -100,8 +100,9 @@ def _provider_operator_journey(
     profiles: list[Mapping[str, object]] = []
     verify = xml_channel.verify_profile
 
-    def verified(metadata: Mapping[str, object]) -> None:
-        verify(metadata)
+    def verified(metadata: Mapping[str, object], *, private_offline: bool = False) -> None:
+        assert private_offline is False
+        verify(metadata, private_offline=private_offline)
         require_packaged_image(metadata)
         profiles.append(metadata)
 

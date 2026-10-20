@@ -36,6 +36,9 @@ PROFILE = (
     "--env=EM_ISOLATION_DIAGNOSTIC=synthetic-test-only",
 )
 COMMAND = ("python", "-m", "emailmonitor.parsing.xml_worker")
+PRIVATE_COMMAND = (*COMMAND, "--private-offline")
+PRIVATE_MARKER = "EM_PRIVATE_OFFLINE_XML=one-file-private-evaluation"
+PRIVATE_PROFILE = (*PROFILE[:-1], "--env=" + PRIVATE_MARKER)
 
 
 def fixture_expectation() -> XmlExpectation:
@@ -83,7 +86,10 @@ def decode_output(
     return observed
 
 
-def verify_profile(metadata: Mapping[str, object]) -> None:
+def verify_profile(metadata: Mapping[str, object], *, private_offline: bool = False) -> None:
+    if type(private_offline) is not bool:
+        raise ValueError("Registered parser mode required")
+    command = PRIVATE_COMMAND if private_offline else COMMAND
     config = metadata["HostConfig"]
     image_config = metadata["Config"]
     if not isinstance(config, dict) or not isinstance(image_config, dict):
@@ -127,7 +133,7 @@ def verify_profile(metadata: Mapping[str, object]) -> None:
             {"Name": "nofile", "Hard": 64, "Soft": 64},
         ]
         or image_config.get("User") != "65532:65532"
-        or image_config.get("Cmd") != list(COMMAND)
+        or image_config.get("Cmd") != list(command)
         or image_config.get("Entrypoint") not in (None, [])
         or config.get("Tmpfs") != {"/tmp": "rw,noexec,nosuid,size=16m"}
     ):
@@ -203,9 +209,19 @@ def parse_isolated(
     settings: Settings, data: bytes, *, expected: XmlExpectation | None = None
 ) -> XmlObservation:
     require_fixture(settings)
+    return _parse_in_container(data, expected or fixture_expectation(), private_offline=False)
+
+
+def _parse_in_container(
+    data: bytes, expected: XmlExpectation, *, private_offline: bool
+) -> XmlObservation:
+    """Shared fixed-mode transport; private callers must first enforce sample admission."""
+    if type(private_offline) is not bool:
+        raise ValueError("Registered parser mode required")
+    profile = PRIVATE_PROFILE if private_offline else PROFILE
+    command = PRIVATE_COMMAND if private_offline else COMMAND
     if not isinstance(data, bytes) or not 1 <= len(data) <= MAX_BYTES:
         raise ValueError("Bounded XML input required")
-    expected = expected or fixture_expectation()
     framed = encode_input(data, expected)
     image_metadata = json.loads(_docker("image", "inspect", IMAGE))[0]
     image_id = image_metadata.get("Id", "")
@@ -217,7 +233,7 @@ def parse_isolated(
     ):
         raise IsolationUnavailable("xml_image_identity_invalid")
     identifier = (
-        _docker("create", "--pull=never", "--interactive", *PROFILE, image_id, *COMMAND)
+        _docker("create", "--pull=never", "--interactive", *profile, image_id, *command)
         .decode()
         .strip()
     )
@@ -225,7 +241,7 @@ def parse_isolated(
         raise IsolationUnavailable("xml_container_identity_invalid")
     try:
         metadata = json.loads(_docker("inspect", identifier))[0]
-        verify_profile(metadata)
+        verify_profile(metadata, private_offline=private_offline)
         if metadata.get("Image") != image_id:
             raise IsolationUnavailable("xml_image_identity_mismatch")
         environment = metadata["Config"].get("Env", [])
@@ -237,11 +253,16 @@ def parse_isolated(
             "PYTHON_SHA256",
             "PYTHONPATH",
             "PYTHONDONTWRITEBYTECODE",
-            "EM_ISOLATION_DIAGNOSTIC",
+            "EM_PRIVATE_OFFLINE_XML" if private_offline else "EM_ISOLATION_DIAGNOSTIC",
         }
         if not isinstance(environment, list) or any(
             not isinstance(value, str) or value.split("=", 1)[0] not in allowed
             for value in environment
+        ):
+            raise IsolationUnavailable("xml_container_environment_invalid")
+        if private_offline and (
+            environment.count(PRIVATE_MARKER) != 1
+            or sum(value.startswith("EM_PRIVATE_OFFLINE_XML=") for value in environment) != 1
         ):
             raise IsolationUnavailable("xml_container_environment_invalid")
         output = exchange(["docker", "start", "--attach", "--interactive", identifier], framed)

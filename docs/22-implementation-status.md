@@ -453,3 +453,24 @@ stored keyword input. The corrected complete-model assertion retains exact raw
 payload checks; independent original mutation fails. Corrected normal/new-empty
 2498/303 skips and 48 React pass. All prior runs ended; new-head actual gates remain
 required. Earlier parser/DNS failures remain unresolved and preserved.
+
+PR40 corrected head `8c7b06ceac5b84eaee36447e2ba70311aef8fcf0` / tree
+`00b57e8761ec8ec61832b0a290df40c7b86047aa` completed all seven workflows:
+2801 actual backend/no skips, 48 React, 41 transport and four operator journeys.
+Browser passed its unchanged second attempt after an unresolved boundary-readiness
+timeout; all other final-head runs passed first attempt. Independent exact-tree,
+actual-evidence and final factual-body review/readback passed. Draft remains
+unmerged; earlier failed receipts remain preserved in its public description.
+
+On 2026-10-20 the owner selected Elsevier/ScienceDirect. The bounded next EM-015
+prerequisite is [private offline sample admission](61-private-offline-sample-admission.md).
+Actual sample execution remains blocked on a scoped rights decision and reviewed
+Docker environment. Current cloud lacks that runtime. No live source grant,
+credential, production deployment or real contact publication is authorized by
+this candidate. At initial assessment, implementation and acceptance were pending.
+
+Private admission implementation and independent source review are complete.
+Normal/new-empty aggregates exit 0 with 2552 passed/303 explicit service skips,
+48 React and mypy 266 files. All seven actual own-head gates, including the new
+synthetic private-entry isolation case, remain required. Real-sample rights and
+local Docker availability remain unresolved.

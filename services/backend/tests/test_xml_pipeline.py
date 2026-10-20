@@ -1,8 +1,11 @@
 """Pure channel/retention/refusal tests; actual sandbox→database proof is separate."""
 
+import ast
 import json
 import sys
+from collections.abc import Callable, Mapping
 from pathlib import Path
+from typing import cast
 from uuid import UUID
 
 import pytest
@@ -379,3 +382,49 @@ def test_unapproved_mount_type_cannot_enter_parser(mount: dict[str, str]) -> Non
     document["Mounts"] = [mount]
     with pytest.raises(ValueError):
         verify_profile(document)
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "scripts/isolation/test_provider_journey_acceptance.py",
+        "scripts/isolation/test_operator_provider_acceptance.py",
+        "services/backend/tests/test_xml_pipeline_tenant.py",
+    ],
+)
+def test_actual_fixture_profile_instrumentation_preserves_mode(source: str) -> None:
+    # Execute the actual nested instrumentation body without its Docker/SQL/UI
+    # scenario. This catches signature drift even when those services are absent.
+    tree = ast.parse((ROOT / source).read_text())
+    wrappers = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef) and node.name == "verified"
+    ]
+    assert len(wrappers) == 1
+    recorded: list[Mapping[str, object]] = []
+    ownership: list[Mapping[str, object]] = []
+    namespace: dict[str, object] = {
+        "Mapping": Mapping,
+        "original_verify": verify_profile,
+        "verify": verify_profile,
+        "require_packaged_image": ownership.append,
+        "profiles": recorded,
+    }
+    exec(compile(ast.Module(body=[wrappers[0]], type_ignores=[]), source, "exec"), namespace)
+    verified = cast(Callable[..., None], namespace["verified"])
+    metadata = profile()
+    verified(metadata)
+    verified(metadata, private_offline=False)
+    assert recorded == ownership == [metadata, metadata]
+    for forbidden in (True, None, 0, "false"):
+        with pytest.raises(AssertionError):
+            verified(metadata, private_offline=forbidden)
+    assert recorded == ownership == [metadata, metadata]
+    # Fixture-only instrumentation still enforces the exact original command.
+    config = metadata["Config"]
+    assert isinstance(config, dict)
+    config["Cmd"] = [*COMMAND, "--private-offline"]
+    with pytest.raises(ValueError, match="configuration mismatch"):
+        verified(metadata, private_offline=False)
+    assert len(recorded) == len(ownership) == 2
