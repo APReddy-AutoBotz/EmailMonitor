@@ -498,3 +498,18 @@ was acquired or parsed locally. Independent exact-tree review, full normal/fresh
 aggregates, existing actual gates and the dedicated initial-event outcome remain
 pending. See [evidence](../reports/elsevier-one-sample-validation.md). Counts alone
 will not establish extraction accuracy or a representative benchmark.
+
+## 2026-10-20 — Private affiliation diagnostic candidate
+
+Partial EM-015 investigation. Authored synthetic counterfactuals reproduce
+reference-gated implicit affiliation suppression; this is not confirmation of the
+real sample's cause. A separate private fixed-counter diagnostic is implemented and independently reviewed,
+with distinct rights scope and unchanged normal parser/one-shot controls.
+[Design](63-affiliation-diagnostic-design.md) and
+[validation](../reports/affiliation-diagnostic-validation.md) distinguish local
+pure/mock evidence from pending actual isolated acceptance. No live activation.
+
+Local normal/new-empty Python aggregates each passed 2751 tests with 303 explicit
+service skips; 48 React, full Ruff/mypy and documentation/inventory checks passed.
+Actual synthetic Docker diagnostic and exact-head CI remain pending before
+acceptance. The candidate is unpublished.

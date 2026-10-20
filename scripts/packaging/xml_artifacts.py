@@ -19,7 +19,7 @@ from artifacts import (
     read,
 )
 
-# Audited import-only closure of the UNCHANGED xml_worker entrypoint, including
+# Audited import-only closure of the ordinary and explicit diagnostic guests, including
 # package initializers. Shared models currently import fixture helper CODE. No
 # fixture/sample ASSETS, tests, credentials or unrelated source enter the context.
 XML_FILES = (
@@ -47,6 +47,8 @@ XML_FILES = (
     "organizations/database.py",
     "organizations/roles.py",
     "parsing/__init__.py",
+    "parsing/affiliation_diagnostic.py",
+    "parsing/affiliation_diagnostic_worker.py",
     "parsing/xml_protocol.py",
     "parsing/xml_worker.py",
     "progress/__init__.py",

@@ -361,7 +361,10 @@ def test_stop_consumer_signals_only_owned_group_and_reaps(monkeypatch: pytest.Mo
 def test_fixed_transport_script_keeps_original_acceptance_predicates() -> None:
     script = (ROOT / "scripts/packaging/check_xml_transport.sh").read_text()
     assert "set -euo pipefail" in script
-    assert script.count("uv run --project services/backend pytest") == 3
+    assert script.count("uv run --project services/backend pytest") == 4
+    assert "test_affiliation_diagnostic_acceptance.py -ra -s" in script
+    assert "AFFILIATION_DIAGNOSTIC_SYNTHETIC_NETWORK_NONE_COUNTERS" in script
+    assert script.count("(^|[=[:space:]])1 passed([ ,]|$)") == 2
     assert (
         "test_transport_acceptance.py scripts/isolation/test_provider_transport_acceptance.py "
         "scripts/isolation/test_provider_journey_acceptance.py -ra -s" in script

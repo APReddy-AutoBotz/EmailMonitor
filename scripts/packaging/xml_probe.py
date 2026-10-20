@@ -41,6 +41,8 @@ XML_FILES = (
     "organizations/database.py",
     "organizations/roles.py",
     "parsing/__init__.py",
+    "parsing/affiliation_diagnostic.py",
+    "parsing/affiliation_diagnostic_worker.py",
     "parsing/xml_protocol.py",
     "parsing/xml_worker.py",
     "progress/__init__.py",
@@ -215,7 +217,7 @@ def main() -> None:
     if [name for _, name in socket.if_nameindex()] != ["lo"]:
         raise RuntimeError("xml_image_network_refused")
     distributions = verify_layout()
-    from emailmonitor.parsing import xml_worker  # noqa: F401
+    from emailmonitor.parsing import affiliation_diagnostic_worker, xml_worker  # noqa: F401
 
     loaded = {
         Path(module.__file__).relative_to(ROOT / "src/emailmonitor").as_posix()
