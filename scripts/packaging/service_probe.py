@@ -8,9 +8,7 @@ import json
 import os
 import re
 import socket
-import subprocess
 import sys
-import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -29,7 +27,9 @@ IMPORTS = (
     "emailmonitor.runtime.database",
     "emailmonitor.extraction.fixture",
 )
-STAGES = frozenset({"kernel", "layout", "imports", "cli", "content", "base_inventory", "receipt"})
+STAGES = frozenset(
+    {"kernel", "layout", "imports", "models", "content", "base_inventory", "receipt"}
+)
 
 
 class ProbeDiagnostics:
@@ -164,7 +164,7 @@ def installed_imports() -> None:
                 raise RuntimeError("service_image_import_closure_refused")
 
 
-def cli_checks() -> None:
+def model_refusals() -> None:
     from emailmonitor.runtime.api_entrypoint import ReferenceAPI
     from emailmonitor.runtime.worker import ServiceRuntimeConfig
     from pydantic import ValidationError
@@ -182,31 +182,6 @@ def cli_checks() -> None:
                 raise RuntimeError("service_image_production_literal_refused") from None
         else:
             raise RuntimeError("service_image_production_literal_refused")
-    base = [sys.executable, "-B", "-m", "emailmonitor.runtime.entrypoint"]
-    help_result = subprocess.run([*base, "--help"], capture_output=True, timeout=5, check=False)
-    if (
-        help_result.returncode
-        or help_result.stderr
-        or not help_result.stdout.startswith(b"usage:")
-        or len(help_result.stdout) > 8192
-    ):
-        raise RuntimeError("service_image_help_refused")
-    with tempfile.TemporaryDirectory(prefix="service-config-refusal-", dir="/tmp") as directory:
-        config = Path(directory) / "production.json"
-        config.write_text('{"environment":"production"}', encoding="utf-8")
-        for name in ("api", "worker", "publish-once", "reconcile-once", "check"):
-            result = subprocess.run(
-                [*base, name, "--config", str(config)],
-                capture_output=True,
-                timeout=5,
-                check=False,
-            )
-            if (
-                result.returncode != 1
-                or result.stdout
-                or result.stderr != b"service_runtime_failed\n"
-            ):
-                raise RuntimeError("service_image_production_refusal_missing")
 
 
 def kernel_checks() -> list[int]:
@@ -251,8 +226,8 @@ def execute(diagnostics: ProbeDiagnostics) -> None:
     manifest, distributions = verify_layout()
     diagnostics.mark("imports")
     installed_imports()
-    diagnostics.mark("cli")
-    cli_checks()
+    diagnostics.mark("models")
+    model_refusals()
     diagnostics.mark("content")
     image_content_sha256 = content_digest()
     diagnostics.mark("base_inventory")
@@ -269,8 +244,6 @@ def execute(diagnostics: ProbeDiagnostics) -> None:
                     name.startswith(SOURCE + "/") for name in manifest["files"]
                 ),
                 "installed_import_closure": True,
-                "cli_help": True,
-                "production_refusals": 5,
                 "production_environment_literal_refusals": 2,
                 "interfaces": ["lo"],
                 "kernel_restrictions": True,

@@ -168,3 +168,80 @@ checks that latch even when Celery swallows bootstep cleanup errors. Python's
 wake-FD API cannot expose a foreign owner's previous warning flag; cooperative
 main-thread ownership remains an explicit constraint. Focused tests include
 real signals, full pipes, partial startup, repeated close and failed restoration.
+
+## First correction hosted receipt (preserved)
+
+Head `7e3ebac8d4b31a9cffbf4c9b1bd72df6bff98e20`, reviewed tree
+`808e0a1f36a00e29b409ec979455cbed61b3d98d`, passed both full local gates:
+**3289 backend tests / 375 explicit infrastructure skips and 57 React tests**.
+The first normal attempt had six deadline failures in unchanged subprocess/TLS
+cases; a focused diagnostic had 212 passes and one remaining XML refusal-process
+deadline failure. No deadline or affected source was changed. Static review found
+no new runtime import in either XML startup closure. The exact source subsequently
+passed the genuinely fresh and serial normal aggregate gates. These later passes
+do not erase the earlier failures or establish their precise timing cause.
+
+[Service runtime run 39431571356](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/39431571356)
+failed both new acceptance jobs. Packaging localized to build one, `probe_execute`,
+with `guest_stage=unknown` and cleanup verified. This does not prove an OOM.
+Installed operator acceptance passed initial worker restart/cleanup and reached
+browser `assets_session`, where only HTTP 401 and 303 replies were observed before
+failure. The [original operator UI run 39431571498](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/39431571498)
+passed. Remaining actual-service results are being tracked separately; no manual
+rerun or source acquisition occurred.
+
+The first correction's [application run 39431571290](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/39431571290)
+failed at the existing 900-second aggregate wrapper bound, after reaching 84% of
+3664 collected cases. Three service-broker cases had failed; no final pytest
+summary or failure stacks were emitted before the wrapper stopped its consumer.
+Owned XML cleanup was verified. This remains a failed, incomplete receipt.
+Controlled transport passed 41 curated cases, two additional single-case checks
+and four operator cases with owned XML cleanup verified. Overall: six synthetic
+workflows passed and two failed at that head.
+
+### Second bounded correction
+
+The packaging probe previously retained a full imported application while
+starting another full CLI interpreter. Local simultaneous anonymous RSS exceeded
+128 MiB, but the hosted receipt does not establish an OOM. The correction runs
+seven sequential containers per image: real default CLI help, single-process
+integrity/import/kernel/model checks and five actual exec-based production-command
+refusals. Each refusal keeps its five-second bound and shares the former probe's
+45-second total budget. Exact stopped/non-OOM state, exit and bounded output are
+required before counting success. All confinement and cleanup controls remain;
+the truthful final receipt counts fourteen containers. Independent source review
+approved this correction; focused checks passed 145 cases.
+
+The installed browser preserves real 303 responses and Set-Cookie. A closed
+coordinator validates two ordered hops per login, observes the exact redirected
+main-frame GET fail in the network-none guest, then consumes one explicit
+navigation to that captured approved target. Four hops across two logins are
+required. PKCE, cookie/state validation, actual callback UI, TLS and the single
+ten-second login budget remain. Unexpected navigation events latch failure;
+ordinary old-document aborted fetches do not grant redirect authority. Independent
+review approved the six harness files; focused checks passed 117 cases with one
+explicit unavailable-service skip. Native Chromium redirect completion is not
+claimed by this relay acceptance.
+
+The enlarged application's aggregate-only budget becomes 1200 seconds under a
+25-minute job. Controlled transport's wrapper1200/consumer900/job25 bounds stay
+unchanged, as do every individual test/runtime deadline and the separate
+180-second cleanup plus five-second stop/five-second reap. Observed setup took
+45 seconds; future runner overhead still needs to fit the remaining reserve.
+The original workflow hash test normalizes only the single reviewed timeout
+field before comparing its pinned original bytes. A focused actual service-broker
+step also runs in the existing disposable installed-operator job, retaining the
+complete aggregate suite and allowing independent browser evidence after
+successful prerequisites even if the focused step fails. Either failure remains
+fatal to the job; no continue-on-error is introduced.
+
+Two extraction-journey test corrections preserve runtime authority checks. The
+positive installed extraction now uses the existing 30-second worker lease
+instead of a deliberately short five-second fixture lease. Completion polling
+uses a nonlocking admin observation of the exact synthetic org/job state; final
+human-authorized progress/state/count checks occur after worker stop. The crash
+test retains its 30-second lease, before-expiry redelivery proof and unchanged
+15/60-second waits and exact effects/observations. This avoids test polling's
+job-share-lock conflict with active worker writes. Export-race failure remains
+separately unresolved pending the focused real-service failure stack; that test
+was not changed. Focused checks: 36 passed, 12 explicit actual-service skips.

@@ -96,6 +96,22 @@ broker, migration and packaged keyboard operator tests must execute against the
 explicit disposable CI services; a local skip is not acceptance. Full normal,
 fresh-environment and exact-head independent review/CI remain release gates.
 
+The container acceptance keeps the 128 MiB network-none profile. Its integrity
+probe and actual CLI checks execute sequentially rather than retaining two full
+application interpreters concurrently. The five production-command refusals keep
+their five-second bounds and share the former probe's 45-second budget. Receipt
+claims require exact output, stopped/non-OOM state and verified owned cleanup.
+
+The installed browser acceptance uses a constrained relay because the guest has
+no network access. Pinned Playwright does not route redirected requests through
+its request handler. The harness therefore observes each real server 303 and its
+browser refusal at the approved target, then permits one explicit navigation to
+that same target. Exactly two ordered hops per login and two logins are allowed;
+real response cookies, PKCE exchange, state validation and callback UI remain in
+use. A successful receipt covers the installed flow through that relay, not native
+Chromium redirect completion or a production IdP integration. Dynamic authorization codes,
+state and cookies are never included in the fixed acceptance receipt.
+
 Traceability: FR-001/021/022/024/025/029/030, NFR-001/003/006/008/013/015/016/018.
 This reference milestone does not establish production deployment, real IdP or
 source certification, private storage activation, measured RPO/RTO or extraction

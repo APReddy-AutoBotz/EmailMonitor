@@ -6,6 +6,9 @@ import platform
 import re
 import sys
 import tempfile
+import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -65,13 +68,18 @@ STAGES = frozenset(
         "entrypoint_help",
         "probe_execute",
         "probe_receipt",
+        "production_refusals",
         "reproducibility",
         "cleanup",
         "receipt",
     }
 )
 GUEST_STAGES = frozenset(
-    {"kernel", "layout", "imports", "cli", "content", "base_inventory", "receipt"}
+    {"kernel", "layout", "imports", "models", "content", "base_inventory", "receipt"}
+)
+PRODUCTION_COMMANDS = ("api", "worker", "publish-once", "reconcile-once", "check")
+CONTAINER_OUTCOMES = frozenset(
+    {"unknown", "oom_killed", "not_stopped", "exit_mismatch", "output_mismatch", "guest_refused"}
 )
 
 
@@ -84,6 +92,7 @@ class Diagnostics:
     failure: tuple[str, int] | None = None
     cleanup: str = "not_started"
     guest_stage: str = "unknown"
+    container_outcome: str = "unknown"
 
     def mark(self, stage: str, ordinal: int = 0) -> None:
         if type(stage) is not str or stage not in STAGES or type(ordinal) is not int:
@@ -112,6 +121,9 @@ class Diagnostics:
         guest = self.guest_stage if type(self.guest_stage) is str else "unknown"
         if guest not in GUEST_STAGES:
             guest = "unknown"
+        outcome = self.container_outcome if type(self.container_outcome) is str else "unknown"
+        if outcome not in CONTAINER_OUTCOMES:
+            outcome = "unknown"
         sys.stderr.write(
             json.dumps(
                 {
@@ -120,6 +132,7 @@ class Diagnostics:
                         "build": ordinal,
                         "cleanup": cleanup,
                         "guest_stage": guest,
+                        "container_outcome": outcome,
                     }
                 },
                 sort_keys=True,
@@ -135,6 +148,53 @@ def guest_failure_stage(stderr: bytes) -> str:
         if stderr == f"SERVICE_IMAGE_PROBE_REFUSED stage={stage}\n".encode():
             return stage
     return "unknown"
+
+
+def refusal_source(command_name: str) -> str:
+    if type(command_name) is not str or command_name not in PRODUCTION_COMMANDS:
+        raise PackagingRefused("service_package_refusal_command_refused")
+    # exec replaces this lightweight bootstrap; no imported application parent
+    # remains alive beside the actual CLI within the unchanged 128 MiB budget.
+    return (
+        "import os, sys\n"
+        "path = '/tmp/service-production-refusal.json'\n"
+        "with open(path, 'x', encoding='utf-8') as source:\n"
+        ' source.write(\'{"environment":"production"}\')\n'
+        "os.execv(sys.executable, [sys.executable, '-B', '-m', "
+        f"'emailmonitor.runtime.entrypoint', {command_name!r}, '--config', path])\n"
+    )
+
+
+def stopped_outcome(
+    record: dict[str, Any] | None,
+    returncode: int,
+    expected_exit: int,
+    stdout: bytes,
+    stderr: bytes,
+    expected_stderr: bytes,
+) -> str:
+    state = record.get("State", {}) if record is not None else {}
+    if state.get("OOMKilled") is True:
+        return "oom_killed"
+    if (
+        state.get("Status") != "exited"
+        or state.get("Running") is not False
+        or state.get("Paused") is not False
+        or state.get("Restarting") is not False
+        or state.get("OOMKilled") is not False
+        or state.get("Error") != ""
+    ):
+        return "not_stopped"
+    if (
+        type(returncode) is not int
+        or returncode != expected_exit
+        or type(state.get("ExitCode")) is not int
+        or state["ExitCode"] != expected_exit
+    ):
+        return "exit_mismatch"
+    if stderr != expected_stderr or (expected_exit == 1 and stdout):
+        return "output_mismatch"
+    return "verified"
 
 
 def command(arguments: list[str], timeout: float = 30, limit: int = 131072) -> bytes:
@@ -265,11 +325,33 @@ class OwnedServiceBuilds:
         self.containers: list[str] = []
         self.image_ids: set[str] = set()
         self.guest_stage = "unknown"
+        self.container_outcome = "unknown"
+        self.deadline: float | None = None
+
+    def timeout(self, maximum: float) -> float:
+        if self.deadline is None:
+            return maximum
+        remaining = self.deadline - time.monotonic()
+        if remaining <= 0:
+            raise PackagingRefused("service_package_probe_deadline_refused")
+        return min(maximum, remaining)
+
+    @contextmanager
+    def probe_budget(self) -> Iterator[None]:
+        if self.deadline is not None:
+            raise PackagingRefused("service_package_probe_deadline_refused")
+        self.deadline = time.monotonic() + 45
+        try:
+            yield
+            self.timeout(1)  # Completion and all receipt checks must fit the shared budget.
+        finally:
+            # Owned cleanup has its existing independent finite reconciliation bounds.
+            self.deadline = None
 
     def inspect(self, kind: str, name: str) -> dict[str, Any] | None:
         if kind not in {"image", "container"}:
             raise PackagingRefused("service_package_resource_kind_refused")
-        result = bounded_process(["docker", kind, "inspect", name], timeout=10)
+        result = bounded_process(["docker", kind, "inspect", name], timeout=self.timeout(10))
         if result.returncode:
             expected = {
                 f"Error: No such image: {name}",
@@ -351,12 +433,23 @@ class OwnedServiceBuilds:
         return identifier
 
     def smoke(self, image_id: str, ordinal: int, probe: str | None = None) -> bytes:
+        case = "help" if probe is None else "probe"
+        return self._run(image_id, ordinal, probe, case, refusal=False)
+
+    def production_refusal(self, image_id: str, ordinal: int, command_name: str) -> None:
+        script = refusal_source(command_name)
+        if self.deadline is None:
+            raise PackagingRefused("service_package_probe_deadline_refused")
+        self._run(image_id, ordinal, script, "refuse-" + command_name, refusal=True)
+
+    def _run(
+        self, image_id: str, ordinal: int, script: str | None, case: str, *, refusal: bool
+    ) -> bytes:
         if image_id not in self.image_ids or ordinal not in (1, 2):
             raise PackagingRefused("service_package_image_identity_refused")
         image = self.owned("image", image_id)
         if image is None or image.get("Id") != image_id:
             raise PackagingRefused("service_package_image_identity_refused")
-        case = "help" if probe is None else "probe"
         name = f"em-service-{self.owner}-{ordinal}-{case}"
         if self.inspect("container", name) is not None:
             raise PackagingRefused("service_package_resource_exists")
@@ -371,36 +464,42 @@ class OwnedServiceBuilds:
                 "--label",
                 LABEL + "=" + self.owner,
                 *PROFILE,
-                *([] if probe is None else ["--entrypoint=python"]),
+                *([] if script is None else ["--entrypoint=python"]),
                 image_id,
-                *([] if probe is None else ["-c", probe]),
+                *([] if script is None else ["-c", script]),
             ],
-            timeout=20,
+            timeout=self.timeout(20),
         )
         if not re.fullmatch(rb"[a-f0-9]{64}\n", created):
             raise PackagingRefused("service_package_container_identity_refused")
         record = self.owned("container", name)
         if record is None:
             raise PackagingRefused("service_package_container_missing")
-        validate_profile(record, image_id, probe)
+        validate_profile(record, image_id, script)
         result = bounded_process(
             ["docker", "start", "--attach", name],
-            timeout=45,
+            timeout=self.timeout(5 if refusal else 45),
             stdout_limit=65536,
             stderr_limit=4096,
         )
         stopped = self.owned("container", name)
-        state = stopped.get("State", {}) if stopped is not None else {}
-        if (
-            result.returncode
-            or result.stderr
-            or state.get("Running") is not False
-            or state.get("ExitCode") != 0
-            or state.get("OOMKilled") is not False
-            or state.get("Error") not in (None, "")
-        ):
-            if probe is not None:
+        outcome = stopped_outcome(
+            stopped,
+            result.returncode,
+            1 if refusal else 0,
+            result.stdout,
+            result.stderr,
+            b"service_runtime_failed\n" if refusal else b"",
+        )
+        if outcome != "verified":
+            self.container_outcome = outcome
+            if case == "probe":
                 self.guest_stage = guest_failure_stage(result.stderr)
+                if self.guest_stage != "unknown" and outcome in {
+                    "exit_mismatch",
+                    "output_mismatch",
+                }:
+                    self.container_outcome = "guest_refused"
             raise PackagingRefused("service_package_smoke_failed")
         return result.stdout
 
@@ -440,8 +539,6 @@ def validate_smoke(
             "exact_source_closure": True,
             "source_file_count": source_count,
             "installed_import_closure": True,
-            "cli_help": True,
-            "production_refusals": 5,
             "production_environment_literal_refusals": 2,
             "interfaces": ["lo"],
             "kernel_restrictions": True,
@@ -549,10 +646,16 @@ def execute(diagnostics: Diagnostics) -> None:
                     )
                 ):
                     raise PackagingRefused("service_package_help_refused")
-                diagnostics.mark("probe_execute", ordinal)
-                output = owned.smoke(image_id, ordinal, probe)
-                diagnostics.mark("probe_receipt", ordinal)
-                smoke = validate_smoke(output, files, runtime)
+                refused = 0
+                with owned.probe_budget():
+                    diagnostics.mark("probe_execute", ordinal)
+                    output = owned.smoke(image_id, ordinal, probe)
+                    diagnostics.mark("probe_receipt", ordinal)
+                    smoke = validate_smoke(output, files, runtime)
+                    diagnostics.mark("production_refusals", ordinal)
+                    for command_name in PRODUCTION_COMMANDS:
+                        owned.production_refusal(image_id, ordinal, command_name)
+                        refused += 1
                 receipts.append(
                     {
                         "archive_sha256": digest(bundle),
@@ -560,6 +663,7 @@ def execute(diagnostics: Diagnostics) -> None:
                         "image_id": image_id,
                         "image_content_sha256": smoke["image_content_sha256"],
                         "base_inventory": smoke["base_inventory"],
+                        "production_refusals": refused,
                     }
                 )
             diagnostics.mark("reproducibility")
@@ -576,6 +680,7 @@ def execute(diagnostics: Diagnostics) -> None:
     except BaseException:
         diagnostics.capture()
         diagnostics.guest_stage = getattr(owned, "guest_stage", "unknown")
+        diagnostics.container_outcome = getattr(owned, "container_outcome", "unknown")
         raise
     finally:
         diagnostics.mark("cleanup")
@@ -600,8 +705,8 @@ def execute(diagnostics: Diagnostics) -> None:
                 "artifacts_equal": True,
                 "image_contents_equal": True,
                 "base_inventory_equal": True,
-                "network_none_containers": 4,
-                "production_refusals_per_image": 5,
+                "network_none_containers": 14,
+                "production_refusals_per_image": receipts[0]["production_refusals"],
                 "cleanup_verified": True,
                 "working_extraction_service": False,
                 "production_ready": False,

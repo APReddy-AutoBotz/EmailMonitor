@@ -611,6 +611,11 @@ def test_required_installed_https_operator_journey(
                         control,
                         lambda _: False,
                     )
+                    assert evidence["redirect_navigation"] == (
+                        "observed_303_failed_target_explicit_navigation"
+                    )
+                    assert evidence["server_redirects"] == 4
+                    assert evidence["explicit_redirect_navigations"] == 4
                     assert api_ready(api_process) and running.poll() is None and not errors
                     assert expiry_observed and publication_passes > 0
                     assert (

@@ -1,9 +1,14 @@
 """Pure service packaging contracts; mocked Docker never establishes image acceptance."""
 
+import ast
 import copy
 import json
+import os
 import platform
 import subprocess
+import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 from unittest.mock import Mock
@@ -65,7 +70,15 @@ def record(probe: str | None = None) -> dict[str, Any]:
             ],
         },
         "Mounts": [{"Type": "tmpfs", "Destination": "/tmp"}],
-        "State": {"Running": False, "ExitCode": 0, "OOMKilled": False, "Error": ""},
+        "State": {
+            "Status": "exited",
+            "Running": False,
+            "Paused": False,
+            "Restarting": False,
+            "ExitCode": 0,
+            "OOMKilled": False,
+            "Error": "",
+        },
     }
 
 
@@ -303,37 +316,18 @@ def test_default_entrypoint_is_exercised_without_override(
     assert owned.smoke(IMAGE, 1) == b"usage:"
 
 
-def test_guest_cli_checks_environment_gate_and_fixed_output(
+def test_guest_model_refusals_never_launch_an_application_child(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    calls: list[list[str]] = []
-
-    def execute(arguments: list[str], **kwargs: object) -> subprocess.CompletedProcess[bytes]:
-        calls.append(arguments)
-        assert kwargs["timeout"] == 5
-        if arguments[-1] == "--help":
-            return subprocess.CompletedProcess(arguments, 0, b"usage: service", b"")
-        config = Path(arguments[-1])
-        assert config.parent.parent == Path("/tmp")
-        assert json.loads(config.read_bytes()) == {"environment": "production"}
-        return subprocess.CompletedProcess(arguments, 1, b"", b"service_runtime_failed\n")
-
-    monkeypatch.setattr(subprocess, "run", execute)
-    service_probe.cli_checks()
-    assert len(calls) == 6
-    assert not Path(calls[-1][-1]).exists()
-
-
-def test_guest_production_refusal_must_have_no_arbitrary_output(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    results = [
-        subprocess.CompletedProcess([], 0, b"usage: service", b""),
-        subprocess.CompletedProcess([], 1, b"", b"unexpected private diagnostic"),
-    ]
-    monkeypatch.setattr(subprocess, "run", Mock(side_effect=results))
-    with pytest.raises(RuntimeError, match="production_refusal_missing"):
-        service_probe.cli_checks()
+    forbidden = Mock(side_effect=AssertionError("Imported probe must stay single-process"))
+    monkeypatch.setattr(subprocess, "run", forbidden)
+    monkeypatch.setattr(subprocess, "Popen", forbidden)
+    monkeypatch.setattr(os, "fork", forbidden)
+    service_probe.model_refusals()
+    forbidden.assert_not_called()
+    source = (runner.ROOT / "scripts/packaging/service_probe.py").read_text()
+    assert "subprocess" not in source
+    assert '"cli_help"' not in source and '"production_refusals"' not in source
 
 
 def test_probe_source_is_host_supplied_and_has_no_install_side_effect() -> None:
@@ -417,6 +411,15 @@ def mock_orchestration(monkeypatch: pytest.MonkeyPatch, *, fail: str | None = No
                 raise PackagingRefused("synthetic_probe_failure")
             return b"usage: api worker publish-once reconcile-once check\n"
 
+        @contextmanager
+        def probe_budget(self) -> Iterator[None]:
+            yield
+
+        def production_refusal(self, image: str, ordinal: int, command_name: str) -> None:
+            events.append("refuse-" + command_name)
+            if fail == "refuse-" + command_name:
+                raise PackagingRefused("synthetic_refusal_failure")
+
         def close(self) -> None:
             events.append("cleanup")
             if fail == "cleanup":
@@ -439,16 +442,20 @@ def test_orchestration_builds_real_web_before_each_collected_context(
         "build",
         "help",
         "probe",
+        *("refuse-" + name for name in runner.PRODUCTION_COMMANDS),
         "web",
         "clean",
         "build",
         "help",
         "probe",
+        *("refuse-" + name for name in runner.PRODUCTION_COMMANDS),
         "cleanup",
     ]
     value = json.loads(capsys.readouterr().out)
     assert value["actual_web_builds"] == 2
-    assert value["network_none_containers"] == 4
+    assert value["network_none_containers"] == 14
+    assert value["production_refusals_per_image"] == 5
+    assert all(receipt["production_refusals"] == 5 for receipt in value["receipts"])
     assert value["cleanup_verified"] is True
     assert value["production_ready"] is False
     assert value["working_extraction_service"] is False
@@ -524,6 +531,7 @@ def test_failure_stage_is_bounded_and_first_failure_survives_cleanup(
             "build": 2,
             "cleanup": "verified",
             "guest_stage": "unknown",
+            "container_outcome": "unknown",
         }
     }
 
@@ -545,7 +553,7 @@ def test_failure_report_never_formats_arbitrary_values(
             raise AssertionError("Diagnostic attempted arbitrary evaluation")
 
     diagnostics = runner.Diagnostics()
-    for name in ("stage", "ordinal", "failure", "cleanup", "guest_stage"):
+    for name in ("stage", "ordinal", "failure", "cleanup", "guest_stage", "container_outcome"):
         monkeypatch.setattr(diagnostics, name, Poison())
     diagnostics.report()
     output = capsys.readouterr()
@@ -556,6 +564,7 @@ def test_failure_report_never_formats_arbitrary_values(
             "build": 0,
             "cleanup": "not_started",
             "guest_stage": "unknown",
+            "container_outcome": "unknown",
         }
     }
 
@@ -587,6 +596,7 @@ def test_orchestration_failure_emits_only_exact_closed_diagnostic(
             "build": ordinal,
             "cleanup": cleanup,
             "guest_stage": "unknown",
+            "container_outcome": "unknown",
         }
     }
 
@@ -610,6 +620,7 @@ def test_primary_probe_failure_is_preserved_when_cleanup_also_fails(
             "build": 1,
             "cleanup": "failed",
             "guest_stage": "unknown",
+            "container_outcome": "unknown",
         }
     }
     assert "private" not in output.err
@@ -628,6 +639,7 @@ def test_failure_before_resource_creation_has_no_cleanup_claim(
         "build": 0,
         "cleanup": "not_started",
         "guest_stage": "unknown",
+        "container_outcome": "unknown",
     }
 
 
@@ -683,3 +695,194 @@ def test_success_has_no_failure_diagnostic(
     output = capsys.readouterr()
     assert output.err == ""
     assert json.loads(output.out)["cleanup_verified"] is True
+
+
+@pytest.mark.parametrize("command_name", runner.PRODUCTION_COMMANDS)
+def test_refusal_bootstrap_execs_actual_cli_without_application_parent(
+    command_name: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import builtins
+    import io
+    import sys
+
+    events: list[object] = []
+
+    @contextmanager
+    def open_config(path: str, mode: str, *, encoding: str) -> Iterator[io.StringIO]:
+        assert path == "/tmp/service-production-refusal.json"
+        assert mode == "x" and encoding == "utf-8"
+        stream = io.StringIO()
+        yield stream
+        events.append(("config_closed", stream.getvalue()))
+
+    def replace(executable: str, arguments: list[str]) -> None:
+        assert executable == sys.executable
+        assert arguments == [
+            sys.executable,
+            "-B",
+            "-m",
+            "emailmonitor.runtime.entrypoint",
+            command_name,
+            "--config",
+            "/tmp/service-production-refusal.json",
+        ]
+        events.append("exec")
+
+    monkeypatch.setattr(builtins, "open", open_config)
+    monkeypatch.setattr(os, "execv", replace)
+    script = runner.refusal_source(command_name)
+    imports = [node for node in ast.walk(ast.parse(script)) if isinstance(node, ast.Import)]
+    assert [alias.name for node in imports for alias in node.names] == ["os", "sys"]
+    exec(compile(script, "<fixed-refusal-bootstrap>", "exec"), {})
+    assert events == [("config_closed", '{"environment":"production"}'), "exec"]
+
+
+def test_refusal_command_is_closed_before_any_container_action() -> None:
+    for value in ("worker; private", "--help", "", "production"):
+        with pytest.raises(PackagingRefused, match="^service_package_refusal_command_refused$"):
+            runner.refusal_source(value)
+
+
+def test_production_refusal_requires_shared_budget_before_docker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    owned = runner.OwnedServiceBuilds(OWNER)
+    inspect = Mock()
+    monkeypatch.setattr(owned, "inspect", inspect)
+    with pytest.raises(PackagingRefused, match="probe_deadline_refused"):
+        owned.production_refusal(IMAGE, 1, "worker")
+    inspect.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("changed", "returncode", "stdout", "stderr", "outcome"),
+    [
+        ({"OOMKilled": True}, 1, b"", b"service_runtime_failed\n", "oom_killed"),
+        ({"Running": True}, 1, b"", b"service_runtime_failed\n", "not_stopped"),
+        ({"Status": "created"}, 1, b"", b"service_runtime_failed\n", "not_stopped"),
+        ({"Paused": True}, 1, b"", b"service_runtime_failed\n", "not_stopped"),
+        ({"Restarting": True}, 1, b"", b"service_runtime_failed\n", "not_stopped"),
+        ({"Error": "private detail"}, 1, b"", b"service_runtime_failed\n", "not_stopped"),
+        ({"ExitCode": 0}, 1, b"", b"service_runtime_failed\n", "exit_mismatch"),
+        ({"ExitCode": 137}, 137, b"", b"service_runtime_failed\n", "exit_mismatch"),
+        ({"ExitCode": True}, 1, b"", b"service_runtime_failed\n", "exit_mismatch"),
+        ({}, 0, b"", b"service_runtime_failed\n", "exit_mismatch"),
+        ({}, 1, b"private content", b"service_runtime_failed\n", "output_mismatch"),
+        ({}, 1, b"", b"service_runtime_failed\nprivate context", "output_mismatch"),
+        ({}, 1, b"", b"", "output_mismatch"),
+    ],
+)
+def test_refusal_marker_alone_cannot_establish_a_verified_exit(
+    changed: dict[str, object],
+    returncode: int,
+    stdout: bytes,
+    stderr: bytes,
+    outcome: str,
+) -> None:
+    stopped = record()
+    stopped["State"]["ExitCode"] = 1
+    assert (
+        runner.stopped_outcome(
+            stopped, 1, 1, b"", b"service_runtime_failed\n", b"service_runtime_failed\n"
+        )
+        == "verified"
+    )
+    stopped["State"].update(changed)
+    assert (
+        runner.stopped_outcome(stopped, returncode, 1, stdout, stderr, b"service_runtime_failed\n")
+        == outcome
+    )
+
+
+@pytest.mark.parametrize("remaining", [45.0, 3.0])
+def test_refusal_execution_has_five_second_and_shared_budget_bounds(
+    remaining: float, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    clock = [100.0]
+    monkeypatch.setattr(time, "monotonic", lambda: clock[0])
+    owned = runner.OwnedServiceBuilds(OWNER)
+    owned.image_ids.add(IMAGE)
+    script = runner.refusal_source("worker")
+    created = False
+    control = Mock(
+        return_value=subprocess.CompletedProcess([], 1, b"", b"service_runtime_failed\n")
+    )
+
+    def inspect(kind: str, name: str) -> dict[str, Any] | None:
+        if kind == "image":
+            return record()
+        if not created:
+            return None
+        stopped = record(script)
+        stopped["State"]["ExitCode"] = 1
+        return stopped
+
+    def create(arguments: list[str], **kwargs: object) -> bytes:
+        nonlocal created
+        assert all(flag in arguments for flag in runner.PROFILE)
+        assert arguments[-3:] == [IMAGE, "-c", script]
+        assert kwargs["timeout"] == min(20.0, remaining)
+        created = True
+        return b"c" * 64 + b"\n"
+
+    monkeypatch.setattr(owned, "inspect", inspect)
+    monkeypatch.setattr(runner, "command", create)
+    monkeypatch.setattr(runner, "bounded_process", control)
+    with owned.probe_budget():
+        clock[0] += 45 - remaining
+        owned.production_refusal(IMAGE, 1, "worker")
+    assert control.call_args.kwargs["timeout"] == min(5.0, remaining)
+    assert owned.containers == [f"em-service-{OWNER}-1-refuse-worker"]
+    assert owned.deadline is None
+
+
+def test_expired_shared_budget_prevents_next_control_operation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = [100.0]
+    monkeypatch.setattr(time, "monotonic", lambda: clock[0])
+    owned = runner.OwnedServiceBuilds(OWNER)
+    control = Mock()
+    monkeypatch.setattr(runner, "bounded_process", control)
+    with pytest.raises(PackagingRefused, match="probe_deadline_refused"):
+        with owned.probe_budget():
+            assert owned.timeout(100) == 45
+            clock[0] = 146
+            owned.inspect("image", IMAGE)
+    control.assert_not_called()
+    assert owned.deadline is None
+    assert owned.timeout(20) == 20  # Cleanup keeps its original independent budget.
+
+
+def test_budget_rechecks_completion_and_clears_after_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = [100.0]
+    monkeypatch.setattr(time, "monotonic", lambda: clock[0])
+    owned = runner.OwnedServiceBuilds(OWNER)
+    with pytest.raises(PackagingRefused, match="probe_deadline_refused"):
+        with owned.probe_budget():
+            clock[0] = 145
+    assert owned.deadline is None
+    with pytest.raises(RuntimeError, match="original"):
+        with owned.probe_budget():
+            raise RuntimeError("original")
+    assert owned.deadline is None
+
+
+@pytest.mark.parametrize("command_name", runner.PRODUCTION_COMMANDS)
+def test_partial_refusal_sequence_never_emits_success_or_continues(
+    command_name: str, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    events = mock_orchestration(monkeypatch, fail="refuse-" + command_name)
+    with pytest.raises(PackagingRefused, match="synthetic_refusal_failure"):
+        runner.main()
+    output = capsys.readouterr()
+    assert output.out == ""
+    assert events[-1] == "cleanup"
+    assert events.count("build") == 1
+    assert [event for event in events if event.startswith("refuse-")] == [
+        "refuse-" + name
+        for name in runner.PRODUCTION_COMMANDS[: runner.PRODUCTION_COMMANDS.index(command_name) + 1]
+    ]
+    assert json.loads(output.err)["service_packaging_failure"]["stage"] == "production_refusals"

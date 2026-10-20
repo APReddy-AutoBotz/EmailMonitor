@@ -87,11 +87,13 @@ jobs:
           echo "$RUNNER_TEMP/tooling/bin" >> "$GITHUB_PATH"
           npm install --global pnpm@11.25.0
       - name: Install locked dependencies and create disposable database roles
+        id: service-prerequisites
         run: |
           uv sync --project services/backend --locked
           EM_MIGRATION_DATABASE_URL="$EM_TEST_ADMIN_DATABASE_URL" uv run --project services/backend alembic -c services/backend/alembic.ini upgrade head
           uv run --project services/backend python scripts/create_ci_runtime.py
       - name: Build actual locked operator UI
+        id: service-web
         run: |
           pnpm --dir apps/web install --frozen-lockfile --strict-peer-dependencies
           pnpm --dir apps/web peers check
@@ -99,7 +101,14 @@ jobs:
           pnpm --dir apps/web lint
           pnpm --dir apps/web test
           pnpm --dir apps/web build
+      - name: Focused actual service broker acceptance
+        timeout-minutes: 5
+        env:
+          EM_TEST_BROKER_CONTAINER: ${{ job.services.rabbitmq.id }}
+          PYTHONPATH: services/backend/src:services/backend/tests:tests:scripts/isolation:scripts/packaging
+        run: uv run --project services/backend pytest services/backend/tests/test_service_runtime_broker.py -v --tb=short
       - name: Installed service API and independent worker operator acceptance
+        if: ${{ !cancelled() && steps.service-prerequisites.outcome == 'success' && steps.service-web.outcome == 'success' }}
         env:
           EM_REQUIRE_INSTALLED_OPERATOR: "true"
           PYTHONPATH: services/backend/src:services/backend/tests:tests:scripts/isolation:scripts/packaging

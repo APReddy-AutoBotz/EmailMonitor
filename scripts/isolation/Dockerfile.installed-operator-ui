@@ -8,5 +8,6 @@ COPY scripts/isolation/browser_acceptance.py ./browser_acceptance.py
 COPY scripts/isolation/operator_ui_protocol.py ./operator_ui_protocol.py
 COPY scripts/isolation/operator_ui_acceptance.py ./operator_ui_helpers.py
 COPY scripts/isolation/installed_operator_browser.py ./operator_ui_acceptance.py
+COPY scripts/isolation/installed_operator_redirects.py ./installed_operator_redirects.py
 ENV PATH="/app/.venv/bin:$PATH" PYTHONPATH="/app/src" PYTHONDONTWRITEBYTECODE=1
 USER 1000:1000

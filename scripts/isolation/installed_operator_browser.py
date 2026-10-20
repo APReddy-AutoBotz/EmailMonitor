@@ -14,8 +14,9 @@ from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit
 
 from browser_acceptance import sandbox_status
+from installed_operator_redirects import LoginRedirects
 from operator_ui_protocol import ORIGIN
-from playwright.async_api import Error, Route, async_playwright, expect
+from playwright.async_api import Error, Request, Route, async_playwright, expect
 
 if TYPE_CHECKING:
     from operator_ui_acceptance import Channel, activate, focus, select_index, type_text
@@ -142,6 +143,29 @@ async def main() -> None:
             )
             if "--no-sandbox" in command["arguments"]:
                 raise RuntimeError("Chromium sandbox required")
+            # This coordinator is available only after the original OS/browser
+            # isolation checks. It cannot recover arbitrary failed navigations.
+            redirects = LoginRedirects(api, issuer)
+
+            def failed_navigation(incoming: Request) -> None:
+                if not redirects.active or not incoming.is_navigation_request():
+                    return
+                try:
+                    redirects.observe_failure(
+                        target=incoming.url,
+                        method=incoming.method,
+                        main_frame=(
+                            incoming.is_navigation_request() and incoming.frame == page.main_frame
+                        ),
+                        redirected_from=incoming.redirected_from,
+                        failure=incoming.failure,
+                    )
+                except RuntimeError:
+                    # The permanent latch wakes the bounded login and prevents
+                    # any success receipt. Never print an authentication URL.
+                    pass
+
+            page.on("requestfailed", failed_navigation)
 
             async def route_request(route: Route) -> None:
                 nonlocal callback_index_seen
@@ -201,6 +225,23 @@ async def main() -> None:
                     )
                     output.extend(base64.b64decode(response["body"], validate=True))
                     statuses.append(response["status"])
+                    if (
+                        300 <= response["status"] < 400
+                        or incoming.url == api + "/api/v1/auth/start"
+                        or (origin == issuer and parsed.path == "/authorize")
+                    ):
+                        redirects.arm(
+                            incoming,
+                            source=incoming.url,
+                            method=incoming.method,
+                            main_frame=(
+                                incoming.is_navigation_request()
+                                and incoming.frame == page.main_frame
+                            ),
+                            redirected_from=incoming.redirected_from,
+                            status=response["status"],
+                            headers=response["headers"],
+                        )
                 await route.fulfill(
                     status=response["status"], headers=response["headers"], body=bytes(output)
                 )
@@ -245,23 +286,49 @@ async def main() -> None:
             page.on("download", download)
 
             async def login() -> None:
-                await activate(
-                    page,
-                    page.get_by_role("link", name="Sign in with configured identity", exact=True),
-                )
-                await page.wait_for_url(api + "/auth/complete?*")
-                await activate(
-                    page, page.get_by_role("button", name="Complete sign-in", exact=True)
-                )
-                await page.get_by_role(
-                    "combobox", name="Active organization", exact=True
-                ).wait_for()
-                organization = page.get_by_role("combobox", name="Active organization", exact=True)
-                values = await organization.locator("option").evaluate_all(
-                    "nodes => nodes.map(node => node.value)"
-                )
-                await select_index(page, organization, values.index(setup["initial_organization"]))
-                await page.get_by_role("heading", name="Synthetic tenant 0", exact=True).wait_for()
+                async with asyncio.timeout(10):
+                    await expect(
+                        page.get_by_role("button", name="Retry connection", exact=True)
+                    ).to_be_enabled()
+                    redirects.begin()
+                    await activate(
+                        page,
+                        page.get_by_role(
+                            "link", name="Sign in with configured identity", exact=True
+                        ),
+                    )
+                    authorization = await redirects.next_target()
+                    try:
+                        await page.goto(authorization, wait_until="domcontentloaded")
+                    except Error:
+                        # Only the separately observed exact failed child of the
+                        # real issuer 303 can release its one-use callback target.
+                        callback = await redirects.next_target()
+                    else:
+                        raise RuntimeError("Expected isolated redirect failure missing")
+                    await page.goto(callback, wait_until="domcontentloaded")
+                    await expect(
+                        page.get_by_role("button", name="Retry connection", exact=True)
+                    ).to_be_enabled()
+                    await activate(
+                        page, page.get_by_role("button", name="Complete sign-in", exact=True)
+                    )
+                    await page.get_by_role(
+                        "combobox", name="Active organization", exact=True
+                    ).wait_for()
+                    organization = page.get_by_role(
+                        "combobox", name="Active organization", exact=True
+                    )
+                    values = await organization.locator("option").evaluate_all(
+                        "nodes => nodes.map(node => node.value)"
+                    )
+                    await select_index(
+                        page, organization, values.index(setup["initial_organization"])
+                    )
+                    await page.get_by_role(
+                        "heading", name="Synthetic tenant 0", exact=True
+                    ).wait_for()
+                    redirects.finish()
 
             checkpoint("assets_session")
             await page.goto(api, wait_until="domcontentloaded")
@@ -445,6 +512,7 @@ async def main() -> None:
                         "keyboard": True,
                         "actual_callback": callback_index_seen,
                         "cookie_injection": False,
+                        **redirects.receipt(),
                         "source_policy_review": True,
                         "review": True,
                         "url_no_contact": True,

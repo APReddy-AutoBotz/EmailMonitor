@@ -81,6 +81,17 @@ def publication_receipt(case: ServiceCase, event: object) -> object:
         ).scalar_one()
 
 
+def durable_job_state(case: ServiceCase) -> str:
+    """Observe this synthetic job without competing with the worker's row lock."""
+    with case.admin.connect() as c:
+        return str(
+            c.execute(
+                text("SELECT state FROM emailmonitor.jobs WHERE organization_id=:org AND id=:job"),
+                {"org": case.scope.organization, "job": case.scope.resource},
+            ).scalar_one()
+        )
+
+
 @pytest.fixture
 def publisher_config(service_case: ServiceCase) -> Iterator[ServiceRuntimeConfig]:
     case = service_case
@@ -321,6 +332,7 @@ def test_service_real_installed_worker_survives_human_expiry_and_restart(
         {
             **config.model_dump(),
             "database_url": case.url,
+            "lease_seconds": 30,
             "process": ServiceProcess(kind="worker", principal=case.principal),
         }
     )
@@ -345,13 +357,11 @@ def test_service_real_installed_worker_survives_human_expiry_and_restart(
             def complete() -> bool:
                 assert running.poll() is None
                 publish_service_once(config)
-                return (
-                    progress.snapshot(case.scope.organization, case.scope.resource).state
-                    == "completed_partial"
-                )
+                return durable_job_state(case) == "completed_partial"
 
             wait_for(complete)
         snapshot = progress.snapshot(case.scope.organization, case.scope.resource)
+        assert snapshot.state == "completed_partial"
         assert snapshot.counts.terminal == snapshot.counts.discovered == 4
         assert len(owned_queues(config.queue)) == 4
         with case.admin.connect() as c:
@@ -597,12 +607,12 @@ def test_service_real_post_observation_crash_original_redelivery_then_lease_reco
             def completed() -> bool:
                 assert resumed.poll() is None
                 publish_service_once(config)
-                return (
-                    progress.snapshot(case.scope.organization, case.scope.resource).state
-                    == "completed_partial"
-                )
+                return durable_job_state(case) == "completed_partial"
 
             wait_for(completed, seconds=60)
+        snapshot = progress.snapshot(case.scope.organization, case.scope.resource)
+        assert snapshot.state == "completed_partial"
+        assert snapshot.counts.terminal == snapshot.counts.discovered == 4
         with case.admin.connect() as c:
             assert (
                 c.execute(
