@@ -60,3 +60,37 @@ frontend dependencies were reused. No local actual-Docker or real-source result
 is inferred. Required own-head evidence is 2855 backend/no skips, the original
 41 transport plus one private-entry synthetic isolation case and four operator
 journeys, with all seven workflows.
+
+## First-head actual CI failure and bounded instrumentation correction
+
+The first published head `40d796c7a8b55b2667e2e14ac6be0c1ea65f60c0`
+(tree `f587cc3122425885ab189f6172e0f308e695dbbc`) failed controlled transport
+run `39349969305`, job `118391594320`: 39 passed and two failed in 187.12s.
+Both IPv4/IPv6 keyword-to-review/export cases failed because their existing
+`verify_profile` instrumentation wrapper did not accept the shared runner's new
+explicit `private_offline` keyword. This was a deterministic test-signature
+mismatch, not accepted parser or full-journey evidence. The later private-entry
+and operator gates did not execute in that failed transport consumer.
+
+The bounded correction updates all three legacy fixture-only instrumentation
+wrappers (provider journey, operator provider and XML tenant acceptance). Each
+accepts the keyword with default `False`, requires it to be exactly `False`, and
+forwards it to the original verifier before unchanged owned-image and profile
+recording checks. No application source, isolation configuration, acceptance
+predicate, timeout, source permission or real input changes.
+
+Three pure regressions execute those actual nested wrapper bodies without needing
+Docker/SQL/UI: default and explicit fixture mode pass the unchanged profile;
+private and non-boolean modes refuse before recording; a private command is still
+rejected under fixture mode. Initial full mypy found only a test AST list variance
+annotation; that was corrected. Focused private/XML regressions pass 101 tests;
+full-scope mypy passes all 266 files, and focused Ruff lint/format passes. Corrected
+own-head actual CI and repeated aggregates remain required before acceptance.
+
+Correction aggregates both exit 0: normal 2555 passed/303 explicit service skips
+in 126.34s; genuinely new-empty Python environment 2555/303 in 130.62s. Both
+include 48 React tests, mypy 266 files and all existing checks. Shared uv cache
+and frontend dependencies were reused. Independent correction review passes,
+including 101 focused tests in 4.33s. Corrected actual backend target is 2858
+without skips; actual transport/private/operator and all seven own-head gates
+remain required. This does not establish real-sample clearance or extraction.
