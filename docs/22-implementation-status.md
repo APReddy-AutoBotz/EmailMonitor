@@ -513,3 +513,18 @@ Local normal/new-empty Python aggregates each passed 2751 tests with 303 explici
 service skips; 48 React, full Ruff/mypy and documentation/inventory checks passed.
 Actual synthetic Docker diagnostic and exact-head CI remain pending before
 acceptance. The candidate is unpublished.
+
+## 2026-10-20 — Separately scoped one-sample diagnostic candidate
+
+PR43 synthetic exact-head gates passed, including the actual fixed-counter Docker
+acceptance. A new PR44 initial-event composer is being validated under the
+[reviewed scope](64-one-sample-affiliation-diagnostic-plan.md). It preserves the
+PR42 and PR43 boundaries and uses a separate diagnostic-purpose decision.
+[Evidence](../reports/one-sample-affiliation-diagnostic-validation.md) records
+prerequisites and pending local/review/actual gates. Real cause remains unproven.
+
+Local candidate gates passed: normal/new-empty Python each 2932 passed with
+303 explicit service-dependent skips; React48, Ruff282, mypy280, inventory and
+docs. Independent source-boundary review passed 515 focused tests after correcting
+a cleanup signal-transition gap. Exact frozen-tree and actual CI/initial-event
+receipts remain separate. No real sample was acquired locally.

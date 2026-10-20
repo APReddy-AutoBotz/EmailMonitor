@@ -375,3 +375,14 @@ separate diagnostic admission/worker isolation. Existing one-shot acquisition an
 association remain unchanged. See [design](63-affiliation-diagnostic-design.md)
 and [validation](../reports/affiliation-diagnostic-validation.md); actual isolated
 synthetic acceptance and final exact-tree gates remain required.
+
+## Separately scoped one-sample fixed-counter diagnostic
+
+AT-03/AT-09/AT-10/AT-17 require exact new PR44 initial-event admission, immutable
+source/rights binding, original guest/profile preservation and invocation-owned
+image validation. AT-21 requires bounded independent private-file and Docker
+cleanup before success/counters. Only the four-key closed schema may be emitted.
+Authored synthetic runner/workflow regressions cover refusals and failure cleanup;
+[scope](64-one-sample-affiliation-diagnostic-plan.md) and
+[evidence](../reports/one-sample-affiliation-diagnostic-validation.md) distinguish
+local tests from the separately authorized single actual attempt.
