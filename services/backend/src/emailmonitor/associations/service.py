@@ -15,6 +15,7 @@ from sqlalchemy.exc import DBAPIError
 
 from emailmonitor.associations.mapping import identifier, map_observation
 from emailmonitor.associations.models import Bundle, Review
+from emailmonitor.associations.quality import ObservationQuality, SourceBinding, project_quality
 from emailmonitor.associations.review import apply_review
 from emailmonitor.config import Settings
 from emailmonitor.discovery.service import Discovery
@@ -259,6 +260,46 @@ VALUES(:org,:batch,:candidate,:ordinal,:raw)
     def detail(self, org: UUID, batch: UUID) -> Bundle:
         with self.discovery._tenant(org, Capability.READ_ORGANIZATION) as (c, _):
             return self._bundle(c, org, batch)
+
+    def quality(self, org: UUID, batch: UUID) -> ObservationQuality:
+        with self.discovery._tenant(org, Capability.READ_ORGANIZATION) as (c, _):
+            bundle = self._bundle(c, org, batch)
+            # Ordinary runtime SELECT retains both tables' current restrictive RLS.
+            # The old definer lock alone is not a privacy/suppression read grant.
+            query = text("""
+SELECT source.observation,source.job_id,source.generation,source.policy_version,
+source.deletion_generation FROM emailmonitor.association_batches batch
+JOIN emailmonitor.article_observations source
+ON source.organization_id=batch.organization_id AND source.job_id=batch.job_id
+AND source.article_url=batch.article_url AND source.revision=batch.source_revision
+AND source.generation=batch.generation AND source.policy_version=batch.policy_version
+AND source.deletion_generation=batch.deletion_generation
+WHERE batch.organization_id=:org AND batch.id=:batch
+""")
+            parameters = {"org": org, "batch": batch}
+            row = c.execute(query, parameters).mappings().first()
+            if row is None:
+                raise AuthorizationDenied()
+            try:
+                result = project_quality(
+                    org,
+                    batch,
+                    bundle,
+                    row["observation"],
+                    SourceBinding(
+                        row["job_id"],
+                        row["generation"],
+                        row["policy_version"],
+                        row["deletion_generation"],
+                    ),
+                )
+            except ValueError:
+                raise AuthorizationDenied() from None
+            self._lock(c, org, batch)
+            # Recheck current row visibility at release (including retention time).
+            if c.execute(query, parameters).mappings().first() != row:
+                raise AuthorizationDenied()
+            return result
 
     def batches(self, org: UUID, job: UUID) -> list[dict[str, object]]:
         with self.discovery._tenant(org, Capability.READ_ORGANIZATION) as (c, _):

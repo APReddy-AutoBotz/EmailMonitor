@@ -56,3 +56,5 @@ Versioning: documents use Git history; public API uses `/api/v1`; event/schema r
 [49 — Disabled provider request and parser binding](49-disabled-provider-binding.md) describes the unregistered ScienceDirect acquisition prerequisites and versioned network-none XML protocol.
 
 - [39 Offline execution and progress](39-offline-progress-runbook.md) — durable synthetic lifecycle, counters, authorized SSE and replay
+
+[65 — Retained article quality during review](65-observation-quality-review.md)

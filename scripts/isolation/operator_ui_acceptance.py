@@ -680,6 +680,16 @@ async def main() -> None:
                     await page.get_by_role(
                         "heading", name="Actual retained citation", exact=True
                     ).wait_for()
+                    quality = page.get_by_role(
+                        "region", name="Article observation quality", exact=True
+                    )
+                    await expect(quality).to_contain_text("Retained parser outcome:")
+                    await expect(quality).to_contain_text(
+                        "does not resolve affiliation uncertainty"
+                    )
+                    await expect(quality).not_to_contain_text(
+                        "reasons are not recorded for this route"
+                    )
                     await type_text(
                         page,
                         page.get_by_label("Reason", exact=True),
@@ -897,6 +907,33 @@ async def main() -> None:
             await page.get_by_role(
                 "heading", name="Actual retained citation", exact=True
             ).wait_for()
+            quality = page.get_by_role("region", name="Article observation quality", exact=True)
+            await quality.get_by_text(
+                "Parser-specific reasons are not recorded for this route.", exact=True
+            ).wait_for()
+            await expect(quality).to_contain_text("Missing affiliations remain unobserved")
+            await channel.request({"kind": "control", "action": "hold_quality"})
+            await activate(
+                page,
+                page.get_by_role("button", name="Refresh association and evidence", exact=True),
+            )
+            await channel.request({"kind": "control", "action": "wait_held"})
+            await expect(quality).to_contain_text("Loading current article quality")
+            await expect(quality).not_to_contain_text("Retained parser outcome:")
+            await channel.request({"kind": "control", "action": "release_quality"})
+            await expect(quality).to_contain_text("Retained parser outcome:")
+            await channel.request({"kind": "control", "action": "fault_quality"})
+            await activate(
+                page,
+                page.get_by_role("button", name="Refresh association and evidence", exact=True),
+            )
+            await expect(quality).to_contain_text("Current article quality is unavailable")
+            await expect(quality).not_to_contain_text("Retained parser outcome:")
+            await activate(
+                page,
+                page.get_by_role("button", name="Refresh association and evidence", exact=True),
+            )
+            await expect(quality).to_contain_text("Retained parser outcome:")
             await page.keyboard.press("Escape")
             await page.get_by_role("dialog").wait_for(state="hidden")
             if not await page.get_by_role(

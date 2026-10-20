@@ -132,6 +132,10 @@ def test_actual_container_output_persists_review_and_both_exports(
     batch = progress.items(org, job)[0].batch_id
     assert batch is not None
     bundle = progress.associations.detail(org, batch)
+    quality = progress.associations.quality(org, batch)
+    assert quality.reason_availability == "recorded"
+    assert quality.observation_status == retained.status
+    assert quality.reasons == tuple(retained.reasons)
     assert {a.state for a in bundle.associations} == {"needs_review"}
     results = Results(progress.database, progress.token, SETTINGS)
     assert results.contacts(org, Filters(job_id=job)).items == ()
@@ -149,6 +153,7 @@ def test_actual_container_output_persists_review_and_both_exports(
         ),
     )
     assert next(a for a in reviewed.associations if a.id == association.id).state == "accepted"
+    assert progress.associations.quality(org, batch) == quality
     contacts = results.contacts(org, Filters(job_id=job)).items
     assert len(contacts) == 1 and contacts[0].technical_status == "not_checked"
     assert contacts[0].outreach_eligibility == "not_assessed"

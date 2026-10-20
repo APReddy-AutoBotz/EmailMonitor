@@ -102,6 +102,7 @@ def main() -> int:
         'discovery-checkpoint.json': 'discovery-checkpoint.schema.json',
         'article-observation.json': 'article-observation.schema.json',
         'pdf-observation.json': 'pdf-observation.schema.json',
+        'observation-quality.json': 'observation-quality.schema.json',
         'association-bundle.json': 'association-bundle.schema.json',
         'association-review-request.json': 'association-review-request.schema.json',
         'progress-snapshot.json': 'progress-snapshot.schema.json',
