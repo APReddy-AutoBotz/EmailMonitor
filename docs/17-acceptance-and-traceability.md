@@ -348,3 +348,21 @@ existing isolated parser controls and redacted evaluation summaries. Public
 regressions and actual private-entry isolation checks use synthetic input only.
 [Validation](../reports/private-sample-admission-validation.md) distinguishes this
 harness prerequisite from unperformed real extraction and live access.
+
+
+## One scoped sample evaluation acceptance
+
+Partial EM-015/runbook62 adds a dedicated acceptance-only one-file composition.
+AT-03/AT-09 and NFR security/privacy controls require refusal of wrong event,
+PR/ref/repository/attempt/head/base, credential/proxy overrides, unsafe DNS/peer,
+TLS failure, redirects, changed size/digest and deadline exhaustion. Build/probe
+failure must precede any sample request. Tests exercise these paths using authored
+synthetic bytes only; normal CI never calls the real acquisition runner.
+
+AT-10/AT-17 require the existing private manifest/rights binding and unchanged
+network-none protocol, plus exact owned-image verification. AT-21 operational
+acceptance requires file removal before resource reconciliation and no successful
+result until cleanup is verified. Public output is limited to closed categories
+and bounded counts. Actual one-sample compatibility remains pending, and counts do
+not prove author/contact correctness. [Evidence](../reports/elsevier-one-sample-validation.md)
+records the separate pure and actual gates and their limitations.

@@ -1,3 +1,9 @@
+## 2026-10-20 — One scoped Elsevier sample validation candidate
+
+- Add a dedicated initial-event, exact-PR/branch/head-bound runner for one approved immutable CC BY 3.0 article representation.
+- Reuse private admission and the existing owned network-none parser artifact; restrict acquisition, output and cleanup without changing the seven synthetic gates.
+- Record scoped rights evidence, legacy wording, attribution and one-attempt limits. Actual real-sample execution remains pending; see [validation](reports/elsevier-one-sample-validation.md).
+
 ## 2026-10-20 — Private offline sample admission candidate
 
 - Prepare bounded provenance/rights-based one-file admission through an explicitly private isolated parser entry.
