@@ -183,6 +183,12 @@ def conversation(
                                     + str(diagnostic.error)
                                     + "; fixed reason="
                                     + diagnostic.reason
+                                    + (
+                                        "; installed login phase="
+                                        + diagnostic.installed_login_phase
+                                        if diagnostic.installed_login_phase is not None
+                                        else ""
+                                    )
                                     + "; actual reply statuses="
                                     + str(diagnostic.api_statuses)
                                 )

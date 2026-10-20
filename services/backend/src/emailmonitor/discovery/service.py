@@ -22,10 +22,11 @@ from emailmonitor.fetching.fixture import HOSTS, require_fixture
 from emailmonitor.fetching.safety import classify_url
 from emailmonitor.jobs.ledger import Ledger
 from emailmonitor.jobs.models import JobRequest, canonical
-from emailmonitor.organizations.database import AuthorizationDenied, Database, TenantContext
+from emailmonitor.organizations.database import AuthorizationDenied
 from emailmonitor.organizations.roles import Capability
 from emailmonitor.progress.binding import allowed as execution_allowed
 from emailmonitor.progress.binding import matches as execution_matches
+from emailmonitor.runtime.access import WorkAuthority, WorkContext, WorkDatabase
 from emailmonitor.sources import provider_documents as provider
 from emailmonitor.sources.access import current_policy, policy_decision
 from emailmonitor.sources.policy import Evaluation, Operation, PolicyProposal
@@ -43,14 +44,14 @@ def policy_fence_denied(error: DBAPIError) -> bool:
 
 
 class Discovery:
-    def __init__(self, database: Database, token: str, settings: Settings):
+    def __init__(self, database: WorkDatabase, token: WorkAuthority, settings: Settings):
         require_fixture(settings)
         self.database, self.token, self.settings = database, token, settings
 
     @contextmanager
     def _tenant(
         self, org: UUID, capability: Capability
-    ) -> Iterator[tuple[Connection, TenantContext]]:
+    ) -> Iterator[tuple[Connection, WorkContext]]:
         try:
             with self.database.tenant(self.token, org, capability) as context:
                 yield context
@@ -204,9 +205,7 @@ CAST(:checkpoint AS jsonb),:pages,:articles)"""),
     @staticmethod
     def _audit(c: Connection, org: UUID, job: UUID, event: str) -> None:
         c.execute(
-            text("""INSERT INTO emailmonitor.audit_events
-(organization_id,id,actor_id,action,resource_id)
-VALUES(:org,:id,emailmonitor.job_actor(),:event,:job)"""),
+            text("SELECT emailmonitor.work_audit(:org,:job,:event,:id)"),
             {"org": org, "job": job, "event": event, "id": uuid4()},
         )
 
@@ -390,8 +389,7 @@ WHERE organization_id=:org AND job_id=:job AND event_id=:event AND published_at 
     @staticmethod
     def _complete(c: Connection, org: UUID, job: UUID) -> None:
         c.execute(
-            text("""UPDATE emailmonitor.jobs SET discovery_complete=true
-WHERE organization_id=:org AND id=:job AND NOT discovery_complete"""),
+            text("SELECT emailmonitor.work_discovery_complete(:org,:job)"),
             {"org": org, "job": job},
         )
 

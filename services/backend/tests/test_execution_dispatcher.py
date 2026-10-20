@@ -1,6 +1,5 @@
 """Python-only execution composition preserves durable claim and default refusals."""
 
-import multiprocessing
 from collections.abc import Callable
 from types import SimpleNamespace
 from typing import Any, cast
@@ -14,6 +13,7 @@ from emailmonitor.progress.execution import ExecutionDispatcher
 from emailmonitor.progress.service import Progress, Work
 from emailmonitor.sources import provider_documents as catalog
 from pydantic import ValidationError
+from spawn_probe import run_spawn_probe
 
 ORG = UUID(int=1)
 
@@ -210,13 +210,4 @@ def registered_composition() -> None:
 
 
 def test_normal_registered_task_retains_python_factory() -> None:
-    child = multiprocessing.get_context("spawn").Process(target=registered_composition)
-    child.start()
-    try:
-        child.join(timeout=10)
-        assert child.exitcode == 0
-    finally:
-        if child.is_alive():
-            child.kill()
-            child.join(timeout=5)
-        child.close()
+    run_spawn_probe(registered_composition)

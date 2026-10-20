@@ -1,8 +1,11 @@
 """Test-only bounded byte acquisition. There is no socket/DNS/network fallback."""
 
+from __future__ import annotations
+
 import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 from urllib.parse import urljoin
 from uuid import UUID
 
@@ -12,10 +15,13 @@ from sqlalchemy import text
 from emailmonitor.config import Settings
 from emailmonitor.fetching.resources import HopResources
 from emailmonitor.fetching.safety import FetchDenied, IsolationUnavailable, SafeURL, classify_url
-from emailmonitor.organizations.database import AuthorizationDenied, Database
+from emailmonitor.organizations.database import AuthorizationDenied
 from emailmonitor.organizations.roles import Capability
 from emailmonitor.sources.access import current_policy, policy_decision
 from emailmonitor.sources.policy import Evaluation, Operation
+
+if TYPE_CHECKING:
+    from emailmonitor.runtime.access import WorkAuthority, WorkDatabase
 
 HOSTS = frozenset({"synthetic.publisher.example"})
 
@@ -132,7 +138,12 @@ class FixtureGateway:
 
 class TenantFixtureAuthorization:
     def __init__(
-        self, database: Database, token: str, organization: UUID, source: str, version: int
+        self,
+        database: WorkDatabase,
+        token: WorkAuthority,
+        organization: UUID,
+        source: str,
+        version: int,
     ) -> None:
         if source != "synthetic-publisher" or type(version) is not int or version < 1:
             raise FetchDenied("fixture_source_scope_denied")
@@ -140,7 +151,7 @@ class TenantFixtureAuthorization:
         self._organization, self._source, self._version = organization, source, version
 
     @property
-    def resources(self) -> "HopResources":
+    def resources(self) -> HopResources:
         from emailmonitor.administration.source import SourceAdmission, TenantHopResources
 
         return TenantHopResources(

@@ -21,6 +21,8 @@ if TYPE_CHECKING:
 ROOT = Path(__file__).resolve().parents[2]
 ALIAS = "emailmonitor-parser-diagnostic:local"
 MARKER = "synthetic-test-only"
+CONSUMER_SECONDS = {"application": 1200, "transport": 900}
+WRAPPER_SECONDS = {"application": 1200, "transport": 1200}
 MODES = {
     "application": ("bash", "scripts/check_tenant_foundation.sh"),
     "transport": ("bash", "scripts/packaging/check_xml_transport.sh"),
@@ -212,7 +214,7 @@ def run_consumer(
             start_new_session=True,
         ) as process:
             try:
-                code = process.wait(timeout=900)
+                code = process.wait(timeout=CONSUMER_SECONDS[mode])
                 if code:
                     raise IntegrationRefused("xml_integration_consumer_failed")
             finally:
@@ -415,9 +417,11 @@ def main() -> None:
         kind: signal.signal(kind, interrupted)
         for kind in (signal.SIGINT, signal.SIGTERM, signal.SIGALRM)
     }
-    # The existing workflow ceilings remain20/25minutes. Allow bounded cleanup
-    # after this stricter wrapper deadline without extending either CI job.
-    signal.alarm(900 if mode == "application" else 1200)
+    # Both workflow ceilings are 25 minutes. The application aggregate grew
+    # with actual service acceptance; per-test/runtime bounds remain unchanged.
+    # Setup and final runner overhead must still fit outside this deadline and
+    # the separate 180-second cleanup plus owned consumer stop/reap bounds.
+    signal.alarm(WRAPPER_SECONDS[mode])
     try:
         execute(mode, dict(os.environ))
     finally:

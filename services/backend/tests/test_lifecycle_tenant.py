@@ -20,6 +20,7 @@ from emailmonitor.organizations.roles import Capability
 from emailmonitor.progress.binding import bound
 from emailmonitor.results.models import Filters
 from emailmonitor.results.render import render
+from emailmonitor.runtime.access import WorkAuthority
 from sqlalchemy import create_engine, text
 from test_association_tenant import client as fixture_client
 from test_durable_jobs import SETTINGS
@@ -30,7 +31,7 @@ from test_tenant_foundation import ORIGIN, Scenario
 from test_tenant_foundation import scenario as scenario
 
 
-def lifecycle(s: Scenario, token: str) -> Lifecycle:
+def lifecycle(s: Scenario, token: WorkAuthority) -> Lifecycle:
     return Lifecycle(s.foundation.database, token, SETTINGS)
 
 

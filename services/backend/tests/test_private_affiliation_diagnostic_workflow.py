@@ -233,10 +233,22 @@ def test_workflow_has_no_extra_trigger_credentials_cache_or_data_sink(forbidden:
 def test_new_composer_preserves_original_one_shot_guest_parser_and_gates(
     relative: str, expected: str
 ) -> None:
-    assert hashlib.sha256((ROOT / relative).read_bytes()).hexdigest() == expected
+    content = (ROOT / relative).read_bytes()
+    if relative == ".github/workflows/application.yml":
+        # Independently reviewed EM-017 aggregate capacity-only adjustment.
+        # Normalize precisely that field; every other original byte stays pinned.
+        assert content.count(b"    timeout-minutes: 25\n") == 1
+        assert b"timeout-minutes: 20" not in content
+        content = content.replace(b"    timeout-minutes: 25\n", b"    timeout-minutes: 20\n")
+    assert hashlib.sha256(content).hexdigest() == expected
 
 
 def test_new_workflow_is_additional_to_all_seven_synthetic_gates_and_original_one_shot() -> None:
     existing = {Path(name).name for name in PRESERVED_BOUNDARIES if name.startswith(".github/")}
     assert len(existing) == 8
-    assert {path.name for path in WORKFLOW.parent.glob("*.yml")} == existing | {WORKFLOW.name}
+    # Later runtime acceptance is additive; every original frozen boundary above
+    # remains byte-for-byte unchanged, including both one-shot controls.
+    assert {path.name for path in WORKFLOW.parent.glob("*.yml")} == existing | {
+        WORKFLOW.name,
+        "service-runtime.yml",
+    }

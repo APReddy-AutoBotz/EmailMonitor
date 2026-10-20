@@ -3,11 +3,14 @@
 import importlib.metadata
 import io
 import json
+import os
+import selectors
 import shutil
 import subprocess
 import sys
 import tarfile
 from pathlib import Path
+from unittest.mock import MagicMock, Mock
 
 import pytest
 import xml_artifacts
@@ -519,6 +522,7 @@ def test_bounded_control_reader_preserves_exit_and_separate_streams() -> None:
 def test_control_reader_bounds_each_stream_while_running(stream: str) -> None:
     import run_xml_acceptance as runner
 
+    diagnostics = runner.ProcessDiagnostics()
     with pytest.raises(PackagingRefused, match="^xml_package_command_output_refused$"):
         runner.bounded_process(
             [
@@ -530,14 +534,22 @@ def test_control_reader_bounds_each_stream_while_running(stream: str) -> None:
             timeout=2,
             stdout_limit=100,
             stderr_limit=100,
+            diagnostics=diagnostics,
         )
+    assert diagnostics.failure is runner.ProcessFailure.OUTPUT_LIMIT
 
 
 def test_control_reader_timeout_is_sanitized_and_kills_owned_process() -> None:
     import run_xml_acceptance as runner
 
+    diagnostics = runner.ProcessDiagnostics()
     with pytest.raises(PackagingRefused, match="^xml_package_command_failed$"):
-        runner.bounded_process([sys.executable, "-c", "import time;time.sleep(10)"], timeout=0.05)
+        runner.bounded_process(
+            [sys.executable, "-c", "import time;time.sleep(10)"],
+            timeout=0.05,
+            diagnostics=diagnostics,
+        )
+    assert diagnostics.failure is runner.ProcessFailure.DEADLINE
 
 
 def test_control_command_never_exposes_failure_output() -> None:
@@ -545,6 +557,93 @@ def test_control_command_never_exposes_failure_output() -> None:
 
     with pytest.raises(PackagingRefused, match="^xml_package_command_failed$"):
         runner.command([sys.executable, "-c", "import sys;print('PRIVATE_SENTINEL');sys.exit(1)"])
+
+
+@pytest.mark.parametrize(
+    ("error", "reason"),
+    [
+        (OSError("private spawn detail"), "os_error"),
+        (subprocess.TimeoutExpired(["private command"], 1), "deadline"),
+    ],
+)
+def test_process_spawn_failure_keeps_fixed_exception_and_typed_cause(
+    error: BaseException, reason: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import run_xml_acceptance as runner
+
+    monkeypatch.setattr(subprocess, "Popen", Mock(side_effect=error))
+    diagnostics = runner.ProcessDiagnostics()
+    with pytest.raises(PackagingRefused, match="^xml_package_command_failed$"):
+        runner.bounded_process(["fixed"], diagnostics=diagnostics)
+    assert diagnostics.failure is not None
+    assert diagnostics.failure.value == reason
+
+
+@pytest.mark.parametrize("cleanup_error", [False, True])
+@pytest.mark.parametrize(
+    ("error", "reason"),
+    [
+        (OSError("private read detail"), "os_error"),
+        (subprocess.TimeoutExpired(["private command"], 1), "deadline"),
+        (RuntimeError("private primary detail"), "unknown"),
+    ],
+)
+def test_process_first_failure_survives_existing_kill_cleanup_error(
+    error: BaseException, reason: str, cleanup_error: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import run_xml_acceptance as runner
+
+    process = MagicMock()
+    process.__enter__.return_value = process
+    process.stdout.fileno.return_value = 10
+    process.stderr.fileno.return_value = 11
+    process.wait.return_value = 0
+    if cleanup_error:
+        process.kill.side_effect = OSError("private cleanup detail")
+    selector = MagicMock()
+    selector.__enter__.return_value = selector
+    selector.get_map.return_value = {10: object()}
+    selector.select.side_effect = error
+    monkeypatch.setattr(subprocess, "Popen", Mock(return_value=process))
+    monkeypatch.setattr(selectors, "DefaultSelector", Mock(return_value=selector))
+    monkeypatch.setattr(os, "set_blocking", Mock())
+    diagnostics = runner.ProcessDiagnostics()
+    with pytest.raises(Exception) as caught:
+        runner.bounded_process(["fixed"], diagnostics=diagnostics)
+    assert diagnostics.failure is not None
+    assert diagnostics.failure.value == reason
+    process.kill.assert_called_once_with()
+    if not cleanup_error:
+        process.wait.assert_called_once_with(timeout=5)
+    if type(error) is RuntimeError and not cleanup_error:
+        assert caught.value is error
+    else:
+        assert type(caught.value) is PackagingRefused
+        assert str(caught.value) == "xml_package_command_failed"
+
+
+def test_process_diagnostic_unknown_is_first_failure_and_holder_is_optional(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import run_xml_acceptance as runner
+
+    diagnostics = runner.ProcessDiagnostics()
+    diagnostics.record(runner.ProcessFailure.UNKNOWN)
+    diagnostics.record(runner.ProcessFailure.DEADLINE)
+    diagnostics.record_exception(OSError("private"))
+    assert diagnostics.failure is runner.ProcessFailure.UNKNOWN
+    diagnostics = runner.ProcessDiagnostics()
+    diagnostics.record(object())  # type: ignore[arg-type]
+    assert diagnostics.failure is runner.ProcessFailure.UNKNOWN
+
+    class Foreign:
+        def record_exception(self, error: BaseException) -> None:
+            raise AssertionError("Foreign diagnostic hook must not run")
+
+    monkeypatch.setattr(subprocess, "Popen", Mock(side_effect=OSError("private")))
+    for holder in (None, Foreign()):
+        with pytest.raises(PackagingRefused, match="^xml_package_command_failed$"):
+            runner.bounded_process(["fixed"], diagnostics=holder)  # type: ignore[arg-type]
 
 
 @pytest.mark.parametrize(

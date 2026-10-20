@@ -147,15 +147,32 @@ def test_unbounded_or_unrecognized_ui_diagnostics_refuse(changes: dict[str, obje
         )
 
 
+@pytest.mark.parametrize("phase", [None, "callback_failure"])
 def test_owned_pipe_failure_is_observed_before_guest_waits_for_host_eof(
     monkeypatch: pytest.MonkeyPatch,
+    phase: str | None,
 ) -> None:
+    import json
     import subprocess
     import sys
 
     import run_operator_ui_acceptance as host
 
     original = subprocess.Popen
+    frame = {
+        "kind": "failure",
+        "stage": "assets_session",
+        "error": "TimeoutError",
+        "api_statuses": [200],
+        **(
+            {
+                "installed_login_phase": phase,
+                "reason": "installed_login_deadline",
+            }
+            if phase is not None
+            else {}
+        ),
+    }
 
     def owned_python_pipe(*args: object, **kwargs: object) -> subprocess.Popen[bytes]:
         return original(
@@ -164,8 +181,7 @@ def test_owned_pipe_failure_is_observed_before_guest_waits_for_host_eof(
                 "-c",
                 "import sys; sys.stdin.readline(); "
                 'print(\'{"kind":"stage","stage":"assets_session"}\',flush=True); '
-                'print(\'{"kind":"failure","stage":"assets_session",'
-                '"error":"TimeoutError","api_statuses":[200]}\',flush=True); '
+                f"print({json.dumps(frame)!r},flush=True); "
                 "sys.stdin.read()",
             ],
             stdin=subprocess.PIPE,
@@ -177,10 +193,14 @@ def test_owned_pipe_failure_is_observed_before_guest_waits_for_host_eof(
     monkeypatch.setattr(subprocess, "Popen", owned_python_pipe)
     with pytest.raises(
         RuntimeError, match=r"Actual UI failure at assets_session: TimeoutError.*200"
-    ):
+    ) as failure:
         host.conversation(
             "owned-pipe-only", FastAPI(), {}, lambda action: None, lambda request: False
         )
+    if phase is None:
+        assert "installed login phase" not in str(failure.value)
+    else:
+        assert "; installed login phase=callback_failure;" in str(failure.value)
 
 
 def test_stderr_summary_only_retains_fixed_source_and_error_metadata() -> None:
@@ -238,6 +258,59 @@ def test_unrecognized_failure_reason_is_never_accepted(reason: str) -> None:
                 "error": "RuntimeError",
                 "reason": reason,
             }
+        )
+
+
+def test_installed_diagnostic_literals_and_existing_frames_are_compatible() -> None:
+    from typing import get_args
+
+    from operator_ui_protocol import DiagnosticFrame, InstalledLoginPhase, InstalledReason
+
+    old = {"kind": "failure", "stage": "assets_session", "error": "RuntimeError"}
+    parsed = DiagnosticFrame.model_validate(old)
+    assert parsed.installed_login_phase is None
+    assert parsed.model_dump(exclude_unset=True) == old
+    assert "installed_login_phase" not in parsed.model_dump(exclude_none=True)
+    stage = DiagnosticFrame.model_validate({"kind": "stage", "stage": "assets_session"})
+    assert stage.installed_login_phase is None
+    for reason in get_args(InstalledReason):
+        for phase in get_args(InstalledLoginPhase):
+            for name in ("assets_session", "keyword_worker"):
+                row = DiagnosticFrame.model_validate(
+                    {
+                        **old,
+                        "stage": name,
+                        "reason": reason,
+                        "installed_login_phase": phase,
+                    }
+                )
+                assert row.reason == reason and row.installed_login_phase == phase
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"kind": "stage", "error": None, "installed_login_phase": "callback_document"},
+        {"stage": "source_review", "installed_login_phase": "callback_document"},
+        {"stage": "export_worker", "installed_login_phase": "callback_document"},
+        {"installed_login_phase": "private state/code/cookie"},
+        {"installed_login_phase": "callback_document private"},
+        {"installed_login_phase": 1},
+        {"installed_login_phase": True},
+        {"reason": "installed_redirect_ancestry private"},
+        {"reason": "https://127.0.0.1/private?code=private"},
+        {"installed_login_phase": "callback_document", "location": "private"},
+        {"installed_login_phase": "callback_document", "cookie": "private"},
+    ],
+)
+def test_installed_diagnostic_phase_and_extra_fields_refuse(
+    changes: dict[str, object],
+) -> None:
+    from operator_ui_protocol import DiagnosticFrame
+
+    with pytest.raises(ValidationError):
+        DiagnosticFrame.model_validate(
+            {"kind": "failure", "stage": "assets_session", "error": "RuntimeError", **changes}
         )
 
 
@@ -311,7 +384,7 @@ def test_owned_channel_refuses_excess_waiters_and_cleans_cancelled_admissions() 
     asyncio.run(run())
 
 
-def test_owned_channel_admission_and_reply_share_one_deadline() -> None:
+def test_owned_channel_concurrent_timeouts_release_all_capacity() -> None:
     import asyncio
 
     async def run() -> None:
@@ -325,8 +398,59 @@ def test_owned_channel_admission_and_reply_share_one_deadline() -> None:
             and channel.capacity._value == 8
             and channel.admitted == 0
         )
-        # The admission timeout did not consume another request identifier.
-        assert channel.identifier == 8
+        # Each request has its own deadline; the ninth may acquire a freed slot.
+        assert channel.identifier in {8, 9}
+
+    asyncio.run(run())
+
+
+def test_owned_channel_admission_timeout_does_not_allocate_identifier() -> None:
+    async def run() -> None:
+        channel = _owned_channel(0.03)
+        for _ in range(8):
+            await channel.capacity.acquire()
+        try:
+            with pytest.raises(TimeoutError):
+                await channel.request({"kind": "control"})
+            assert channel.identifier == 0 and not channel.retired
+            assert not channel.pending and channel.waiting == 0 and channel.admitted == 0
+            assert channel.capacity._value == 0
+        finally:
+            for _ in range(8):
+                channel.capacity.release()
+        assert channel.capacity._value == 8
+
+    asyncio.run(run())
+
+
+def test_owned_channel_reply_uses_remaining_admission_budget() -> None:
+    from types import SimpleNamespace
+
+    async def run() -> None:
+        channel = _owned_channel(0.03)
+        loop = asyncio.get_running_loop()
+        clock = iter([100.0, 100.02])
+        timeouts: list[float] = []
+
+        async def wait_for(awaitable: Any, *, timeout: float) -> Any:
+            timeouts.append(timeout)
+            if len(timeouts) == 1:
+                return await awaitable
+            awaitable.cancel()
+            raise TimeoutError
+
+        channel.request.__func__.__globals__["asyncio"] = SimpleNamespace(
+            get_running_loop=lambda: SimpleNamespace(
+                time=lambda: next(clock), create_future=loop.create_future
+            ),
+            wait_for=wait_for,
+        )
+        with pytest.raises(TimeoutError):
+            await channel.request({"kind": "control"})
+        assert timeouts == pytest.approx([0.03, 0.01])
+        assert channel.identifier == 1
+        assert not channel.pending and channel.waiting == 0 and channel.admitted == 0
+        assert channel.capacity._value == 8
 
     asyncio.run(run())
 

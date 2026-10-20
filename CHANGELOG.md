@@ -358,3 +358,13 @@ Add a trusted Python-only executor factory to the normal claimed Celery path, re
 - Preserve original acquisition controls and reviewed diagnostic/parser source.
 - Track synthetic validation and the single authorized actual attempt in the
   [report](reports/one-sample-affiliation-diagnostic-validation.md).
+
+## EM-017 durable service reference runtime candidate
+
+- Add exact tenant/resource/purpose service authority with independent worker and
+  publisher SQL logins, immutable bounded lifetime and explicit revocation checks.
+- Package API/web, worker and finite publisher entrypoints for the closed authored
+  HTML reference profile; preserve human sessions and isolated XML controls.
+- Add forward-only migration 0014 without historical grants or actual logins;
+  refuse legacy restore of unsupported service authority state.
+- Track remaining actual runtime/operator/CI acceptance in [document 66](docs/66-durable-service-reference-runtime.md).

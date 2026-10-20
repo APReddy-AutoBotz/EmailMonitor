@@ -406,6 +406,7 @@ def test_real_concurrent_reviews_one_revision_and_one_atomic_receipt(scenario: S
             return "conflict"
 
     try:
+        assert isinstance(service.database, Database)
         with ThreadPoolExecutor(max_workers=2) as pool:
             futures = [pool.submit(invoke, database) for database in (service.database, other)]
             assert sorted(f.result(timeout=20) for f in futures) == ["committed", "conflict"]

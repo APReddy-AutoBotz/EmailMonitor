@@ -213,6 +213,16 @@ def capture(engine: Engine, organizations: tuple[UUID, UUID]) -> SafetySnapshot:
     if len(set(organizations)) != 2:
         raise RestoreRefused("restore_tenant_scope_refused")
     with engine.connect().execution_options(isolation_level="REPEATABLE READ") as c, c.begin():
+        # This legacy restore profile has no service-role/authority seal. Refuse
+        # rather than replay an older principal or delegation revocation state.
+        if c.execute(
+            text(
+                "SELECT EXISTS(SELECT 1 FROM emailmonitor.service_principals) "
+                "OR EXISTS(SELECT 1 FROM emailmonitor.service_delegations) "
+                "OR EXISTS(SELECT 1 FROM emailmonitor.service_audit)"
+            )
+        ).scalar_one():
+            raise RestoreRefused("restore_service_authority_unsupported")
         rows = {table: records(c, table, organizations) for table in TABLES}
         active: bool = c.execute(
             text(

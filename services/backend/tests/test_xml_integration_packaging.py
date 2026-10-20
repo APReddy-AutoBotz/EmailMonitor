@@ -325,12 +325,13 @@ def test_fixed_consumers_stream_and_verify_each_gate(
         assert [arguments[-1] for arguments, _ in commands] == ["transport", "operator"]
 
 
+@pytest.mark.parametrize("mode,budget", [("application", 1200), ("transport", 900)])
 @pytest.mark.parametrize("kind", ["failed", "timeout", "interrupted"])
 def test_failed_consumer_is_stopped_before_propagating(
-    monkeypatch: pytest.MonkeyPatch, kind: str
+    monkeypatch: pytest.MonkeyPatch, kind: str, mode: str, budget: int
 ) -> None:
     failure = (
-        subprocess.TimeoutExpired("fixed", 900)
+        subprocess.TimeoutExpired("fixed", budget)
         if kind == "timeout"
         else KeyboardInterrupt()
         if kind == "interrupted"
@@ -342,8 +343,8 @@ def test_failed_consumer_is_stopped_before_propagating(
     monkeypatch.setattr(integration, "stop_consumer", lambda process: stopped.append(process))
     expected = type(failure) if failure is not None else integration.IntegrationRefused
     with pytest.raises(expected):
-        integration.run_consumer("application", IMAGE, OWNER, ENV, lambda: None)
-    assert stopped == [child] and child.waits == [900]
+        integration.run_consumer(mode, IMAGE, OWNER, ENV, lambda: None)
+    assert stopped == [child] and child.waits == [budget]
 
 
 def test_stop_consumer_signals_only_owned_group_and_reaps(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -580,3 +581,31 @@ def test_private_sample_gate_is_separate_and_synthetic_only() -> None:
     assert "PRIVATE_OFFLINE_SYNTHETIC_NETWORK_NONE_REDACTED_COUNTS" in script
     assert "1 passed([ ,]|$)" in script
     assert "[0-9]+ skipped|[0-9]+ warnings?" in script
+
+
+def test_closed_aggregate_budgets_preserve_cleanup_reserve() -> None:
+    assert integration.CONSUMER_SECONDS == {"application": 1200, "transport": 900}
+    assert integration.WRAPPER_SECONDS == {"application": 1200, "transport": 1200}
+    source = Path(integration.__file__).read_text()
+    assert "signal.alarm(180)" in source
+    assert source.count("process.wait(timeout=5)") == 2
+    assert "signal.alarm(WRAPPER_SECONDS[mode])" in source
+    root = Path(integration.__file__).resolve().parents[2]
+    assert "timeout-minutes: 25" in (root / ".github/workflows/application.yml").read_text()
+
+
+def test_focused_service_gate_preserves_aggregate_and_browser_evidence() -> None:
+    root = Path(integration.__file__).resolve().parents[2]
+    workflow = (root / ".github/workflows/service-runtime.yml").read_text()
+    assert workflow.count("pytest services/backend/tests/test_service_runtime_broker.py") == 1
+    assert "test_service_runtime_broker.py -v --tb=short" in workflow
+    assert "EM_TEST_BROKER_CONTAINER: ${{ job.services.rabbitmq.id }}" in workflow
+    assert "        timeout-minutes: 5\n" in workflow
+    assert "continue-on-error" not in workflow
+    assert "steps.service-prerequisites.outcome == 'success'" in workflow
+    assert "steps.service-web.outcome == 'success'" in workflow
+    assert "!cancelled()" in workflow
+    assert workflow.index("Focused actual service broker acceptance") < workflow.index(
+        "Installed service API and independent worker operator acceptance"
+    )
+    assert "pytest services/backend/tests tests" in (root / "scripts/check.sh").read_text()

@@ -9,6 +9,7 @@ import sys
 import tempfile
 import time
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -52,12 +53,39 @@ ENVIRONMENT_KEYS = {
 }
 
 
+class ProcessFailure(Enum):
+    DEADLINE = "deadline"
+    OUTPUT_LIMIT = "output_limit"
+    OS_ERROR = "os_error"
+    UNKNOWN = "unknown"
+
+
+@dataclass
+class ProcessDiagnostics:
+    """Optional first-failure metadata; never changes or formats an exception."""
+
+    failure: ProcessFailure | None = None
+
+    def record(self, reason: ProcessFailure) -> None:
+        if self.failure is None:
+            self.failure = reason if type(reason) is ProcessFailure else ProcessFailure.UNKNOWN
+
+    def record_exception(self, error: BaseException) -> None:
+        if isinstance(error, subprocess.TimeoutExpired):
+            self.record(ProcessFailure.DEADLINE)
+        elif isinstance(error, OSError):
+            self.record(ProcessFailure.OS_ERROR)
+        else:
+            self.record(ProcessFailure.UNKNOWN)
+
+
 def bounded_process(
     arguments: list[str],
     timeout: float = 30,
     *,
     stdout_limit: int = 131072,
     stderr_limit: int = 4096,
+    diagnostics: ProcessDiagnostics | None = None,
 ) -> subprocess.CompletedProcess[bytes]:
     """Cap both output streams while the control/build process is still running."""
     try:
@@ -75,6 +103,8 @@ def bounded_process(
                     while selector.get_map():
                         remaining = deadline - time.monotonic()
                         if remaining <= 0:
+                            if type(diagnostics) is ProcessDiagnostics:
+                                diagnostics.record(ProcessFailure.DEADLINE)
                             raise PackagingRefused("xml_package_command_failed")
                         for key, _ in selector.select(remaining):
                             chunk = os.read(key.fd, 8192)
@@ -85,16 +115,22 @@ def bounded_process(
                             buffer.extend(chunk)
                             limit = stdout_limit if key.data == "stdout" else stderr_limit
                             if len(buffer) > limit:
+                                if type(diagnostics) is ProcessDiagnostics:
+                                    diagnostics.record(ProcessFailure.OUTPUT_LIMIT)
                                 raise PackagingRefused("xml_package_command_output_refused")
                     code = process.wait(timeout=max(0.001, deadline - time.monotonic()))
                 return subprocess.CompletedProcess(
                     arguments, code, bytes(buffers["stdout"]), bytes(buffers["stderr"])
                 )
-            except BaseException:
+            except BaseException as error:
+                if type(diagnostics) is ProcessDiagnostics:
+                    diagnostics.record_exception(error)
                 process.kill()
                 process.wait(timeout=5)
                 raise
-    except (OSError, subprocess.TimeoutExpired):
+    except (OSError, subprocess.TimeoutExpired) as error:
+        if type(diagnostics) is ProcessDiagnostics:
+            diagnostics.record_exception(error)
         raise PackagingRefused("xml_package_command_failed") from None
 
 

@@ -14,12 +14,101 @@ from typing import Any, BinaryIO, TextIO
 
 from emailmonitor.config import Settings
 from emailmonitor.extraction.html import parse_article
-from playwright.async_api import CDPSession, Error, Route, WebSocketRoute, async_playwright
+from playwright.async_api import (
+    CDPSession,
+    Error,
+    Frame,
+    Page,
+    Route,
+    WebSocketRoute,
+    async_playwright,
+)
 
 URL = "https://synthetic.publisher.example/tooltip.html"
 NETWORK_DIAGNOSTIC_URL = "http://192.0.2.1:443/"
 POPUP_URL = "https://denied.fixture.example/popup"
 POPUP_EVIDENCE_LIMIT = 16
+MARKER_SNAPSHOT = """() => {
+ const markers = document.querySelectorAll('#marker');
+ const ready = globalThis.boundaryReady, state = globalThis.boundaryState;
+ return {
+  document_url: document.URL === 'https://synthetic.publisher.example/tooltip.html'
+   ? 'fixture' : document.URL === 'chrome-error://chromewebdata/' ? 'error_document' : 'other',
+  marker_count: Math.min(markers.length, 2),
+  marker_expected: markers.length === 1 && markers[0].textContent === 'synthetic marker revealed',
+  boundary_ready: ready === true ? 'true' : ready === false ? 'false'
+   : ready === undefined ? 'absent' : 'other',
+  boundary_state: state === undefined ? 'absent'
+   : state !== null && typeof state === 'object' && !Array.isArray(state) ? 'object' : 'other'
+ };
+}"""
+BOUNDARY_FAILURE_SNAPSHOT = (
+    "() => ({pending: globalThis.boundaryPending, document: (" + MARKER_SNAPSHOT + ")()})"
+)
+
+
+def marker_snapshot_summary(value: object) -> dict[str, object]:
+    """Accept only a closed snapshot; no DOM, URL or arbitrary value is emitted."""
+    if type(value) is not dict or set(value) != {
+        "document_url",
+        "marker_count",
+        "marker_expected",
+        "boundary_ready",
+        "boundary_state",
+    }:
+        return {"status": "malformed"}
+    strings = {
+        "document_url": {"fixture", "error_document", "other"},
+        "boundary_ready": {"true", "false", "absent", "other"},
+        "boundary_state": {"object", "absent", "other"},
+    }
+    if (
+        any(
+            type(value[key]) is not str or value[key] not in allowed
+            for key, allowed in strings.items()
+        )
+        or type(value["marker_count"]) is not int
+        or not 0 <= value["marker_count"] <= 2
+        or type(value["marker_expected"]) is not bool
+        or value["marker_expected"]
+        and value["marker_count"] != 1
+    ):
+        return {"status": "malformed"}
+    return {"status": "observed", **value}
+
+
+async def marker_failure_message(page: Page, fixture_frame: Frame) -> str:
+    """Failure-only, one-second snapshot; same Frame is not same-document proof."""
+    safe: dict[str, object]
+    try:
+        current = page.url
+        closed = page.is_closed()
+        safe = {
+            "page_url": (
+                "fixture"
+                if type(current) is str and current == URL
+                else "error_document"
+                if type(current) is str and current == "chrome-error://chromewebdata/"
+                else "other"
+            ),
+            "page_state": "closed"
+            if closed is True
+            else "open"
+            if closed is False
+            else "unavailable",
+            "same_main_frame": page.main_frame is fixture_frame,
+        }
+    except Exception:
+        safe = {"page_snapshot": "unavailable"}
+    try:
+        value = await asyncio.wait_for(page.evaluate(MARKER_SNAPSHOT), timeout=1)
+        snapshot = marker_snapshot_summary(value)
+    except TimeoutError:
+        snapshot = {"status": "timeout"}
+    except Exception:
+        snapshot = {"status": "unavailable"}
+    safe["document_snapshot"] = snapshot
+    return "Marker failure snapshot: " + json.dumps(safe, sort_keys=True)
 
 
 def sandbox_status(text: str, evaluation: str) -> dict[str, bool]:
@@ -93,6 +182,32 @@ def pending_task_evidence(value: object) -> str:
     ):
         return '{"pending_task_evidence":"unavailable"}'
     return json.dumps({"pending_task_evidence": value}, sort_keys=True)
+
+
+def boundary_failure_evidence(value: object) -> tuple[str, str]:
+    """Closed current-document evidence; does not expose or infer socket state."""
+    pending: object = None
+    document: dict[str, object] = {"status": "unavailable"}
+    if value is not None:
+        if (
+            type(value) is dict
+            and all(type(key) is str for key in value)
+            and set(value) == {"pending", "document"}
+        ):
+            pending, snapshot = value["pending"], value["document"]
+            if type(pending) is not dict or any(
+                type(key) is not str or type(item) is not str for key, item in pending.items()
+            ):
+                pending = None
+            if type(snapshot) is dict and any(type(key) is not str for key in snapshot):
+                snapshot = None
+            document = marker_snapshot_summary(snapshot)
+        else:
+            document = {"status": "malformed"}
+    return (
+        pending_task_evidence(pending),
+        json.dumps({"boundary_document_evidence": document}, sort_keys=True),
+    )
 
 
 async def boundary_readiness(readiness: Awaitable[object]) -> None:
@@ -419,6 +534,7 @@ async def main() -> None:
         page.on("download", download)
         trace_stage("routes_registered")
         await page.goto(URL, wait_until="domcontentloaded")
+        fixture_frame = page.main_frame
         trace_stage("fixture_loaded")
         trace_stage("click_start")
         await page.locator("#reveal").click()
@@ -429,14 +545,19 @@ async def main() -> None:
                 page.wait_for_function("globalThis.boundaryReady === true", timeout=10000)
             )
         except (Error, TimeoutError):
-            trace_stage("boundary_wait_failed")
             try:
-                pending = await asyncio.wait_for(
-                    page.evaluate("globalThis.boundaryPending"), timeout=1
-                )
-            except Exception:
-                pending = None
-            trace_stage(pending_task_evidence(pending))
+                trace_stage("boundary_wait_failed")
+                try:
+                    snapshot = await asyncio.wait_for(
+                        page.evaluate(BOUNDARY_FAILURE_SNAPSHOT), timeout=1
+                    )
+                except Exception:
+                    snapshot = None
+                for evidence in boundary_failure_evidence(snapshot):
+                    trace_stage(evidence)
+            except BaseException:
+                # Secondary diagnostics, including output, cannot replace readiness failure.
+                pass
             raise
         trace_stage("boundary_ready")
         # JavaScript's boundaryReady does not await Playwright's independent
@@ -460,8 +581,17 @@ async def main() -> None:
                     context_pages=len(context.pages),
                 )
             ) from error
-        if await page.locator("#marker").inner_text() != "synthetic marker revealed":
-            raise RuntimeError("Approved synthetic browser interaction failed")
+        try:
+            if await page.locator("#marker").inner_text() != "synthetic marker revealed":
+                raise RuntimeError("Approved synthetic browser interaction failed")
+        except (Error, RuntimeError):
+            try:
+                trace_stage(await marker_failure_message(page, fixture_frame))
+            except BaseException:
+                # Snapshot/format/output failure cannot replace the original
+                # ordinary marker failure or turn it into successful evidence.
+                pass
+            raise
         state = await page.evaluate("globalThis.boundaryState")
         required = {
             "image",

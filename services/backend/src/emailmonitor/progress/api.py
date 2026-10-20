@@ -19,6 +19,7 @@ from emailmonitor.progress.models import Item, Snapshot
 from emailmonitor.progress.service import Progress
 from emailmonitor.progress.state import parse_cursor
 from emailmonitor.progress.stream import replay
+from emailmonitor.runtime.delegation import ServiceBindings
 
 
 class Revision(BaseModel):
@@ -31,6 +32,7 @@ def progress_router(
     token: Callable[[Request], str],
     csrf: Callable[[Request], str],
     settings: Settings,
+    bindings: ServiceBindings | None = None,
 ) -> APIRouter:
     router = APIRouter()
 
@@ -39,7 +41,9 @@ def progress_router(
             require_fixture(settings)
         except FetchDenied as error:
             raise HTTPException(404, "Synthetic execution unavailable") from error
-        return Progress(database, csrf(request) if mutation else token(request), settings)
+        return Progress(
+            database, csrf(request) if mutation else token(request), settings, bindings=bindings
+        )
 
     @router.post("/organizations/{organization_id}/jobs/{job_id}/start", response_model=Snapshot)
     def start(request: Request, organization_id: UUID, job_id: UUID, body: Revision) -> Snapshot:

@@ -142,6 +142,49 @@ ERRORS = {
     "UnexpectedError",
 }
 
+InstalledLoginPhase = Literal[
+    "initial_session",
+    "start_activation",
+    "authorize_failure",
+    "authorize_navigation",
+    "callback_failure",
+    "callback_document",
+    "callback_session",
+    "callback_complete",
+    "organization",
+]
+InstalledReason = Literal[
+    "installed_login_failed",
+    "installed_login_deadline",
+    "installed_expected_navigation_mismatch",
+    "installed_redirect_order",
+    "installed_redirect_source",
+    "installed_redirect_request_identity",
+    "installed_redirect_status",
+    "installed_redirect_location",
+    "installed_redirect_query",
+    "installed_redirect_authorization",
+    "installed_redirect_cookie",
+    "installed_redirect_callback_query",
+    "installed_redirect_state",
+    "installed_redirect_failure_identity",
+    "installed_redirect_ancestry",
+    "installed_redirect_aborted",
+    "installed_redirect_certificate",
+    "installed_redirect_timeout",
+    "installed_redirect_network",
+    "installed_route_headers",
+    "installed_route_relay",
+    "installed_relay_request_capacity",
+    "installed_relay_admission_capacity",
+    "installed_relay_request_size",
+    "installed_relay_outer_status",
+    "installed_static_range",
+    "installed_static_hash",
+    "installed_redirect_arm",
+    "installed_route_fulfill",
+]
+
 
 class DiagnosticFrame(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
@@ -158,21 +201,25 @@ class DiagnosticFrame(BaseModel):
         ]
         | None
     ) = None
-    reason: Literal[
-        "unknown",
-        "rpc_capacity",
-        "rpc_request_capacity",
-        "rpc_admission_capacity",
-        "keyboard_focus",
-        "dialog_focus_restore",
-        "route_fulfill_failed",
-        "route_fulfill_unclassified",
-        "route_headers_aborted",
-        "route_headers_unclassified",
-        "route_headers_future_state",
-        "route_headers_loop_state",
-        "route_headers_iteration_state",
-    ] = "unknown"
+    reason: (
+        Literal[
+            "unknown",
+            "rpc_capacity",
+            "rpc_request_capacity",
+            "rpc_admission_capacity",
+            "keyboard_focus",
+            "dialog_focus_restore",
+            "route_fulfill_failed",
+            "route_fulfill_unclassified",
+            "route_headers_aborted",
+            "route_headers_unclassified",
+            "route_headers_future_state",
+            "route_headers_loop_state",
+            "route_headers_iteration_state",
+        ]
+        | InstalledReason
+    ) = "unknown"
+    installed_login_phase: InstalledLoginPhase | None = None
     api_statuses: list[int] = Field(default_factory=list, max_length=512)
 
     @model_validator(mode="after")
@@ -188,6 +235,10 @@ class DiagnosticFrame(BaseModel):
             and (self.error is not None or self.api_statuses or self.reason != "unknown")
         ):
             raise ValueError("Explicit failure or fixed stage required")
+        if self.installed_login_phase is not None and (
+            self.kind != "failure" or self.stage not in {"assets_session", "keyword_worker"}
+        ):
+            raise ValueError("Installed login phase requires its exact failure stage")
         return self
 
 

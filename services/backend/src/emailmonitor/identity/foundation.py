@@ -34,6 +34,7 @@ from emailmonitor.organizations.roles import (
 )
 from emailmonitor.progress.api import progress_router
 from emailmonitor.results.api import result_router
+from emailmonitor.runtime.delegation import ServiceBindings
 from emailmonitor.sources.api import source_router
 
 COOKIE = "__Host-emailmonitor_session"
@@ -71,6 +72,7 @@ class Foundation:
     database: Database
     provider: OIDCProvider
     authentication: AuthenticationDatabase
+    service_bindings: ServiceBindings | None = None
 
     def router(self, settings: Settings) -> APIRouter:
         if (
@@ -468,8 +470,12 @@ AND identity_id=:actor
         router.include_router(administration_router(self.database, token, csrf, settings))
         router.include_router(operator_router(self.database, token, csrf, audit))
         router.include_router(source_router(self.database, token, csrf, audit))
-        router.include_router(progress_router(self.database, token, csrf, settings))
+        router.include_router(
+            progress_router(self.database, token, csrf, settings, self.service_bindings)
+        )
         router.include_router(job_router(self.database, token, csrf, settings))
         router.include_router(association_router(self.database, token, csrf, settings))
-        router.include_router(result_router(self.database, token, csrf, settings))
+        router.include_router(
+            result_router(self.database, token, csrf, settings, self.service_bindings)
+        )
         return router

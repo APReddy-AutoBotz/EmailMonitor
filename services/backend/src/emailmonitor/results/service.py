@@ -13,7 +13,7 @@ from sqlalchemy.exc import DBAPIError
 
 from emailmonitor.config import Settings
 from emailmonitor.fetching.fixture import require_fixture
-from emailmonitor.organizations.database import AuthorizationDenied, Database, RevisionConflict
+from emailmonitor.organizations.database import AuthorizationDenied, RevisionConflict
 from emailmonitor.organizations.roles import Capability
 from emailmonitor.results.cursor import decode, encode
 from emailmonitor.results.models import (
@@ -29,6 +29,8 @@ from emailmonitor.results.models import (
     OutcomePage,
 )
 from emailmonitor.results.render import Artifact, RenderDenied, render
+from emailmonitor.runtime.access import WorkAuthority, WorkDatabase
+from emailmonitor.runtime.delegation import ServiceBindings
 
 
 def translate(error: DBAPIError) -> NoReturn:
@@ -63,9 +65,17 @@ class Lease:
 
 
 class Results:
-    def __init__(self, database: Database, token: str, settings: Settings) -> None:
+    def __init__(
+        self,
+        database: WorkDatabase,
+        token: WorkAuthority,
+        settings: Settings,
+        *,
+        bindings: ServiceBindings | None = None,
+    ) -> None:
         require_fixture(settings)
         self.database, self.token, self.settings = database, token, settings
+        self.bindings = bindings
 
     @contextmanager
     def _tenant(self, org: UUID, exporting: bool = False) -> Iterator[Connection]:
@@ -174,6 +184,7 @@ class Results:
             or any(ord(ch) < 33 or ord(ch) > 126 for ch in key)
         ):
             raise ValueError("Printable bounded idempotency key required")
+        created = uuid4()
         with self._tenant(org, True) as c:
             export: UUID = c.execute(
                 text(
@@ -182,12 +193,14 @@ class Results:
                 ),
                 {
                     "org": org,
-                    "id": uuid4(),
+                    "id": created,
                     "key": hashlib.sha256(key.encode()).hexdigest(),
                     "request": request.model_dump_json(),
                     "event": uuid4(),
                 },
             ).scalar_one()
+            if self.bindings is not None and export == created:
+                self.bindings.issue(c, org, export, "export")
             return self._metadata(c, org, export)
 
     @staticmethod

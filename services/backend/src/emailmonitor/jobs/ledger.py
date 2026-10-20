@@ -7,11 +7,14 @@ from uuid import UUID, uuid4, uuid5
 
 from fastapi import HTTPException
 from sqlalchemy import Connection, text
+from sqlalchemy.exc import DBAPIError
 
 from emailmonitor.config import Settings
 from emailmonitor.jobs.models import JobRequest, canonical, effect_key
-from emailmonitor.organizations.database import AuthorizationDenied, Database
+from emailmonitor.organizations.database import AuthorizationDenied
 from emailmonitor.organizations.roles import Capability
+from emailmonitor.runtime.access import WorkAuthority, WorkDatabase
+from emailmonitor.runtime.database import ServiceDatabase
 from emailmonitor.sources.access import current_policy, policy_decision
 from emailmonitor.sources.policy import Evaluation, Operation, PolicyProposal
 
@@ -91,7 +94,9 @@ class Lease:
 
 
 class Ledger:
-    def __init__(self, database: Database, token: str, settings: Settings) -> None:
+    def __init__(self, database: WorkDatabase, token: WorkAuthority, settings: Settings) -> None:
+        if isinstance(database, ServiceDatabase) or type(token) is not str:
+            raise AuthorizationDenied()
         self.database, self.token, self.settings = database, token, settings
 
     def _fixture(self) -> None:
@@ -106,25 +111,37 @@ class Ledger:
                 "set_config('statement_timeout','5000ms',true)"
             )
         )
-        row = (
-            c.execute(
-                text("""
-SELECT j.*, o.deletion_generation FROM emailmonitor.jobs j
+        try:
+            row = (
+                c.execute(
+                    text("""
+SELECT j.*, o.deletion_generation FROM emailmonitor.work_job_lock(:org,:job) j
 JOIN emailmonitor.organizations o ON o.id=j.organization_id
-WHERE j.organization_id=:org AND j.id=:job AND
-emailmonitor.job_write_allowed(:org, :job) FOR UPDATE OF j
 """),
+                    {"org": organization, "job": job},
+                )
+                .mappings()
+                .first()
+            )
+            if row is None:
+                raise AuthorizationDenied()
+            c.execute(
+                text("SELECT emailmonitor.job_permission_fence(:org,:job)"),
                 {"org": organization, "job": job},
             )
-            .mappings()
-            .first()
-        )
-        if row is None:
-            raise AuthorizationDenied()
-        c.execute(
-            text("SELECT emailmonitor.job_permission_fence(:org,:job)"),
-            {"org": organization, "job": job},
-        )
+        except DBAPIError as error:
+            original = error.orig
+            args = getattr(original, "args", ())
+            detail = args[0] if args else None
+            code = getattr(original, "sqlstate", None) or (
+                detail.get("C") if isinstance(detail, dict) else None
+            )
+            reason = getattr(original, "message", None) or (
+                detail.get("M") if isinstance(detail, dict) else None
+            )
+            if (code, reason) == ("P0001", "JOB_UNAVAILABLE"):
+                raise AuthorizationDenied() from None
+            raise
         return dict(row)
 
     @staticmethod
