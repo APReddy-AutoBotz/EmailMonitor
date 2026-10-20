@@ -9,12 +9,17 @@ import os
 import re
 import socket
 import sys
+from contextlib import AsyncExitStack
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit
 
 from browser_acceptance import sandbox_status
-from installed_operator_redirects import InstalledDiagnostics, LoginRedirects
+from installed_operator_redirects import (
+    InstalledDiagnostics,
+    LoginRedirects,
+    observe_error_documents,
+)
 from operator_ui_protocol import ORIGIN, InstalledLoginPhase, InstalledReason
 from playwright.async_api import Error, Request, Route, async_playwright, expect
 
@@ -122,7 +127,7 @@ async def main() -> None:
 
     try:
         checkpoint("browser_launch")
-        async with async_playwright() as playwright:
+        async with async_playwright() as playwright, AsyncExitStack() as observers:
             browser = await playwright.chromium.launch(
                 channel="chromium",
                 headless=True,
@@ -172,6 +177,14 @@ async def main() -> None:
                         error, redirects.failure_reason or "installed_redirect_order", login_phase
                     )
 
+            def observer_failure(error: RuntimeError) -> None:
+                diagnostics.capture(
+                    error, redirects.failure_reason or "installed_redirect_order", login_phase
+                )
+
+            observer = await observers.enter_async_context(
+                observe_error_documents(context, page, redirects, observer_failure)
+            )
             page.on("requestfailed", failed_navigation)
 
             async def route_request(route: Route, operation: list[InstalledReason]) -> None:
@@ -243,7 +256,7 @@ async def main() -> None:
                         or (origin == issuer and parsed.path == "/authorize")
                     ):
                         operation[0] = "installed_redirect_arm"
-                        redirects.arm(
+                        observer.arm(
                             incoming,
                             source=incoming.url,
                             method=incoming.method,
@@ -319,7 +332,7 @@ async def main() -> None:
                         ),
                     )
                     login_phase = "authorize_failure"
-                    authorization = await redirects.next_target()
+                    authorization = await observer.next_target()
                     login_phase = "authorize_navigation"
                     try:
                         await page.goto(authorization, wait_until="domcontentloaded")
@@ -327,7 +340,7 @@ async def main() -> None:
                         # Only the separately observed exact failed child of the
                         # real issuer 303 can release its one-use callback target.
                         login_phase = "callback_failure"
-                        callback = await redirects.next_target()
+                        callback = await observer.next_target()
                     else:
                         login_reason = "installed_expected_navigation_mismatch"
                         raise RuntimeError("Expected isolated redirect failure missing")
@@ -528,6 +541,7 @@ async def main() -> None:
             async with asyncio.timeout(10):
                 while channel.pending:
                     await asyncio.sleep(0.05)
+            await observers.aclose()
             await context.close()
             await browser.close()
             if received_assets != set(assets):

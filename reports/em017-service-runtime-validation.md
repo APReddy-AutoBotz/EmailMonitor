@@ -289,3 +289,80 @@ success-receipt changes are introduced. Focused checks passed 227 tests with one
 explicit unavailable-service skip. The deterministic export barrier's focused
 checks passed 55 tests with twelve actual SQL/broker skips. Hosted evidence for
 both remains pending.
+
+### Second correction terminal aggregate
+
+[Application run 39436846952](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/39436846952)
+finished **3760 passed, 1 failed, no skips**, in 1130.48 seconds. The sole failure
+was the same export `wait_for(unpublished)` race observation. The controlled XML
+composition and owned cleanup passed. The run was within the reviewed 1200-second
+aggregate budget, but remains failed. All eight workflows terminated: six passed,
+application and service reference runtime failed. No real-source run occurred.
+
+## Third correction hosted evidence (in progress)
+
+Head `e11e69a4d622ddcfbcfe67e753ea55cdb9b14f1a` used independently reviewed tree
+`4eae845d253f05514489060f8a6088fa33c04613`; its test merge had that same tree and
+expected PR45/head parents. Both full normal and genuinely fresh local gates passed
+**3429 backend tests / 375 explicit infrastructure skips and 57 React tests**,
+with all aggregate checks. These skips are not actual-service acceptance.
+
+[Service run 39440797602](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/39440797602)
+passed packaging again. Focused actual PostgreSQL/RabbitMQ broker acceptance passed
+**all 12 tests in 89.89 seconds**, including the corrected export race barrier.
+Installed browser acceptance remains failed: its closed diagnostics identify
+`assets_session`, exception class `Error`, reason `installed_login_failed`, phase
+`callback_document`, with actual API reply statuses 401/303/303. This localizes the
+failure to callback-document navigation before callback-session verification;
+it does not establish a completed login or operator journey. The aggregate
+application and controlled transport gates are still running at this checkpoint.
+
+### Third correction terminal aggregate
+
+[Application run 39440797573](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/39440797573)
+passed **3804 backend tests, no skips or failures**, in 1136.06 seconds, followed
+by **57 React tests** and all aggregate checks. Controlled XML integration and
+owned cleanup passed. The independent full aggregate therefore also accepts the
+export race regression. All eight workflows are terminal: seven passed; only the
+service workflow's installed browser journey failed. No real-source workflow ran.
+
+### Fourth correction design evidence
+
+An authored deterministic lifecycle probe invoked the installed Playwright 1.63.0
+`Frame.gotoImpl`: a prior failed document committing during the next navigation
+raises a document-ID mismatch; settling that prior commit before the next call
+returns the authored successful response. This establishes a possible mechanism,
+not the hosted failure's root cause. A supplementary system-Chromium 154 probe
+could not launch under the private namespace's existing sandbox constraints and
+provided no browser acceptance evidence; no sandbox/network relaxation was made.
+
+Independent design review approved a test-only per-hop lifecycle barrier. It must
+retain the exact existing failed Request predicate, correlate the failed document
+using read-only CDP main-frame identity, exact pending unreachable target and fresh
+loader, observe that loader's DOMContentLoaded, and ensure Playwright's own frame
+manager has consumed the error-document commit and DOMContentLoaded. These are
+observations within the original ten-second login budget, without extra navigation
+or retries. Target and loader identities remain transient and excluded from
+receipts. Exact implementation/cleanup review and hosted acceptance remain pending.
+
+The implemented barrier's focused validation passed **302 tests**, with one
+explicit unavailable SQL/broker installed-journey skip. Ruff check/format and
+strict mypy passed. The durable regression invokes the installed pinned Playwright
+navigation implementation with authored events and verifies both the late-commit
+failure and settled-commit success. Observer setup is capped at ten seconds and
+owned detach at five seconds; teardown precedes browser/context closure and any
+cleanup failure prevents acceptance. No public receipt/diagnostic fields changed.
+Exact cleanup review and complete normal/fresh gates remain required.
+
+Exact independent implementation review returned source GO at all four changed
+source/test hashes. It confirmed unchanged URL/cookie validation, isolation,
+receipts and the original twelve login awaits/two navigations/one ten-second
+budget. Bounded four-loader state and partial setup/teardown ownership were
+reviewed; setup/detach fit within the unchanged 180-second host envelope. No
+blocking changes were requested. Complete gates and hosted evidence follow.
+
+Fourth-correction full normal gate passed **3504 backend tests / 375 explicit
+infrastructure skips and 57 React tests**, with all documentation, Ruff/format,
+mypy, inventory, frontend typecheck/lint and build checks. Backend elapsed time
+was 166.82 seconds. A genuinely new-empty Python environment gate is running;
+actual hosted browser acceptance is still required.

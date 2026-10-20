@@ -16,6 +16,7 @@ from emailmonitor.identity.oidc import AuthenticationDenied
 from emailmonitor.runtime.api_entrypoint import ReferenceExchange, ReferenceIdentity
 from installed_operator_issuer import synthetic_issuer
 from installed_operator_redirects import (
+    ERROR_DOCUMENT,
     FLOW_COOKIE,
     NAVIGATION,
     InstalledDiagnostics,
@@ -28,6 +29,12 @@ from test_service_api_entrypoint import certificate
 API = "https://127.0.0.1:4444"
 ISSUER = "https://127.0.0.1:4445"
 ASSETS = {"index.html": "a" * 64, "assets/index-12345678.js": "b" * 64}
+
+
+def bound_redirects() -> LoginRedirects:
+    coordinator = LoginRedirects(API, ISSUER)
+    coordinator.bind_frame("main")
+    return coordinator
 
 
 def login_headers() -> dict[str, str]:
@@ -68,6 +75,23 @@ def observe_redirect(coordinator: LoginRedirects, original: object, target: str)
         redirected_from=original,
         failure="net::ERR_CONNECTION_REFUSED",
     )
+    coordinator.observe_commit(
+        frame="main",
+        loader="loader-" + str(coordinator.redirects),
+        url=ERROR_DOCUMENT,
+        target=target,
+    )
+    coordinator.observe_lifecycle(
+        frame="main",
+        loader="loader-" + str(coordinator.redirects),
+        name="DOMContentLoaded",
+    )
+    coordinator.observe_public_commit(
+        sequence=coordinator.redirects,
+        main_frame=True,
+        url=ERROR_DOCUMENT,
+    )
+    coordinator.observe_public_loaded(sequence=coordinator.redirects)
 
 
 async def synthetic_login(coordinator: LoginRedirects) -> None:
@@ -100,7 +124,7 @@ async def synthetic_login(coordinator: LoginRedirects) -> None:
 
 def test_installed_redirects_preserve_responses_and_require_four_observed_one_use_hops() -> None:
     async def exercise() -> None:
-        coordinator = LoginRedirects(API, ISSUER)
+        coordinator = bound_redirects()
         await synthetic_login(coordinator)
         await synthetic_login(coordinator)
         assert coordinator.receipt() == {
@@ -168,7 +192,7 @@ def test_installed_diagnostic_capture_refuses_nonliteral_values(
 
 
 def test_installed_redirect_first_rejection_cause_survives_secondary_order_failure() -> None:
-    coordinator = LoginRedirects(API, ISSUER)
+    coordinator = bound_redirects()
     coordinator.begin()
     original = object()
     headers = arm_login(coordinator, original)
@@ -194,7 +218,7 @@ def test_installed_redirect_first_rejection_cause_survives_secondary_order_failu
 def test_installed_redirect_network_diagnostics_are_finite(
     failure: str | None, reason: str
 ) -> None:
-    coordinator = LoginRedirects(API, ISSUER)
+    coordinator = bound_redirects()
     coordinator.begin()
     original = object()
     headers = arm_login(coordinator, original)
@@ -225,7 +249,7 @@ def test_installed_redirect_network_diagnostics_are_finite(
     ],
 )
 def test_installed_redirect_response_identity_is_exact(key: str, value: object) -> None:
-    coordinator = LoginRedirects(API, ISSUER)
+    coordinator = bound_redirects()
     coordinator.begin()
     arguments = {
         "source": API + "/api/v1/auth/start",
@@ -272,7 +296,7 @@ def test_installed_redirect_response_identity_is_exact(key: str, value: object) 
     ],
 )
 def test_installed_redirect_location_refusals_latch(target: str) -> None:
-    coordinator = LoginRedirects(API, ISSUER)
+    coordinator = bound_redirects()
     coordinator.begin()
     with pytest.raises(RuntimeError, match="redirect refused"):
         coordinator.arm(
@@ -306,7 +330,7 @@ def test_installed_redirect_authorization_query_is_fixed(key: str, value: str) -
     query = dict(parse_qs(urlsplit(headers["location"]).query))
     query[key] = [value]
     headers["location"] = ISSUER + "/authorize?" + urlencode(query, doseq=True)
-    coordinator = LoginRedirects(API, ISSUER)
+    coordinator = bound_redirects()
     coordinator.begin()
     with pytest.raises(RuntimeError, match="redirect refused"):
         coordinator.arm(
@@ -337,7 +361,7 @@ def test_installed_redirect_authorization_query_is_fixed(key: str, value: str) -
 def test_installed_redirect_flow_cookie_is_server_exact(replace: str, value: str) -> None:
     headers = login_headers()
     headers["set-cookie"] = headers["set-cookie"].replace(replace, value)
-    coordinator = LoginRedirects(API, ISSUER)
+    coordinator = bound_redirects()
     coordinator.begin()
     with pytest.raises(RuntimeError, match="redirect refused"):
         coordinator.arm(
@@ -368,7 +392,7 @@ def test_installed_redirect_flow_cookie_is_server_exact(replace: str, value: str
 )
 def test_installed_redirect_failure_never_recovers_other_errors(key: str, value: object) -> None:
     async def exercise() -> None:
-        coordinator = LoginRedirects(API, ISSUER)
+        coordinator = bound_redirects()
         coordinator.begin()
         original = object()
         headers = arm_login(coordinator, original)
@@ -392,7 +416,7 @@ def test_installed_redirect_failure_never_recovers_other_errors(key: str, value:
 @pytest.mark.parametrize("failure_point", ["unarmed", "duplicate", "replay", "wrong_order"])
 def test_installed_redirect_order_and_replay_latch(failure_point: str) -> None:
     async def exercise() -> None:
-        coordinator = LoginRedirects(API, ISSUER)
+        coordinator = bound_redirects()
         coordinator.begin()
         original = object()
         target = login_headers()["location"]
@@ -418,7 +442,7 @@ def test_installed_redirect_order_and_replay_latch(failure_point: str) -> None:
 )
 def test_installed_callback_redirect_remains_state_bound(change: str) -> None:
     async def exercise() -> None:
-        coordinator = LoginRedirects(API, ISSUER)
+        coordinator = bound_redirects()
         coordinator.begin()
         original = object()
         headers = arm_login(coordinator, original)
@@ -651,7 +675,7 @@ def test_installed_browser_image_keeps_original_security_profile_and_no_assets_c
     assert login.count("asyncio.timeout(10)") == 1
     assert login.index('name="Retry connection"') < login.index("redirects.begin()")
     assert 'status=response["status"], headers=response["headers"], body=bytes(output)' in guest
-    assert guest.index("redirects.arm(") < guest.index("await route.fulfill(")
+    assert guest.index("observer.arm(") < guest.index("await route.fulfill(")
     assert login.index("redirects.finish()") < login.index("login_phase = None")
     assert "finally:" not in login
     assert "type(error) is TimeoutError" in guest

@@ -7,13 +7,19 @@ its already-validated target once so the new request enters the HTTPS relay.
 
 import asyncio
 import re
-from collections.abc import Mapping
+from collections.abc import AsyncIterator, Callable, Mapping
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from http.cookies import CookieError, SimpleCookie
-from typing import NoReturn, get_args
+from typing import TYPE_CHECKING, Any, NoReturn, get_args
 from urllib.parse import parse_qsl, urlsplit
 
 from operator_ui_protocol import ERRORS, InstalledLoginPhase, InstalledReason
+
+if TYPE_CHECKING:
+    from playwright.async_api import BrowserContext, CDPSession, Frame, Page
+
+ERROR_DOCUMENT = "chrome-error://chromewebdata/"
 
 NAVIGATION = "observed_303_failed_target_explicit_navigation"
 FLOW_COOKIE = "__Host-emailmonitor_login"
@@ -23,6 +29,7 @@ FLOW_COOKIE = "__Host-emailmonitor_login"
 class PendingRedirect:
     original: object
     target: str
+    sequence: int
 
 
 @dataclass(frozen=True)
@@ -78,13 +85,92 @@ class LoginRedirects:
         self._state = ""
         self._pending: PendingRedirect | None = None
         self._observed = False
+        self._frame = ""
+        self._loaders: set[str] = set()
+        self._loader: str | None = None
+        self._cdp_loaded = False
+        self._public_commit = False
+        self._public_loaded = False
         self._event = asyncio.Event()
+
+    def bind_frame(self, frame: str) -> None:
+        if self._frame or self.active or not self._identifier(frame):
+            self._reject()
+        self._frame = frame
+
+    @staticmethod
+    def _identifier(value: str) -> bool:
+        return bool(re.fullmatch(r"[A-Za-z0-9_.:-]{1,128}", value))
+
+    def _ready(self) -> bool:
+        return (
+            self._observed
+            and self._loader is not None
+            and self._cdp_loaded
+            and self._public_commit
+            and self._public_loaded
+        )
+
+    def _wake(self) -> None:
+        if self._ready():
+            self._event.set()
+
+    def observe_commit(self, *, frame: str, loader: str, url: str, target: str) -> None:
+        """Read-only CDP identity gate; values never enter a receipt or log."""
+        pending = self._pending
+        if pending is None:
+            if self.active and url == ERROR_DOCUMENT:
+                self._reject()
+            return
+        if self.failed or frame != self._frame or url != ERROR_DOCUMENT or target != pending.target:
+            self._reject("installed_redirect_failure_identity")
+        if self._loader is not None or loader in self._loaders or not self._identifier(loader):
+            self._reject()
+        if len(self._loaders) >= 4:
+            self._reject()
+        self._loaders.add(loader)
+        self._loader = loader
+        self._wake()
+
+    def observe_lifecycle(self, *, frame: str, loader: str, name: str) -> None:
+        if self._pending is None or name != "DOMContentLoaded":
+            return
+        # Unrelated/early lifecycle events cannot satisfy the owned commit.
+        if loader != self._loader:
+            if loader in self._loaders:
+                self._reject()
+            return
+        if self.failed or frame != self._frame or self._cdp_loaded:
+            self._reject()
+        self._cdp_loaded = True
+        self._wake()
+
+    def observe_public_commit(self, *, sequence: int, main_frame: bool, url: str) -> None:
+        pending = self._pending
+        if self.failed or pending is None or pending.sequence != sequence:
+            self._reject()
+        if not main_frame or url != ERROR_DOCUMENT or self._public_commit:
+            self._reject("installed_redirect_failure_identity")
+        self._public_commit = True
+        self._wake()
+
+    def observe_public_loaded(self, *, sequence: int) -> None:
+        pending = self._pending
+        if self.failed or pending is None or pending.sequence != sequence or self._public_loaded:
+            self._reject()
+        if not self._public_commit:
+            return
+        self._public_loaded = True
+        self._wake()
+
+    def invalidate(self) -> None:
+        self.failed = True
+        self._event.set()
 
     def _reject(self, reason: InstalledReason = "installed_redirect_order") -> NoReturn:
         if self.failure_reason is None:
             self.failure_reason = reason
-        self.failed = True
-        self._event.set()
+        self.invalidate()
         raise RuntimeError("Synthetic login redirect refused") from None
 
     def begin(self) -> None:
@@ -205,7 +291,13 @@ class LoginRedirects:
         headers: Mapping[str, str],
     ) -> None:
         """Call before fulfilling the unchanged real response into Chromium."""
-        if self.failed or not self.active or self._pending is not None or self._phase not in {0, 1}:
+        if (
+            self.failed
+            or not self.active
+            or not self._frame
+            or self._pending is not None
+            or self._phase not in {0, 1}
+        ):
             self._reject()
         if source != self._source:
             self._reject("installed_redirect_source")
@@ -213,8 +305,12 @@ class LoginRedirects:
             self._reject("installed_redirect_request_identity")
         if type(status) is not int or status != 303:
             self._reject("installed_redirect_status")
-        self._pending = PendingRedirect(original, self._target(headers))
+        self._pending = PendingRedirect(original, self._target(headers), self.redirects + 1)
         self.redirects += 1
+        self._loader = None
+        self._cdp_loaded = False
+        self._public_commit = False
+        self._public_loaded = False
         self._observed = False
         self._event.clear()
 
@@ -243,12 +339,12 @@ class LoginRedirects:
                 self._reject("installed_redirect_timeout")
             self._reject("installed_redirect_network")
         self._observed = True
-        self._event.set()
+        self._wake()
 
     async def next_target(self) -> str:
         # The caller owns one unchanged ten-second budget for the entire login.
         await self._event.wait()
-        if self.failed or not self.active or self._pending is None or not self._observed:
+        if self.failed or not self.active or self._pending is None or not self._ready():
             self._reject()
         assert self._pending is not None
         target = self._pending.target
@@ -280,3 +376,154 @@ class LoginRedirects:
             "server_redirects": 4,
             "explicit_redirect_navigations": 4,
         }
+
+
+class ErrorDocumentObserver:
+    """Own only Page observation; never navigate, intercept, or change network state."""
+
+    def __init__(
+        self,
+        page: "Page",
+        session: "CDPSession",
+        redirects: LoginRedirects,
+        capture: Callable[[RuntimeError], None],
+    ) -> None:
+        self.page, self.session, self.redirects = page, session, redirects
+        self.capture = capture
+        self.listeners: list[tuple[Any, str, Callable[..., None]]] = []
+        self.public: list[tuple[Any, str, Callable[..., None]]] = []
+        self.closed = False
+
+    def _call(self, action: Callable[[], None]) -> None:
+        try:
+            action()
+        except RuntimeError as error:
+            self.capture(error)
+
+    def _listen(
+        self, owner: Any, name: str, callback: Callable[..., None], *, public: bool = False
+    ) -> None:
+        # Record ownership before registration, so partial registration rolls back.
+        (self.public if public else self.listeners).append((owner, name, callback))
+        owner.on(name, callback)
+
+    def install(self) -> None:
+        def committed(event: dict[str, Any]) -> None:
+            frame = event["frame"]
+            # Child-frame traffic cannot supply the main frame's barrier.
+            if frame.get("parentId") and frame.get("url") != ERROR_DOCUMENT:
+                return
+            self._call(
+                lambda: self.redirects.observe_commit(
+                    frame=frame.get("id", ""),
+                    loader=frame.get("loaderId", ""),
+                    url=frame.get("url", ""),
+                    target=frame.get("unreachableUrl", ""),
+                )
+            )
+
+        def lifecycle(event: dict[str, Any]) -> None:
+            self._call(
+                lambda: self.redirects.observe_lifecycle(
+                    frame=event.get("frameId", ""),
+                    loader=event.get("loaderId", ""),
+                    name=event.get("name", ""),
+                )
+            )
+
+        self._listen(self.session, "Page.frameNavigated", committed)
+        self._listen(self.session, "Page.lifecycleEvent", lifecycle)
+
+    def arm(self, original: object, **arguments: Any) -> None:
+        if self.closed or self.public:
+            self.redirects._reject()
+        sequence = self.redirects.redirects + 1
+
+        def committed(frame: "Frame") -> None:
+            self._call(
+                lambda: self.redirects.observe_public_commit(
+                    sequence=sequence,
+                    main_frame=frame == self.page.main_frame,
+                    url=frame.url,
+                )
+            )
+
+        def loaded() -> None:
+            self._call(lambda: self.redirects.observe_public_loaded(sequence=sequence))
+
+        # Both streams are observed before arming and fulfilling the real 303.
+        self._listen(self.page, "framenavigated", committed, public=True)
+        self._listen(self.page, "domcontentloaded", loaded, public=True)
+        self.redirects.arm(original, **arguments)
+
+    def _remove(self, listeners: list[tuple[Any, str, Callable[..., None]]]) -> None:
+        errors = []
+        for owner, name, callback in listeners:
+            try:
+                owner.remove_listener(name, callback)
+            except BaseException as error:
+                errors.append(error)
+        listeners.clear()
+        if errors:
+            self.redirects.invalidate()
+            raise RuntimeError("Owned observer listener cleanup failed") from None
+
+    async def next_target(self) -> str:
+        target = await self.redirects.next_target()
+        self._remove(self.public)
+        return target
+
+    async def close(self) -> None:
+        if self.closed:
+            return
+        self.closed = True
+        errors: list[BaseException] = []
+        if self.public:
+            self.redirects.invalidate()
+            errors.append(RuntimeError("Owned observation closed while pending"))
+        for listeners in (self.public, self.listeners):
+            try:
+                self._remove(listeners)
+            except BaseException as error:
+                errors.append(error)
+        try:
+            async with asyncio.timeout(5):
+                await self.session.detach()
+        except BaseException as error:
+            errors.append(error)
+        if errors:
+            self.redirects.invalidate()
+            raise RuntimeError("Owned observer cleanup failed") from None
+
+
+@asynccontextmanager
+async def observe_error_documents(
+    context: "BrowserContext",
+    page: "Page",
+    redirects: LoginRedirects,
+    capture: Callable[[RuntimeError], None],
+) -> AsyncIterator[ErrorDocumentObserver]:
+    observer: ErrorDocumentObserver | None = None
+    primary: BaseException | None = None
+    try:
+        async with asyncio.timeout(10):
+            session = await context.new_cdp_session(page)
+            observer = ErrorDocumentObserver(page, session, redirects, capture)
+            observer.install()
+            await session.send("Page.enable")
+            tree = await session.send("Page.getFrameTree")
+            redirects.bind_frame(tree["frameTree"]["frame"]["id"])
+            await session.send("Page.setLifecycleEventsEnabled", {"enabled": True})
+        yield observer
+    except BaseException as error:
+        primary = error
+        redirects.invalidate()
+        raise
+    finally:
+        if observer is not None:
+            try:
+                await observer.close()
+            except BaseException:
+                if primary is None:
+                    raise
+                primary.add_note("Owned observer cleanup also failed")
