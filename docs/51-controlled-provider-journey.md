@@ -52,3 +52,13 @@ Pure tests also exercise registry conflicts, exact FULL URL/fingerprint semantic
 The controlled journey now joins acquisition to retained review/export; it does not certify a real source. Actual source rights and FULL entitlement, approved representative response compatibility, real credential-store integration, live source-specific admission and a reviewed usable live DNS/egress composition remain separate activation gates. Default production configuration and worker registration remain denied. No user credential, source grant, network/security setting, deployment or merge was made. An authorized pilot must first resolve those exact gates; this candidate is not evidence that credentials are the sole missing step.
 
 Next: immutable review, coordinator publication and all seven actual own-head CI gates. Only then reconcile the controlled proof and select the next bounded pilot prerequisite.
+
+## Installed runtime integration candidate
+
+A dependent code-only candidate connects this same journey to registered durable
+service authority and normal installed review/export, with a confined service
+worker and supervisor-owned isolated parser. See [ADR0007](adr/0007-installed-controlled-xml.md)
+and its [validation record](../reports/em017-installed-controlled-xml-validation.md).
+The original human-authorized fixture composition, XML v1 attribution rules,
+quality warnings, source-policy approvals and one-file evaluation controls remain
+unchanged. Implementation and acceptance of this candidate are not source certification.

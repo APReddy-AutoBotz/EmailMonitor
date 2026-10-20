@@ -13,7 +13,7 @@ from uuid import NAMESPACE_URL, uuid5
 from fastapi import HTTPException
 
 from emailmonitor.administration.source import SourceAdmission, SourceLease
-from emailmonitor.extraction.provider_xml import parse_response
+from emailmonitor.extraction.provider_xml import XmlParser, parse_response
 from emailmonitor.extraction.xml_retained import retain_xml
 from emailmonitor.extraction.xml_service import XmlExtraction
 from emailmonitor.fetching.resources import HopResources
@@ -72,9 +72,12 @@ class BoundResources:
 
 
 class ProviderJourney:
-    def __init__(self, progress: Progress, dispatch: ProviderDispatch) -> None:
+    def __init__(
+        self, progress: Progress, dispatch: ProviderDispatch, *, parser: XmlParser | None = None
+    ) -> None:
         # Progress already enforces the production/fixture configuration boundary.
         self.progress, self.dispatch = progress, dispatch
+        self.parser = parser
         self.xml = XmlExtraction(progress.database, progress.token, progress.settings)
 
     def _request(
@@ -223,7 +226,11 @@ class ProviderJourney:
                     return self.progress.finish(work)
                 registered = next(d for d in registry if d.source_url == work.url)
                 observed = parse_response(
-                    self.progress.settings, boundary, acquired, profile=registered.source_profile
+                    self.progress.settings,
+                    boundary,
+                    acquired,
+                    profile=registered.source_profile,
+                    parser=self.parser,
                 )
                 binding, excerpts = self.xml.binding(
                     lease.organization, lease.job, boundary.binding.discovery_revision, work.url

@@ -60,3 +60,6 @@ Versioning: documents use Git history; public API uses `/api/v1`; event/schema r
 [65 — Retained article quality during review](65-observation-quality-review.md)
 
 [66 — Bounded durable service reference runtime](66-durable-service-reference-runtime.md)
+
+- [Installed controlled XML architecture](adr/0007-installed-controlled-xml.md)
+  and [candidate validation](../reports/em017-installed-controlled-xml-validation.md).

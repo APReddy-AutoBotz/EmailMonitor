@@ -4,6 +4,7 @@ Deployment supplies existing registered principals. This module cannot provision
 logins or enroll historical work, and request bodies never select principals.
 """
 
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -33,6 +34,9 @@ class ServiceBinding(BaseModel):
 class ServiceBindings(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
+    profile: Literal["authored-html-service-reference", "controlled-xml-service-reference"] = (
+        "authored-html-service-reference"
+    )
     tenants: tuple[ServiceBinding, ...] = ()
 
     @model_validator(mode="after")
@@ -55,7 +59,7 @@ class ServiceBindings(BaseModel):
                 ),
                 {"org": org, "resource": resource},
             ).scalar_one_or_none()
-            if start not in {
+            allowed = {
                 "https://synthetic.publisher.example/" + name
                 for name in (
                     "search-page-1.html",
@@ -65,7 +69,12 @@ class ServiceBindings(BaseModel):
                     "tooltip.html",
                     "no-contact.html",
                 )
-            }:
+            }
+            if self.profile == "controlled-xml-service-reference":
+                from emailmonitor.sources.provider_documents import URLS
+
+                allowed = allowed | URLS
+            if start not in allowed:
                 raise AuthorizationDenied()
         for principal in (binding.worker, binding.publisher):
             connection.execute(

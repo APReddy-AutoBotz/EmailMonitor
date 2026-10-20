@@ -5,7 +5,7 @@ lease; no caller-supplied role, browser session or executor selector is accepted
 """
 
 import time
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 from uuid import UUID
 
 from celery import Celery, bootsteps
@@ -18,6 +18,7 @@ from emailmonitor.jobs.callback_wake import FixtureCallbackWake
 from emailmonitor.jobs.queues import owned_queues
 from emailmonitor.progress.broker import ExecutionEvent
 from emailmonitor.progress.broker import process as execute
+from emailmonitor.progress.execution import ExecutionDispatcher
 from emailmonitor.progress.service import Progress
 from emailmonitor.results.broker import ExportEvent
 from emailmonitor.results.broker import process as export
@@ -27,6 +28,9 @@ from emailmonitor.runtime.authority import ServiceProcess, ServiceWork
 from emailmonitor.runtime.database import ServiceDatabase
 from emailmonitor.runtime.publisher import TestPublisherConfig
 from emailmonitor.runtime.signal_wake import SignalWakeState, register_signal_wake
+
+if TYPE_CHECKING:
+    from emailmonitor.runtime.controlled_channel import ControlledChannel
 
 
 class ServiceRuntimeConfig(BaseModel):
@@ -39,6 +43,9 @@ class ServiceRuntimeConfig(BaseModel):
     organization: UUID
     process: ServiceProcess
     lease_seconds: int = Field(default=30, ge=1, le=120)
+    profile: Literal["authored-html-service-reference", "controlled-xml-service-reference"] = (
+        "authored-html-service-reference"
+    )
 
     @model_validator(mode="after")
     def isolated(self) -> "ServiceRuntimeConfig":
@@ -94,20 +101,34 @@ def broker_application(config: ServiceRuntimeConfig) -> Any:
 class ServiceWorker:
     """Own one pool and one application; caller quiesces tasks before close."""
 
-    def __init__(self, config: ServiceRuntimeConfig) -> None:
+    channel: "ControlledChannel | None" = None
+
+    def __init__(
+        self, config: ServiceRuntimeConfig, *, controlled_channel: "ControlledChannel | None" = None
+    ) -> None:
         if config.process.kind != "worker":
             raise ValueError("Worker principal required")
+        if (config.profile == "controlled-xml-service-reference") != (
+            controlled_channel is not None
+        ):
+            raise ValueError("Explicit controlled profile and owned capability must agree")
+        self.channel = controlled_channel
         self.config = config
         self.signal_wake = SignalWakeState()
-        self.database = ServiceDatabase(config.database_url, config.process)
         try:
+            self.database = ServiceDatabase(config.database_url, config.process)
             self._initialize(config)
         except BaseException:
             try:
                 if hasattr(self, "application"):
                     self.application.close()
             finally:
-                self.database.engine.dispose()
+                try:
+                    if hasattr(self, "database"):
+                        self.database.engine.dispose()
+                finally:
+                    if self.channel is not None:
+                        self.channel.close()
             raise
 
     def _initialize(self, config: ServiceRuntimeConfig) -> None:
@@ -229,7 +250,13 @@ class ServiceWorker:
             scope.organization,
             event.model_dump(),
             seconds=self.config.lease_seconds,
+            executor_factory=self.executor,
         )
+
+    def executor(self, progress: Progress) -> ExecutionDispatcher:
+        if self.channel is None:
+            return ExecutionDispatcher(progress)
+        return ExecutionDispatcher(progress, self.channel, parser=self.channel.parse)
 
     def export(self, body: dict[str, object]) -> bool:
         if self.closed:
@@ -259,4 +286,8 @@ class ServiceWorker:
                 try:
                     self.application.close()
                 finally:
-                    self.database.engine.dispose()
+                    try:
+                        self.database.engine.dispose()
+                    finally:
+                        if self.channel is not None:
+                            self.channel.close()

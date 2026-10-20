@@ -21,11 +21,12 @@ if TYPE_CHECKING:
 ROOT = Path(__file__).resolve().parents[2]
 ALIAS = "emailmonitor-parser-diagnostic:local"
 MARKER = "synthetic-test-only"
-CONSUMER_SECONDS = {"application": 1200, "transport": 900}
-WRAPPER_SECONDS = {"application": 1200, "transport": 1200}
+CONSUMER_SECONDS = {"application": 1200, "transport": 900, "installed": 900}
+WRAPPER_SECONDS = {"application": 1200, "transport": 1200, "installed": 1200}
 MODES = {
     "application": ("bash", "scripts/check_tenant_foundation.sh"),
     "transport": ("bash", "scripts/packaging/check_xml_transport.sh"),
+    "installed": ("bash", "scripts/packaging/check_xml_installed.sh"),
 }
 
 
@@ -40,7 +41,12 @@ def require_context(environ: Mapping[str, str], mode: str) -> None:
         or environ.get("EM_REQUIRE_XML_INTEGRATION") != MARKER
         or any(
             environ.get(name)
-            for name in ("DOCKER_HOST", "DOCKER_CONTEXT", "DOCKER_TLS_VERIFY", "DOCKER_CERT_PATH")
+            for name in (
+                "DOCKER_HOST",
+                "DOCKER_CONTEXT",
+                "DOCKER_TLS_VERIFY",
+                "DOCKER_CERT_PATH",
+            )
         )
         or platform.system() != "Linux"
         or platform.machine() != "x86_64"
@@ -199,7 +205,7 @@ def run_consumer(
     }
     commands = (
         (MODES[mode],)
-        if mode == "application"
+        if mode in {"application", "installed"}
         else (MODES[mode] + ("transport",), MODES[mode] + ("operator",))
     )
     for arguments in commands:
@@ -380,7 +386,10 @@ def execute(mode: str, environ: Mapping[str, str]) -> None:
         image_id, receipt = prepare_image(runtime, owned)
         alias = OwnedAlias(owned, image_id, runtime.command)
         alias.install()
-        print(json.dumps({"xml_integration_prepared": receipt}, sort_keys=True), flush=True)
+        print(
+            json.dumps({"xml_integration_prepared": receipt}, sort_keys=True),
+            flush=True,
+        )
         alias.verify()
         run_consumer(mode, image_id, owned.owner, environ, alias.verify)
         alias.verify()

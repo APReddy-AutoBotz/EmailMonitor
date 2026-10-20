@@ -91,7 +91,7 @@ def alias_for(owned: FakeOwned) -> integration.OwnedAlias:
     return integration.OwnedAlias(owned, IMAGE, owned.command)  # type: ignore[arg-type]
 
 
-@pytest.mark.parametrize("mode", ["application", "transport"])
+@pytest.mark.parametrize("mode", ["application", "transport", "installed"])
 def test_ci_context_accepts_only_fixed_modes(mode: str) -> None:
     integration.require_context(ENV, mode)
 
@@ -294,7 +294,7 @@ class FakeConsumer:
         return self.code
 
 
-@pytest.mark.parametrize("mode,count", [("application", 1), ("transport", 2)])
+@pytest.mark.parametrize("mode,count", [("application", 1), ("transport", 2), ("installed", 1)])
 def test_fixed_consumers_stream_and_verify_each_gate(
     monkeypatch: pytest.MonkeyPatch, mode: str, count: int
 ) -> None:
@@ -325,7 +325,9 @@ def test_fixed_consumers_stream_and_verify_each_gate(
         assert [arguments[-1] for arguments, _ in commands] == ["transport", "operator"]
 
 
-@pytest.mark.parametrize("mode,budget", [("application", 1200), ("transport", 900)])
+@pytest.mark.parametrize(
+    "mode,budget", [("application", 1200), ("transport", 900), ("installed", 900)]
+)
 @pytest.mark.parametrize("kind", ["failed", "timeout", "interrupted"])
 def test_failed_consumer_is_stopped_before_propagating(
     monkeypatch: pytest.MonkeyPatch, kind: str, mode: str, budget: int
@@ -584,8 +586,12 @@ def test_private_sample_gate_is_separate_and_synthetic_only() -> None:
 
 
 def test_closed_aggregate_budgets_preserve_cleanup_reserve() -> None:
-    assert integration.CONSUMER_SECONDS == {"application": 1200, "transport": 900}
-    assert integration.WRAPPER_SECONDS == {"application": 1200, "transport": 1200}
+    assert integration.CONSUMER_SECONDS == {"application": 1200, "transport": 900, "installed": 900}
+    assert integration.WRAPPER_SECONDS == {
+        "application": 1200,
+        "transport": 1200,
+        "installed": 1200,
+    }
     source = Path(integration.__file__).read_text()
     assert "signal.alarm(180)" in source
     assert source.count("process.wait(timeout=5)") == 2

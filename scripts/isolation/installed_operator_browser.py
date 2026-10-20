@@ -390,130 +390,149 @@ async def main() -> None:
             await login()
             if not callback_index_seen or 303 not in statuses:
                 raise RuntimeError("Actual callback navigation missing")
-            checkpoint("source_review")
-            await activate(page, page.get_by_role("button", name="Sources", exact=True))
-            await expect(
-                page.get_by_role("combobox", name="Synthetic policy profile", exact=True)
-            ).to_have_value("html")
-            await activate(
-                page, page.get_by_role("button", name="Request synthetic source review", exact=True)
-            )
-            await activate(
-                page, page.get_by_role("button", name="Approve synthetic policy", exact=True)
-            )
-            await activate(
-                page,
-                page.get_by_role("button", name="Confirm approve synthetic policy", exact=True),
-            )
-            await page.get_by_role("dialog").wait_for(state="hidden")
-            await page.get_by_text("Current synthetic policy", exact=True).wait_for()
-            checkpoint("keyword_plan")
-            await activate(page, page.get_by_role("button", name="New extraction", exact=True))
-            await type_text(page, page.get_by_label("Keyword", exact=True), "Myocardial Infarction")
-            await activate(
-                page, page.get_by_role("button", name="Create and validate plan", exact=True)
-            )
-            await page.get_by_role("region", name="Server source plan").wait_for()
-            await activate(page, page.get_by_role("button", name="Launch extraction", exact=True))
-            job = (
-                await page.get_by_role(
-                    "heading", name=re.compile(r"^Job [0-9a-f-]{36}$")
-                ).inner_text()
-            ).removeprefix("Job ")
-            checkpoint("keyword_worker")
-            # Host shortens only this browser-created session to a future deadline,
-            # waits for elapsed expiry, then releases the independent publisher.
-            await channel.request({"kind": "control", "action": "publish"})
-            # A fresh navigation avoids racing the UI's simultaneous expired-session
-            # notification. The new document must obtain its own real 401/session.
-            await page.goto(api, wait_until="domcontentloaded")
-            await page.get_by_role(
-                "link", name="Sign in with configured identity", exact=True
-            ).wait_for()
-            await login()
-            await activate(page, page.get_by_role("button", name="Jobs", exact=True))
-            await activate(page, page.get_by_role("button", name="Open job " + job, exact=True))
-            # Initial progress fetch and real scoped SSE update this rendered
-            # status. Repeated global refreshes would overlap seven resource
-            # requests while their previous relay calls are still outstanding.
-            async with asyncio.timeout(55):
-                await page.get_by_text("completed partial", exact=True).wait_for(
-                    state="visible", timeout=55000
-                )
-            await channel.request({"kind": "control", "action": "wait_jobs"})
-            checkpoint("evidence_review")
-            await activate(page, page.get_by_role("button", name="Contacts", exact=True))
-            await activate(
-                page, page.get_by_role("button", name="Evidence and review", exact=True).first
-            )
-            await page.get_by_role(
-                "heading", name="Actual retained citation", exact=True
-            ).wait_for()
-            await type_text(
-                page, page.get_by_label("Reason", exact=True), "Installed synthetic evidence review"
-            )
-            await activate(page, page.get_by_role("button", name="Save review", exact=True))
-            await page.get_by_role("dialog").wait_for(state="hidden")
-            checkpoint("export_preview")
-            await activate(page, page.get_by_role("button", name="Exports", exact=True))
-            for index, format_name in enumerate(("xlsx", "csv")):
-                await select_index(page, page.get_by_label(re.compile(r"^Format")), index)
-                if format_name == "csv":
-                    outcomes = page.get_by_role(
-                        "checkbox", name=re.compile(r"^Include separate article-outcome dataset")
-                    )
-                    await focus(page, outcomes)
-                    await page.keyboard.press("Space")
-                    await expect(outcomes).not_to_be_checked()
+            controlled_xml = setup.get("journey") == "installed-controlled-xml"
+            if controlled_xml:
+                from installed_xml_browser import xml_journey
+
+                job = await xml_journey(page, channel, setup, checkpoint, login, download_seen)
+            else:
+                checkpoint("source_review")
+                await activate(page, page.get_by_role("button", name="Sources", exact=True))
+                await expect(
+                    page.get_by_role("combobox", name="Synthetic policy profile", exact=True)
+                ).to_have_value("html")
                 await activate(
                     page,
-                    page.get_by_role("button", name="Preview eligible export counts", exact=True),
+                    page.get_by_role("button", name="Request synthetic source review", exact=True),
                 )
-                await page.get_by_role("region", name="Current export preview").wait_for()
                 await activate(
-                    page, page.get_by_role("button", name="Create asynchronous export", exact=True)
+                    page, page.get_by_role("button", name="Approve synthetic policy", exact=True)
                 )
-                row = page.get_by_role("row").filter(has_text=" · " + format_name)
-                await row.wait_for()
-                async with asyncio.timeout(30):
-                    while not await row.get_by_role(
-                        "button", name="Download", exact=True
-                    ).is_enabled():
-                        await asyncio.sleep(0.4)
-                        await activate(
-                            page,
-                            page.get_by_role("button", name="Refresh current view", exact=True),
+                await activate(
+                    page,
+                    page.get_by_role("button", name="Confirm approve synthetic policy", exact=True),
+                )
+                await page.get_by_role("dialog").wait_for(state="hidden")
+                await page.get_by_text("Current synthetic policy", exact=True).wait_for()
+                checkpoint("keyword_plan")
+                await activate(page, page.get_by_role("button", name="New extraction", exact=True))
+                await type_text(
+                    page, page.get_by_label("Keyword", exact=True), "Myocardial Infarction"
+                )
+                await activate(
+                    page, page.get_by_role("button", name="Create and validate plan", exact=True)
+                )
+                await page.get_by_role("region", name="Server source plan").wait_for()
+                await activate(
+                    page, page.get_by_role("button", name="Launch extraction", exact=True)
+                )
+                job = (
+                    await page.get_by_role(
+                        "heading", name=re.compile(r"^Job [0-9a-f-]{36}$")
+                    ).inner_text()
+                ).removeprefix("Job ")
+                checkpoint("keyword_worker")
+                # Host shortens only this browser-created session to a future deadline,
+                # waits for elapsed expiry, then releases the independent publisher.
+                await channel.request({"kind": "control", "action": "publish"})
+                # A fresh navigation avoids racing the UI's simultaneous expired-session
+                # notification. The new document must obtain its own real 401/session.
+                await page.goto(api, wait_until="domcontentloaded")
+                await page.get_by_role(
+                    "link", name="Sign in with configured identity", exact=True
+                ).wait_for()
+                await login()
+                await activate(page, page.get_by_role("button", name="Jobs", exact=True))
+                await activate(page, page.get_by_role("button", name="Open job " + job, exact=True))
+                # Initial progress fetch and real scoped SSE update this rendered
+                # status. Repeated global refreshes would overlap seven resource
+                # requests while their previous relay calls are still outstanding.
+                async with asyncio.timeout(55):
+                    await page.get_by_text("completed partial", exact=True).wait_for(
+                        state="visible", timeout=55000
+                    )
+                await channel.request({"kind": "control", "action": "wait_jobs"})
+                checkpoint("evidence_review")
+                await activate(page, page.get_by_role("button", name="Contacts", exact=True))
+                await activate(
+                    page, page.get_by_role("button", name="Evidence and review", exact=True).first
+                )
+                await page.get_by_role(
+                    "heading", name="Actual retained citation", exact=True
+                ).wait_for()
+                await type_text(
+                    page,
+                    page.get_by_label("Reason", exact=True),
+                    "Installed synthetic evidence review",
+                )
+                await activate(page, page.get_by_role("button", name="Save review", exact=True))
+                await page.get_by_role("dialog").wait_for(state="hidden")
+                checkpoint("export_preview")
+                await activate(page, page.get_by_role("button", name="Exports", exact=True))
+                for index, format_name in enumerate(("xlsx", "csv")):
+                    await select_index(page, page.get_by_label(re.compile(r"^Format")), index)
+                    if format_name == "csv":
+                        outcomes = page.get_by_role(
+                            "checkbox",
+                            name=re.compile(r"^Include separate article-outcome dataset"),
                         )
-                download_seen.clear()
-                await activate(page, row.get_by_role("button", name="Download", exact=True))
-                await asyncio.wait_for(download_seen.wait(), timeout=5)
-            await channel.request({"kind": "control", "action": "wait_exports"})
-            checkpoint("url_plan")
-            await activate(page, page.get_by_role("button", name="New extraction", exact=True))
-            await activate(page, page.get_by_role("button", name="URL", exact=True))
-            await type_text(
-                page,
-                page.get_by_label("Search-results or article URL", exact=True),
-                "https://synthetic.publisher.example/no-contact.html",
-            )
-            await activate(
-                page, page.get_by_role("button", name="Create and validate plan", exact=True)
-            )
-            await page.get_by_role("region", name="Server source plan").wait_for()
-            await activate(page, page.get_by_role("button", name="Launch extraction", exact=True))
-            checkpoint("url_worker")
-            async with asyncio.timeout(30):
-                await page.get_by_text("completed", exact=True).wait_for(
-                    state="visible", timeout=30000
+                        await focus(page, outcomes)
+                        await page.keyboard.press("Space")
+                        await expect(outcomes).not_to_be_checked()
+                    await activate(
+                        page,
+                        page.get_by_role(
+                            "button", name="Preview eligible export counts", exact=True
+                        ),
+                    )
+                    await page.get_by_role("region", name="Current export preview").wait_for()
+                    await activate(
+                        page,
+                        page.get_by_role("button", name="Create asynchronous export", exact=True),
+                    )
+                    row = page.get_by_role("row").filter(has_text=" · " + format_name)
+                    await row.wait_for()
+                    async with asyncio.timeout(30):
+                        while not await row.get_by_role(
+                            "button", name="Download", exact=True
+                        ).is_enabled():
+                            await asyncio.sleep(0.4)
+                            await activate(
+                                page,
+                                page.get_by_role("button", name="Refresh current view", exact=True),
+                            )
+                    download_seen.clear()
+                    await activate(page, row.get_by_role("button", name="Download", exact=True))
+                    await asyncio.wait_for(download_seen.wait(), timeout=5)
+                await channel.request({"kind": "control", "action": "wait_exports"})
+                checkpoint("url_plan")
+                await activate(page, page.get_by_role("button", name="New extraction", exact=True))
+                await activate(page, page.get_by_role("button", name="URL", exact=True))
+                await type_text(
+                    page,
+                    page.get_by_label("Search-results or article URL", exact=True),
+                    "https://synthetic.publisher.example/no-contact.html",
                 )
-            await page.get_by_text(
-                "1 of 1 discovered article units terminal", exact=True
-            ).wait_for()
-            outcomes = page.get_by_role("table", name="Actual article outcomes and failures")
-            await expect(outcomes.get_by_role("row")).to_have_count(2)
-            await expect(
-                outcomes.get_by_role("row").nth(1).locator("td:nth-child(2), td:nth-child(3)")
-            ).to_have_text(["no contact", "no contact"])
+                await activate(
+                    page, page.get_by_role("button", name="Create and validate plan", exact=True)
+                )
+                await page.get_by_role("region", name="Server source plan").wait_for()
+                await activate(
+                    page, page.get_by_role("button", name="Launch extraction", exact=True)
+                )
+                checkpoint("url_worker")
+                async with asyncio.timeout(30):
+                    await page.get_by_text("completed", exact=True).wait_for(
+                        state="visible", timeout=30000
+                    )
+                await page.get_by_text(
+                    "1 of 1 discovered article units terminal", exact=True
+                ).wait_for()
+                outcomes = page.get_by_role("table", name="Actual article outcomes and failures")
+                await expect(outcomes.get_by_role("row")).to_have_count(2)
+                await expect(
+                    outcomes.get_by_role("row").nth(1).locator("td:nth-child(2), td:nth-child(3)")
+                ).to_have_text(["no contact", "no contact"])
             checkpoint("readonly_role")
             organization = page.get_by_role("combobox", name="Active organization", exact=True)
             values = await organization.locator("option").evaluate_all(
@@ -524,6 +543,12 @@ async def main() -> None:
             await page.get_by_text(
                 "No jobs yet. Create a bounded extraction plan.", exact=True
             ).wait_for()
+            if controlled_xml:
+                tenant_body = await page.locator("body").inner_text()
+                if any(
+                    address in tenant_body for address in ("Second@example.org", "beta@example.org")
+                ):
+                    raise RuntimeError("Installed XML contacts survived tenant switch")
             # Read-only adversarial browser probe complements the keyboard switch:
             # a tenant-B path cannot return the known tenant-A job.
             denied = await page.evaluate(
@@ -563,14 +588,23 @@ async def main() -> None:
                     {
                         "kind": "result",
                         "diagnostic": "synthetic-operator-ui",
-                        "journey": "installed-authored-service",
+                        "journey": (
+                            "installed-controlled-xml"
+                            if controlled_xml
+                            else "installed-authored-service"
+                        ),
+                        "direct_article_url": setup.get("direct_article_url", False),
                         "keyboard": True,
                         "actual_callback": callback_index_seen,
                         "cookie_injection": False,
                         **redirects.receipt(),
                         "source_policy_review": True,
                         "review": True,
-                        "url_no_contact": True,
+                        **(
+                            {"url_no_contact": False}
+                            if controlled_xml
+                            else {"url_no_contact": True}
+                        ),
                         "formats": ["xlsx", "csv"],
                         "tenant_switch": True,
                         "foreign_tenant_job_denied": True,

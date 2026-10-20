@@ -409,3 +409,14 @@ revocation, export separation and contention; `test_service_runtime_broker.py`
 covers installed worker/recovery and confirmed publisher races. Pure contract,
 packaging and TLS tests remain distinct from actual service acceptance. All actual
 service-dependent skips are reported as pending evidence, not satisfied criteria.
+
+## Installed controlled XML candidate
+
+EM-012/015/017 extends the installed reference workflow under FR-003/004/005/006,
+FR-010/015/016/017/020/021/022/024/025/027/029/030. The closed profile, bounded
+capability protocol, immutable parser owner and daemon-exposure refusal unit
+checks are not actual infrastructure acceptance. Required keyword/direct URL
+keyboard review/export and post-observation crash recovery run in the installed
+XML consumer of the existing owned packaging wrapper; inherited tenant,
+revocation, source, parser, browser and cleanup gates remain required.
+[Current evidence and gaps](../reports/em017-installed-controlled-xml-validation.md).

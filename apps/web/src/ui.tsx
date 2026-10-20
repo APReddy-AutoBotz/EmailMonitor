@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { ApiError, ApiScope, errorMessage } from './client'
+import type { RuntimeProfile } from './runtimeProfile'
 import { scheduleSearch } from './search'
 export type Resource<T> = { data?: T; loading: boolean; error?: string; stale?: boolean }
 export function useResource<T>(scope: ApiScope, path: string | null, revision = 0): Resource<T> {
@@ -45,4 +46,4 @@ export const truth = (value: boolean | null) => value === true ? 'Observed' : va
 export const uid = (value: string) => encodeURIComponent(value)
 export type Action = (label: string, work: () => Promise<unknown>, success?: string) => Promise<void>
 export type Confirm = (title: string, detail: string, work: () => Promise<unknown>) => void
-export type Context = { scope: ApiScope; revision: number; refresh: () => void; act: Action; confirm: Confirm; can: (capability: string) => boolean; identity: string; zone: string; openJob: (id: string) => void }
+export type Context = { runtimeProfile?: RuntimeProfile; scope: ApiScope; revision: number; refresh: () => void; act: Action; confirm: Confirm; can: (capability: string) => boolean; identity: string; zone: string; openJob: (id: string) => void }
