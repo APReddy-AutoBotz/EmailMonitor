@@ -366,3 +366,12 @@ result until cleanup is verified. Public output is limited to closed categories
 and bounded counts. Actual one-sample compatibility remains pending, and counts do
 not prove author/contact correctness. [Evidence](../reports/elsevier-one-sample-validation.md)
 records the separate pure and actual gates and their limitations.
+
+## Private affiliation diagnostic candidate
+
+AT-09/AT-10/AT-17 and privacy controls map to authored affiliation counterfactuals,
+full guest parser/provenance validation, strict bounded fixed-counter output and
+separate diagnostic admission/worker isolation. Existing one-shot acquisition and
+association remain unchanged. See [design](63-affiliation-diagnostic-design.md)
+and [validation](../reports/affiliation-diagnostic-validation.md); actual isolated
+synthetic acceptance and final exact-tree gates remain required.

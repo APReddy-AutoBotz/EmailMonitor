@@ -337,3 +337,10 @@ Add a trusted Python-only executor factory to the normal claimed Celery path, re
 - Own one finite synthetic publisher connection/channel while reusing existing confirmed JSON task publication and durable outbox replay.
 - Test partial publication, uncertain SQL marking, cleanup and caller-resource survival; consume the helper in the existing controlled operator journey.
 - No migration, new service identity, supervisor, deployment or real-source activation. [Validation](reports/em017g-validation.md).
+
+## 2026-10-20 — Private affiliation diagnostic candidate
+
+- Reproduce conservative affiliation selection with authored synthetic counterfactuals.
+- Add an explicit private fixed-counter diagnostic candidate, separate from normal
+  observations and one-shot acquisition; see the design and validation report.
+- Real-sample cause remains unproven; no association rule is relaxed.

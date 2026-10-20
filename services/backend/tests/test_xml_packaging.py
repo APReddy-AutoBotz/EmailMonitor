@@ -37,7 +37,7 @@ def xml_inputs(tmp_path: Path) -> Path:
 
 def test_explicit_worker_entrypoint_import_closure() -> None:
     files = set(xml_artifacts.XML_FILES)
-    assert len(files) == 33
+    assert len(files) == 35
     assert "parsing/xml_worker.py" in files
     assert "fetching/fixture.py" in files  # Shared helper code is deliberately disclosed.
     assert "api.py" not in files
@@ -53,6 +53,7 @@ def test_explicit_worker_entrypoint_import_closure() -> None:
 import json, pathlib, sys
 sys.path.insert(0, sys.argv[1])
 import emailmonitor.parsing.xml_worker
+import emailmonitor.parsing.affiliation_diagnostic_worker
 import emailmonitor
 root = pathlib.Path(emailmonitor.__file__).parent
 print(json.dumps(sorted(str(pathlib.Path(module.__file__).relative_to(root))
