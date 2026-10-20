@@ -344,3 +344,11 @@ Add a trusted Python-only executor factory to the normal claimed Celery path, re
 - Add an explicit private fixed-counter diagnostic candidate, separate from normal
   observations and one-shot acquisition; see the design and validation report.
 - Real-sample cause remains unproven; no association rule is relaxed.
+
+## 2026-10-20 — One-sample fixed-counter diagnostic candidate
+
+- Add a separately scoped initial-event composer for the same immutable article,
+  with diagnostic-purpose rights, exact PR44 controls and redacted cleanup gating.
+- Preserve original acquisition controls and reviewed diagnostic/parser source.
+- Track synthetic validation and the single authorized actual attempt in the
+  [report](reports/one-sample-affiliation-diagnostic-validation.md).
