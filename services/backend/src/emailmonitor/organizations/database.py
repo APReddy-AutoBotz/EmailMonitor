@@ -1,9 +1,12 @@
 """Parameterized, transaction-local context with bounded identity bootstrap."""
 
+from __future__ import annotations
+
 import hashlib
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 from sqlalchemy import Connection, Engine, create_engine, text
@@ -14,6 +17,9 @@ from emailmonitor.lifecycle.errors import lifecycle_denied
 from emailmonitor.organizations.roles import ROLE_CAPABILITIES, Capability, Role
 from emailmonitor.progress.binding import apply as apply_work_binding
 
+if TYPE_CHECKING:
+    from emailmonitor.runtime.authority import ServiceWork
+
 
 class AuthorizationDenied(Exception):
     pass
@@ -23,7 +29,9 @@ class RevisionConflict(Exception):
     pass
 
 
-def digest(value: str) -> str:
+def digest(value: str | ServiceWork) -> str:
+    if type(value) is not str:
+        raise AuthorizationDenied()
     return hashlib.sha256(value.encode()).hexdigest()
 
 
@@ -48,7 +56,11 @@ class _ConnectionPool:
                     pg_has_role(current_user,'emailmonitor_owner','MEMBER') OR
                     pg_has_role(current_user,'emailmonitor_owner','SET') OR
                     pg_has_role(current_user,:forbidden,'MEMBER') OR
-                    pg_has_role(current_user,:forbidden,'SET') FROM pg_roles
+                    pg_has_role(current_user,:forbidden,'SET') OR EXISTS(
+                    SELECT 1 FROM pg_roles service_role WHERE service_role.rolname
+                    IN ('emailmonitor_worker','emailmonitor_publisher') AND (
+                    pg_has_role(current_user,service_role.oid,'MEMBER') OR
+                    pg_has_role(current_user,service_role.oid,'SET'))) FROM pg_roles
                     WHERE rolname=current_user"""),
                     {"forbidden": forbidden},
                 ).scalar_one()
@@ -92,11 +104,13 @@ class Database(_ConnectionPool):
     @contextmanager
     def tenant(
         self,
-        token: str,
+        token: str | ServiceWork,
         organization_id: UUID,
         capability: Capability,
         allow_inactive: bool = False,
     ) -> Iterator[tuple[Connection, TenantContext]]:
+        if type(token) is not str:
+            raise AuthorizationDenied()
         with self.transaction() as connection:
             row = (
                 connection.execute(
@@ -121,6 +135,8 @@ class Database(_ConnectionPool):
                 text(
                     "SELECT set_config('emailmonitor.session_hash',:token,true), "
                     "set_config('emailmonitor.organization_id',:org,true), "
+                    "set_config('emailmonitor.service_delegation','',true), "
+                    "set_config('emailmonitor.service_kind','',true), "
                     "set_config('emailmonitor.lifecycle_recovery',:recovery,true)"
                 ),
                 {

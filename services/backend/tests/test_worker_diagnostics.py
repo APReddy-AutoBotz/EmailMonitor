@@ -1,7 +1,6 @@
 """Pure opt-in fixture diagnostics preserve worker behavior and reveal no task data."""
 
 import json
-import multiprocessing
 from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
@@ -33,6 +32,7 @@ from operator_ui_protocol import (
     WORKER_STAGES,
     completion_worker_snapshot,
 )
+from spawn_probe import run_spawn_probe
 
 ROOT = Path(__file__).resolve().parents[3]
 NAMESPACE = "em-fixture-diagnostics"
@@ -398,18 +398,7 @@ def _check_worker_config(enabled: bool) -> None:
 
 @pytest.mark.parametrize("enabled", [False, True])
 def test_fixture_worker_diagnostics_are_explicitly_opt_in_and_queue_scoped(enabled: bool) -> None:
-    child = multiprocessing.get_context("spawn").Process(
-        target=_check_worker_config, args=(enabled,)
-    )
-    child.start()
-    try:
-        child.join(timeout=10)
-        assert child.exitcode == 0
-    finally:
-        if child.is_alive():
-            child.kill()
-            child.join(timeout=5)
-        child.close()
+    run_spawn_probe(_check_worker_config, enabled)
 
 
 def test_diagnostic_wire_parity_and_existing_ui_controls_are_unchanged() -> None:
@@ -607,52 +596,19 @@ def _check_published_delivery(
 @pytest.mark.parametrize("kind", ["discover", "article"])
 @pytest.mark.parametrize("outcome", ["success", "empty", "claim_error", "process_error"])
 def test_real_published_routing_and_celery_request_trace_signals(kind: str, outcome: str) -> None:
-    child = multiprocessing.get_context("spawn").Process(
-        target=_check_published_delivery, args=(kind, outcome)
-    )
-    child.start()
-    try:
-        child.join(timeout=10)
-        assert child.exitcode == 0
-    finally:
-        if child.is_alive():
-            child.kill()
-            child.join(timeout=5)
-        child.close()
+    run_spawn_probe(_check_published_delivery, kind, outcome)
 
 
 @pytest.mark.parametrize("kind", ["discover", "article"])
 @pytest.mark.parametrize("outcome", ["claim_error", "process_error"])
 @pytest.mark.parametrize("failure_kind", ["fetch", "isolation", "unknown", "unpickleable"])
 def test_real_trace_failure_metadata(kind: str, outcome: str, failure_kind: str) -> None:
-    child = multiprocessing.get_context("spawn").Process(
-        target=_check_published_delivery, args=(kind, outcome, failure_kind)
-    )
-    child.start()
-    try:
-        child.join(timeout=10)
-        assert child.exitcode == 0
-    finally:
-        if child.is_alive():
-            child.kill()
-            child.join(timeout=5)
-        child.close()
+    run_spawn_probe(_check_published_delivery, kind, outcome, failure_kind)
 
 
 @pytest.mark.parametrize("outcome", ["claim_error", "process_error"])
 def test_real_trace_failure_has_no_diagnostics_when_disabled(outcome: str) -> None:
-    child = multiprocessing.get_context("spawn").Process(
-        target=_check_published_delivery, args=("article", outcome, "fetch", False)
-    )
-    child.start()
-    try:
-        child.join(timeout=10)
-        assert child.exitcode == 0
-    finally:
-        if child.is_alive():
-            child.kill()
-            child.join(timeout=5)
-        child.close()
+    run_spawn_probe(_check_published_delivery, "article", outcome, "fetch", False)
 
 
 @pytest.mark.parametrize("kind,label", FAILURE_CLASSES)

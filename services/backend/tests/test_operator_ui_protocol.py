@@ -311,7 +311,7 @@ def test_owned_channel_refuses_excess_waiters_and_cleans_cancelled_admissions() 
     asyncio.run(run())
 
 
-def test_owned_channel_admission_and_reply_share_one_deadline() -> None:
+def test_owned_channel_concurrent_timeouts_release_all_capacity() -> None:
     import asyncio
 
     async def run() -> None:
@@ -325,8 +325,59 @@ def test_owned_channel_admission_and_reply_share_one_deadline() -> None:
             and channel.capacity._value == 8
             and channel.admitted == 0
         )
-        # The admission timeout did not consume another request identifier.
-        assert channel.identifier == 8
+        # Each request has its own deadline; the ninth may acquire a freed slot.
+        assert channel.identifier in {8, 9}
+
+    asyncio.run(run())
+
+
+def test_owned_channel_admission_timeout_does_not_allocate_identifier() -> None:
+    async def run() -> None:
+        channel = _owned_channel(0.03)
+        for _ in range(8):
+            await channel.capacity.acquire()
+        try:
+            with pytest.raises(TimeoutError):
+                await channel.request({"kind": "control"})
+            assert channel.identifier == 0 and not channel.retired
+            assert not channel.pending and channel.waiting == 0 and channel.admitted == 0
+            assert channel.capacity._value == 0
+        finally:
+            for _ in range(8):
+                channel.capacity.release()
+        assert channel.capacity._value == 8
+
+    asyncio.run(run())
+
+
+def test_owned_channel_reply_uses_remaining_admission_budget() -> None:
+    from types import SimpleNamespace
+
+    async def run() -> None:
+        channel = _owned_channel(0.03)
+        loop = asyncio.get_running_loop()
+        clock = iter([100.0, 100.02])
+        timeouts: list[float] = []
+
+        async def wait_for(awaitable: Any, *, timeout: float) -> Any:
+            timeouts.append(timeout)
+            if len(timeouts) == 1:
+                return await awaitable
+            awaitable.cancel()
+            raise TimeoutError
+
+        channel.request.__func__.__globals__["asyncio"] = SimpleNamespace(
+            get_running_loop=lambda: SimpleNamespace(
+                time=lambda: next(clock), create_future=loop.create_future
+            ),
+            wait_for=wait_for,
+        )
+        with pytest.raises(TimeoutError):
+            await channel.request({"kind": "control"})
+        assert timeouts == pytest.approx([0.03, 0.01])
+        assert channel.identifier == 1
+        assert not channel.pending and channel.waiting == 0 and channel.admitted == 0
+        assert channel.capacity._value == 8
 
     asyncio.run(run())
 

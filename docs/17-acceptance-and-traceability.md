@@ -399,3 +399,13 @@ The actual XML pipeline compares retained reasons before and after review.
 or mismatched reads. Required keyboard operator CI holds and aborts quality reads
 across refresh and checks XML review presentation. [Runbook](65-observation-quality-review.md)
 records the contact-row reachability limit and unchanged storage/parser contracts.
+
+## Bounded durable service reference candidate
+
+ADR 0006 and document 66 map the EM-017 service runtime to AT-01, AT-21/22,
+AT-24/25, AT-29/30 and SEC-TENANT, SEC-SECRETS/TLS, REL-REPLAY, REL-ARTIFACT.
+`test_service_authority_tenant.py` covers actual service SQL identity, exact scope,
+revocation, export separation and contention; `test_service_runtime_broker.py`
+covers installed worker/recovery and confirmed publisher races. Pure contract,
+packaging and TLS tests remain distinct from actual service acceptance. All actual
+service-dependent skips are reported as pending evidence, not satisfied criteria.

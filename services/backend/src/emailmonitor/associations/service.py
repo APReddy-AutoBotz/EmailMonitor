@@ -22,8 +22,9 @@ from emailmonitor.discovery.service import Discovery
 from emailmonitor.extraction.html import ArticleObservation
 from emailmonitor.extraction.service import Extraction
 from emailmonitor.extraction.xml_retained import RetainedXml
-from emailmonitor.organizations.database import AuthorizationDenied, Database, RevisionConflict
+from emailmonitor.organizations.database import AuthorizationDenied, RevisionConflict
 from emailmonitor.organizations.roles import Capability
+from emailmonitor.runtime.access import WorkAuthority, WorkDatabase
 
 RECORDS = {
     "authors": "association_authors",
@@ -57,7 +58,7 @@ def translate(error: DBAPIError) -> NoReturn:
 
 
 class Associations:
-    def __init__(self, database: Database, token: str, settings: Settings) -> None:
+    def __init__(self, database: WorkDatabase, token: WorkAuthority, settings: Settings) -> None:
         self.database, self.token, self.settings = database, token, settings
         self.discovery = Discovery(database, token, settings)
         self.extraction = Extraction(database, token, settings)

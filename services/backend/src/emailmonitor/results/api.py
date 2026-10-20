@@ -20,6 +20,7 @@ from emailmonitor.results.models import (
     OutcomePage,
 )
 from emailmonitor.results.service import Results
+from emailmonitor.runtime.delegation import ServiceBindings
 
 
 class Revocation(BaseModel):
@@ -32,12 +33,13 @@ def result_router(
     token: Callable[[Request], str],
     csrf: Callable[[Request], str],
     settings: Settings,
+    bindings: ServiceBindings | None = None,
 ) -> APIRouter:
     router = APIRouter()
 
     def service(session: str) -> Results:
         try:
-            return Results(database, session, settings)
+            return Results(database, session, settings, bindings=bindings)
         except FetchDenied as error:
             raise HTTPException(404, "Resource unavailable") from error
 

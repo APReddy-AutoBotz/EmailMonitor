@@ -532,3 +532,15 @@ receipts remain separate. No real sample was acquired locally.
 ### Additive article-quality review view (2026-10-20)
 
 The EM-010/EM-012 evidence drawer now has a separately versioned, current-authorized retained article-quality read view. It displays fixed XML reasons and explicitly leaves missing affiliations unobserved after author-email acceptance. HTML reason availability is reported honestly. Existing stored Bundle identity, parser/diagnostic versions, replay and export contracts are preserved. See [scope, compatibility and validation](65-observation-quality-review.md). This entry records implementation scope; exact-head CI receipts remain required before acceptance. Zero-candidate article-wide UX and production deployment are not claimed.
+
+### EM-017 bounded durable service runtime (2026-10-20, candidate)
+
+The [service reference runtime](66-durable-service-reference-runtime.md) adds
+independent API/web, worker and finite publisher entrypoints, explicit exact-resource
+service delegations and additive migration 0014. Natural human-session expiry and
+explicit revocation have separate, tested contract semantics; no persistent live
+access is created. HTML-only reference dispatch is explicit. Actual disposable
+SQL/broker, migration equivalence, installed keyboard operator and full exact-head
+CI acceptance remain pending. Local fixture/package/TLS checks do not establish
+production readiness. Legacy restore refuses service-authority state until its
+revocation seal is supported; downgrade is forward repair only.

@@ -239,4 +239,9 @@ def test_new_composer_preserves_original_one_shot_guest_parser_and_gates(
 def test_new_workflow_is_additional_to_all_seven_synthetic_gates_and_original_one_shot() -> None:
     existing = {Path(name).name for name in PRESERVED_BOUNDARIES if name.startswith(".github/")}
     assert len(existing) == 8
-    assert {path.name for path in WORKFLOW.parent.glob("*.yml")} == existing | {WORKFLOW.name}
+    # Later runtime acceptance is additive; every original frozen boundary above
+    # remains byte-for-byte unchanged, including both one-shot controls.
+    assert {path.name for path in WORKFLOW.parent.glob("*.yml")} == existing | {
+        WORKFLOW.name,
+        "service-runtime.yml",
+    }

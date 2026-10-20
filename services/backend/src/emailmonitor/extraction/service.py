@@ -27,15 +27,16 @@ from emailmonitor.fetching.fixture import (
 from emailmonitor.fetching.safety import classify_url
 from emailmonitor.jobs.ledger import Ledger
 from emailmonitor.jobs.models import JobRequest
-from emailmonitor.organizations.database import AuthorizationDenied, Database
+from emailmonitor.organizations.database import AuthorizationDenied
 from emailmonitor.organizations.roles import Capability
 from emailmonitor.progress.binding import matches as execution_matches
+from emailmonitor.runtime.access import WorkAuthority, WorkDatabase
 from emailmonitor.sources.access import policy_decision
 from emailmonitor.sources.policy import Evaluation, Operation, PolicyProposal
 
 
 class Extraction:
-    def __init__(self, database: Database, token: str, settings: Settings) -> None:
+    def __init__(self, database: WorkDatabase, token: WorkAuthority, settings: Settings) -> None:
         self.discovery = Discovery(database, token, settings)
         self.database, self.token, self.settings = database, token, settings
 

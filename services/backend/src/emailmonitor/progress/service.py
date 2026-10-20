@@ -17,11 +17,13 @@ from emailmonitor.discovery.service import Discovery
 from emailmonitor.discovery.state import DiscoveryState
 from emailmonitor.extraction.service import Extraction
 from emailmonitor.fetching.fixture import require_fixture
-from emailmonitor.organizations.database import AuthorizationDenied, Database, RevisionConflict
+from emailmonitor.organizations.database import AuthorizationDenied, RevisionConflict
 from emailmonitor.organizations.roles import Capability
 from emailmonitor.progress.binding import Lease, bound
 from emailmonitor.progress.models import Event, Item, Snapshot
 from emailmonitor.progress.state import Outcome, counts, percentage
+from emailmonitor.runtime.access import WorkAuthority, WorkDatabase
+from emailmonitor.runtime.delegation import ServiceBindings
 
 
 def row_pairs[Value](rows: Result[str, Value]) -> dict[str, Value]:
@@ -60,9 +62,17 @@ class Work:
 
 
 class Progress:
-    def __init__(self, database: Database, token: str, settings: Settings) -> None:
+    def __init__(
+        self,
+        database: WorkDatabase,
+        token: WorkAuthority,
+        settings: Settings,
+        *,
+        bindings: ServiceBindings | None = None,
+    ) -> None:
         require_fixture(settings)
         self.database, self.token, self.settings = database, token, settings
+        self.bindings = bindings
         self.discovery = Discovery(database, token, settings)
         self.extraction = Extraction(database, token, settings)
         self.associations = Associations(database, token, settings)
@@ -187,6 +197,8 @@ SELECT emailmonitor.execution_start(:org, :job, :revision, :event)
 """),
                 {"org": org, "job": job, "revision": revision, "event": uuid4()},
             )
+            if self.bindings is not None:
+                self.bindings.issue(c, org, job, "extraction")
         return self.snapshot(org, job)
 
     def control(
@@ -199,6 +211,8 @@ SELECT emailmonitor.execution_control(:org, :job, :revision, :action, :event)
 """),
                 {"org": org, "job": job, "revision": revision, "action": action, "event": uuid4()},
             )
+            if action == "resume" and self.bindings is not None:
+                self.bindings.issue(c, org, job, "extraction")
 
     def retry(self, org: UUID, job: UUID, revision: int) -> UUID:
         continuation = uuid4()
@@ -213,6 +227,8 @@ SELECT emailmonitor.execution_control(:org, :job, :revision, :action, :event)
                     "event": uuid4(),
                 },
             ).scalar_one()
+            if self.bindings is not None and result == continuation:
+                self.bindings.issue(c, org, result, "extraction")
         return result
 
     def pending(self, org: UUID) -> list[dict[str, object]]:

@@ -11,8 +11,9 @@ from sqlalchemy.exc import DBAPIError
 from emailmonitor.administration.models import Configuration, ConfigurationUpdate, ResourceUsage
 from emailmonitor.config import Settings
 from emailmonitor.fetching.fixture import require_fixture
-from emailmonitor.organizations.database import AuthorizationDenied, Database
+from emailmonitor.organizations.database import AuthorizationDenied
 from emailmonitor.organizations.roles import Capability
+from emailmonitor.runtime.access import WorkAuthority, WorkDatabase
 
 
 def administration_denied(error: DBAPIError) -> bool:
@@ -27,7 +28,7 @@ def administration_denied(error: DBAPIError) -> bool:
 
 
 class Administration:
-    def __init__(self, database: Database, token: str, settings: Settings) -> None:
+    def __init__(self, database: WorkDatabase, token: WorkAuthority, settings: Settings) -> None:
         require_fixture(settings)
         self.database, self.token = database, token
 

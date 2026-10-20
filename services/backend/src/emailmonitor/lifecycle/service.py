@@ -25,15 +25,19 @@ from emailmonitor.lifecycle.models import (
     SuppressionCreate,
     canonical_privacy,
 )
-from emailmonitor.organizations.database import AuthorizationDenied, Database, RevisionConflict
+from emailmonitor.organizations.database import AuthorizationDenied, RevisionConflict
 from emailmonitor.organizations.roles import Capability
+from emailmonitor.runtime.access import WorkAuthority, WorkDatabase
+from emailmonitor.runtime.database import ServiceDatabase
 
 Model = TypeVar("Model", bound=BaseModel)
 
 
 class Lifecycle:
-    def __init__(self, database: Database, token: str, settings: Settings) -> None:
+    def __init__(self, database: WorkDatabase, token: WorkAuthority, settings: Settings) -> None:
         require_fixture(settings)
+        if isinstance(database, ServiceDatabase) or type(token) is not str:
+            raise AuthorizationDenied()
         self.database, self.token = database, token
 
     @contextmanager

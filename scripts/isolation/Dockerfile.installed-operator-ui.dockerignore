@@ -1,0 +1,17 @@
+**
+!services/
+!services/backend/
+!services/backend/pyproject.toml
+!services/backend/uv.lock
+!services/backend/src/
+!services/backend/src/**
+!scripts/
+!scripts/isolation/
+!scripts/isolation/browser_acceptance.py
+!scripts/isolation/operator_ui_protocol.py
+!scripts/isolation/operator_ui_acceptance.py
+!scripts/isolation/installed_operator_browser.py
+**/__pycache__
+**/*.pyc
+**/.env
+**/.env.*

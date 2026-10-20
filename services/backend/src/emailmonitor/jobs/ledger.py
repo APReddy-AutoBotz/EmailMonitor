@@ -10,8 +10,10 @@ from sqlalchemy import Connection, text
 
 from emailmonitor.config import Settings
 from emailmonitor.jobs.models import JobRequest, canonical, effect_key
-from emailmonitor.organizations.database import AuthorizationDenied, Database
+from emailmonitor.organizations.database import AuthorizationDenied
 from emailmonitor.organizations.roles import Capability
+from emailmonitor.runtime.access import WorkAuthority, WorkDatabase
+from emailmonitor.runtime.database import ServiceDatabase
 from emailmonitor.sources.access import current_policy, policy_decision
 from emailmonitor.sources.policy import Evaluation, Operation, PolicyProposal
 
@@ -91,7 +93,9 @@ class Lease:
 
 
 class Ledger:
-    def __init__(self, database: Database, token: str, settings: Settings) -> None:
+    def __init__(self, database: WorkDatabase, token: WorkAuthority, settings: Settings) -> None:
+        if isinstance(database, ServiceDatabase) or type(token) is not str:
+            raise AuthorizationDenied()
         self.database, self.token, self.settings = database, token, settings
 
     def _fixture(self) -> None:
@@ -109,10 +113,8 @@ class Ledger:
         row = (
             c.execute(
                 text("""
-SELECT j.*, o.deletion_generation FROM emailmonitor.jobs j
+SELECT j.*, o.deletion_generation FROM emailmonitor.work_job_lock(:org,:job) j
 JOIN emailmonitor.organizations o ON o.id=j.organization_id
-WHERE j.organization_id=:org AND j.id=:job AND
-emailmonitor.job_write_allowed(:org, :job) FOR UPDATE OF j
 """),
                 {"org": organization, "job": job},
             )

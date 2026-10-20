@@ -61,3 +61,12 @@ Provision owner, region, entitlements, identity connection, source policies/cred
 ## Support model
 
 Maintain severity definitions, named responsibility, response targets and supported version window in customer contracts. The baseline does not promise 24/7 staffing. No remote access by default. Customer-specific failures are reproduced with sanitized fixtures, not copied production contact lists.
+
+## Code-only service reference candidate
+
+[Document 66](66-durable-service-reference-runtime.md) specifies the installed
+API/web, worker and finite publisher commands, exact service schema readiness,
+HTML-only synthetic profile and external activation boundary. Migration 0014 does
+not create login credentials or enroll historical jobs. Legacy restore refuses
+service-authority state pending a revocation-aware seal; production activation and
+measured recovery acceptance remain separate gates.
