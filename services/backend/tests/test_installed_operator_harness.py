@@ -468,3 +468,89 @@ def test_installed_api_signal_replay_requires_our_successful_termination(
     running.terminate.assert_called_once()
     running.wait.assert_called_once_with(timeout=5)
     running.kill.assert_not_called()
+
+
+@pytest.mark.parametrize("primary_exists", [False, True])
+def test_installed_api_client_closes_before_process_on_success_and_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, primary_exists: bool
+) -> None:
+    import signal
+    from unittest.mock import MagicMock
+
+    import test_installed_operator_acceptance as harness
+
+    events: list[str] = []
+    running = MagicMock()
+    running.poll.return_value = None
+    running.wait.return_value = -signal.SIGTERM
+    running.terminate.side_effect = lambda: events.append("terminate")
+    client = MagicMock()
+    client.__enter__.return_value = client
+    client.__exit__.side_effect = lambda *_: events.append("client-close")
+    monkeypatch.setattr(
+        "test_installed_operator_acceptance.subprocess.Popen", MagicMock(return_value=running)
+    )
+    monkeypatch.setattr(
+        "test_installed_operator_acceptance.httpx.Client", MagicMock(return_value=client)
+    )
+    primary = ValueError("original-task-failure")
+    context = ssl.create_default_context()
+    if primary_exists:
+        with pytest.raises(ValueError) as caught:
+            with harness.api_process_client(tmp_path, tmp_path / "owned.json", context):
+                raise primary
+        assert caught.value is primary
+    else:
+        with harness.api_process_client(tmp_path, tmp_path / "owned.json", context):
+            pass
+    assert events == ["client-close", "terminate"]
+    running.wait.assert_called_once_with(timeout=5)
+    running.kill.assert_not_called()
+
+
+def test_installed_api_client_tls_shutdown_uses_original_five_second_bound(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Pinned Uvicorn connection drain regression, without SQL or service readiness claims."""
+    import signal
+    import socket
+    import sys
+    import time
+
+    import test_installed_operator_acceptance as harness
+
+    cert, key = certificate(tmp_path)
+    with socket.socket() as reserved:
+        reserved.bind(("127.0.0.1", 0))
+        port = reserved.getsockname()[1]
+    # Use the real pinned server and TLS transport; no production configuration,
+    # signal handler, shutdown setting, or certificate verification is replaced.
+    code = (
+        "import uvicorn\n"
+        "from fastapi import FastAPI\n"
+        "app=FastAPI()\n"
+        "@app.get('/readyz')\n"
+        "def ready(): return {'transport_probe':True}\n"
+        f"uvicorn.run(app,host='127.0.0.1',port={port},"
+        f"ssl_certfile={str(cert)!r},ssl_keyfile={str(key)!r},"
+        "access_log=False,log_level='critical')\n"
+    )
+    monkeypatch.setattr(harness, "command", lambda *_: [sys.executable, "-I", "-B", "-c", code])
+    with harness.api_process_client(
+        tmp_path, tmp_path / "unused.json", ssl.create_default_context(cafile=str(cert))
+    ) as (running, client):
+        deadline = time.monotonic() + 5
+        while True:
+            assert running.poll() is None
+            try:
+                response = client.get(f"https://127.0.0.1:{port}/readyz")
+                assert response.status_code == 200
+                assert response.json() == {"transport_probe": True}
+                break
+            except httpx.ConnectError:
+                if time.monotonic() >= deadline:
+                    raise
+                time.sleep(0.02)
+        assert not client.is_closed
+    assert client.is_closed
+    assert running.returncode == -signal.SIGTERM

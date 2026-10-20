@@ -67,3 +67,104 @@ packaged keyboard operator and service container acceptance require their explic
 disposable CI environments. Local skips are not passes. Final exact-tree review,
 normal/fresh gates and all exact-head CI receipts are pending. No live identities,
 source grants, credentials, acquisition, deployment or merge occurred.
+
+## Initial hosted acceptance receipt (preserved)
+
+Initial draft PR46 head `4af6e75abe9f0cc267ca0fda31acfbf8b576fc52`
+used reviewed tree `70b636a34b305c3ae04f7cdf49956ca6bf2724fe`; the GitHub
+synthetic merge had the same tree and expected PR45/head parents. Complete normal
+and new-empty Python environment gates both passed: **3194 backend tests, 351
+explicit local service-dependent skips, 57 React tests**, with documentation,
+Ruff/format, mypy (312 files), inventory, typecheck, lint and build passing.
+
+Hosted failures are retained rather than replaced by local passes:
+
+- [Service runtime run 39424496858](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/39424496858):
+  packaging returned the fixed `SERVICE_PACKAGING_ACCEPTANCE_REFUSED` result;
+  that receipt does not establish the failed stage. Installed operator acceptance
+  failed its empty worker restart because graceful shutdown required forced kill.
+  The failure remains a failure, and no complete installed journey is claimed.
+- [Operator UI run 39424496880](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/39424496880):
+  failed while waiting for jobs after worker processing errors.
+- [Controlled transport run 39424496913](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/39424496913):
+  **36 passed, 5 failed**, with `work_audit` rejecting the existing fixed
+  `extraction.observation_committed` action. Both HTML and XML commit call sites
+  use this action; the new closed allowlist omitted it. XML owned cleanup was
+  verified. Source review is being renewed on a bounded compatibility correction.
+
+Documentation, parser isolation, browser isolation and metadata prerequisite
+packaging passed at that head. The [application run 39424496803](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/39424496803)
+finished **3395 passed, 150 failed**, with no skips, in 854.60 seconds. Of its
+150 failure summaries, 140 directly named the omitted `work_audit` action. The
+remaining ten include broker-state timeouts, service publication/authority
+failures, a human missing-job error-shape regression and an upgrade visibility
+assertion; those require separate diagnosis rather than assuming one fix covers
+all failures. All eight synthetic workflows are terminal; four passed and four
+failed. No failed workflow was cancelled or manually rerun.
+
+Both unchanged opened-only licensed-source jobs were skipped without executed
+steps: [sample 39424496840](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/39424496840)
+and [diagnostic 39424496864](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/39424496864).
+No source was acquired or diagnosed by this draft.
+
+### Bounded corrections under review
+
+The audit correction restores the four existing call-site actions. Service calls
+permit only page/observation commits, exact extraction scope, current permission
+and a live execution/admission lease; human delivery receipts retain outbox-event
+resource semantics. A fast AST-to-SQL contract now checks the complete literal
+call-site action universe even when local SQL is unavailable. Independent review
+approved this correction; actual hosted acceptance remains required.
+
+The upgrade visibility assertion now names the exact queued probe in each tenant
+and explicitly denies the tombstoned extraction job. Existing restrictive
+lifecycle policy was correct; it was not weakened. The other twelve cases in the
+initial migration test module passed.
+
+The API shutdown problem was reproduced using pinned Uvicorn and real verified
+TLS without SQL: holding the readiness client open required forced kill at
+5.008 seconds; closing that owned client first exited in 0.214 seconds. The
+harness now closes that client before API teardown on success and failure.
+Independent review approved the ownership-order correction. The five-second
+cleanup bound and forced-kill failure remain unchanged.
+
+Packaging currently adds only closed stage/build/cleanup diagnostics and a
+strictly validated guest stage. It does not claim an identified recipe defect.
+Raw errors, paths, configuration and stderr are not forwarded. Independent review
+confirmed unchanged Dockerfile, confinement, limits and success receipts. Actual
+container acceptance is still required.
+
+The ledger correction maps only the exact database `P0001/JOB_UNAVAILABLE`
+refusal to the existing `AuthorizationDenied` contract. Twelve pure cases check
+that matching refusals suppress database exception context while nonmatching
+errors remain unchanged. Independent review approved the bounded mapping.
+
+Two publisher failures separately showed `55P03` contention on the extraction
+job row. Only the pre-send extraction selection now catches that contention in a
+nested transaction block and returns no event; no send or receipt occurs. A later
+ordinary publication pass may try again. Confirmation contention remains fatal;
+authority, privacy and entitlement checks remain outside the handler, and export
+semantics are unchanged. Independent review approved the implementation and
+regressions for held job/item/outbox rows, later publication, confirmation failure
+and revocation between enumeration and scoped execution. Focused local checks
+passed 66 tests with 69 explicit SQL/broker skips. Actual service tests remain
+required. The five older broker effect-wait failures correlate with the omitted
+audit action in retained PostgreSQL logs; that diagnosis still needs hosted
+validation rather than a longer timeout.
+
+The worker shutdown investigation used the pinned solo controller with a
+synthetic asynchronous transport. Its existing warm-shutdown handler fired
+immediately, but the hub waited approximately 4.91 seconds for the unchanged
+five-second reconciliation timer. The original five-second cleanup required
+forced kill; an independent signal wake exited in 0.079 seconds. This is a causal
+local controller probe, not RabbitMQ or installed-journey acceptance.
+
+The correction gives only the owned service worker a separate nonblocking,
+close-on-exec wake pipe. Celery handlers, reconciliation timing and cleanup
+bounds are unchanged. It requires the main thread, exact solo pool and live hub;
+foreign ownership is refused, replacement is detected, and uncertain restoration
+retains descriptors while latching a fatal runtime failure. The entrypoint
+checks that latch even when Celery swallows bootstep cleanup errors. Python's
+wake-FD API cannot expose a foreign owner's previous warning flag; cooperative
+main-thread ownership remains an explicit constraint. Focused tests include
+real signals, full pipes, partial startup, repeated close and failed restoration.

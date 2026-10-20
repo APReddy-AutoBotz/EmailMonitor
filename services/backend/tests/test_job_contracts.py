@@ -2,14 +2,18 @@
 
 import json
 from pathlib import Path
+from unittest.mock import MagicMock
 from uuid import uuid4
 
 import jsonschema
 import pytest
 from emailmonitor.jobs.broker import FixtureWorkerConfig
-from emailmonitor.jobs.ledger import Work
+from emailmonitor.jobs.ledger import Ledger, Work
 from emailmonitor.jobs.models import TERMINAL, TRANSITIONS, JobRequest, effect_key
+from emailmonitor.organizations.database import AuthorizationDenied
 from pydantic import ValidationError
+from sqlalchemy import Connection
+from sqlalchemy.exc import DBAPIError
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -133,3 +137,33 @@ def test_disposable_container_context_is_only_used_in_runner_step() -> None:
         in test_step
     )
     assert 'EM_REQUIRE_REAL_BROKER: "true"' in before_steps
+
+
+@pytest.mark.parametrize("stage", ["lock", "recheck"])
+@pytest.mark.parametrize(
+    "detail,denied",
+    [
+        ({"C": "P0001", "M": "JOB_UNAVAILABLE"}, True),
+        ({"C": "P0001", "M": "JOB_UNAVAILABLE private suffix"}, False),
+        ({"C": "42501", "M": "JOB_UNAVAILABLE"}, False),
+        ({"C": "55P03", "M": "lock timeout"}, False),
+        ({}, False),
+        ("JOB_UNAVAILABLE", False),
+    ],
+)
+def test_job_lock_translates_only_exact_authority_denial(
+    stage: str, detail: object, denied: bool
+) -> None:
+    error = DBAPIError("synthetic protected query", {}, Exception(detail), False)
+    connection = MagicMock(spec=Connection)
+    row = MagicMock()
+    row.mappings.return_value.first.return_value = {"id": uuid4()}
+    connection.execute.side_effect = [None, error] if stage == "lock" else [None, row, error]
+    if denied:
+        with pytest.raises(AuthorizationDenied) as caught:
+            Ledger._lock(connection, uuid4(), uuid4())
+        assert caught.value.__cause__ is None and caught.value.__suppress_context__
+    else:
+        with pytest.raises(DBAPIError) as unchanged:
+            Ledger._lock(connection, uuid4(), uuid4())
+        assert unchanged.value is error

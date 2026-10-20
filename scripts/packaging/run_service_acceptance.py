@@ -6,6 +6,7 @@ import platform
 import re
 import sys
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -44,6 +45,96 @@ ENVIRONMENT_KEYS = {
     "PYTHONPATH",
     "PYTHONDONTWRITEBYTECODE",
 }
+STAGES = frozenset(
+    {
+        "ci_context",
+        "tool_versions",
+        "clean_source",
+        "source_tree",
+        "runtime_export",
+        "runtime_inventory",
+        "recipe",
+        "probe_source",
+        "web_build",
+        "source_inventory",
+        "artifact_collect",
+        "artifact_archive",
+        "artifact_verify",
+        "artifact_materialize",
+        "image_build",
+        "entrypoint_help",
+        "probe_execute",
+        "probe_receipt",
+        "reproducibility",
+        "cleanup",
+        "receipt",
+    }
+)
+GUEST_STAGES = frozenset(
+    {"kernel", "layout", "imports", "cli", "content", "base_inventory", "receipt"}
+)
+
+
+@dataclass
+class Diagnostics:
+    """Only source-owned enums; no exception, subprocess output or config data."""
+
+    stage: str = "ci_context"
+    ordinal: int = 0
+    failure: tuple[str, int] | None = None
+    cleanup: str = "not_started"
+    guest_stage: str = "unknown"
+
+    def mark(self, stage: str, ordinal: int = 0) -> None:
+        if type(stage) is not str or stage not in STAGES or type(ordinal) is not int:
+            raise PackagingRefused("service_package_diagnostic_refused")
+        if ordinal not in (0, 1, 2):
+            raise PackagingRefused("service_package_diagnostic_refused")
+        self.stage, self.ordinal = stage, ordinal
+
+    def capture(self) -> None:
+        if self.failure is None:
+            self.failure = self.stage, self.ordinal
+
+    def report(self) -> None:
+        failure = self.failure
+        stage, ordinal = (
+            failure if type(failure) is tuple and len(failure) == 2 else (self.stage, self.ordinal)
+        )
+        # Revalidate even internal state; the reporter never serializes arbitrary objects.
+        if type(stage) is not str or stage not in STAGES:
+            stage = "ci_context"
+        if type(ordinal) is not int or ordinal not in (0, 1, 2):
+            ordinal = 0
+        cleanup = self.cleanup if type(self.cleanup) is str else "not_started"
+        if cleanup not in {"not_started", "verified", "failed"}:
+            cleanup = "not_started"
+        guest = self.guest_stage if type(self.guest_stage) is str else "unknown"
+        if guest not in GUEST_STAGES:
+            guest = "unknown"
+        sys.stderr.write(
+            json.dumps(
+                {
+                    "service_packaging_failure": {
+                        "stage": stage,
+                        "build": ordinal,
+                        "cleanup": cleanup,
+                        "guest_stage": guest,
+                    }
+                },
+                sort_keys=True,
+            )
+            + "\n"
+        )
+
+
+def guest_failure_stage(stderr: bytes) -> str:
+    if type(stderr) is not bytes:
+        return "unknown"
+    for stage in GUEST_STAGES:
+        if stderr == f"SERVICE_IMAGE_PROBE_REFUSED stage={stage}\n".encode():
+            return stage
+    return "unknown"
 
 
 def command(arguments: list[str], timeout: float = 30, limit: int = 131072) -> bytes:
@@ -173,6 +264,7 @@ class OwnedServiceBuilds:
         self.images: list[str] = []
         self.containers: list[str] = []
         self.image_ids: set[str] = set()
+        self.guest_stage = "unknown"
 
     def inspect(self, kind: str, name: str) -> dict[str, Any] | None:
         if kind not in {"image", "container"}:
@@ -307,6 +399,8 @@ class OwnedServiceBuilds:
             or state.get("OOMKilled") is not False
             or state.get("Error") not in (None, "")
         ):
+            if probe is not None:
+                self.guest_stage = guest_failure_stage(result.stderr)
             raise PackagingRefused("service_package_smoke_failed")
         return result.stdout
 
@@ -378,20 +472,25 @@ def require_clean_source() -> None:
         raise PackagingRefused("service_package_clean_source_required")
 
 
-def main() -> None:
+def execute(diagnostics: Diagnostics) -> None:
+    diagnostics.mark("ci_context")
     require_ci(dict(os.environ))
+    diagnostics.mark("tool_versions")
     require_tool_versions(
         {
             name: command([name, "--version"]).decode("ascii").strip()
             for name in ("uv", "pnpm", "node")
         }
     )
+    diagnostics.mark("clean_source")
     require_clean_source()
+    diagnostics.mark("source_tree")
     tree_sha = (
         command(["git", "-C", str(ROOT), "rev-parse", "HEAD^{tree}"], timeout=10)
         .decode("ascii")
         .strip()
     )
+    diagnostics.mark("runtime_export")
     exported = command(
         [
             "uv",
@@ -406,29 +505,40 @@ def main() -> None:
             "--no-annotate",
         ]
     ).decode("utf-8")
+    diagnostics.mark("runtime_inventory")
     runtime = runtime_versions(exported)
+    diagnostics.mark("recipe")
     dockerfile = read(ROOT, "scripts/packaging/ServiceRuntime.Dockerfile")
     validate_dockerfile(dockerfile)
+    diagnostics.mark("probe_source")
     probe = probe_source()
     owned = OwnedServiceBuilds(uuid4().hex)
     receipts = []
     try:
         with tempfile.TemporaryDirectory(prefix="em-service-packaging-") as temporary:
             for ordinal in (1, 2):
+                diagnostics.mark("web_build", ordinal)
                 command(["pnpm", "--dir", str(ROOT / "apps/web"), "build"], timeout=180)
+                diagnostics.mark("clean_source", ordinal)
                 require_clean_source()
-                files = collect_service(
-                    ROOT, tree_sha, runtime, tracked_service_sources(ROOT, tree_sha)
-                )
+                diagnostics.mark("source_inventory", ordinal)
+                sources = tracked_service_sources(ROOT, tree_sha)
+                diagnostics.mark("artifact_collect", ordinal)
+                files = collect_service(ROOT, tree_sha, runtime, sources)
+                diagnostics.mark("artifact_archive", ordinal)
                 bundle = archive(files)
+                diagnostics.mark("artifact_verify", ordinal)
                 if verify_service_archive(bundle, files["manifest.json"]) != files:
                     raise PackagingRefused("service_package_roundtrip_refused")
                 context = Path(temporary) / str(ordinal)
+                diagnostics.mark("artifact_materialize", ordinal)
                 materialize(files, context)
                 (context / "Dockerfile").write_bytes(dockerfile)
                 # Migration inputs remain in the archive, never in a runtime layer.
                 (context / ".dockerignore").write_text("migrations\n", encoding="utf-8")
+                diagnostics.mark("image_build", ordinal)
                 image_id = owned.build(context, ordinal)
+                diagnostics.mark("entrypoint_help", ordinal)
                 help_output = owned.smoke(image_id, ordinal)
                 if (
                     len(help_output) > 8192
@@ -439,7 +549,10 @@ def main() -> None:
                     )
                 ):
                     raise PackagingRefused("service_package_help_refused")
-                smoke = validate_smoke(owned.smoke(image_id, ordinal, probe), files, runtime)
+                diagnostics.mark("probe_execute", ordinal)
+                output = owned.smoke(image_id, ordinal, probe)
+                diagnostics.mark("probe_receipt", ordinal)
+                smoke = validate_smoke(output, files, runtime)
                 receipts.append(
                     {
                         "archive_sha256": digest(bundle),
@@ -449,6 +562,7 @@ def main() -> None:
                         "base_inventory": smoke["base_inventory"],
                     }
                 )
+            diagnostics.mark("reproducibility")
             if any(
                 receipts[0][key] != receipts[1][key]
                 for key in (
@@ -459,9 +573,21 @@ def main() -> None:
                 )
             ):
                 raise PackagingRefused("service_package_reproducibility_refused")
+    except BaseException:
+        diagnostics.capture()
+        diagnostics.guest_stage = getattr(owned, "guest_stage", "unknown")
+        raise
     finally:
-        owned.close()
+        diagnostics.mark("cleanup")
+        try:
+            owned.close()
+        except BaseException:
+            diagnostics.cleanup = "failed"
+            raise
+        else:
+            diagnostics.cleanup = "verified"
     # No successful receipt, content, stderr or private config is emitted before cleanup.
+    diagnostics.mark("receipt")
     print(
         json.dumps(
             {
@@ -486,6 +612,16 @@ def main() -> None:
         ),
         flush=True,
     )
+
+
+def main() -> None:
+    diagnostics = Diagnostics()
+    try:
+        execute(diagnostics)
+    except Exception:
+        diagnostics.capture()
+        diagnostics.report()
+        raise
 
 
 if __name__ == "__main__":

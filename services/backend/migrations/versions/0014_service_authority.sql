@@ -1217,13 +1217,19 @@ $$;
 CREATE FUNCTION emailmonitor.work_audit(p_org uuid,p_resource uuid,p_action text,p_id uuid)
  RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,emailmonitor AS $$
 BEGIN
- IF p_action IS NULL OR p_action NOT IN ('discovery.planned','discovery.page_committed','discovery.delivery.received')
+ IF p_action IS NULL OR p_action NOT IN ('discovery.planned','discovery.page_committed',
+ 'discovery.delivery.received','extraction.observation_committed')
  THEN RAISE EXCEPTION 'SERVICE_AUTHORITY_DENIED' USING ERRCODE='EM017'; END IF;
  IF emailmonitor.service_selected(p_org) THEN
- IF p_action<>'discovery.page_committed' OR NOT emailmonitor.service_scope_allowed(p_org,p_resource,'extraction')
+ IF p_action NOT IN ('discovery.page_committed','extraction.observation_committed')
+ OR NOT emailmonitor.service_scope_allowed(p_org,p_resource,'extraction')
  THEN RAISE EXCEPTION 'SERVICE_AUTHORITY_DENIED' USING ERRCODE='EM017'; END IF;
  PERFORM emailmonitor.job_permission_fence(p_org,p_resource);
+ IF NOT COALESCE(emailmonitor.execution_write_allowed(p_org,p_resource),false) THEN
+ RAISE EXCEPTION 'SERVICE_AUTHORITY_DENIED' USING ERRCODE='EM017'; END IF;
  ELSE
+ -- Human delivery receipts identify an outbox event, not a job. Preserve their
+ -- original tenant/current-actor audit semantics without a service lease fence.
  IF NOT COALESCE(emailmonitor.human_work_tenant_allowed(p_org),false) THEN
  RAISE EXCEPTION 'SERVICE_AUTHORITY_DENIED' USING ERRCODE='EM017'; END IF;
  END IF;
@@ -1828,6 +1834,7 @@ BEGIN
  AND least((c.configuration->'entitlements'->>'max_parallel_parse')::integer,
  (j.entitlements->>'max_parallel_parse')::integer)>0) THEN
  RAISE EXCEPTION 'SERVICE_AUTHORITY_DENIED' USING ERRCODE='EM017'; END IF;
+ BEGIN
  PERFORM 1 FROM emailmonitor.jobs WHERE organization_id=p_org AND id=p_resource FOR SHARE NOWAIT;
  PERFORM 1 FROM emailmonitor.execution_items WHERE organization_id=p_org
  AND job_id=p_resource AND id=p_item FOR SHARE NOWAIT;
@@ -1840,6 +1847,12 @@ BEGIN
  AND j.state IN ('queued','running') AND i.state IN ('pending','retry_wait')
  AND i.attempts<3 AND o.published_at IS NULL
  AND emailmonitor.privacy_job_state(p_org,p_resource) FOR UPDATE OF o NOWAIT;
+ EXCEPTION WHEN lock_not_available THEN
+ -- A busy extraction row can be reconsidered by a later finite publisher pass.
+ -- Never turn a post-send receipt failure into a successful publication.
+ IF p_confirm IS FALSE THEN RETURN NULL; END IF;
+ RAISE;
+ END;
  IF phase IS NULL THEN RETURN NULL; END IF;
  IF p_confirm THEN UPDATE emailmonitor.execution_outbox SET published_at=clock_timestamp()
  WHERE organization_id=p_org AND job_id=p_resource AND event_id=p_event; END IF;

@@ -278,14 +278,20 @@ def history(c: Connection) -> dict[str, list[tuple[object, ...]]]:
 class History:
     organizations: tuple[UUID, UUID]
     tokens: tuple[str, str]
+    visible_jobs: tuple[UUID, UUID]
+    tombstoned_jobs: tuple[UUID, UUID]
 
 
 def populate_legacy(c: Connection) -> History:
     """Author valid 0013 rows without importing a post-0013 application writer."""
     organizations = (uuid4(), uuid4())
     tokens = (uuid4().hex + uuid4().hex, uuid4().hex + uuid4().hex)
-    for org, token in zip(organizations, tokens, strict=True):
-        actor, job, draft, item, export = (uuid4() for _ in range(5))
+    visible_jobs = (uuid4(), uuid4())
+    tombstoned_jobs = (uuid4(), uuid4())
+    for org, token, job, draft in zip(
+        organizations, tokens, visible_jobs, tombstoned_jobs, strict=True
+    ):
+        actor, item, export = (uuid4() for _ in range(3))
         params: dict[str, object] = {
             "org": org,
             "actor": actor,
@@ -349,7 +355,7 @@ def populate_legacy(c: Connection) -> History:
             "VALUES(:org,gen_random_uuid(),:draft,'owner_request')",
         ):
             c.execute(text(statement), params)
-    return History(organizations, tokens)
+    return History(organizations, tokens, visible_jobs, tombstoned_jobs)
 
 
 @dataclass(frozen=True)
@@ -544,8 +550,12 @@ def test_actual_upgraded_human_login_retains_tenant_rls_without_service_authorit
         with runtime.begin() as c:
             assert rows(c, "SELECT id FROM emailmonitor.organizations") == []
             assert c.execute(text("SELECT emailmonitor.service_schema_ready()")).scalar_one()
-        for org, token in zip(
-            migration_pair.legacy.organizations, migration_pair.legacy.tokens, strict=True
+        for org, token, visible_job, tombstoned_job in zip(
+            migration_pair.legacy.organizations,
+            migration_pair.legacy.tokens,
+            migration_pair.legacy.visible_jobs,
+            migration_pair.legacy.tombstoned_jobs,
+            strict=True,
         ):
             with runtime.begin() as c:
                 c.execute(
@@ -556,10 +566,22 @@ def test_actual_upgraded_human_login_retains_tenant_rls_without_service_authorit
                     {"token": digest(token), "org": str(org)},
                 )
                 assert rows(c, "SELECT id FROM emailmonitor.organizations") == [(org,)]
-                assert c.execute(text("SELECT count(*) FROM emailmonitor.jobs")).scalar_one() == 2
+                # Physical history preserves both jobs, but 0011's restrictive
+                # lifecycle policy must keep the tombstoned draft unreadable.
+                assert rows(c, "SELECT organization_id,id,kind,state FROM emailmonitor.jobs") == [
+                    (org, visible_job, "fixture_probe", "queued")
+                ]
+                assert (
+                    c.execute(
+                        text("SELECT id FROM emailmonitor.jobs WHERE id=:id"),
+                        {"id": tombstoned_job},
+                    ).first()
+                    is None
+                )
             # One pooled connection has no residual tenant after each transaction.
             with runtime.begin() as c:
                 assert rows(c, "SELECT id FROM emailmonitor.organizations") == []
+                assert rows(c, "SELECT id FROM emailmonitor.jobs") == []
         for table in AUTHORITY_TABLES:
             with pytest.raises(DBAPIError):
                 with runtime.begin() as c:

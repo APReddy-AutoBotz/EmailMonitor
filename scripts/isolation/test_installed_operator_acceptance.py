@@ -205,6 +205,19 @@ def process(
         stop_process(running, primary, action)
 
 
+@contextmanager
+def api_process_client(
+    installed: Path, config: Path, context: ssl.SSLContext
+) -> Iterator[tuple[subprocess.Popen[bytes], httpx.Client]]:
+    # The readiness client owns persistent TLS connections. Close it before
+    # SIGTERM so Uvicorn can finish its connection drain within the same bound.
+    with (
+        process(installed, "api", config) as running,
+        httpx.Client(verify=context, trust_env=False, timeout=2) as client,
+    ):
+        yield running, client
+
+
 def cleanup_resources(
     stop: threading.Event,
     publisher_thread: threading.Thread | None,
@@ -451,7 +464,7 @@ def test_required_installed_https_operator_journey(
             app = broker_application(runtime_configs["publisher"])
             declare_owned(app, runtime_configs["publisher"].queue)
             context = ssl.create_default_context(cafile=str(identity.ca))
-            with httpx.Client(verify=context, trust_env=False, timeout=2) as client:
+            with api_process_client(installed, configs["api"], context) as (api_process, client):
 
                 def api_ready(running: subprocess.Popen[bytes]) -> bool:
                     assert running.poll() is None, "Installed API exited before readiness"
@@ -553,130 +566,129 @@ def test_required_installed_https_operator_journey(
                     else:
                         raise RuntimeError("Unexpected installed operator control")
 
-                with process(installed, "api", configs["api"]) as api_process:
-                    wait_for(lambda: api_ready(api_process), seconds=10)
-                    profile = client.get(origin + "/api/v1/runtime-profile").json()
-                    assert profile["production_ready"] is False
-                    assert all(
-                        profile[key] is False
-                        for key in (
-                            "xml_available",
-                            "pdf_available",
-                            "dynamic_browser_available",
-                            "live_sources_available",
-                        )
+                wait_for(lambda: api_ready(api_process), seconds=10)
+                profile = client.get(origin + "/api/v1/runtime-profile").json()
+                assert profile["production_ready"] is False
+                assert all(
+                    profile[key] is False
+                    for key in (
+                        "xml_available",
+                        "pdf_available",
+                        "dynamic_browser_available",
+                        "live_sources_available",
+                    )
+                )
+                assert (
+                    client.get(
+                        origin + "/api/v1/auth/session",
+                        headers={"X-EmailMonitor-UI": "session"},
+                    ).status_code
+                    == 401
+                )
+                # Deliberately an empty-process restart, not a crash/lease recovery claim.
+                with process(installed, "worker", configs["worker"]) as first:
+                    wait_for(lambda: worker_ready(first), seconds=10)
+                with process(installed, "worker", configs["worker"]) as running:
+                    wait_for(lambda: worker_ready(running), seconds=10)
+                    publisher_thread = threading.Thread(target=publish, daemon=True)
+                    publisher_thread.start()
+                    setup: dict[str, object] = {
+                        "kind": "bootstrap",
+                        "origin": "https://app.example.test",
+                        "api": origin,
+                        "issuer": identity.origin,
+                        "assets": assets,
+                        "asset_sizes": {
+                            name: (installed / "static-web" / name).stat().st_size
+                            for name in assets
+                        },
+                        "initial_organization": str(org),
+                        "other_organization": str(other),
+                    }
+                    evidence = run_installed(
+                        application(origin, identity.origin, identity.ca, assets, downloads),
+                        setup,
+                        control,
+                        lambda _: False,
+                    )
+                    assert api_ready(api_process) and running.poll() is None and not errors
+                    assert expiry_observed and publication_passes > 0
+                    assert (
+                        identity.authorizations == identity.exchanges == 2
+                        and identity.refusals == 0
                     )
                     assert (
-                        client.get(
-                            origin + "/api/v1/auth/session",
-                            headers={"X-EmailMonitor-UI": "session"},
-                        ).status_code
-                        == 401
+                        scalar(
+                            "SELECT count(*) FROM emailmonitor.execution_effects WHERE "
+                            "organization_id=:org"
+                        )
+                        == 5
                     )
-                    # Deliberately an empty-process restart, not a crash/lease recovery claim.
-                    with process(installed, "worker", configs["worker"]) as first:
-                        wait_for(lambda: worker_ready(first), seconds=10)
-                    with process(installed, "worker", configs["worker"]) as running:
-                        wait_for(lambda: worker_ready(running), seconds=10)
-                        publisher_thread = threading.Thread(target=publish, daemon=True)
-                        publisher_thread.start()
-                        setup: dict[str, object] = {
-                            "kind": "bootstrap",
-                            "origin": "https://app.example.test",
-                            "api": origin,
-                            "issuer": identity.origin,
-                            "assets": assets,
-                            "asset_sizes": {
-                                name: (installed / "static-web" / name).stat().st_size
-                                for name in assets
+                    assert (
+                        scalar(
+                            "SELECT count(*) FROM emailmonitor.association_reviews WHERE "
+                            "organization_id=:org"
+                        )
+                        == 1
+                    )
+                    assert (
+                        scalar(
+                            "SELECT count(*) FROM emailmonitor.service_delegations WHERE "
+                            "organization_id=:org AND revoked_at IS NULL"
+                        )
+                        == 8
+                    )
+                    assert (
+                        scalar(
+                            "SELECT count(*) FROM emailmonitor.sessions WHERE "
+                            "identity_id=:id AND expires_at<=clock_timestamp() AND "
+                            "revoked_at IS NULL"
+                        )
+                        == 1
+                    )
+                    assert (
+                        scalar(
+                            "SELECT count(*) FROM emailmonitor.jobs j "
+                            "JOIN emailmonitor.execution_items i "
+                            "ON i.organization_id=j.organization_id AND i.job_id=j.id "
+                            "WHERE j.organization_id=:org AND j.state='completed' "
+                            "AND j.request->'input'->>'type'='url' "
+                            "AND j.request->'input'->>'url'="
+                            "'https://synthetic.publisher.example/no-contact.html' "
+                            "AND i.state='no_contact'"
+                        )
+                        == 1
+                    )
+                    assert len(downloads) == 2
+                    with ZipFile(io.BytesIO(downloads[0])) as archive_file:
+                        assert b"example.org" in archive_file.read("xl/worksheets/sheet1.xml")
+                    assert b"example.org" in downloads[1] and not downloads[1].startswith(b"PK")
+                    print(
+                        json.dumps(
+                            {
+                                **evidence,
+                                "package_sha256": package_sha,
+                                "installed_api_ready": True,
+                                "independent_installed_worker": True,
+                                "independent_installed_publisher": True,
+                                "empty_worker_restart": True,
+                                "session_expiry": (
+                                    "shortened_future_deadline_elapsed_without_revocation"
+                                ),
+                                "sse_transport": (
+                                    "actual_https_frames_bounded_disconnect_buffered"
+                                ),
+                                "export_sha256": [
+                                    hashlib.sha256(body).hexdigest() for body in downloads
+                                ],
+                                "production_ready": False,
                             },
-                            "initial_organization": str(org),
-                            "other_organization": str(other),
-                        }
-                        evidence = run_installed(
-                            application(origin, identity.origin, identity.ca, assets, downloads),
-                            setup,
-                            control,
-                            lambda _: False,
+                            sort_keys=True,
                         )
-                        assert api_ready(api_process) and running.poll() is None and not errors
-                        assert expiry_observed and publication_passes > 0
-                        assert (
-                            identity.authorizations == identity.exchanges == 2
-                            and identity.refusals == 0
-                        )
-                        assert (
-                            scalar(
-                                "SELECT count(*) FROM emailmonitor.execution_effects WHERE "
-                                "organization_id=:org"
-                            )
-                            == 5
-                        )
-                        assert (
-                            scalar(
-                                "SELECT count(*) FROM emailmonitor.association_reviews WHERE "
-                                "organization_id=:org"
-                            )
-                            == 1
-                        )
-                        assert (
-                            scalar(
-                                "SELECT count(*) FROM emailmonitor.service_delegations WHERE "
-                                "organization_id=:org AND revoked_at IS NULL"
-                            )
-                            == 8
-                        )
-                        assert (
-                            scalar(
-                                "SELECT count(*) FROM emailmonitor.sessions WHERE "
-                                "identity_id=:id AND expires_at<=clock_timestamp() AND "
-                                "revoked_at IS NULL"
-                            )
-                            == 1
-                        )
-                        assert (
-                            scalar(
-                                "SELECT count(*) FROM emailmonitor.jobs j "
-                                "JOIN emailmonitor.execution_items i "
-                                "ON i.organization_id=j.organization_id AND i.job_id=j.id "
-                                "WHERE j.organization_id=:org AND j.state='completed' "
-                                "AND j.request->'input'->>'type'='url' "
-                                "AND j.request->'input'->>'url'="
-                                "'https://synthetic.publisher.example/no-contact.html' "
-                                "AND i.state='no_contact'"
-                            )
-                            == 1
-                        )
-                        assert len(downloads) == 2
-                        with ZipFile(io.BytesIO(downloads[0])) as archive_file:
-                            assert b"example.org" in archive_file.read("xl/worksheets/sheet1.xml")
-                        assert b"example.org" in downloads[1] and not downloads[1].startswith(b"PK")
-                        print(
-                            json.dumps(
-                                {
-                                    **evidence,
-                                    "package_sha256": package_sha,
-                                    "installed_api_ready": True,
-                                    "independent_installed_worker": True,
-                                    "independent_installed_publisher": True,
-                                    "empty_worker_restart": True,
-                                    "session_expiry": (
-                                        "shortened_future_deadline_elapsed_without_revocation"
-                                    ),
-                                    "sse_transport": (
-                                        "actual_https_frames_bounded_disconnect_buffered"
-                                    ),
-                                    "export_sha256": [
-                                        hashlib.sha256(body).hexdigest() for body in downloads
-                                    ],
-                                    "production_ready": False,
-                                },
-                                sort_keys=True,
-                            )
-                        )
-                        stop.set()
-                        publisher_thread.join(timeout=25)
-                        assert not publisher_thread.is_alive()
+                    )
+                    stop.set()
+                    publisher_thread.join(timeout=25)
+                    assert not publisher_thread.is_alive()
     except BaseException as error:
         primary = error
         raise

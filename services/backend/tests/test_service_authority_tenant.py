@@ -2,13 +2,15 @@
 
 import os
 from collections.abc import Iterator
+from contextlib import nullcontext
 from dataclasses import dataclass, replace
 from datetime import datetime
 from uuid import UUID, uuid4
 
 import pytest
-from emailmonitor.organizations.database import AuthorizationDenied, Database, digest
+from emailmonitor.organizations.database import AuthorizationDenied, Database, TenantContext, digest
 from emailmonitor.organizations.roles import Capability
+from emailmonitor.progress.binding import bound
 from emailmonitor.progress.service import Progress
 from emailmonitor.runtime.authority import ServiceProcess, ServiceWork
 from emailmonitor.runtime.database import ServiceDatabase
@@ -294,8 +296,139 @@ def test_service_real_extraction_without_human_session_and_current_logout_fence(
     assert snapshot.state == "completed_partial"
     assert snapshot.counts.discovered == snapshot.counts.terminal == 4
     assert snapshot.counts.by_outcome["no_contact"] == 1
+    with case.admin.connect() as c:
+        audits = c.execute(
+            text(
+                "SELECT a.action,count(*),bool_and(a.actor_id=d.initiator_id) "
+                "FROM emailmonitor.audit_events a JOIN emailmonitor.service_delegations d "
+                "ON d.organization_id=a.organization_id AND d.resource_id=a.resource_id "
+                "WHERE d.id=:grant AND a.action IN "
+                "('discovery.page_committed','extraction.observation_committed') "
+                "GROUP BY a.action"
+            ),
+            {"grant": case.grant},
+        ).all()
+    assert {row[0]: (row[1], row[2]) for row in audits} == {
+        "discovery.page_committed": (2, True),
+        "extraction.observation_committed": (4, True),
+    }
     with pytest.raises(AuthorizationDenied):
         worker.control(case.scope.organization, case.scope.resource, snapshot.revision, "resume")
+
+
+@pytest.mark.parametrize(
+    "action",
+    [
+        "discovery.planned",
+        "discovery.page_committed",
+        "discovery.delivery.received",
+        "extraction.observation_committed",
+    ],
+)
+def test_human_work_audit_preserves_event_and_resource_semantics(
+    service_case: ServiceCase, action: str
+) -> None:
+    case = service_case
+    # A delivery receipt intentionally identifies an event rather than its job.
+    resource = uuid4() if action == "discovery.delivery.received" else case.scope.resource
+    identifier = uuid4()
+    with case.progress.database.tenant(
+        case.progress.token, case.scope.organization, Capability.ACQUIRE_SOURCE
+    ) as (c, context):
+        assert isinstance(context, TenantContext)
+        c.execute(
+            text("SELECT emailmonitor.work_audit(:org,:resource,:action,:id)"),
+            {
+                "org": case.scope.organization,
+                "resource": resource,
+                "action": action,
+                "id": identifier,
+            },
+        )
+        row = c.execute(
+            text(
+                "SELECT actor_id,action,resource_id FROM emailmonitor.audit_events "
+                "WHERE organization_id=:org AND id=:id"
+            ),
+            {"org": case.scope.organization, "id": identifier},
+        ).one()
+        assert tuple(row) == (context.identity_id, action, resource)
+
+
+@pytest.mark.parametrize("action", ["discovery.page_committed", "extraction.observation_committed"])
+@pytest.mark.parametrize("condition", ["current", "missing", "stale", "wrong_resource"])
+def test_service_real_audit_requires_current_exact_lease(
+    service_case: ServiceCase, action: str, condition: str
+) -> None:
+    case = service_case
+    worker = Progress(case.database, case.scope, SETTINGS)
+    work = claim(worker, case.scope.organization, case.scope.resource)
+    if condition == "stale":
+        with case.admin.begin() as c:
+            c.execute(
+                text(
+                    "UPDATE emailmonitor.execution_items SET "
+                    "lease_until=clock_timestamp()-interval '1 second' "
+                    "WHERE organization_id=:org AND job_id=:job AND id=:item"
+                ),
+                {
+                    "org": case.scope.organization,
+                    "job": case.scope.resource,
+                    "item": work.lease.item,
+                },
+            )
+    identifier = uuid4()
+    resource = uuid4() if condition == "wrong_resource" else case.scope.resource
+    with (
+        bound(work.lease) if condition != "missing" else nullcontext(),
+        pytest.raises(AuthorizationDenied) if condition != "current" else nullcontext(),
+        case.database.tenant(case.scope, case.scope.organization, Capability.ACQUIRE_SOURCE) as (
+            c,
+            _,
+        ),
+    ):
+        c.execute(
+            text("SELECT emailmonitor.work_audit(:org,:resource,:action,:id)"),
+            {
+                "org": case.scope.organization,
+                "resource": resource,
+                "action": action,
+                "id": identifier,
+            },
+        )
+    with case.admin.connect() as c:
+        assert c.execute(
+            text("SELECT count(*) FROM emailmonitor.audit_events WHERE id=:id"),
+            {"id": identifier},
+        ).scalar_one() == int(condition == "current")
+
+
+@pytest.mark.parametrize(
+    "action", [None, "discovery.planned", "discovery.delivery.received", "arbitrary.audit"]
+)
+def test_service_real_audit_refuses_actions_outside_commit_subset(
+    service_case: ServiceCase, action: str | None
+) -> None:
+    case = service_case
+    worker = Progress(case.database, case.scope, SETTINGS)
+    work = claim(worker, case.scope.organization, case.scope.resource)
+    with (
+        bound(work.lease),
+        pytest.raises(AuthorizationDenied),
+        case.database.tenant(case.scope, case.scope.organization, Capability.ACQUIRE_SOURCE) as (
+            c,
+            _,
+        ),
+    ):
+        c.execute(
+            text("SELECT emailmonitor.work_audit(:org,:resource,:action,:id)"),
+            {
+                "org": case.scope.organization,
+                "resource": case.scope.resource,
+                "action": action,
+                "id": uuid4(),
+            },
+        )
 
 
 def test_service_real_logout_after_observation_prevents_association_and_effect(

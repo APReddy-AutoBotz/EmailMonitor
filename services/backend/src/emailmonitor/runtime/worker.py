@@ -26,6 +26,7 @@ from emailmonitor.runtime.assembly import _database_target
 from emailmonitor.runtime.authority import ServiceProcess, ServiceWork
 from emailmonitor.runtime.database import ServiceDatabase
 from emailmonitor.runtime.publisher import TestPublisherConfig
+from emailmonitor.runtime.signal_wake import SignalWakeState, register_signal_wake
 
 
 class ServiceRuntimeConfig(BaseModel):
@@ -97,6 +98,7 @@ class ServiceWorker:
         if config.process.kind != "worker":
             raise ValueError("Worker principal required")
         self.config = config
+        self.signal_wake = SignalWakeState()
         self.database = ServiceDatabase(config.database_url, config.process)
         try:
             self._initialize(config)
@@ -143,6 +145,7 @@ class ServiceWorker:
             terminate = stop
 
         self.application.steps["consumer"].add(ReconcileStep)
+        register_signal_wake(self.application, self.signal_wake)
 
     def reconcile_safe(self) -> None:
         try:
@@ -251,6 +254,9 @@ class ServiceWorker:
         if not self.closed:
             self.closed = True
             try:
-                self.application.close()
+                self.signal_wake.close()
             finally:
-                self.database.engine.dispose()
+                try:
+                    self.application.close()
+                finally:
+                    self.database.engine.dispose()

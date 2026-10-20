@@ -79,6 +79,9 @@ def main() -> int:
                     controller.start()
                     if controller.exitcode not in (None, 0):
                         raise RuntimeError("Worker stopped unsuccessfully")
+                    # Celery bootstep teardown logs and swallows exceptions.
+                    # A wake ownership/cleanup failure must still fail the CLI.
+                    worker.signal_wake.require_clean()
     except Exception:
         print("service_runtime_failed", file=sys.stderr)
         status = 1

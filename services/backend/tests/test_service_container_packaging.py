@@ -502,3 +502,184 @@ def test_changed_second_artifact_is_not_reproducible(
 def test_guest_receipt_requires_closed_schema(output: bytes) -> None:
     with pytest.raises(PackagingRefused, match="^service_package_probe_output_refused$"):
         runner.validate_smoke(output, {"manifest.json": b"{}\n"}, {"pydantic": "2.14.0"})
+
+
+@pytest.mark.parametrize("stage", sorted(runner.STAGES))
+def test_failure_stage_is_bounded_and_first_failure_survives_cleanup(
+    stage: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    diagnostics = runner.Diagnostics()
+    diagnostics.mark(stage, 2)
+    diagnostics.capture()
+    diagnostics.mark("cleanup")
+    diagnostics.cleanup = "verified"
+    diagnostics.capture()
+    diagnostics.report()
+    output = capsys.readouterr()
+    assert output.out == ""
+    assert len(output.err.encode()) < 256
+    assert json.loads(output.err) == {
+        "service_packaging_failure": {
+            "stage": stage,
+            "build": 2,
+            "cleanup": "verified",
+            "guest_stage": "unknown",
+        }
+    }
+
+
+@pytest.mark.parametrize(("stage", "ordinal"), [("private secret", 1), ("cleanup", 3)])
+def test_invalid_diagnostic_stage_is_refused_without_echo(stage: str, ordinal: int) -> None:
+    with pytest.raises(PackagingRefused, match="^service_package_diagnostic_refused$"):
+        runner.Diagnostics().mark(stage, ordinal)
+
+
+def test_failure_report_never_formats_arbitrary_values(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    class Poison:
+        def __str__(self) -> str:
+            raise AssertionError("Diagnostic attempted arbitrary formatting")
+
+        def __bool__(self) -> bool:
+            raise AssertionError("Diagnostic attempted arbitrary evaluation")
+
+    diagnostics = runner.Diagnostics()
+    for name in ("stage", "ordinal", "failure", "cleanup", "guest_stage"):
+        monkeypatch.setattr(diagnostics, name, Poison())
+    diagnostics.report()
+    output = capsys.readouterr()
+    assert output.out == ""
+    assert json.loads(output.err) == {
+        "service_packaging_failure": {
+            "stage": "ci_context",
+            "build": 0,
+            "cleanup": "not_started",
+            "guest_stage": "unknown",
+        }
+    }
+
+
+@pytest.mark.parametrize(
+    ("failure", "stage", "ordinal", "cleanup"),
+    [
+        ("build", "image_build", 1, "verified"),
+        ("probe", "probe_execute", 1, "verified"),
+        ("cleanup", "cleanup", 0, "failed"),
+    ],
+)
+def test_orchestration_failure_emits_only_exact_closed_diagnostic(
+    failure: str,
+    stage: str,
+    ordinal: int,
+    cleanup: str,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    mock_orchestration(monkeypatch, fail=failure)
+    with pytest.raises(PackagingRefused):
+        runner.main()
+    output = capsys.readouterr()
+    assert output.out == ""
+    assert json.loads(output.err) == {
+        "service_packaging_failure": {
+            "stage": stage,
+            "build": ordinal,
+            "cleanup": cleanup,
+            "guest_stage": "unknown",
+        }
+    }
+
+
+def test_primary_probe_failure_is_preserved_when_cleanup_also_fails(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    mock_orchestration(monkeypatch, fail="probe")
+    monkeypatch.setattr(
+        runner.OwnedServiceBuilds,
+        "close",
+        Mock(side_effect=PackagingRefused("private cleanup context")),
+    )
+    with pytest.raises(PackagingRefused):
+        runner.main()
+    output = capsys.readouterr()
+    assert output.out == ""
+    assert json.loads(output.err) == {
+        "service_packaging_failure": {
+            "stage": "probe_execute",
+            "build": 1,
+            "cleanup": "failed",
+            "guest_stage": "unknown",
+        }
+    }
+    assert "private" not in output.err
+
+
+def test_failure_before_resource_creation_has_no_cleanup_claim(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(runner, "require_ci", Mock(side_effect=RuntimeError("private config")))
+    with pytest.raises(RuntimeError):
+        runner.main()
+    output = capsys.readouterr()
+    assert output.out == ""
+    assert json.loads(output.err)["service_packaging_failure"] == {
+        "stage": "ci_context",
+        "build": 0,
+        "cleanup": "not_started",
+        "guest_stage": "unknown",
+    }
+
+
+@pytest.mark.parametrize("stage", sorted(service_probe.STAGES))
+def test_guest_stage_is_exact_and_host_allowlist_matches(
+    stage: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert service_probe.STAGES == runner.GUEST_STAGES
+    diagnostics = service_probe.ProbeDiagnostics()
+    diagnostics.mark(stage)
+    diagnostics.report()
+    output = capsys.readouterr()
+    assert output.out == ""
+    assert output.err == f"SERVICE_IMAGE_PROBE_REFUSED stage={stage}\n"
+    assert runner.guest_failure_stage(output.err.encode()) == stage
+
+
+@pytest.mark.parametrize(
+    "stderr",
+    [
+        b"",
+        b"SERVICE_IMAGE_PROBE_REFUSED\n",
+        b"SERVICE_IMAGE_PROBE_REFUSED stage=private secret\n",
+        b"prefix SERVICE_IMAGE_PROBE_REFUSED stage=imports\n",
+        b"SERVICE_IMAGE_PROBE_REFUSED stage=imports\nprivate context\n",
+        b"SERVICE_IMAGE_PROBE_REFUSED stage=imports\n" * 2,
+        b"SERVICE_IMAGE_PROBE_REFUSED stage=imports\x00\n",
+    ],
+)
+def test_guest_diagnostic_never_forwards_arbitrary_stderr(stderr: bytes) -> None:
+    assert runner.guest_failure_stage(stderr) == "unknown"
+
+
+def test_actual_guest_failure_reports_stage_without_exception_text(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(service_probe, "kernel_checks", lambda: [101, 101])
+    monkeypatch.setattr(
+        service_probe, "verify_layout", Mock(side_effect=RuntimeError("private layout content"))
+    )
+    with pytest.raises(RuntimeError):
+        service_probe.main()
+    output = capsys.readouterr()
+    assert output.out == ""
+    assert output.err == "SERVICE_IMAGE_PROBE_REFUSED stage=layout\n"
+
+
+def test_success_has_no_failure_diagnostic(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    mock_orchestration(monkeypatch)
+    runner.main()
+    output = capsys.readouterr()
+    assert output.err == ""
+    assert json.loads(output.out)["cleanup_verified"] is True

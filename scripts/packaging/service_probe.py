@@ -29,6 +29,20 @@ IMPORTS = (
     "emailmonitor.runtime.database",
     "emailmonitor.extraction.fixture",
 )
+STAGES = frozenset({"kernel", "layout", "imports", "cli", "content", "base_inventory", "receipt"})
+
+
+class ProbeDiagnostics:
+    stage = "kernel"
+
+    def mark(self, stage: str) -> None:
+        if type(stage) is not str or stage not in STAGES:
+            raise RuntimeError("service_image_diagnostic_refused")
+        self.stage = stage
+
+    def report(self) -> None:
+        stage = self.stage if type(self.stage) is str and self.stage in STAGES else "kernel"
+        sys.stderr.write(f"SERVICE_IMAGE_PROBE_REFUSED stage={stage}\n")
 
 
 def regular_files(root: Path) -> set[str]:
@@ -230,11 +244,20 @@ def kernel_checks() -> list[int]:
     return network_errno
 
 
-def main() -> None:
+def execute(diagnostics: ProbeDiagnostics) -> None:
+    diagnostics.mark("kernel")
     network_errno = kernel_checks()
+    diagnostics.mark("layout")
     manifest, distributions = verify_layout()
+    diagnostics.mark("imports")
     installed_imports()
+    diagnostics.mark("cli")
     cli_checks()
+    diagnostics.mark("content")
+    image_content_sha256 = content_digest()
+    diagnostics.mark("base_inventory")
+    base_inventory = collect_base_inventory()
+    diagnostics.mark("receipt")
     print(
         json.dumps(
             {
@@ -257,8 +280,8 @@ def main() -> None:
                 "manifest_sha256": hashlib.sha256(
                     (ROOT / "manifest.json").read_bytes()
                 ).hexdigest(),
-                "image_content_sha256": content_digest(),
-                "base_inventory": collect_base_inventory(),
+                "image_content_sha256": image_content_sha256,
+                "base_inventory": base_inventory,
             },
             sort_keys=True,
         ),
@@ -266,9 +289,17 @@ def main() -> None:
     )
 
 
+def main() -> None:
+    diagnostics = ProbeDiagnostics()
+    try:
+        execute(diagnostics)
+    except Exception:
+        diagnostics.report()
+        raise
+
+
 if __name__ == "__main__":
     try:
         main()
     except Exception:
-        sys.stderr.write("SERVICE_IMAGE_PROBE_REFUSED\n")
         raise SystemExit(1) from None

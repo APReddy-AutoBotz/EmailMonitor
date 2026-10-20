@@ -11,24 +11,74 @@ from uuid import UUID, uuid4
 
 import pytest
 from emailmonitor.jobs.queues import owned_queues
-from emailmonitor.organizations.database import digest
+from emailmonitor.organizations.database import AuthorizationDenied, digest
 from emailmonitor.organizations.roles import Capability
 from emailmonitor.progress.service import Progress
 from emailmonitor.runtime.authority import ServiceProcess
+from emailmonitor.runtime.database import ServiceDatabase
+from emailmonitor.runtime.publisher import PublisherError
 from emailmonitor.runtime.service_publisher import publish_service_once
 from emailmonitor.runtime.worker import ServiceRuntimeConfig, broker_application
 from sqlalchemy import text
 from sqlalchemy.engine import make_url
+from sqlalchemy.exc import DBAPIError
 from test_admission_broker import close_owned
 from test_durable_jobs import SETTINGS
 from test_real_broker_jobs import wait_for
-from test_runtime_publisher_broker import declare_owned
+from test_runtime_publisher_broker import declare_owned, queue_counts
 from test_service_authority_tenant import ServiceCase
 from test_service_authority_tenant import _service_ci_guard as _service_ci_guard
 from test_service_authority_tenant import service_case as service_case
 from test_tenant_foundation import scenario as scenario
 
 ROOT = Path(__file__).resolve().parents[3]
+
+PUBLICATION_LOCKS = {
+    "job": "SELECT id FROM emailmonitor.jobs WHERE organization_id=:org AND id=:resource",
+    "item": (
+        "SELECT id FROM emailmonitor.execution_items "
+        "WHERE organization_id=:org AND job_id=:resource AND id=:item"
+    ),
+    "outbox": (
+        "SELECT event_id FROM emailmonitor.execution_outbox "
+        "WHERE organization_id=:org AND job_id=:resource AND event_id=:event"
+    ),
+}
+
+
+def publication_params(case: ServiceCase, *, confirm: bool = False) -> dict[str, object]:
+    with case.admin.connect() as c:
+        row = c.execute(
+            text(
+                "SELECT item_id,event_id,generation FROM emailmonitor.execution_outbox "
+                "WHERE organization_id=:org AND job_id=:job AND published_at IS NULL"
+            ),
+            {"org": case.scope.organization, "job": case.scope.resource},
+        ).one()
+    return {
+        "org": case.scope.organization,
+        "resource": case.scope.resource,
+        "purpose": "extraction",
+        "generation": row.generation,
+        "item": row.item_id,
+        "event": row.event_id,
+        "confirm": confirm,
+    }
+
+
+def publication_receipt(case: ServiceCase, event: object) -> object:
+    with case.admin.connect() as c:
+        return c.execute(
+            text(
+                "SELECT published_at FROM emailmonitor.execution_outbox "
+                "WHERE organization_id=:org AND job_id=:job AND event_id=:event"
+            ),
+            {
+                "org": case.scope.organization,
+                "job": case.scope.resource,
+                "event": event,
+            },
+        ).scalar_one()
 
 
 @pytest.fixture
@@ -96,6 +146,120 @@ def publisher_config(service_case: ServiceCase) -> Iterator[ServiceRuntimeConfig
                 text("DELETE FROM emailmonitor.service_principals WHERE id=:id"), {"id": principal}
             )
             c.exec_driver_sql(f"DROP ROLE IF EXISTS {name}")
+
+
+@pytest.mark.parametrize("row", ["job", "item", "outbox"])
+def test_service_publication_busy_row_defers_without_send_or_receipt(
+    service_case: ServiceCase, publisher_config: ServiceRuntimeConfig, row: str
+) -> None:
+    case, config = service_case, publisher_config
+    params = publication_params(case)
+    application = broker_application(config)
+    try:
+        declare_owned(application, config.queue)
+        with case.admin.begin() as holder:
+            holder.execute(text(PUBLICATION_LOCKS[row] + " FOR UPDATE"), params).one()
+            assert publish_service_once(config) == 0
+            assert not any(queue_counts(application, config.queue).values())
+            assert publication_receipt(case, params["event"]) is None
+        # A separate finite pass after release publishes the same pending event.
+        assert publish_service_once(config) == 1
+        assert sum(queue_counts(application, config.queue).values()) == 1
+        assert publication_receipt(case, params["event"]) is not None
+    finally:
+        close_owned(application, config.queue)
+
+
+@pytest.mark.parametrize("row", ["job", "item", "outbox"])
+def test_service_publication_confirm_busy_row_remains_fatal(
+    service_case: ServiceCase, publisher_config: ServiceRuntimeConfig, row: str
+) -> None:
+    case, config = service_case, publisher_config
+    params = publication_params(case, confirm=True)
+    publisher = ServiceDatabase(config.database_url, config.process)
+    sqlstates: list[str] = []
+    try:
+        with case.admin.begin() as holder:
+            holder.execute(text(PUBLICATION_LOCKS[row] + " FOR UPDATE"), params).one()
+            with pytest.raises(AuthorizationDenied):
+                with publisher.tenant(
+                    case.scope, case.scope.organization, Capability.ACQUIRE_SOURCE
+                ) as (c, _):
+                    try:
+                        c.execute(
+                            text(
+                                "SELECT emailmonitor.service_publish_event("
+                                ":org,:resource,:purpose,:generation,:event,:item,:confirm)"
+                            ),
+                            params,
+                        ).scalar_one()
+                    except DBAPIError as error:
+                        assert error.orig is not None
+                        detail = error.orig.args[0]
+                        assert isinstance(detail, dict)
+                        sqlstates.append(str(detail.get("C")))
+                        raise
+        assert sqlstates == ["55P03"]
+        assert publication_receipt(case, params["event"]) is None
+    finally:
+        publisher.engine.dispose()
+
+
+@pytest.mark.parametrize("revoked", ["origin", "delegation"])
+def test_service_publication_revocation_after_enumeration_is_not_busy_defer(
+    service_case: ServiceCase,
+    publisher_config: ServiceRuntimeConfig,
+    monkeypatch: pytest.MonkeyPatch,
+    revoked: str,
+) -> None:
+    from typing import Any
+
+    from emailmonitor.runtime import service_publisher
+    from kombu import Connection
+
+    case, config = service_case, publisher_config
+    params = publication_params(case)
+    application = broker_application(config)
+    original = Connection
+    revoked_after_enumeration = False
+
+    def revoke_then_connect(*args: Any, **kwargs: Any) -> Any:
+        nonlocal revoked_after_enumeration
+        # This constructor occurs after service_pending selected the exact event,
+        # before the publisher's scoped transaction and before any broker send.
+        with case.admin.begin() as c:
+            if revoked == "origin":
+                assert isinstance(case.progress.token, str)
+                c.execute(
+                    text(
+                        "UPDATE emailmonitor.sessions SET revoked_at=clock_timestamp() "
+                        "WHERE token_hash=:token"
+                    ),
+                    {"token": digest(case.progress.token)},
+                )
+            else:
+                c.execute(
+                    text(
+                        "UPDATE emailmonitor.service_delegations "
+                        "SET revoked_at=clock_timestamp() WHERE principal_id=:principal"
+                    ),
+                    {"principal": config.process.principal},
+                )
+        revoked_after_enumeration = True
+        return original(*args, **kwargs)
+
+    try:
+        declare_owned(application, config.queue)
+        monkeypatch.setattr(service_publisher, "Connection", revoke_then_connect)
+        with case.admin.begin() as holder:
+            holder.execute(text(PUBLICATION_LOCKS["job"] + " FOR UPDATE"), params).one()
+            with pytest.raises(PublisherError, match="Service publication failed"):
+                publish_service_once(config)
+        assert revoked_after_enumeration
+        assert not any(queue_counts(application, config.queue).values())
+        assert publication_receipt(case, params["event"]) is None
+    finally:
+        close_owned(application, config.queue)
 
 
 @contextmanager
