@@ -42,6 +42,9 @@ MARKER_SNAPSHOT = """() => {
    : state !== null && typeof state === 'object' && !Array.isArray(state) ? 'object' : 'other'
  };
 }"""
+BOUNDARY_FAILURE_SNAPSHOT = (
+    "() => ({pending: globalThis.boundaryPending, document: (" + MARKER_SNAPSHOT + ")()})"
+)
 
 
 def marker_snapshot_summary(value: object) -> dict[str, object]:
@@ -179,6 +182,32 @@ def pending_task_evidence(value: object) -> str:
     ):
         return '{"pending_task_evidence":"unavailable"}'
     return json.dumps({"pending_task_evidence": value}, sort_keys=True)
+
+
+def boundary_failure_evidence(value: object) -> tuple[str, str]:
+    """Closed current-document evidence; does not expose or infer socket state."""
+    pending: object = None
+    document: dict[str, object] = {"status": "unavailable"}
+    if value is not None:
+        if (
+            type(value) is dict
+            and all(type(key) is str for key in value)
+            and set(value) == {"pending", "document"}
+        ):
+            pending, snapshot = value["pending"], value["document"]
+            if type(pending) is not dict or any(
+                type(key) is not str or type(item) is not str for key, item in pending.items()
+            ):
+                pending = None
+            if type(snapshot) is dict and any(type(key) is not str for key in snapshot):
+                snapshot = None
+            document = marker_snapshot_summary(snapshot)
+        else:
+            document = {"status": "malformed"}
+    return (
+        pending_task_evidence(pending),
+        json.dumps({"boundary_document_evidence": document}, sort_keys=True),
+    )
 
 
 async def boundary_readiness(readiness: Awaitable[object]) -> None:
@@ -516,14 +545,19 @@ async def main() -> None:
                 page.wait_for_function("globalThis.boundaryReady === true", timeout=10000)
             )
         except (Error, TimeoutError):
-            trace_stage("boundary_wait_failed")
             try:
-                pending = await asyncio.wait_for(
-                    page.evaluate("globalThis.boundaryPending"), timeout=1
-                )
-            except Exception:
-                pending = None
-            trace_stage(pending_task_evidence(pending))
+                trace_stage("boundary_wait_failed")
+                try:
+                    snapshot = await asyncio.wait_for(
+                        page.evaluate(BOUNDARY_FAILURE_SNAPSHOT), timeout=1
+                    )
+                except Exception:
+                    snapshot = None
+                for evidence in boundary_failure_evidence(snapshot):
+                    trace_stage(evidence)
+            except BaseException:
+                # Secondary diagnostics, including output, cannot replace readiness failure.
+                pass
             raise
         trace_stage("boundary_ready")
         # JavaScript's boundaryReady does not await Playwright's independent

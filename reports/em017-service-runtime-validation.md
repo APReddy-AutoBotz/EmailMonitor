@@ -708,3 +708,101 @@ the isolated TLS child does not load this diagnostic. Scheduling cause remains
 unproved. The next genuinely new-empty full gate passed unchanged: **3717 backend
 tests / 375 explicit infrastructure skips and 60 React tests**, all aggregate
 checks; backend elapsed 201.38 seconds. The failed fresh receipt remains above.
+
+## Ninth hosted receipts and WebSocket evidence
+
+Head `2a8fcf0b3fd8123322cb784fe8f576b9608c52f1` passed service reference runtime:
+**12 actual broker tests in 96.68 seconds**, then the complete installed journey
+in **93.62 seconds**, including its subsequent required graceful cleanup.
+Packaging passed two independent builds, equal archives and measured image
+contents, fourteen network-none containers, production refusals and verified
+cleanup. Both packaging archives and the installed journey used SHA256
+`66a3c32dfcaa9f41c4a82401a8c8d394a19db9b1d4ef1c3ee99a70d2f2f099da`.
+The earlier attach and relay failures did not recur; their causes remain unknown.
+Source: [service checks](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/39469717201).
+
+Controlled transport remains a failed receipt: **41 curated cases** and both
+single-case checks passed, then **three operator cases passed, one failed and
+one cleanup error** in 189.98 seconds. The earliest specific failure is the
+fixture browser's unchanged ten-second boundary readiness wait: all tracked
+tasks were fulfilled except `websocket=pending`, despite the route logging that
+its close method returned. The later URL-worker UI timeout and poisoned-channel
+cleanup follow that underlying browser failure. This branch does not use the
+artificial repeated-refresh loop; the installed-loop correction is unrelated.
+Source: [transport checks](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/39469717137).
+
+Pinned Playwright source suppresses exceptions in both the Python close method
+and driver frame dispatch. A successful close-method return therefore does not
+prove a browser-side terminal event was delivered. This observation does not
+establish why the hosted socket's close/error callback did not settle. Independent
+design review approved an authored pinned-implementation probe and closed
+failure-only fixture socket state/event evidence, using the existing snapshot
+budget and retaining the original readiness failure. No behavior correction,
+extra close/request, retry, timer or deadline change is justified yet.
+
+All ninth-head workflows are terminal: **seven passed, controlled transport
+failed**. Application passed **4092 backend tests with no skips in 1079.38
+seconds**, **60 React tests**, all aggregate checks and XML owned cleanup.
+Source: [application checks](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/39469717101).
+
+The authored pinned Playwright probe demonstrates that failed dispatch can leave
+the fixture-owned socket connecting and its original promise pending despite a
+normal close-method return; normal dispatch closes it and settles that same
+promise. This proves a possible mechanism, not the hosted cause. The diagnostic
+retains the first socket's closure, saturates per-document instance count at two,
+and marks later instances ambiguous. Callbacks record booleans then resolve with
+the original event. It exposes only fixed ready-state/event-seen fields via the
+existing bounded failure-only snapshot; original success code, waits, refusal
+helpers and fixture behavior outside that evidence block are pinned unchanged.
+Focused checks passed **248 tests in 6.18 seconds**, Ruff/format and mypy.
+Exact-source review and full normal/fresh gates are in progress.
+
+The first full tenth-candidate normal gate retained a deterministic integration
+failure: **3770 passed, 375 skipped, one failed in 177.20 seconds**. The authored
+browser fixture's acquisition digest still pinned its prior bytes after the
+narrow evidence block changed. The existing integrity assertion correctly
+refused that mismatch. Digest reference/compatibility review is in progress;
+no integrity assertion is being removed or relaxed.
+
+Compatibility review established that the acquired fixture bytes are pinned not
+only by an integrity test but also by service validation and SQL provenance
+fences. The initial four-file source GO is withdrawn: that candidate must not
+be published as accepted. The fixture instrumentation is being removed rather
+than changing any digest authorization or historical migration. The original
+socket is lexical inside the acquired document; observing its private state
+externally would require a more invasive constructor/init-script intervention.
+That expansion is not justified. A reduced diagnostic is limited to existing
+closed current-document/pending-task evidence and authored pinned mechanism
+probes, preserving the original acquisition bytes. It cannot claim the socket's
+state or delivered events, and the hosted root cause remains unresolved.
+
+The reduced patch restores the host fixture file byte-for-byte to the ninth
+baseline and the original PAGE acquisition digest
+`7c26b49fe73a02899f77c88ebea70abb1f256399b66ed9c3b41eab12b587f9e3`.
+All five SQL provenance fences remain unchanged. The surviving three-file
+implementation adds only the existing closed document/marker snapshot to the
+single bounded readiness-failure evaluation, alongside pending-task states.
+The authored pinned probes now exercise the original fixture. Focused browser,
+HTML/XML, tooltip and migration checks passed **371 tests / seven explicit SQL
+skips in 8.79 seconds**, with Ruff/format and mypy passing. Exact-source review
+and new combined normal/fresh validation are running; the initial provenance
+mismatch remains a failed receipt above.
+
+The first reduced normal gate confirmed the acquisition-digest regression is
+fixed, but retained a different failure: **3786 passed, 375 skipped, one failed
+in 169.91 seconds**. The unchanged deliberate 100-millisecond TLS slow-response
+case recorded zero server requests rather than one before its connection denial.
+The isolated unchanged TLS module then passed **18 tests in 8.58 seconds**.
+No timeout, retry-count assertion or acceptance criterion changed. This does not
+establish scheduling cause. A genuinely fresh full gate is running unchanged;
+normal acceptance is still outstanding.
+
+Read-only isolation review found no process/task leak or global mutation from
+the pinned probes: the synchronous Node child is reaped and Python async work
+is locally closed. The unchanged TLS failure occurred before its server recorded
+a request; no phase timing establishes its cause. The reduced candidate then
+passed both complete gates unchanged: **3787 backend tests / 375 explicit
+infrastructure skips and 60 React tests**, all aggregate checks. Genuinely fresh
+backend elapsed was 201.21 seconds; subsequent normal elapsed was 166.95 seconds.
+Both earlier tenth-candidate failures remain retained, and no deadline or
+provenance fence was weakened. Exact-head hosted acceptance remains required.

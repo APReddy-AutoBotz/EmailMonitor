@@ -417,10 +417,11 @@ def test_pending_task_evidence_never_echoes_unknown_guest_text() -> None:
 
 def test_pending_task_diagnostic_preserves_deadline_and_rethrows_failure() -> None:
     guest = (ROOT / "scripts/isolation/browser_acceptance.py").read_text()
-    assert 'page.evaluate("globalThis.boundaryPending"), timeout=1' in guest
+    assert "page.evaluate(BOUNDARY_FAILURE_SNAPSHOT), timeout=1" in guest
     assert '"globalThis.boundaryReady === true", timeout=10000' in guest
     assert "await boundary_readiness(" in guest
-    assert "trace_stage(pending_task_evidence(pending))\n            raise" in guest
+    assert "for evidence in boundary_failure_evidence(snapshot):" in guest
+    assert 'pass\n            raise\n        trace_stage("boundary_ready")' in guest
 
 
 def test_fixture_tracks_each_fixed_pending_operation_without_early_readiness() -> None:
