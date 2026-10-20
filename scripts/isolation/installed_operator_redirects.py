@@ -14,7 +14,7 @@ from http.cookies import CookieError, SimpleCookie
 from typing import TYPE_CHECKING, Any, NoReturn, get_args
 from urllib.parse import parse_qsl, urlsplit
 
-from operator_ui_protocol import ERRORS, InstalledLoginPhase, InstalledReason
+from operator_ui_protocol import ERRORS, InstalledLoginPhase, InstalledReason, failure_reason
 
 if TYPE_CHECKING:
     from playwright.async_api import BrowserContext, CDPSession, Frame, Page
@@ -59,6 +59,23 @@ class InstalledDiagnostics:
         if self.first.phase is not None:
             result["installed_login_phase"] = self.first.phase
         return result
+
+
+def installed_relay_reason(error: BaseException) -> InstalledReason:
+    """Classify only exact authored guards; no exception text enters diagnostics."""
+    known = failure_reason(error)
+    if known == "rpc_request_capacity":
+        return "installed_relay_request_capacity"
+    if known == "rpc_admission_capacity":
+        return "installed_relay_admission_capacity"
+    if (
+        type(error) is RuntimeError
+        and len(error.args) == 1
+        and type(error.args[0]) is str
+        and error.args[0] == "UI diagnostic request too large"
+    ):
+        return "installed_relay_request_size"
+    return "installed_route_relay"
 
 
 class LoginRedirects:

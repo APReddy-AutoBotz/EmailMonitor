@@ -366,3 +366,73 @@ infrastructure skips and 57 React tests**, with all documentation, Ruff/format,
 mypy, inventory, frontend typecheck/lint and build checks. Backend elapsed time
 was 166.82 seconds. A genuinely new-empty Python environment gate is running;
 actual hosted browser acceptance is still required.
+
+## Fourth correction hosted evidence (in progress)
+
+Head `470beb8b1badfa4e214777099596478e8ac2e6c4` uses reviewed tree
+`2644b2aa0d2134954fec81903bfaca1cdc0e49bc`; its synthetic merge has the same tree
+and expected parents. Both normal and genuinely fresh full local gates passed
+**3504 backend / 375 explicit infrastructure skips and 57 React tests**, with all
+aggregate checks. Fresh backend elapsed time was 197.79 seconds.
+
+[Service run 39447562879](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/39447562879)
+passed actual packaging again and **12 focused actual PostgreSQL/RabbitMQ broker
+tests in 117.60 seconds**. Installed browser progressed through both sign-ins;
+its failure moved to `keyword_worker`, fixed reason `installed_route_relay`,
+exception class `RuntimeError`, without an active login phase. Numerous successful
+authenticated API replies do not establish worker completion. The exact relay
+refusal requires further diagnosis; full aggregate acceptance is still running.
+The earlier callback-document failure is retained, and this progression does not
+retroactively prove the hypothesized late-commit cause.
+
+### Fifth correction scope and evidence
+
+The installed positive-work harness retained a five-second execution lease, while
+its restart is explicitly an empty-process restart and natural browser expiry is
+independently tested by shortening that session to 500 milliseconds. Independent
+review approved using the existing supported thirty-second worker default in this
+test only, retaining the publisher's five-second lease, all browser expiry/control
+ordering, UI deadlines and exact outcome assertions. An AST regression pins those
+boundaries. Focused validation: **129 passed, one actual-installed dependency
+skip**; Ruff/format/mypy passed. No SQL or production runtime changed.
+
+The retained PostgreSQL `ASSOCIATION_DENIED` occurred at the parent composite
+fence late in association writes, not the affiliation-value guard. Lease expiry
+is consistent with this observation but not uniquely established. It is not
+conflated with the guest relay failure. An authored ASGI probe confirms ordinary
+host relay exceptions propagate through the distinct host-owned error path.
+Request-local closed diagnostic reasons for the existing guest request/admission
+capacity, envelope-size and outer-status guards are therefore being added without
+changing shared Channel behavior, accepted responses or limits. Unknown exception
+text must retain the generic reason; no raw exception details may be emitted.
+
+Exact independent source review approved both the isolated worker/publisher lease
+split and diagnostics-only patch. Diagnostics focused validation passed **328
+tests**, with one explicit unavailable installed SQL/broker dependency skip;
+Ruff check/format and strict mypy passed. Request-local classification re-raises
+original exceptions; first-cause capture and shared Channel remain unchanged.
+The guest retains 108 awaits, identical timeout calls and the approved login
+barrier. No actual relay cause or complete browser journey is claimed. Full
+normal/fresh gates and actual hosted acceptance remain required.
+
+### Fourth correction terminal aggregate and fifth local gate
+
+[Application run 39447563441](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/39447563441)
+passed **3879 backend tests, no skips or failures**, in 1114.39 seconds, plus
+**57 React tests** and all aggregate checks. XML composition and owned cleanup
+passed. All eight workflows terminated: seven passed; only the installed browser
+journey failed in the service workflow. No real-source workflow ran.
+
+The fifth correction's complete normal local gate passed **3530 backend tests /
+375 explicit infrastructure skips and 57 React tests**, with documentation,
+Ruff/format, mypy, inventory, frontend types/lint/build all passing. Backend time
+was 190.59 seconds. A genuinely fresh-environment full gate is running; actual
+installed browser acceptance remains required.
+
+The fourth installed-journey failure also retained a secondary
+`Installed operator cleanup failed: process-forced-kill` receipt. This is an
+unresolved cleanup failure, separate from both the relay refusal and the lease
+hypothesis; no successful cleanup or complete journey is inferred for that job.
+The fifth correction's genuinely new-empty full gate subsequently passed unchanged:
+**3530 backend / 375 explicit infrastructure skips and 57 React tests**, all
+aggregate checks, backend elapsed 157.76 seconds.

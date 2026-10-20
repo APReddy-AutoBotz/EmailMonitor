@@ -18,6 +18,7 @@ from browser_acceptance import sandbox_status
 from installed_operator_redirects import (
     InstalledDiagnostics,
     LoginRedirects,
+    installed_relay_reason,
     observe_error_documents,
 )
 from operator_ui_protocol import ORIGIN, InstalledLoginPhase, InstalledReason
@@ -111,17 +112,26 @@ async def main() -> None:
         stage = value
         print(json.dumps({"kind": "stage", "stage": value}), flush=True)
 
-    async def exchange(value: dict[str, object]) -> dict[str, Any]:
-        outer = await channel.request(
-            {
-                "kind": "request",
-                "url": ORIGIN + "/api/v1/installed-relay",
-                "method": "POST",
-                "headers": {"content-type": "application/json"},
-                "body": json.dumps(value),
-            }
-        )
+    async def exchange(
+        value: dict[str, object], operation: list[InstalledReason]
+    ) -> dict[str, Any]:
+        try:
+            outer = await channel.request(
+                {
+                    "kind": "request",
+                    "url": ORIGIN + "/api/v1/installed-relay",
+                    "method": "POST",
+                    "headers": {"content-type": "application/json"},
+                    "body": json.dumps(value),
+                }
+            )
+        except Exception as error:
+            # This operation list belongs only to this route request. Preserve
+            # the exact exception, and never retain or emit its message.
+            operation[0] = installed_relay_reason(error)
+            raise
         if outer["status"] != 200:
+            operation[0] = "installed_relay_outer_status"
             raise RuntimeError("Installed HTTPS relay failed")
         return dict(json.loads(base64.b64decode(outer["body"], validate=True)))
 
@@ -221,7 +231,8 @@ async def main() -> None:
                                 "headers": headers,
                                 "body": "",
                                 "offset": offset,
-                            }
+                            },
+                            operation,
                         )
                         operation[0] = "installed_static_range"
                         piece = base64.b64decode(response["body"], validate=True)
@@ -246,7 +257,8 @@ async def main() -> None:
                             "headers": headers,
                             "body": incoming.post_data or "",
                             "offset": None,
-                        }
+                        },
+                        operation,
                     )
                     output.extend(base64.b64decode(response["body"], validate=True))
                     statuses.append(response["status"])

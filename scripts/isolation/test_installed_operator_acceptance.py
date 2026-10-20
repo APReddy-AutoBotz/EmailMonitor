@@ -429,7 +429,7 @@ def test_required_installed_https_operator_journey(
                     organization=org,
                     queue="em-fixture-" + org.hex,
                     process=ServiceProcess(kind=kind, principal=principals[kind]),  # type: ignore[arg-type]
-                    lease_seconds=5,
+                    lease_seconds=30 if kind == "worker" else 5,
                 )
                 configs[kind] = config_file(tmp_path, runtime_configs[kind].model_dump_json())
             configuration = ReferenceAPI(

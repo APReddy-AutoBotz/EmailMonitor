@@ -686,6 +686,33 @@ def test_installed_browser_image_keeps_original_security_profile_and_no_assets_c
     assert json.loads(json.dumps(ASSETS)) == ASSETS
 
 
+def test_installed_positive_work_lease_is_separate_from_browser_session_expiry() -> None:
+    import ast
+
+    from emailmonitor.runtime.worker import ServiceRuntimeConfig
+
+    root = Path(__file__).resolve().parents[3]
+    source = (root / "scripts/isolation/test_installed_operator_acceptance.py").read_text()
+    tree = ast.parse(source)
+    calls = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "ServiceRuntimeConfig"
+    ]
+    assert len(calls) == 1
+    leases = [keyword.value for keyword in calls[0].keywords if keyword.arg == "lease_seconds"]
+    assert len(leases) == 1
+    expected = ast.parse('30 if kind == "worker" else 5', mode="eval").body
+    assert ast.dump(leases[0]) == ast.dump(expected)
+    assert ServiceRuntimeConfig.model_fields["lease_seconds"].default == 30
+    assert "expires_at=clock_timestamp()+interval '500 milliseconds'" in source
+    assert "AND revoked_at IS NULL AND expires_at<=clock_timestamp()" in source
+    assert source.index("expiry_observed = True") < source.index("release.set()")
+    assert "empty-process restart, not a crash/lease recovery claim" in source
+
+
 @pytest.mark.parametrize("primary_exists", [False, True])
 @pytest.mark.parametrize("join_mode", ["raises", "alive"])
 def test_installed_cleanup_attempts_all_resources_and_preserves_primary(
