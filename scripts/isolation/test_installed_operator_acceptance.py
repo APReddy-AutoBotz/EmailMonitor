@@ -166,7 +166,9 @@ def stop_process(
         except subprocess.TimeoutExpired:
             # Always kill and reap this owned process, but a normal restart must
             # never count a forced shutdown as successful graceful lifecycle proof.
-            errors.append("process-forced-kill")
+            errors.append(
+                "worker-process-forced-kill" if action == "worker" else "api-process-forced-kill"
+            )
             attempt("process-kill", running.kill)
             attempt("process-reap", lambda: running.wait(timeout=5))
         except BaseException:

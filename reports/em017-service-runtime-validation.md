@@ -436,3 +436,51 @@ hypothesis; no successful cleanup or complete journey is inferred for that job.
 The fifth correction's genuinely new-empty full gate subsequently passed unchanged:
 **3530 backend / 375 explicit infrastructure skips and 57 React tests**, all
 aggregate checks, backend elapsed 157.76 seconds.
+
+## Fifth correction hosted evidence (in progress)
+
+Head `2ee98379c099f618f9f33e763f397c3d63a9fd6e` uses reviewed tree
+`23eeb1295dfa3ca4052daf175f3ff8cb6f484e1e`, with matching synthetic merge tree
+and expected parents. [Service run 39451346638](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/39451346638)
+passed actual packaging and **12 focused actual broker tests in 114.08 seconds**.
+Installed browser remains failed at `keyword_worker`, now with the exact closed
+reason `installed_relay_admission_capacity`. This identifies the existing guest
+RPC admission guard; it does not by itself establish why requests accumulated.
+The secondary `process-forced-kill` cleanup failure persists. Its owner is either
+the active worker or API; the generic receipt cannot distinguish them. The
+publisher, guest browser and completed empty-worker restart are excluded by the
+source call paths. No cleanup success or complete journey is claimed. Full
+aggregate acceptance remains running.
+
+### Sixth correction design evidence
+
+The admission guard directly establishes that sixteen guest RPCs were already
+admitted when the next was refused. Source tracing identifies artificial global
+refresh waves every 0.4 seconds in the two job waits; each restarts multiple
+workspace/job resources. Browser fetch cancellation does not cancel already
+admitted host relay work. Individual SQL read transactions close before SSE
+sleep; no shared SQL lock spanning that sleep or production deadlock is proved.
+
+Independent design review approved replacing only those two harness refresh loops
+with exact visible terminal-state waits within the original 55/30-second budgets.
+The normal app path consumes durable job-finished events, scoped cursor replay
+and fresh authorized progress reads, including completion before subscription.
+All outcome/count/effect assertions and Channel limits remain; the export loop
+is untouched. A final reload failure must still fail acceptance, without a manual
+fallback. Separate source-authored API/worker forced-kill labels will distinguish
+existing teardown failures without altering the five-second bound or behavior.
+Actual complete journey and shutdown acceptance remain required.
+
+Sixth-correction focused validation passed **339 tests**, with one explicit
+installed SQL/broker dependency skip. The authored actual-Channel regression
+reproduces admission refusal with overlapping held waves, while completed
+seven-request waves plus a held SSE request fit the unchanged eight active slots.
+Tests compile the actual guest terminal-wait blocks and verify exact visible
+states, original 55/30-second envelopes and failure propagation without refresh
+or retry. Ruff/mypy checks pass; exact source review and full gates follow.
+
+The complete sixth-correction normal local gate passed **3541 backend tests /
+375 explicit infrastructure skips and 57 React tests**, with all documentation,
+Ruff/format, mypy, inventory, frontend typecheck/lint and build checks. Backend
+elapsed time was 165.94 seconds. A genuinely fresh full gate is running; no
+complete hosted installed journey is inferred from local skips.

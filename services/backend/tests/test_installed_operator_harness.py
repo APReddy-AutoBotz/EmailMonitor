@@ -6,6 +6,7 @@ import hashlib
 import json
 import ssl
 from pathlib import Path
+from typing import Literal
 from urllib.parse import parse_qs, urlencode, urlsplit
 
 import httpx
@@ -818,11 +819,13 @@ def test_installed_cleanup_attempts_all_resources_and_preserves_primary(
 
 @pytest.mark.parametrize("primary_exists", [False, True])
 @pytest.mark.parametrize("kill_fails", [False, True])
+@pytest.mark.parametrize("action", ["api", "worker"])
 def test_installed_forced_shutdown_fails_success_and_reaps_during_failure(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     primary_exists: bool,
     kill_fails: bool,
+    action: Literal["api", "worker"],
 ) -> None:
     import subprocess
     from unittest.mock import MagicMock
@@ -840,18 +843,22 @@ def test_installed_forced_shutdown_fails_success_and_reaps_during_failure(
     primary = ValueError("original-task-failure")
     if primary_exists:
         with pytest.raises(ValueError) as caught:
-            with harness.process(tmp_path, "worker", tmp_path / "owned.json"):
+            with harness.process(tmp_path, action, tmp_path / "owned.json"):
                 raise primary
         assert caught.value is primary
         assert "process-forced-kill" in primary.__notes__[0]
         receipt = primary.__notes__[0]
     else:
         with pytest.raises(RuntimeError, match="process-forced-kill") as failure:
-            with harness.process(tmp_path, "worker", tmp_path / "owned.json"):
+            with harness.process(tmp_path, action, tmp_path / "owned.json"):
                 pass
         receipt = str(failure.value)
     assert running.terminate.call_count == running.kill.call_count == 1
     assert running.wait.call_count == 2
+    assert all(call.kwargs == {"timeout": 5} for call in running.wait.call_args_list)
+    assert action + "-process-forced-kill" in receipt
+    other = "api" if action == "worker" else "worker"
+    assert other + "-process-forced-kill" not in receipt
     assert ("process-kill" in receipt) is kill_fails
     assert "private-process-sentinel" not in receipt
 

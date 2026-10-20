@@ -433,12 +433,13 @@ async def main() -> None:
             await login()
             await activate(page, page.get_by_role("button", name="Jobs", exact=True))
             await activate(page, page.get_by_role("button", name="Open job " + job, exact=True))
+            # Initial progress fetch and real scoped SSE update this rendered
+            # status. Repeated global refreshes would overlap seven resource
+            # requests while their previous relay calls are still outstanding.
             async with asyncio.timeout(55):
-                while not await page.get_by_text("completed partial", exact=True).count():
-                    await asyncio.sleep(0.4)
-                    await activate(
-                        page, page.get_by_role("button", name="Refresh current view", exact=True)
-                    )
+                await page.get_by_text("completed partial", exact=True).wait_for(
+                    state="visible", timeout=55000
+                )
             await channel.request({"kind": "control", "action": "wait_jobs"})
             checkpoint("evidence_review")
             await activate(page, page.get_by_role("button", name="Contacts", exact=True))
@@ -502,11 +503,9 @@ async def main() -> None:
             await activate(page, page.get_by_role("button", name="Launch extraction", exact=True))
             checkpoint("url_worker")
             async with asyncio.timeout(30):
-                while not await page.get_by_text("completed", exact=True).count():
-                    await asyncio.sleep(0.4)
-                    await activate(
-                        page, page.get_by_role("button", name="Refresh current view", exact=True)
-                    )
+                await page.get_by_text("completed", exact=True).wait_for(
+                    state="visible", timeout=30000
+                )
             await page.get_by_text(
                 "1 of 1 discovered article units terminal", exact=True
             ).wait_for()
