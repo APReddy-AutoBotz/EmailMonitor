@@ -53,7 +53,7 @@ def test_runtime_quality_read_preserves_stored_snapshot_replay_and_review(
 
 @pytest.mark.parametrize("kind", ["policy", "session", "suppression", "deletion", "expiry"])
 def test_quality_current_authority_refuses(scenario: Scenario, kind: str) -> None:
-    service, _, batch = prepared(scenario)
+    service, job, batch = prepared(scenario)
     org = scenario.organizations[0]
     assert service.quality(org, batch).scope == "article"
     from sqlalchemy import create_engine
@@ -72,19 +72,19 @@ def test_quality_current_authority_refuses(scenario: Scenario, kind: str) -> Non
                 )
             elif kind == "session":
                 c.execute(text("UPDATE emailmonitor.sessions SET revoked_at=clock_timestamp()"))
-            elif kind == "deletion":
-                c.execute(
-                    text(
-                        "UPDATE emailmonitor.organizations SET deletion_generation="
-                        "deletion_generation+1 WHERE id=:org"
-                    ),
-                    {"org": org},
-                )
             elif kind == "expiry":
                 c.execute(text("UPDATE emailmonitor.sessions SET expires_at=clock_timestamp()"))
             else:
-                # Exercise the supported suppression service below rather than bypass triggers.
+                # Exercise supported privacy services below rather than bypass triggers.
                 pass
+        if kind == "deletion":
+            from emailmonitor.lifecycle.models import DeletionRequest
+            from emailmonitor.lifecycle.service import Lifecycle
+
+            receipt = Lifecycle(service.database, service.token, SETTINGS).stage(
+                org, DeletionRequest(job_id=job, reason="privacy_request")
+            )
+            assert receipt.stage == "fenced"
         if kind == "suppression":
             from emailmonitor.lifecycle.models import SuppressionCreate
             from emailmonitor.lifecycle.service import Lifecycle
