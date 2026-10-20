@@ -10,8 +10,10 @@ import base64
 import json
 import re
 import ssl
+import sys
+import threading
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, get_args
 from urllib.parse import urlsplit
 
 import httpx
@@ -41,6 +43,99 @@ REPLY_HEADERS = frozenset(
         "content-range",
     }
 )
+RelayRoute = Literal[
+    "issuer_authorize",
+    "auth",
+    "callback_document",
+    "static",
+    "job_list",
+    "job_detail",
+    "job_progress",
+    "job_items",
+    "job_events",
+    "export_metadata",
+    "export_download",
+    "other_api",
+]
+RelayPhase = Literal["client_open", "response_enter", "response_open"]
+_UUID_PATH = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+
+
+def diagnostic_route(target: str, api: str, issuer: str, assets: dict[str, str]) -> RelayRoute:
+    """Classify an already validated target; no target data enters the record."""
+    parsed = urlsplit(target)
+    origin = f"{parsed.scheme}://{parsed.netloc}"
+    path = parsed.path
+    if origin == issuer and path == "/authorize":
+        return "issuer_authorize"
+    if origin != api:
+        raise ValueError("Validated installed relay target required")
+    if path in {"/api/v1/auth/start", "/api/v1/auth/session", "/api/v1/auth/logout"}:
+        return "auth"
+    if path == "/auth/complete":
+        return "callback_document"
+    if path == "/" or path.lstrip("/") in assets:
+        return "static"
+    scoped = re.fullmatch(rf"/api/v1/organizations/{_UUID_PATH}/(.+)", path)
+    if scoped is not None:
+        resource = scoped.group(1)
+        if resource == "jobs":
+            return "job_list"
+        if re.fullmatch(rf"jobs/{_UUID_PATH}", resource):
+            return "job_detail"
+        if re.fullmatch(rf"jobs/{_UUID_PATH}/progress", resource):
+            return "job_progress"
+        if re.fullmatch(rf"jobs/{_UUID_PATH}/progress/items", resource):
+            return "job_items"
+        if re.fullmatch(rf"jobs/{_UUID_PATH}/events", resource):
+            return "job_events"
+        if resource == "exports" or re.fullmatch(rf"exports/{_UUID_PATH}", resource):
+            return "export_metadata"
+        if re.fullmatch(rf"exports/{_UUID_PATH}/download", resource):
+            return "export_download"
+    return "other_api"
+
+
+class RelayDiagnostics:
+    """One request-local, closed failure tuple across the host's relay threads."""
+
+    def __init__(self) -> None:
+        self.first: tuple[RelayRoute, RelayPhase, Literal["read_timeout"]] | None = None
+        self._lock = threading.Lock()
+
+    def capture(self, error: Exception, route: RelayRoute, last_phase: RelayPhase) -> None:
+        if type(error) is not httpx.ReadTimeout:
+            return
+        if (
+            type(route) is not str
+            or route not in get_args(RelayRoute)
+            or type(last_phase) is not str
+            or last_phase not in get_args(RelayPhase)
+        ):
+            raise ValueError("Closed installed relay diagnostic required")
+        record: tuple[RelayRoute, RelayPhase, Literal["read_timeout"]] = (
+            route,
+            last_phase,
+            "read_timeout",
+        )
+        with self._lock:
+            if self.first is not None:
+                return
+            self.first = record
+        # Latch before output, with no retry if formatting or stderr fails.
+        print(
+            json.dumps(
+                {
+                    "diagnostic": "installed-relay-failure",
+                    "route": record[0],
+                    "last_phase": record[1],
+                    "error": record[2],
+                },
+                sort_keys=True,
+            ),
+            file=sys.stderr,
+            flush=True,
+        )
 
 
 def validate_target(
@@ -115,6 +210,7 @@ def application(
             raise ValueError("Ephemeral loopback HTTPS origin required")
     context = ssl.create_default_context(cafile=str(ca))
     app = FastAPI()
+    diagnostics = RelayDiagnostics()
 
     @app.post("/api/v1/installed-relay")
     async def relay(request: Request) -> JSONResponse:
@@ -122,39 +218,54 @@ def application(
         if len(raw) > 32768:
             raise ValueError("Bounded relay envelope required")
         target, method, headers, body = validate_target(json.loads(raw), api, issuer, assets)
-        async with httpx.AsyncClient(
-            verify=context, trust_env=False, follow_redirects=False, timeout=4
-        ) as client:
-            async with client.stream(method, target, headers=headers, content=body) as response:
-                output = bytearray()
-                stream = response.headers.get("content-type", "").startswith("text/event-stream")
-                try:
-                    async with asyncio.timeout(2 if stream else 5):
-                        async for chunk in response.aiter_bytes():
-                            output.extend(chunk)
-                            if len(output) > 16_384:
-                                raise ValueError("Actual HTTPS response exceeds bounded relay")
-                except TimeoutError:
-                    if not stream:
-                        raise
-                if stream:
-                    end = output.rfind(b"\n\n")
-                    output = output[: end + 2] if end >= 0 else bytearray()
-                if urlsplit(target).path.endswith("/download") and response.status_code == 200:
-                    if len(downloads) >= 2:
-                        raise ValueError("Bounded export receipt count exceeded")
-                    downloads.append(bytes(output))
-                result_headers = {
-                    key: "\n".join(response.headers.get_list(key))
-                    for key in REPLY_HEADERS
-                    if key in response.headers
-                }
-                return JSONResponse(
-                    {
-                        "status": response.status_code,
-                        "headers": result_headers,
-                        "body": base64.b64encode(output).decode(),
+        route = diagnostic_route(target, api, issuer, assets)
+        # These are last-entered phases, not attribution to an exact failing I/O.
+        last_phase: RelayPhase = "client_open"
+        try:
+            async with httpx.AsyncClient(
+                verify=context, trust_env=False, follow_redirects=False, timeout=4
+            ) as client:
+                last_phase = "response_enter"
+                async with client.stream(method, target, headers=headers, content=body) as response:
+                    last_phase = "response_open"  # Includes body processing and context cleanup.
+                    output = bytearray()
+                    stream = response.headers.get("content-type", "").startswith(
+                        "text/event-stream"
+                    )
+                    try:
+                        async with asyncio.timeout(2 if stream else 5):
+                            async for chunk in response.aiter_bytes():
+                                output.extend(chunk)
+                                if len(output) > 16_384:
+                                    raise ValueError("Actual HTTPS response exceeds bounded relay")
+                    except TimeoutError:
+                        if not stream:
+                            raise
+                    if stream:
+                        end = output.rfind(b"\n\n")
+                        output = output[: end + 2] if end >= 0 else bytearray()
+                    if urlsplit(target).path.endswith("/download") and response.status_code == 200:
+                        if len(downloads) >= 2:
+                            raise ValueError("Bounded export receipt count exceeded")
+                        downloads.append(bytes(output))
+                    result_headers = {
+                        key: "\n".join(response.headers.get_list(key))
+                        for key in REPLY_HEADERS
+                        if key in response.headers
                     }
-                )
+                    return JSONResponse(
+                        {
+                            "status": response.status_code,
+                            "headers": result_headers,
+                            "body": base64.b64encode(output).decode(),
+                        }
+                    )
+        except httpx.ReadTimeout as error:
+            try:
+                diagnostics.capture(error, route, last_phase)
+            except BaseException:
+                # A secondary diagnostic failure must never replace the pending failure.
+                pass
+            raise
 
     return app

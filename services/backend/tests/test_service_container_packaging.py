@@ -16,6 +16,7 @@ from unittest.mock import Mock
 import pytest
 import run_service_acceptance as runner
 import service_probe
+from run_xml_acceptance import ProcessDiagnostics, ProcessFailure
 
 from artifacts import PackagingRefused
 
@@ -535,6 +536,9 @@ def test_failure_stage_is_bounded_and_first_failure_survives_cleanup(
             "refusal_index": 0,
             "host_phase": "unknown",
             "shared_budget_state": "inactive",
+            "process_failure": "unknown",
+            "cleanup_container_state": "not_observed",
+            "cleanup_oom": "unknown",
         }
     }
 
@@ -566,6 +570,9 @@ def test_failure_report_never_formats_arbitrary_values(
         "refusal_index",
         "host_phase",
         "shared_budget_state",
+        "process_failure",
+        "cleanup_container_state",
+        "cleanup_oom",
     ):
         monkeypatch.setattr(diagnostics, name, Poison())
     diagnostics.report()
@@ -581,6 +588,9 @@ def test_failure_report_never_formats_arbitrary_values(
             "refusal_index": 0,
             "host_phase": "unknown",
             "shared_budget_state": "unknown",
+            "process_failure": "unknown",
+            "cleanup_container_state": "unknown",
+            "cleanup_oom": "unknown",
         }
     }
 
@@ -616,6 +626,9 @@ def test_orchestration_failure_emits_only_exact_closed_diagnostic(
             "refusal_index": 0,
             "host_phase": "unknown",
             "shared_budget_state": "inactive",
+            "process_failure": "unknown",
+            "cleanup_container_state": "not_observed",
+            "cleanup_oom": "unknown",
         }
     }
 
@@ -643,6 +656,9 @@ def test_primary_probe_failure_is_preserved_when_cleanup_also_fails(
             "refusal_index": 0,
             "host_phase": "unknown",
             "shared_budget_state": "inactive",
+            "process_failure": "unknown",
+            "cleanup_container_state": "not_observed",
+            "cleanup_oom": "unknown",
         }
     }
     assert "private" not in output.err
@@ -665,6 +681,9 @@ def test_failure_before_resource_creation_has_no_cleanup_claim(
         "refusal_index": 0,
         "host_phase": "unknown",
         "shared_budget_state": "inactive",
+        "process_failure": "unknown",
+        "cleanup_container_state": "not_observed",
+        "cleanup_oom": "unknown",
     }
 
 
@@ -864,6 +883,8 @@ def test_refusal_execution_has_five_second_and_shared_budget_bounds(
     assert owned.deadline is None
     assert owned.shared_budget_state == "inactive"
     assert owned.host_phase == "unknown"
+    assert owned.failed_container is None
+    assert owned.process_diagnostics is None
 
 
 def test_expired_shared_budget_prevents_next_control_operation(
@@ -994,6 +1015,14 @@ def test_refusal_boundary_diagnostics_preserve_phase_index_and_budget(
     assert owned.shared_budget_state == ("exhausted" if exhausted else "remaining")
     assert owned.container_outcome == "unknown"
     assert owned.deadline is None
+    if phase in {"start_attach", "stopped_inspect", "stopped_validate"}:
+        assert owned.failed_container == (
+            f"em-service-{OWNER}-1-refuse-{command_name}",
+            "c" * 64,
+            IMAGE,
+        )
+    else:
+        assert owned.failed_container is None
 
 
 def test_exhaustion_before_refusal_inspect_records_boundary_without_control_call(
@@ -1038,12 +1067,16 @@ def test_primary_refusal_diagnostics_are_frozen_before_cleanup(
         self.refusal_index = 4
         self.host_phase = "stopped_inspect"
         self.shared_budget_state = "remaining"
+        self.process_diagnostics = ProcessDiagnostics(ProcessFailure.DEADLINE)
         raise PackagingRefused("private primary context")
 
     def cleanup(self: Any) -> None:
         self.refusal_index = 5
         self.host_phase = "container_create"
         self.shared_budget_state = "exhausted"
+        self.process_diagnostics = ProcessDiagnostics(ProcessFailure.OS_ERROR)
+        self.cleanup_container_state = "exited"
+        self.cleanup_oom = "yes"
         raise PackagingRefused("private cleanup context")
 
     monkeypatch.setattr(runner.OwnedServiceBuilds, "production_refusal", refuse)
@@ -1062,6 +1095,9 @@ def test_primary_refusal_diagnostics_are_frozen_before_cleanup(
         "refusal_index": 4,
         "host_phase": "stopped_inspect",
         "shared_budget_state": "remaining",
+        "process_failure": "deadline",
+        "cleanup_container_state": "exited",
+        "cleanup_oom": "yes",
     }
 
 
@@ -1080,15 +1116,175 @@ def test_added_diagnostics_reject_nonexact_types_and_unknown_values(
         diagnostics.refusal_index = index  # type: ignore[assignment]
         diagnostics.host_phase = String("start_attach")
         diagnostics.shared_budget_state = String("remaining")
+        diagnostics.process_failure = String("deadline")
+        diagnostics.cleanup_container_state = String("running")
+        diagnostics.cleanup_oom = String("yes")
         diagnostics.report()
         value = json.loads(capsys.readouterr().err)["service_packaging_failure"]
         assert value["refusal_index"] == 0
         assert value["host_phase"] == "unknown"
         assert value["shared_budget_state"] == "unknown"
+        assert value["process_failure"] == "unknown"
+        assert value["cleanup_container_state"] == "unknown"
+        assert value["cleanup_oom"] == "unknown"
     diagnostics = runner.Diagnostics()
     diagnostics.host_phase = "private phase"
     diagnostics.shared_budget_state = "private budget"
+    diagnostics.process_failure = "private cause"
+    diagnostics.cleanup_container_state = "private state"
+    diagnostics.cleanup_oom = "private OOM"
     diagnostics.report()
     output = capsys.readouterr()
     assert "private" not in output.err
     assert len(output.err.encode()) < 512
+
+
+def cleanup_record() -> dict[str, Any]:
+    value = record()
+    value["Id"] = "c" * 64
+    value["State"]["Dead"] = False
+    return value
+
+
+@pytest.mark.parametrize(
+    ("changed", "expected"),
+    [
+        ({}, ("exited", "no")),
+        ({"Status": "created"}, ("created", "no")),
+        ({"Status": "running", "Running": True}, ("running", "no")),
+        ({"OOMKilled": True, "ExitCode": 137}, ("exited", "yes")),
+        ({"Status": "paused", "Running": True, "Paused": True}, ("other", "unknown")),
+        ({"Status": "dead", "Dead": True}, ("other", "unknown")),
+        ({"Running": True}, ("unknown", "unknown")),
+        ({"Paused": True}, ("unknown", "unknown")),
+        ({"Restarting": True}, ("unknown", "unknown")),
+        ({"Dead": True}, ("unknown", "unknown")),
+        ({"OOMKilled": True}, ("unknown", "unknown")),
+        ({"Status": "running", "Running": True, "ExitCode": 1}, ("unknown", "unknown")),
+        ({"Status": "created", "OOMKilled": True, "ExitCode": 137}, ("unknown", "unknown")),
+        ({"Status": "paused", "Paused": False}, ("unknown", "unknown")),
+        ({"Status": "private status"}, ("unknown", "unknown")),
+        ({"ExitCode": True}, ("unknown", "unknown")),
+        ({"ExitCode": -1}, ("unknown", "unknown")),
+        ({"OOMKilled": "true"}, ("unknown", "unknown")),
+        ({"Error": "private daemon detail"}, ("unknown", "unknown")),
+    ],
+)
+def test_cleanup_observation_is_closed_and_rejects_contradictory_state(
+    changed: dict[str, object], expected: tuple[str, str]
+) -> None:
+    value = cleanup_record()
+    value["State"].update(changed)
+    assert runner.cleanup_observation(value, "c" * 64, IMAGE) == expected
+
+
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        ("Id", "d" * 64),
+        ("Image", "sha256:" + "e" * 64),
+        ("State", []),
+        ("State", {}),
+    ],
+)
+def test_cleanup_observation_requires_exact_container_and_image(key: str, value: object) -> None:
+    observed = cleanup_record()
+    observed[key] = value
+    assert runner.cleanup_observation(observed, "c" * 64, IMAGE) == ("unknown", "unknown")
+
+
+@pytest.mark.parametrize("missing", [False, True])
+def test_cleanup_observes_only_failed_target_using_existing_owned_inspect(
+    missing: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    owned = runner.OwnedServiceBuilds(OWNER)
+    owned.containers = ["other", "failed"]
+    owned.failed_container = "failed", "c" * 64, IMAGE
+    remaining = set(owned.containers)
+    if missing:
+        remaining.remove("failed")
+    calls: list[tuple[str, str]] = []
+
+    def inspect(kind: str, name: str) -> dict[str, Any] | None:
+        calls.append((kind, name))
+        if name not in remaining:
+            return None
+        value = cleanup_record()
+        if name == "other":
+            value["State"].update(OOMKilled=True, ExitCode=137)
+        return value
+
+    def remove(arguments: list[str], **kwargs: object) -> bytes:
+        remaining.remove(arguments[-1])
+        return b""
+
+    monkeypatch.setattr(owned, "inspect", inspect)
+    control = Mock(side_effect=remove)
+    monkeypatch.setattr(runner, "command", control)
+    owned.close()
+    assert calls == [
+        ("container", "failed"),
+        ("container", "failed"),
+        ("container", "other"),
+        ("container", "other"),
+    ]
+    assert control.call_count == (1 if missing else 2)
+    assert (owned.cleanup_container_state, owned.cleanup_oom) == (
+        ("missing", "unknown") if missing else ("exited", "no")
+    )
+    assert not remaining
+
+
+def test_cleanup_foreign_owner_never_produces_observation_or_remove(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    owned = runner.OwnedServiceBuilds(OWNER)
+    owned.containers = ["failed"]
+    owned.failed_container = "failed", "c" * 64, IMAGE
+    value = cleanup_record()
+    value["Config"]["Labels"][runner.LABEL] = "d" * 32
+    value["State"].update(OOMKilled=True, ExitCode=137)
+    inspect = Mock(return_value=value)
+    control = Mock()
+    monkeypatch.setattr(owned, "inspect", inspect)
+    monkeypatch.setattr(runner, "command", control)
+    with pytest.raises(PackagingRefused, match="cleanup_failed"):
+        owned.close()
+    inspect.assert_called_once_with("container", "failed")
+    control.assert_not_called()
+    assert (owned.cleanup_container_state, owned.cleanup_oom) == ("not_observed", "unknown")
+
+
+def test_attach_failure_retains_exact_failed_target_and_typed_cause(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    owned = runner.OwnedServiceBuilds(OWNER)
+    owned.image_ids.add(IMAGE)
+    script = runner.refusal_source("api")
+    value = cleanup_record()
+    value["Config"]["Entrypoint"] = ["python"]
+    value["Config"]["Cmd"] = ["-c", script]
+    inspect = Mock(side_effect=[record(), None, value])
+    monkeypatch.setattr(owned, "inspect", inspect)
+    monkeypatch.setattr(runner, "command", Mock(return_value=b"c" * 64 + b"\n"))
+
+    def attach(arguments: list[str], **kwargs: Any) -> subprocess.CompletedProcess[bytes]:
+        assert kwargs["timeout"] <= 5
+        assert kwargs["stdout_limit"] == 65536 and kwargs["stderr_limit"] == 4096
+        assert type(kwargs["diagnostics"]) is ProcessDiagnostics
+        kwargs["diagnostics"].record(ProcessFailure.DEADLINE)
+        raise PackagingRefused("xml_package_command_failed")
+
+    control = Mock(side_effect=attach)
+    monkeypatch.setattr(runner, "bounded_process", control)
+    with pytest.raises(PackagingRefused, match="xml_package_command_failed"):
+        with owned.probe_budget():
+            owned.production_refusal(IMAGE, 1, "api")
+    target = f"em-service-{OWNER}-1-refuse-api"
+    assert owned.failed_container == (target, "c" * 64, IMAGE)
+    assert owned.process_diagnostics is not None
+    assert owned.process_diagnostics.failure is ProcessFailure.DEADLINE
+    assert owned.host_phase == "start_attach" and owned.refusal_index == 1
+    assert inspect.call_count == 3
+    assert control.call_count == 1
+    assert control.call_args.args[0] == ["docker", "start", "--attach", target]

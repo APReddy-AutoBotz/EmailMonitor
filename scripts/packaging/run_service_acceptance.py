@@ -15,7 +15,7 @@ from typing import Any
 from uuid import uuid4
 
 from base_inventory import validate_base_inventory
-from run_xml_acceptance import bounded_process
+from run_xml_acceptance import ProcessDiagnostics, ProcessFailure, bounded_process
 from service_artifacts import collect_service, tracked_service_sources, verify_service_archive
 
 from artifacts import BASE, PLATFORM, PackagingRefused, archive, digest, materialize, read
@@ -98,6 +98,11 @@ HOST_PHASES = frozenset(
     }
 )
 SHARED_BUDGET_STATES = frozenset({"unknown", "inactive", "remaining", "exhausted"})
+PROCESS_FAILURES = frozenset(reason.value for reason in ProcessFailure)
+CLEANUP_CONTAINER_STATES = frozenset(
+    {"not_observed", "unknown", "missing", "created", "running", "exited", "other"}
+)
+CLEANUP_OOM_STATES = frozenset({"unknown", "no", "yes"})
 
 
 @dataclass
@@ -113,6 +118,9 @@ class Diagnostics:
     refusal_index: int = 0
     host_phase: str = "unknown"
     shared_budget_state: str = "inactive"
+    process_failure: str = "unknown"
+    cleanup_container_state: str = "not_observed"
+    cleanup_oom: str = "unknown"
 
     def mark(self, stage: str, ordinal: int = 0) -> None:
         if type(stage) is not str or stage not in STAGES or type(ordinal) is not int:
@@ -153,6 +161,17 @@ class Diagnostics:
         budget = self.shared_budget_state if type(self.shared_budget_state) is str else "unknown"
         if budget not in SHARED_BUDGET_STATES:
             budget = "unknown"
+        process = self.process_failure if type(self.process_failure) is str else "unknown"
+        if process not in PROCESS_FAILURES:
+            process = "unknown"
+        container = (
+            self.cleanup_container_state if type(self.cleanup_container_state) is str else "unknown"
+        )
+        if container not in CLEANUP_CONTAINER_STATES:
+            container = "unknown"
+        oom = self.cleanup_oom if type(self.cleanup_oom) is str else "unknown"
+        if oom not in CLEANUP_OOM_STATES:
+            oom = "unknown"
         sys.stderr.write(
             json.dumps(
                 {
@@ -165,6 +184,9 @@ class Diagnostics:
                         "refusal_index": refusal_index,
                         "host_phase": phase,
                         "shared_budget_state": budget,
+                        "process_failure": process,
+                        "cleanup_container_state": container,
+                        "cleanup_oom": oom,
                     }
                 },
                 sort_keys=True,
@@ -227,6 +249,60 @@ def stopped_outcome(
     if stderr != expected_stderr or (expected_exit == 1 and stdout):
         return "output_mismatch"
     return "verified"
+
+
+def cleanup_observation(
+    record: dict[str, Any] | None, container_id: str, image_id: str
+) -> tuple[str, str]:
+    """Only the already-owned, exact failed container's pre-removal state."""
+    if record is None:
+        return "missing", "unknown"
+    if (
+        type(record) is not dict
+        or type(record.get("Id")) is not str
+        or record["Id"] != container_id
+        or type(record.get("Image")) is not str
+        or record["Image"] != image_id
+    ):
+        return "unknown", "unknown"
+    state = record.get("State")
+    if (
+        type(state) is not dict
+        or type(state.get("Status")) is not str
+        or any(
+            type(state.get(key)) is not bool
+            for key in ("Running", "Paused", "Restarting", "OOMKilled", "Dead")
+        )
+        or type(state.get("ExitCode")) is not int
+        or not 0 <= state["ExitCode"] <= 255
+        or type(state.get("Error")) is not str
+        or state["Error"] != ""
+    ):
+        return "unknown", "unknown"
+    status = state["Status"]
+    other_flags = {
+        "paused": (True, True, False, False),
+        "restarting": (True, False, True, False),
+        "removing": (False, False, False, False),
+        "dead": (False, False, False, True),
+    }
+    if status in other_flags:
+        flags = tuple(state[key] for key in ("Running", "Paused", "Restarting", "Dead"))
+        if flags != other_flags[status] or state["OOMKilled"]:
+            return "unknown", "unknown"
+        return "other", "unknown"
+    if status not in {"created", "running", "exited"}:
+        return "unknown", "unknown"
+    if (
+        state["Running"] is not (status == "running")
+        or state["Paused"]
+        or state["Restarting"]
+        or state["Dead"]
+        or (status != "exited" and (state["OOMKilled"] or state["ExitCode"] != 0))
+        or (state["OOMKilled"] and state["ExitCode"] == 0)
+    ):
+        return "unknown", "unknown"
+    return status, "yes" if state["OOMKilled"] else "no"
 
 
 def command(arguments: list[str], timeout: float = 30, limit: int = 131072) -> bytes:
@@ -361,6 +437,10 @@ class OwnedServiceBuilds:
         self.refusal_index = 0
         self.host_phase = "unknown"
         self.shared_budget_state = "inactive"
+        self.process_diagnostics: ProcessDiagnostics | None = None
+        self.failed_container: tuple[str, str, str] | None = None
+        self.cleanup_container_state = "not_observed"
+        self.cleanup_oom = "unknown"
         self.deadline: float | None = None
 
     def timeout(self, maximum: float) -> float:
@@ -539,11 +619,14 @@ class OwnedServiceBuilds:
         self.host_phase = "profile_validate"
         validate_profile(record, image_id, script)
         self.host_phase = "start_attach"
+        self.failed_container = name, created.decode("ascii").strip(), image_id
+        self.process_diagnostics = ProcessDiagnostics()
         result = bounded_process(
             ["docker", "start", "--attach", name],
             timeout=self.timeout(5 if refusal else 45),
             stdout_limit=65536,
             stderr_limit=4096,
+            diagnostics=self.process_diagnostics,
         )
         self.host_phase = "stopped_inspect"
         stopped = self.owned("container", name)
@@ -567,6 +650,8 @@ class OwnedServiceBuilds:
                     self.container_outcome = "guest_refused"
             raise PackagingRefused("service_package_smoke_failed")
         self.host_phase = "unknown"
+        self.failed_container = None
+        self.process_diagnostics = None
         return result.stdout
 
     def close(self) -> None:
@@ -574,7 +659,17 @@ class OwnedServiceBuilds:
         for kind, names in (("container", self.containers), ("image", self.images)):
             for name in reversed(names):
                 try:
-                    if self.owned(kind, name) is not None:
+                    record = self.owned(kind, name)
+                    if (
+                        kind == "container"
+                        and self.failed_container is not None
+                        and name == self.failed_container[0]
+                        and self.cleanup_container_state == "not_observed"
+                    ):
+                        self.cleanup_container_state, self.cleanup_oom = cleanup_observation(
+                            record, self.failed_container[1], self.failed_container[2]
+                        )
+                    if record is not None:
                         command(["docker", kind, "rm", "--force", name], timeout=20)
                     if self.inspect(kind, name) is not None:
                         raise PackagingRefused("service_package_cleanup_incomplete")
@@ -750,6 +845,12 @@ def execute(diagnostics: Diagnostics) -> None:
         diagnostics.refusal_index = getattr(owned, "refusal_index", 0)
         diagnostics.host_phase = getattr(owned, "host_phase", "unknown")
         diagnostics.shared_budget_state = getattr(owned, "shared_budget_state", "inactive")
+        process_diagnostics = getattr(owned, "process_diagnostics", None)
+        if (
+            type(process_diagnostics) is ProcessDiagnostics
+            and type(process_diagnostics.failure) is ProcessFailure
+        ):
+            diagnostics.process_failure = process_diagnostics.failure.value
         raise
     finally:
         diagnostics.mark("cleanup")
@@ -760,6 +861,11 @@ def execute(diagnostics: Diagnostics) -> None:
             raise
         else:
             diagnostics.cleanup = "verified"
+        finally:
+            diagnostics.cleanup_container_state = getattr(
+                owned, "cleanup_container_state", "not_observed"
+            )
+            diagnostics.cleanup_oom = getattr(owned, "cleanup_oom", "unknown")
     # No successful receipt, content, stderr or private config is emitted before cleanup.
     diagnostics.mark("receipt")
     print(

@@ -633,3 +633,78 @@ The subsequent genuinely new-empty full gate passed unchanged: **3625 backend
 tests / 375 explicit infrastructure skips and 60 React tests**, all aggregate
 checks; backend elapsed 201.58 seconds. Both earlier failed fresh receipts and
 isolated diagnoses remain above; no failure was reclassified as acceptance.
+
+## Eighth hosted receipts and bounded host diagnostics
+
+Head `ae697ac1fd9c681260ce50371606fa2d45ffd826` retained a service failure.
+The installed service job passed all **12 focused broker tests in 112.02 seconds**,
+then the installed browser journey failed after **82.50 seconds** with a host
+HTTPS relay `ReadTimeout`. The outer relay wrapper reports only that class;
+no fixed route or last-entered phase is available. This proves neither a slow
+API route nor the guest's stage, and no behavior or deadline correction follows
+from it. The seventh head's complete successful journey remains a separate
+receipt, not acceptance of this head.
+
+Packaging failed at first-build, first actual API production refusal:
+`host_phase=start_attach`, `shared_budget_state=remaining`,
+`container_outcome=unknown`, `guest_stage=unknown`, with owned cleanup verified.
+Image identity, creation, ownership and profile checks preceded the failure.
+The bounded attach operation raised before the normal stopped-state inspection;
+a normal nonzero exit alone does not explain this phase. Shared-budget exhaustion
+is excluded by the captured state, but subprocess deadline, output-limit, OS or
+other helper failure are not distinguished. No OOM or CLI-startup cause is proved.
+Source: [service checks](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/39464382849).
+
+Controlled transport passed **41 curated tests**, both single-case checks and
+**four original operator cases**, with XML owned cleanup verified. The previous
+marker failure did not recur; its cause remains unknown.
+Source: [transport checks](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/39464382868).
+
+Independent design review approved two failure-only diagnostic refinements:
+- A typed first subprocess failure category and a separate cleanup-time state
+  observation from the already-required exact-owned container inspection. The
+  latter is not a reconstruction of state at the earlier attach failure.
+- An exact host `ReadTimeout` record with fixed route category and last-entered
+  relay phase. A complete request-local snapshot is latched before stderr output;
+  the original exception is re-raised. No raw URL, query, identifier, header,
+  cookie, body, configuration or arbitrary exception content is emitted.
+
+Implementation and focused validation are in progress. No new Docker inspection,
+request, retry or timeout change is intended; existing failure and cleanup rules
+remain mandatory. Actual exact-head service acceptance remains outstanding.
+
+All eight eighth-head workflows are now terminal: **seven passed, one failed**.
+Full application passed **4000 backend tests with no skips in 916.54 seconds**,
+**60 React tests**, all aggregate checks and XML owned cleanup.
+Source: [application checks](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/39464382737).
+The packaging diagnostic implementation passed **304 focused tests in 16.39
+seconds**, formatting, Ruff and mypy, with independent exact-source review GO.
+The additional observations do not make either service failure accepted.
+
+The installed host relay diagnostic passed **303 focused tests / one explicit
+unavailable-service skip in 8.19 seconds**, Ruff and mypy. Its authored tests pin
+the original HTTP transaction AST, awaits and deadlines. Exact source review is
+in progress. The failure record uses only exact `ReadTimeout`, a fixed route
+category and the last-entered phase; `response_open` includes body processing
+and context cleanup and does not identify which operation failed. A complete
+first-failure snapshot is emitted only to host stderr. Full normal validation of
+the combined diagnostics is running; no cause or behavioral fix is claimed.
+
+Both diagnostic source reviews passed. The combined normal gate passed **3717
+backend tests / 375 explicit infrastructure skips and 60 React tests**, all
+aggregate checks; backend elapsed 182.41 seconds. The first fresh gate is a
+retained failure: **3716 passed, 375 skipped, one failed in 233.40 seconds**.
+The unchanged TLS shutdown regression's child remained alive at its pre-request
+poll, but TCP readiness still refused connection after the original five-second
+startup bound. Its shutdown assertions were not reached. The entire unchanged
+harness test module then passed **133 tests in 4.36 seconds** in isolation.
+No startup or shutdown deadline was changed. The isolated child imports only
+Uvicorn/FastAPI and not the new relay diagnostic; no direct import coupling is
+established. Another genuinely new-empty full gate is running unchanged.
+
+Read-only isolation review found no leaked task/thread/client or global-state
+mutation from the new tests; all replacement module bindings are restored and
+the isolated TLS child does not load this diagnostic. Scheduling cause remains
+unproved. The next genuinely new-empty full gate passed unchanged: **3717 backend
+tests / 375 explicit infrastructure skips and 60 React tests**, all aggregate
+checks; backend elapsed 201.38 seconds. The failed fresh receipt remains above.
