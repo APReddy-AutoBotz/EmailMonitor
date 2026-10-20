@@ -81,6 +81,23 @@ PRODUCTION_COMMANDS = ("api", "worker", "publish-once", "reconcile-once", "check
 CONTAINER_OUTCOMES = frozenset(
     {"unknown", "oom_killed", "not_stopped", "exit_mismatch", "output_mismatch", "guest_refused"}
 )
+HOST_PHASES = frozenset(
+    {
+        "unknown",
+        "image_identity",
+        "image_inspect",
+        "container_absence",
+        "container_create",
+        "created_identity",
+        "created_inspect",
+        "profile_validate",
+        "start_attach",
+        "stopped_inspect",
+        "stopped_validate",
+        "budget_complete",
+    }
+)
+SHARED_BUDGET_STATES = frozenset({"unknown", "inactive", "remaining", "exhausted"})
 
 
 @dataclass
@@ -93,6 +110,9 @@ class Diagnostics:
     cleanup: str = "not_started"
     guest_stage: str = "unknown"
     container_outcome: str = "unknown"
+    refusal_index: int = 0
+    host_phase: str = "unknown"
+    shared_budget_state: str = "inactive"
 
     def mark(self, stage: str, ordinal: int = 0) -> None:
         if type(stage) is not str or stage not in STAGES or type(ordinal) is not int:
@@ -124,6 +144,15 @@ class Diagnostics:
         outcome = self.container_outcome if type(self.container_outcome) is str else "unknown"
         if outcome not in CONTAINER_OUTCOMES:
             outcome = "unknown"
+        refusal_index = self.refusal_index if type(self.refusal_index) is int else 0
+        if refusal_index not in (0, 1, 2, 3, 4, 5):
+            refusal_index = 0
+        phase = self.host_phase if type(self.host_phase) is str else "unknown"
+        if phase not in HOST_PHASES:
+            phase = "unknown"
+        budget = self.shared_budget_state if type(self.shared_budget_state) is str else "unknown"
+        if budget not in SHARED_BUDGET_STATES:
+            budget = "unknown"
         sys.stderr.write(
             json.dumps(
                 {
@@ -133,6 +162,9 @@ class Diagnostics:
                         "cleanup": cleanup,
                         "guest_stage": guest,
                         "container_outcome": outcome,
+                        "refusal_index": refusal_index,
+                        "host_phase": phase,
+                        "shared_budget_state": budget,
                     }
                 },
                 sort_keys=True,
@@ -326,6 +358,9 @@ class OwnedServiceBuilds:
         self.image_ids: set[str] = set()
         self.guest_stage = "unknown"
         self.container_outcome = "unknown"
+        self.refusal_index = 0
+        self.host_phase = "unknown"
+        self.shared_budget_state = "inactive"
         self.deadline: float | None = None
 
     def timeout(self, maximum: float) -> float:
@@ -341,9 +376,26 @@ class OwnedServiceBuilds:
         if self.deadline is not None:
             raise PackagingRefused("service_package_probe_deadline_refused")
         self.deadline = time.monotonic() + 45
+        self.refusal_index = 0
+        self.host_phase = "unknown"
+        self.shared_budget_state = "remaining"
         try:
             yield
+            self.refusal_index = 0
+            self.host_phase = "budget_complete"
             self.timeout(1)  # Completion and all receipt checks must fit the shared budget.
+        except BaseException:
+            # Snapshot before finally clears the deadline; never replace the primary error.
+            try:
+                self.shared_budget_state = (
+                    "exhausted" if time.monotonic() >= self.deadline else "remaining"
+                )
+            except Exception:
+                self.shared_budget_state = "unknown"
+            raise
+        else:
+            self.host_phase = "unknown"
+            self.shared_budget_state = "inactive"
         finally:
             # Owned cleanup has its existing independent finite reconciliation bounds.
             self.deadline = None
@@ -433,6 +485,7 @@ class OwnedServiceBuilds:
         return identifier
 
     def smoke(self, image_id: str, ordinal: int, probe: str | None = None) -> bytes:
+        self.refusal_index = 0
         case = "help" if probe is None else "probe"
         return self._run(image_id, ordinal, probe, case, refusal=False)
 
@@ -440,20 +493,26 @@ class OwnedServiceBuilds:
         script = refusal_source(command_name)
         if self.deadline is None:
             raise PackagingRefused("service_package_probe_deadline_refused")
+        self.refusal_index = PRODUCTION_COMMANDS.index(command_name) + 1
         self._run(image_id, ordinal, script, "refuse-" + command_name, refusal=True)
+        self.refusal_index = 0
 
     def _run(
         self, image_id: str, ordinal: int, script: str | None, case: str, *, refusal: bool
     ) -> bytes:
+        self.host_phase = "image_identity"
         if image_id not in self.image_ids or ordinal not in (1, 2):
             raise PackagingRefused("service_package_image_identity_refused")
+        self.host_phase = "image_inspect"
         image = self.owned("image", image_id)
         if image is None or image.get("Id") != image_id:
             raise PackagingRefused("service_package_image_identity_refused")
         name = f"em-service-{self.owner}-{ordinal}-{case}"
+        self.host_phase = "container_absence"
         if self.inspect("container", name) is not None:
             raise PackagingRefused("service_package_resource_exists")
         self.containers.append(name)
+        self.host_phase = "container_create"
         created = command(
             [
                 "docker",
@@ -470,19 +529,25 @@ class OwnedServiceBuilds:
             ],
             timeout=self.timeout(20),
         )
+        self.host_phase = "created_identity"
         if not re.fullmatch(rb"[a-f0-9]{64}\n", created):
             raise PackagingRefused("service_package_container_identity_refused")
+        self.host_phase = "created_inspect"
         record = self.owned("container", name)
         if record is None:
             raise PackagingRefused("service_package_container_missing")
+        self.host_phase = "profile_validate"
         validate_profile(record, image_id, script)
+        self.host_phase = "start_attach"
         result = bounded_process(
             ["docker", "start", "--attach", name],
             timeout=self.timeout(5 if refusal else 45),
             stdout_limit=65536,
             stderr_limit=4096,
         )
+        self.host_phase = "stopped_inspect"
         stopped = self.owned("container", name)
+        self.host_phase = "stopped_validate"
         outcome = stopped_outcome(
             stopped,
             result.returncode,
@@ -501,6 +566,7 @@ class OwnedServiceBuilds:
                 }:
                     self.container_outcome = "guest_refused"
             raise PackagingRefused("service_package_smoke_failed")
+        self.host_phase = "unknown"
         return result.stdout
 
     def close(self) -> None:
@@ -681,6 +747,9 @@ def execute(diagnostics: Diagnostics) -> None:
         diagnostics.capture()
         diagnostics.guest_stage = getattr(owned, "guest_stage", "unknown")
         diagnostics.container_outcome = getattr(owned, "container_outcome", "unknown")
+        diagnostics.refusal_index = getattr(owned, "refusal_index", 0)
+        diagnostics.host_phase = getattr(owned, "host_phase", "unknown")
+        diagnostics.shared_budget_state = getattr(owned, "shared_budget_state", "inactive")
         raise
     finally:
         diagnostics.mark("cleanup")

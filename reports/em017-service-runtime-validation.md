@@ -484,3 +484,63 @@ The complete sixth-correction normal local gate passed **3541 backend tests /
 Ruff/format, mypy, inventory, frontend typecheck/lint and build checks. Backend
 elapsed time was 165.94 seconds. A genuinely fresh full gate is running; no
 complete hosted installed journey is inferred from local skips.
+
+## Sixth correction hosted evidence (in progress)
+
+Head `7420550bca218e204d77dcb93c1c31d64e7cf674` uses reviewed tree
+`912f2c255db6bbef563bb5b268130bbd7b96ee39` with matching synthetic merge tree and
+expected parents. Normal and genuinely fresh local gates passed **3541 backend /
+375 explicit infrastructure skips and 57 React tests**, all aggregate checks;
+fresh backend time was 216.43 seconds.
+
+[Service run 39454825028](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/39454825028)
+passed **12 focused actual broker tests in 112.41 seconds**. Installed browser
+advanced through keyword completion, evidence review and both export downloads,
+then failed at `url_worker` with `AssertionError` and generic fixed reason. Exact
+URL outcome assertion diagnosis remains pending. The previous admission-capacity
+and forced-kill failures were not reported in this run; the entire journey has
+not passed and this is not a final cleanup receipt.
+
+Packaging independently failed at build one, `production_refusals`, with unknown
+container outcome/guest stage and verified owned cleanup. Unchanged packaging
+source and previous passing heads do not establish flakiness or cause. Existing
+receipt combines several host-control/budget boundaries; bounded phase diagnostics
+are being reviewed without budget, confinement or accepted-result changes. Full
+aggregate acceptance is still running.
+
+### Seventh correction scope and source evidence
+
+The rendered outcomes table has distinct Outcome and Reason columns. For a
+successful no-contact article, SQL sets both fields to `no_contact`, and the UI
+renders both as `no contact`. The old table-wide matching-cell count of one is
+therefore impossible for that valid row. Independent review approved checking
+both exact columns while retaining the total two-row assertion, existing await
+count and all timeout expressions. This proves the assertion defect independently;
+the preceding hosted generic failure does not uniquely identify which assertion
+fired. Authored tests render the real Jobs/JobWorkspace component (**3 passed**)
+and execute the actual guest assertion block with wrong/missing/extra negative
+cases. Combined focused Python checks: **346 passed, one explicit unavailable
+installed SQL/broker skip**. Ruff/format/mypy and frontend types/ESLint passed.
+Exact four-path source review returned GO; production UI behavior is unchanged.
+
+Packaging's unchanged runner was exercised with authored failures at seven host
+boundaries. All reproduced its indistinguishable unknown receipt without Docker.
+Reviewed diagnostic-only additions will expose a closed refusal index, host phase
+and shared-budget state, frozen before cleanup; successful indices reset to zero
+to avoid later misattribution. No extra container calls, budget, confinement,
+process helper or accepted-result changes are authorized by this diagnostic patch.
+
+Packaging diagnostics focused validation passed **177 tests** in 2.99 seconds,
+including 32 new regression cases; Ruff/format/mypy passed. The two-file patch
+leaves old receipt fields and success receipts unchanged. Exact implementation
+review and serial full normal/fresh gates are running; actual failure cause is
+still unresolved.
+
+Independent exact-source review approved both frozen patches. Packaging's existing
+timeout/Docker/process/success calls and ownership/profile/cleanup functions are
+unchanged; the guest probe, Dockerfile and shared process helper are unchanged.
+The full seventh-correction normal local gate passed **3580 backend tests / 375
+explicit infrastructure skips and 60 React tests**, with all documentation,
+Ruff/format, mypy, inventory, frontend types/lint/build passing. Backend time was
+166.78 seconds. Genuinely fresh full validation and hosted acceptance remain
+pending.

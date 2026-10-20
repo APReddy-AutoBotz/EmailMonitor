@@ -511,9 +511,9 @@ async def main() -> None:
             ).wait_for()
             outcomes = page.get_by_role("table", name="Actual article outcomes and failures")
             await expect(outcomes.get_by_role("row")).to_have_count(2)
-            await expect(outcomes.get_by_role("cell", name="no contact", exact=True)).to_have_count(
-                1
-            )
+            await expect(
+                outcomes.get_by_role("row").nth(1).locator("td:nth-child(2), td:nth-child(3)")
+            ).to_have_text(["no contact", "no contact"])
             checkpoint("readonly_role")
             organization = page.get_by_role("combobox", name="Active organization", exact=True)
             values = await organization.locator("option").evaluate_all(

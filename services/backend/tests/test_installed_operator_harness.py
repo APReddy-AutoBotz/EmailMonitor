@@ -683,7 +683,8 @@ def test_installed_browser_image_keeps_original_security_profile_and_no_assets_c
     assert 'isinstance(error, Error) and route.request.failure == "net::ERR_ABORTED"' in guest
     assert '"Installed browser journey failed: " + fixed["error"]' in guest
     assert "type(error).__name__" not in guest
-    assert 'name="no contact", exact=True' in guest
+    assert 'locator("td:nth-child(2), td:nth-child(3)")' in guest
+    assert '.to_have_text(["no contact", "no contact"])' in guest
     assert json.loads(json.dumps(ASSETS)) == ASSETS
 
 

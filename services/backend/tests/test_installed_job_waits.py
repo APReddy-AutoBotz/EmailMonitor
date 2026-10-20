@@ -3,6 +3,7 @@
 import ast
 import asyncio
 from pathlib import Path
+from textwrap import dedent
 from typing import Any
 
 import pytest
@@ -166,7 +167,7 @@ def test_job_wait_source_retains_initial_fetch_real_replay_and_terminal_assertio
     assert guest.count('name="Refresh current view", exact=True') == 1  # Existing export loop only.
     assert '"action": "wait_jobs"' in guest
     assert '"1 of 1 discovered article units terminal"' in guest
-    assert 'name="no contact", exact=True' in guest
+    assert '.to_have_text(["no contact", "no contact"])' in guest
     assert 'name="Actual article outcomes and failures"' in guest
 
 
@@ -192,5 +193,125 @@ def test_failed_terminal_observation_propagates_without_refresh_or_retry(
         with pytest.raises(TimeoutError) as caught:
             await job_wait(seconds, text)(Page())
         assert caught.value is failure and calls == 1
+
+    asyncio.run(exercise())
+
+
+def url_assertions() -> Any:
+    """Execute the actual guest's two expectations without inventing a UI result."""
+    root = Path(__file__).resolve().parents[3]
+    source = (root / "scripts/isolation/installed_operator_browser.py").read_text()
+    section = source.split('checkpoint("url_worker")', 1)[1].split(
+        'checkpoint("readonly_role")', 1
+    )[0]
+    nodes = ast.parse(dedent(section)).body
+    start = next(
+        index
+        for index, node in enumerate(nodes)
+        if isinstance(node, ast.Assign)
+        and any(isinstance(target, ast.Name) and target.id == "outcomes" for target in node.targets)
+    )
+    assertions = nodes[start:]
+    assert len(assertions) == 3
+    assert sum(isinstance(node, ast.Await) for line in assertions for node in ast.walk(line)) == 2
+    # Preserve the original assertion timeout defaults. Restricting columns is
+    # the sole selector change; do not broaden the expected state to a count.
+    assert ast.unparse(assertions[1]) == (
+        "await expect(outcomes.get_by_role('row')).to_have_count(2)"
+    )
+    assert ast.unparse(assertions[2]) == (
+        "await expect(outcomes.get_by_role('row').nth(1).locator("
+        "'td:nth-child(2), td:nth-child(3)')).to_have_text(['no contact', 'no contact'])"
+    )
+    function = ast.AsyncFunctionDef(
+        name="check",
+        args=ast.arguments(
+            posonlyargs=[],
+            args=[ast.arg(arg="page"), ast.arg(arg="expect")],
+            kwonlyargs=[],
+            kw_defaults=[],
+            defaults=[],
+        ),
+        body=assertions,
+        decorator_list=[],
+        type_params=[],
+    )
+    module = ast.fix_missing_locations(ast.Module(body=[function], type_ignores=[]))
+    namespace: dict[str, Any] = {}
+    exec(compile(module, "owned-url-assertions", "exec"), namespace)
+    return namespace["check"]
+
+
+@pytest.mark.parametrize(
+    "rows,valid",
+    [
+        ([["article", "no contact", "no contact", "1"]], True),
+        ([["article", "succeeded", "no contact", "1"]], False),
+        ([["article", "no contact", "observed", "1"]], False),
+        ([["article", "succeeded", "observed", "1"]], False),
+        ([["article", "no contact"]], False),
+        ([], False),
+        ([["article", "no contact", "no contact", "1"]] * 2, False),
+    ],
+)
+def test_url_assertions_require_one_row_and_both_exact_outcome_columns(
+    rows: list[list[str]], valid: bool
+) -> None:
+    async def exercise() -> None:
+        failure = AssertionError("authored private assertion detail")
+        table = [["Article", "Outcome", "Reason", "Attempts"], *rows]
+        calls: list[str] = []
+
+        class Cells:
+            def __init__(self, values: list[str]) -> None:
+                self.values = values
+
+        class Row:
+            def __init__(self, values: list[str]) -> None:
+                self.values = values
+
+            def locator(self, selector: str) -> Cells:
+                assert selector == "td:nth-child(2), td:nth-child(3)"
+                return Cells(self.values[1:3])
+
+        class Rows:
+            def nth(self, index: int) -> Row:
+                assert index == 1
+                return Row(table[index])
+
+        class Outcomes:
+            def get_by_role(self, role: str) -> Rows:
+                assert role == "row"
+                return Rows()
+
+        class Page:
+            def get_by_role(self, role: str, *, name: str) -> Outcomes:
+                assert role == "table" and name == "Actual article outcomes and failures"
+                return Outcomes()
+
+        class Expected:
+            def __init__(self, locator: Rows | Cells) -> None:
+                self.locator = locator
+
+            async def to_have_count(self, count: int) -> None:
+                calls.append("row_count")
+                assert isinstance(self.locator, Rows) and count == 2
+                if len(table) != count:
+                    raise failure
+
+            async def to_have_text(self, values: list[str]) -> None:
+                calls.append("columns")
+                assert isinstance(self.locator, Cells) and values == ["no contact", "no contact"]
+                if self.locator.values != values:
+                    raise failure
+
+        if valid:
+            await url_assertions()(Page(), Expected)
+            assert calls == ["row_count", "columns"]
+        else:
+            with pytest.raises(AssertionError) as caught:
+                await url_assertions()(Page(), Expected)
+            assert caught.value is failure
+            assert calls == (["row_count", "columns"] if len(table) == 2 else ["row_count"])
 
     asyncio.run(exercise())

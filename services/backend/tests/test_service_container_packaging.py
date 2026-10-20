@@ -524,7 +524,7 @@ def test_failure_stage_is_bounded_and_first_failure_survives_cleanup(
     diagnostics.report()
     output = capsys.readouterr()
     assert output.out == ""
-    assert len(output.err.encode()) < 256
+    assert len(output.err.encode()) < 512
     assert json.loads(output.err) == {
         "service_packaging_failure": {
             "stage": stage,
@@ -532,6 +532,9 @@ def test_failure_stage_is_bounded_and_first_failure_survives_cleanup(
             "cleanup": "verified",
             "guest_stage": "unknown",
             "container_outcome": "unknown",
+            "refusal_index": 0,
+            "host_phase": "unknown",
+            "shared_budget_state": "inactive",
         }
     }
 
@@ -553,7 +556,17 @@ def test_failure_report_never_formats_arbitrary_values(
             raise AssertionError("Diagnostic attempted arbitrary evaluation")
 
     diagnostics = runner.Diagnostics()
-    for name in ("stage", "ordinal", "failure", "cleanup", "guest_stage", "container_outcome"):
+    for name in (
+        "stage",
+        "ordinal",
+        "failure",
+        "cleanup",
+        "guest_stage",
+        "container_outcome",
+        "refusal_index",
+        "host_phase",
+        "shared_budget_state",
+    ):
         monkeypatch.setattr(diagnostics, name, Poison())
     diagnostics.report()
     output = capsys.readouterr()
@@ -565,6 +578,9 @@ def test_failure_report_never_formats_arbitrary_values(
             "cleanup": "not_started",
             "guest_stage": "unknown",
             "container_outcome": "unknown",
+            "refusal_index": 0,
+            "host_phase": "unknown",
+            "shared_budget_state": "unknown",
         }
     }
 
@@ -597,6 +613,9 @@ def test_orchestration_failure_emits_only_exact_closed_diagnostic(
             "cleanup": cleanup,
             "guest_stage": "unknown",
             "container_outcome": "unknown",
+            "refusal_index": 0,
+            "host_phase": "unknown",
+            "shared_budget_state": "inactive",
         }
     }
 
@@ -621,6 +640,9 @@ def test_primary_probe_failure_is_preserved_when_cleanup_also_fails(
             "cleanup": "failed",
             "guest_stage": "unknown",
             "container_outcome": "unknown",
+            "refusal_index": 0,
+            "host_phase": "unknown",
+            "shared_budget_state": "inactive",
         }
     }
     assert "private" not in output.err
@@ -640,6 +662,9 @@ def test_failure_before_resource_creation_has_no_cleanup_claim(
         "cleanup": "not_started",
         "guest_stage": "unknown",
         "container_outcome": "unknown",
+        "refusal_index": 0,
+        "host_phase": "unknown",
+        "shared_budget_state": "inactive",
     }
 
 
@@ -831,9 +856,14 @@ def test_refusal_execution_has_five_second_and_shared_budget_bounds(
     with owned.probe_budget():
         clock[0] += 45 - remaining
         owned.production_refusal(IMAGE, 1, "worker")
+        assert owned.refusal_index == 0
+        assert owned.host_phase == "unknown"
+        assert owned.shared_budget_state == "remaining"
     assert control.call_args.kwargs["timeout"] == min(5.0, remaining)
     assert owned.containers == [f"em-service-{OWNER}-1-refuse-worker"]
     assert owned.deadline is None
+    assert owned.shared_budget_state == "inactive"
+    assert owned.host_phase == "unknown"
 
 
 def test_expired_shared_budget_prevents_next_control_operation(
@@ -851,6 +881,7 @@ def test_expired_shared_budget_prevents_next_control_operation(
             owned.inspect("image", IMAGE)
     control.assert_not_called()
     assert owned.deadline is None
+    assert owned.shared_budget_state == "exhausted"
     assert owned.timeout(20) == 20  # Cleanup keeps its original independent budget.
 
 
@@ -864,10 +895,15 @@ def test_budget_rechecks_completion_and_clears_after_failure(
         with owned.probe_budget():
             clock[0] = 145
     assert owned.deadline is None
+    assert owned.host_phase == "budget_complete"
+    assert owned.refusal_index == 0
+    assert owned.shared_budget_state == "exhausted"
     with pytest.raises(RuntimeError, match="original"):
         with owned.probe_budget():
             raise RuntimeError("original")
     assert owned.deadline is None
+    assert owned.host_phase == "unknown"
+    assert owned.shared_budget_state == "remaining"
 
 
 @pytest.mark.parametrize("command_name", runner.PRODUCTION_COMMANDS)
@@ -886,3 +922,173 @@ def test_partial_refusal_sequence_never_emits_success_or_continues(
         for name in runner.PRODUCTION_COMMANDS[: runner.PRODUCTION_COMMANDS.index(command_name) + 1]
     ]
     assert json.loads(output.err)["service_packaging_failure"]["stage"] == "production_refusals"
+
+
+@pytest.mark.parametrize("exhausted", [False, True])
+@pytest.mark.parametrize(
+    ("phase", "command_name"),
+    [(phase, "worker") for phase in sorted(runner.HOST_PHASES - {"unknown", "budget_complete"})]
+    + [("start_attach", name) for name in runner.PRODUCTION_COMMANDS if name != "worker"],
+)
+def test_refusal_boundary_diagnostics_preserve_phase_index_and_budget(
+    phase: str, command_name: str, exhausted: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    clock = [100.0]
+    monkeypatch.setattr(time, "monotonic", lambda: clock[0])
+    owned = runner.OwnedServiceBuilds(OWNER)
+    if phase != "image_identity":
+        owned.image_ids.add(IMAGE)
+    script = runner.refusal_source(command_name)
+    visits: list[str] = []
+
+    def fail_at(boundary: str) -> None:
+        if phase == boundary:
+            clock[0] = 146.0 if exhausted else 101.0
+            raise PackagingRefused("synthetic_private_control_failure")
+
+    def inspect(kind: str, name: str) -> dict[str, Any] | None:
+        boundary = (
+            "image_inspect",
+            "container_absence",
+            "created_inspect",
+            "stopped_inspect",
+        )[len(visits)]
+        visits.append(boundary)
+        fail_at(boundary)
+        if boundary == "container_absence":
+            return None
+        value = record(None if kind == "image" else script)
+        value["State"]["ExitCode"] = 1
+        return value
+
+    def create(arguments: list[str], **kwargs: object) -> bytes:
+        fail_at("container_create")
+        if phase == "created_identity":
+            clock[0] = 146.0 if exhausted else 101.0
+            return b"invalid"
+        return b"c" * 64 + b"\n"
+
+    def attach(arguments: list[str], **kwargs: object) -> subprocess.CompletedProcess[bytes]:
+        fail_at("start_attach")
+        return subprocess.CompletedProcess([], 1, b"", b"service_runtime_failed\n")
+
+    def profile(*args: object) -> None:
+        fail_at("profile_validate")
+
+    def stopped(*args: object) -> str:
+        fail_at("stopped_validate")
+        return "verified"
+
+    monkeypatch.setattr(owned, "inspect", inspect)
+    monkeypatch.setattr(runner, "command", create)
+    monkeypatch.setattr(runner, "bounded_process", attach)
+    monkeypatch.setattr(runner, "validate_profile", profile)
+    monkeypatch.setattr(runner, "stopped_outcome", stopped)
+    with pytest.raises(PackagingRefused):
+        with owned.probe_budget():
+            if phase == "image_identity":
+                clock[0] = 146.0 if exhausted else 101.0
+            owned.production_refusal(IMAGE, 1, command_name)
+    assert owned.host_phase == phase
+    assert owned.refusal_index == runner.PRODUCTION_COMMANDS.index(command_name) + 1
+    assert owned.shared_budget_state == ("exhausted" if exhausted else "remaining")
+    assert owned.container_outcome == "unknown"
+    assert owned.deadline is None
+
+
+def test_exhaustion_before_refusal_inspect_records_boundary_without_control_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = [100.0]
+    monkeypatch.setattr(time, "monotonic", lambda: clock[0])
+    owned = runner.OwnedServiceBuilds(OWNER)
+    owned.image_ids.add(IMAGE)
+    control = Mock()
+    monkeypatch.setattr(runner, "bounded_process", control)
+    with pytest.raises(PackagingRefused, match="probe_deadline_refused"):
+        with owned.probe_budget():
+            clock[0] = 145.0
+            owned.production_refusal(IMAGE, 1, "check")
+    control.assert_not_called()
+    assert (owned.refusal_index, owned.host_phase, owned.shared_budget_state) == (
+        5,
+        "image_inspect",
+        "exhausted",
+    )
+
+
+def test_failed_budget_snapshot_never_replaces_primary_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    owned = runner.OwnedServiceBuilds(OWNER)
+    monkeypatch.setattr(time, "monotonic", Mock(side_effect=[100.0, RuntimeError("clock")]))
+    with pytest.raises(RuntimeError, match="^primary$"):
+        with owned.probe_budget():
+            raise RuntimeError("primary")
+    assert owned.shared_budget_state == "unknown"
+    assert owned.deadline is None
+
+
+def test_primary_refusal_diagnostics_are_frozen_before_cleanup(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    mock_orchestration(monkeypatch)
+
+    def refuse(self: Any, *args: object) -> None:
+        self.refusal_index = 4
+        self.host_phase = "stopped_inspect"
+        self.shared_budget_state = "remaining"
+        raise PackagingRefused("private primary context")
+
+    def cleanup(self: Any) -> None:
+        self.refusal_index = 5
+        self.host_phase = "container_create"
+        self.shared_budget_state = "exhausted"
+        raise PackagingRefused("private cleanup context")
+
+    monkeypatch.setattr(runner.OwnedServiceBuilds, "production_refusal", refuse)
+    monkeypatch.setattr(runner.OwnedServiceBuilds, "close", cleanup)
+    with pytest.raises(PackagingRefused):
+        runner.main()
+    output = capsys.readouterr()
+    assert output.out == ""
+    assert "private" not in output.err
+    assert json.loads(output.err)["service_packaging_failure"] == {
+        "stage": "production_refusals",
+        "build": 1,
+        "cleanup": "failed",
+        "guest_stage": "unknown",
+        "container_outcome": "unknown",
+        "refusal_index": 4,
+        "host_phase": "stopped_inspect",
+        "shared_budget_state": "remaining",
+    }
+
+
+def test_added_diagnostics_reject_nonexact_types_and_unknown_values(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    class Integer(int):
+        pass
+
+    class String(str):
+        pass
+
+    invalid_indices: tuple[object, ...] = (True, -1, 6, "1", Integer(1), [])
+    for index in invalid_indices:
+        diagnostics = runner.Diagnostics()
+        diagnostics.refusal_index = index  # type: ignore[assignment]
+        diagnostics.host_phase = String("start_attach")
+        diagnostics.shared_budget_state = String("remaining")
+        diagnostics.report()
+        value = json.loads(capsys.readouterr().err)["service_packaging_failure"]
+        assert value["refusal_index"] == 0
+        assert value["host_phase"] == "unknown"
+        assert value["shared_budget_state"] == "unknown"
+    diagnostics = runner.Diagnostics()
+    diagnostics.host_phase = "private phase"
+    diagnostics.shared_budget_state = "private budget"
+    diagnostics.report()
+    output = capsys.readouterr()
+    assert "private" not in output.err
+    assert len(output.err.encode()) < 512
