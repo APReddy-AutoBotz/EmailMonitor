@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 
 from emailmonitor.associations.models import Bundle, Review
+from emailmonitor.associations.quality import ObservationQuality
 from emailmonitor.associations.service import Associations
 from emailmonitor.config import Settings
 from emailmonitor.fetching.fixture import require_fixture
@@ -103,6 +104,12 @@ def association_router(
     @router.get("/organizations/{organization_id}/association-batches/{batch_id}")
     def detail(request: Request, organization_id: UUID, batch_id: UUID) -> Bundle:
         return service_for(token(request)).detail(organization_id, batch_id)
+
+    @router.get(
+        "/organizations/{organization_id}/association-batches/{batch_id}/observation-quality"
+    )
+    def quality(request: Request, organization_id: UUID, batch_id: UUID) -> ObservationQuality:
+        return service_for(token(request)).quality(organization_id, batch_id)
 
     @router.post("/organizations/{organization_id}/reviews")
     def review(request: Request, organization_id: UUID, body: ReviewInput) -> Bundle:

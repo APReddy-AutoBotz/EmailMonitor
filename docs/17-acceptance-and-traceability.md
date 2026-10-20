@@ -386,3 +386,16 @@ Authored synthetic runner/workflow regressions cover refusals and failure cleanu
 [scope](64-one-sample-affiliation-diagnostic-plan.md) and
 [evidence](../reports/one-sample-affiliation-diagnostic-validation.md) distinguish
 local tests from the separately authorized single actual attempt.
+
+## Retained article quality in association review
+
+EM-010/EM-012: `test_observation_quality.py` covers article-only fixed reasons,
+missing-affiliation uncertainty, acceptance/replay compatibility, profile/source
+mismatch refusal, closed values and empty-candidate outcomes.
+`test_observation_quality_tenant.py` requires actual runtime RLS/API reads,
+tenant denial, session/policy/privacy/deletion refusal and no-contact batch access.
+The actual XML pipeline compares retained reasons before and after review.
+`observationQuality.test.tsx` covers honest HTML/no-reason/partial text and unavailable
+or mismatched reads. Required keyboard operator CI holds and aborts quality reads
+across refresh and checks XML review presentation. [Runbook](65-observation-quality-review.md)
+records the contact-row reachability limit and unchanged storage/parser contracts.

@@ -1,0 +1,14 @@
+{
+  "view_version": "observation-quality-v1",
+  "organization_id": "00000000-0000-0000-0000-000000000001",
+  "batch_id": "00000000-0000-0000-0000-00000000002c",
+  "scope": "article",
+  "parser_version": "elsevier-xml-head-v1",
+  "observation_route": "article_xml",
+  "observation_status": "partial",
+  "reason_availability": "recorded",
+  "reasons": [
+    "unsupported_affiliation"
+  ],
+  "review_scope": "author_email_association"
+}

@@ -93,6 +93,9 @@ def test_required_actual_keyboard_operator_ui(scenario: Scenario, tmp_path: Path
         threading.Event(),
         threading.Event(),
     )
+    hold_quality, fault_quality = threading.Event(), threading.Event()
+    quality_faults: list[int] = []
+    quality_holds: list[int] = []
     held.set()
     observed_hold = threading.Event()
     hold_events = threading.Event()
@@ -101,6 +104,16 @@ def test_required_actual_keyboard_operator_ui(scenario: Scenario, tmp_path: Path
     faults: list[int] = []
 
     def before_reply(request: RequestFrame) -> bool:
+        if request.method == "GET" and request.url.endswith("/observation-quality"):
+            if fault_quality.is_set():
+                fault_quality.clear()
+                quality_faults.append(request.identifier)
+                return True
+            if hold_quality.is_set():
+                observed_hold.set()
+                if not held.wait(timeout=8):
+                    raise RuntimeError("Owned quality response release deadline exceeded")
+                quality_holds.append(request.identifier)
         if request.method == "GET" and request.url.startswith(
             f"{ORIGIN}/api/v1/organizations/{org}/contacts?"
         ):
@@ -133,6 +146,15 @@ def test_required_actual_keyboard_operator_ui(scenario: Scenario, tmp_path: Path
     def control(action: str) -> None:
         if action == "publish":
             release.set()
+        elif action == "fault_quality":
+            fault_quality.set()
+        elif action == "hold_quality":
+            held.clear()
+            observed_hold.clear()
+            hold_quality.set()
+        elif action == "release_quality":
+            held.set()
+            hold_quality.clear()
         elif action == "fault_contacts":
             fault_contacts.set()
         elif action == "hold_events":
@@ -344,6 +366,7 @@ WHERE i.organization_id=:org AND j.kind='extraction' LIMIT 33
                 first.counts.by_outcome["unsupported"] == first.counts.by_outcome["no_contact"] == 1
             )
             assert reviews == 1 and effects >= 5
+            assert len(quality_faults) == len(quality_holds) == 1
             administration = Administration(progress.database, token, progress.settings)
             configuration = administration.read(org)
             usage = administration.usage(org)

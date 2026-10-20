@@ -1,3 +1,9 @@
+## 2026-10-20 — Retained article-quality review candidate
+
+- Add a current-authorized article-quality read view and evidence-drawer warnings for retained parser reasons.
+- Keep missing affiliations unobserved after author-email review, with no attribution or parser association changes.
+- Preserve Bundle persistence/replay and exports; add synthetic SQL/API/browser coverage. See [scope](docs/65-observation-quality-review.md).
+
 ## 2026-10-20 — One scoped Elsevier sample validation candidate
 
 - Add a dedicated initial-event, exact-PR/branch/head-bound runner for one approved immutable CC BY 3.0 article representation.

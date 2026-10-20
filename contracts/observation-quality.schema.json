@@ -1,0 +1,100 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "view_version": {
+      "const": "observation-quality-v1",
+      "default": "observation-quality-v1",
+      "title": "View Version",
+      "type": "string"
+    },
+    "organization_id": {
+      "format": "uuid",
+      "title": "Organization Id",
+      "type": "string"
+    },
+    "batch_id": {
+      "format": "uuid",
+      "title": "Batch Id",
+      "type": "string"
+    },
+    "scope": {
+      "const": "article",
+      "default": "article",
+      "title": "Scope",
+      "type": "string"
+    },
+    "parser_version": {
+      "enum": [
+        "elsevier-xml-head-v1",
+        "synthetic-html-v1"
+      ],
+      "title": "Parser Version",
+      "type": "string"
+    },
+    "observation_route": {
+      "enum": [
+        "article_xml",
+        "html",
+        "browser_dom"
+      ],
+      "title": "Observation Route",
+      "type": "string"
+    },
+    "observation_status": {
+      "enum": [
+        "observed",
+        "no_contact",
+        "requires_browser",
+        "partial",
+        "unsupported"
+      ],
+      "title": "Observation Status",
+      "type": "string"
+    },
+    "reason_availability": {
+      "enum": [
+        "recorded",
+        "not_recorded"
+      ],
+      "title": "Reason Availability",
+      "type": "string"
+    },
+    "reasons": {
+      "items": {
+        "enum": [
+          "missing_full_text",
+          "unsupported_structure",
+          "missing_article_identity",
+          "missing_authors",
+          "unsupported_author",
+          "ambiguous_reference",
+          "unsupported_affiliation",
+          "unsupported_email",
+          "unstructured_contact"
+        ],
+        "type": "string"
+      },
+      "maxItems": 20,
+      "title": "Reasons",
+      "type": "array"
+    },
+    "review_scope": {
+      "const": "author_email_association",
+      "default": "author_email_association",
+      "title": "Review Scope",
+      "type": "string"
+    }
+  },
+  "required": [
+    "organization_id",
+    "batch_id",
+    "parser_version",
+    "observation_route",
+    "observation_status",
+    "reason_availability",
+    "reasons"
+  ],
+  "title": "ObservationQuality",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

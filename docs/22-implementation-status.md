@@ -528,3 +528,7 @@ Local candidate gates passed: normal/new-empty Python each 2932 passed with
 docs. Independent source-boundary review passed 515 focused tests after correcting
 a cleanup signal-transition gap. Exact frozen-tree and actual CI/initial-event
 receipts remain separate. No real sample was acquired locally.
+
+### Additive article-quality review view (2026-10-20)
+
+The EM-010/EM-012 evidence drawer now has a separately versioned, current-authorized retained article-quality read view. It displays fixed XML reasons and explicitly leaves missing affiliations unobserved after author-email acceptance. HTML reason availability is reported honestly. Existing stored Bundle identity, parser/diagnostic versions, replay and export contracts are preserved. See [scope, compatibility and validation](65-observation-quality-review.md). This entry records implementation scope; exact-head CI receipts remain required before acceptance. Zero-candidate article-wide UX and production deployment are not claimed.
