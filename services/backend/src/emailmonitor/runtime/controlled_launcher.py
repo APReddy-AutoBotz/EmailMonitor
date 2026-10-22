@@ -199,8 +199,8 @@ def _docker(*args: str, timeout: float = 15) -> bytes:
     return output
 
 
-def _metadata(identifier: str) -> dict[str, Any]:
-    value = json.loads(_docker("inspect", identifier))
+def _metadata(identifier: str, *, timeout: float = 15) -> dict[str, Any]:
+    value = json.loads(_docker("inspect", identifier, timeout=timeout))
     if type(value) is not list or len(value) != 1 or type(value[0]) is not dict:
         raise ValueError("Controlled container metadata required")
     return value[0]
@@ -316,6 +316,30 @@ class OwnedWorker:
         self.returncode: int | None = None
         self.parser_calls = 0
 
+    def wait_started(self, deadline: float) -> None:
+        """Prove first running state; Docker's initial created state is not an exit."""
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0 or self.attached.poll() is not None:
+                raise RuntimeError("Controlled worker startup failed")
+            metadata = _metadata(self.identifier, timeout=min(15, remaining))
+            if metadata.get("Id") != self.identifier or time.monotonic() >= deadline:
+                raise RuntimeError("Controlled worker startup failed")
+            state = metadata.get("State")
+            if (
+                type(state) is not dict
+                or state.get("OOMKilled") is not False
+                or type(state.get("ExitCode")) is not int
+                or state["ExitCode"] != 0
+                or self.attached.poll() is not None
+            ):
+                raise RuntimeError("Controlled worker startup failed")
+            if state.get("Status") == "running" and state.get("Running") is True:
+                return
+            if state.get("Status") != "created" or state.get("Running") is not False:
+                raise RuntimeError("Controlled worker startup failed")
+            time.sleep(min(0.05, max(0, deadline - time.monotonic())))
+
     def poll(self) -> int | None:
         state = _metadata(self.identifier).get("State", {})
         if state.get("Running") is True:
@@ -424,6 +448,7 @@ def launched_worker(
         if verify_worker(_metadata(identifier), service_image_id, name, owner) != identifier:
             raise ValueError("Controlled worker identity mismatch")
         require_local_control_only()
+        startup_deadline = time.monotonic() + 20
         attached = subprocess.Popen(
             [*CONTROL, "start", "--attach", "--interactive", identifier],
             stdin=subprocess.PIPE,
@@ -443,7 +468,8 @@ def launched_worker(
         pipe = FramedPipes(*unclaimed)
         unclaimed.clear()
         process = OwnedWorker(identifier, attached)
-        pipe.send({"kind": "bootstrap", "config": bootstrap}, time.monotonic() + 20)
+        pipe.send({"kind": "bootstrap", "config": bootstrap}, startup_deadline)
+        process.wait_started(startup_deadline)
 
         def serve() -> None:
             assert pipe is not None and process is not None

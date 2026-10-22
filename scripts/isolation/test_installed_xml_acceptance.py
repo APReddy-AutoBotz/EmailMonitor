@@ -699,11 +699,14 @@ def test_installed_controlled_xml_post_observation_crash_recovery(
             with admin.connect() as barrier:
                 transaction = barrier.begin()
                 try:
-                    # Relation lock blocks derive's first batch SELECT, not XML's
-                    # observation commit. Only this disposable CI database is used.
+                    # SHARE permits AccessShare reads, including service authority
+                    # SQL function planning, but blocks derive's RowExclusive
+                    # INSERT after XML's observation commit. Only this disposable
+                    # CI database is used.
                     barrier.exec_driver_sql(
-                        "LOCK TABLE emailmonitor.association_batches IN ACCESS EXCLUSIVE MODE"
+                        "LOCK TABLE emailmonitor.association_batches IN SHARE MODE"
                     )
+                    barrier_pid = barrier.exec_driver_sql("SELECT pg_backend_pid()").scalar_one()
                     with pytest.raises(RuntimeError, match="^Controlled worker capability failed$"):
                         with launched_worker(
                             configs["worker"],
@@ -730,9 +733,10 @@ def test_installed_controlled_xml_post_observation_crash_recovery(
                                                 "SELECT count(*)=1 FROM pg_stat_activity "
                                                 "WHERE usename=:name AND wait_event_type='Lock' "
                                                 "AND query LIKE "
-                                                "'%emailmonitor.association_batches%'"
+                                                "'INSERT INTO emailmonitor.association_batches%' "
+                                                "AND :barrier_pid=ANY(pg_blocking_pids(pid))"
                                             ),
-                                            {"name": names["worker"]},
+                                            {"name": names["worker"], "barrier_pid": barrier_pid},
                                         ).scalar_one()
                                     )
 

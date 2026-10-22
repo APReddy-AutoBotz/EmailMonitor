@@ -160,6 +160,32 @@ def test_installed_xml_declares_actual_worker_policy_review_export_and_cleanup()
     assert "run_xml_integration.py installed" in workflow
 
 
+def test_crash_barrier_allows_authority_reads_and_targets_owned_batch_insert() -> None:
+    source = inspect.getsource(
+        harness.test_installed_controlled_xml_post_observation_crash_recovery
+    )
+    tree = ast.parse(source)
+    literals = [
+        node.value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Constant) and isinstance(node.value, str)
+    ]
+    # ACCESS EXCLUSIVE blocks AccessShare while authority functions are planned,
+    # preventing the observation this crash test intends to preserve.
+    assert "LOCK TABLE emailmonitor.association_batches IN SHARE MODE" in literals
+    assert "ACCESS EXCLUSIVE" not in source
+    blocked_query = next(value for value in literals if "FROM pg_stat_activity" in value)
+    assert "usename=:name AND wait_event_type='Lock'" in blocked_query
+    assert "query LIKE 'INSERT INTO emailmonitor.association_batches%'" in blocked_query
+    assert ":barrier_pid=ANY(pg_blocking_pids(pid))" in blocked_query
+    assert "SELECT pg_backend_pid()" in literals
+    assert 'count("article_observations") != 1' in source
+    assert "wait_for(committed_and_blocked, seconds=45)" in source
+    assert "worker.wait(timeout=5) == 137" in source
+    assert 'snapshot(fresh)["calls"] == []' in source
+    assert "recovered.parser_calls == 0" in source
+
+
 @pytest.mark.parametrize("failure", [None, "build", "help", "probe", "work", "cleanup"])
 def test_installed_service_image_owned_lifetime_and_failure_cleanup(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure: str | None

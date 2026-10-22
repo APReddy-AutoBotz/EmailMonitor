@@ -5,13 +5,15 @@ import json
 import os
 import secrets
 import subprocess
+import time
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from emailmonitor.runtime import controlled_launcher as launcher
 from emailmonitor.runtime import entrypoint
+from emailmonitor.runtime.controlled_pipes import FramedPipes
 from test_controlled_runtime_channel import IMAGE, Gateway, boundary
 
 IDENTIFIER = "b" * 64
@@ -57,7 +59,7 @@ def metadata() -> dict[str, Any]:
             ],
         },
         "Mounts": [],
-        "State": {"Running": True, "ExitCode": 0, "OOMKilled": False},
+        "State": {"Status": "running", "Running": True, "ExitCode": 0, "OOMKilled": False},
     }
 
 
@@ -125,7 +127,7 @@ def setup(
 
     monkeypatch.setattr(subprocess, "Popen", spawn)
     monkeypatch.setattr(launcher, "_docker", docker)
-    monkeypatch.setattr(launcher, "_metadata", lambda identifier: copy.deepcopy(state))
+    monkeypatch.setattr(launcher, "_metadata", lambda identifier, **kwargs: copy.deepcopy(state))
     return calls, controls, state, attach
 
 
@@ -332,3 +334,155 @@ def test_control_probe_refusal_never_creates_container(
         attach.wait(1)
         for stream in (attach.stdin, attach.stdout, attach.stderr):
             stream.close()
+
+
+def test_created_transitions_to_running_with_decreasing_inspect_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    now = [10.0]
+    budgets: list[float] = []
+    statuses = iter(("created", "created", "running"))
+
+    def inspect(identifier: str, *, timeout: float = 15) -> dict[str, Any]:
+        budgets.append(timeout)
+        status = next(statuses)
+        return {
+            "Id": identifier,
+            "State": {
+                "Status": status,
+                "Running": status == "running",
+                "ExitCode": 0,
+                "OOMKilled": False,
+            },
+        }
+
+    monkeypatch.setattr(launcher, "_metadata", inspect)
+    monkeypatch.setattr(time, "monotonic", lambda: now[0])
+    monkeypatch.setattr(time, "sleep", lambda seconds: now.__setitem__(0, now[0] + seconds))
+    owned = launcher.OwnedWorker(IDENTIFIER, cast(Any, SimpleNamespace(poll=lambda: None)))
+    owned.wait_started(10.2)
+    assert len(budgets) == 3 and 0 < budgets[2] < budgets[1] < budgets[0] <= 0.2 + 1e-10
+    assert owned.returncode is None
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        "exited_zero",
+        "exited_error",
+        "dead",
+        "restarting",
+        "id",
+        "attach",
+        "oom",
+        "running_mismatch",
+        "boolean_exit",
+    ],
+)
+def test_startup_rejects_terminal_or_unverified_state(
+    monkeypatch: pytest.MonkeyPatch, fault: str
+) -> None:
+    state: dict[str, Any] = {
+        "Status": "running",
+        "Running": True,
+        "ExitCode": 0,
+        "OOMKilled": False,
+    }
+    if fault in ("exited_zero", "exited_error", "dead", "restarting"):
+        state.update(Status="exited" if fault.startswith("exited") else fault, Running=False)
+        if fault == "exited_error":
+            state["ExitCode"] = 1
+    elif fault == "oom":
+        state["OOMKilled"] = True
+    elif fault == "running_mismatch":
+        state["Running"] = False
+    elif fault == "boolean_exit":
+        state["ExitCode"] = False
+    monkeypatch.setattr(
+        launcher,
+        "_metadata",
+        lambda identifier, **kwargs: {
+            "Id": "d" * 64 if fault == "id" else identifier,
+            "State": state,
+        },
+    )
+    owned = launcher.OwnedWorker(
+        IDENTIFIER, cast(Any, SimpleNamespace(poll=lambda: 1 if fault == "attach" else None))
+    )
+    with pytest.raises(RuntimeError, match="startup failed"):
+        owned.wait_started(time.monotonic() + 20)
+
+
+def test_created_startup_exhausts_fixed_deadline_without_yielding_success(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    now = [10.0]
+    monkeypatch.setattr(time, "monotonic", lambda: now[0])
+    monkeypatch.setattr(time, "sleep", lambda seconds: now.__setitem__(0, now[0] + seconds))
+    monkeypatch.setattr(
+        launcher,
+        "_metadata",
+        lambda identifier, **kwargs: {
+            "Id": identifier,
+            "State": {"Status": "created", "Running": False, "ExitCode": 0, "OOMKilled": False},
+        },
+    )
+    owned = launcher.OwnedWorker(IDENTIFIER, cast(Any, SimpleNamespace(poll=lambda: None)))
+    with pytest.raises(RuntimeError, match="startup failed"):
+        owned.wait_started(10.15)
+    assert now[0] == 10.15 and owned.returncode is None
+
+
+def test_running_report_after_deadline_is_not_accepted(monkeypatch: pytest.MonkeyPatch) -> None:
+    now = [10.0]
+    monkeypatch.setattr(time, "monotonic", lambda: now[0])
+
+    def inspect(identifier: str, *, timeout: float = 15) -> dict[str, Any]:
+        assert timeout == 1
+        now[0] = 11.0
+        return {
+            "Id": identifier,
+            "State": {"Status": "running", "Running": True, "ExitCode": 0, "OOMKilled": False},
+        }
+
+    monkeypatch.setattr(launcher, "_metadata", inspect)
+    owned = launcher.OwnedWorker(IDENTIFIER, cast(Any, SimpleNamespace(poll=lambda: None)))
+    with pytest.raises(RuntimeError, match="startup failed"):
+        owned.wait_started(11.0)
+
+
+def test_failed_startup_never_yields_and_cleans_owned_container(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _, controls, state, attach = setup(monkeypatch)
+    state["State"].update(Status="exited", Running=False, ExitCode=1)
+    with (
+        pytest.raises(RuntimeError, match="startup failed"),
+        launcher.launched_worker(tmp_path / "config.json", Gateway(boundary()), IMAGE, IMAGE),
+    ):
+        pytest.fail("Unverified worker must not be yielded")
+    assert ("rm", "--force", IDENTIFIER) in controls
+    assert all(stream.closed for stream in (attach.stdin, attach.stdout, attach.stderr))
+
+
+def test_bootstrap_and_startup_proof_share_deadline(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    setup(monkeypatch)
+    deadlines: list[float] = []
+    original_send = FramedPipes.send
+    original_wait = launcher.OwnedWorker.wait_started
+
+    def send(self: FramedPipes, value: dict[str, Any], deadline: float) -> None:
+        if value.get("kind") == "bootstrap":
+            deadlines.append(deadline)
+        original_send(self, value, deadline)
+
+    def wait(self: launcher.OwnedWorker, deadline: float) -> None:
+        assert deadlines == [deadline]
+        original_wait(self, deadline)
+
+    monkeypatch.setattr(FramedPipes, "send", send)
+    monkeypatch.setattr(launcher.OwnedWorker, "wait_started", wait)
+    with launcher.launched_worker(tmp_path / "config.json", Gateway(boundary()), IMAGE, IMAGE):
+        assert len(deadlines) == 1
