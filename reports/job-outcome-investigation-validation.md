@@ -113,3 +113,40 @@ The subsequent native-modal tree's normal aggregate passed 4,813 tests with 397
 infrastructure skips and 91 React tests; fresh had not run. This SQL-fixture patch
 supersedes that tree for acceptance. Full normal/fresh and hosted actual SQL/browser
 receipts remain required; these fixture corrections alone are not execution proof.
+
+## Scoped contact selector correction
+
+The next hosted operator receipt failed with `AssertionError` in the closed
+`outcomes_scoped_contacts` phase. Earlier investigation phases had completed on
+that run, but the full operator journey did not pass.
+
+Source review established a deterministic harness selector mismatch: pinned
+Playwright's exact label matcher reads the full implicit label text, including
+nested select option text. `Association state` alone therefore cannot exactly
+match the label wrapping the state select and all its options. Both added state
+assertions now use the existing harness's anchored label-prefix regex pattern.
+They still require one matching control and exact `accepted` / `needs_review`
+values; no `.first`/`.nth` ambiguity suppression is added. A pure regression keeps
+that selector/value pairing. No production UI defect is established by this
+failure, and no production code or diagnostic/security guard changes are made.
+
+The previous frozen tree's normal/fresh results (4,814 passed, 397 infrastructure
+skips and 91 React tests per run) do not validate this new selector patch. Full
+serial normal/fresh and hosted actual checks must be rerun on its exact tree.
+
+## Late-organization hold readiness correction
+
+Read-only continuation review found a scheduling hazard after returning from the
+review screen to Jobs: the test armed its response hold before the remounted first
+page was confirmed ready. A pending initial-page response could then be held while
+the keyboard helper waited for Next to become enabled. This is a source-identified
+race, not an observed hosted failure or an established production defect.
+
+The test now positively verifies Page 1 and an enabled Next control before arming
+the late-organization hold. Both late-job and late-organization holds target only
+offset 25 and assert that exact held offset before changing scope. Initial-page
+loads are not delayed accidentally. The existing hold deadlines, keyboard controls,
+current-scope checks and stale-response assertions remain unchanged. A pure order
+regression preserves these preconditions. The preceding selector tree's two local
+aggregates (4,815 passed, 397 infrastructure skips and 91 React tests each) are
+superseded; full normal/fresh and hosted checks are required on this corrected tree.

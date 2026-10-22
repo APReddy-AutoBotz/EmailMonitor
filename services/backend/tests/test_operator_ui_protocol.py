@@ -919,3 +919,58 @@ def test_native_outcome_modal_checks_controls_without_forcing_dom_focus_wrap() -
         and isinstance(call.args[0], ast.Constant)
     ]
     assert keys == ["Tab", "Shift+Tab"]
+
+
+def test_scoped_association_select_uses_unique_label_prefix_and_exact_values() -> None:
+    import ast
+
+    root = Path(__file__).resolve().parents[3]
+    module = ast.parse((root / "scripts/isolation/operator_ui_acceptance.py").read_text())
+    helper = next(
+        node
+        for node in module.body
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "authored_outcome_paging"
+    )
+    checks = [
+        node
+        for node in ast.walk(helper)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "to_have_value"
+        and "Association state" in ast.unparse(node.func.value)
+    ]
+    assert len(checks) == 2
+    assert [ast.literal_eval(check.args[0]) for check in checks] == ["accepted", "needs_review"]
+    for check in checks:
+        assert isinstance(check.func, ast.Attribute)
+        # No .first/.nth shortcut: Playwright's assertion still requires one match.
+        assert ast.unparse(check.func.value) == (
+            "expect(page.get_by_label(re.compile('^Association state')))"
+        )
+
+
+def test_late_organization_hold_follows_ready_first_page_and_targets_next_page() -> None:
+    import ast
+
+    root = Path(__file__).resolve().parents[3]
+    source = (root / "scripts/isolation/operator_ui_acceptance.py").read_text()
+    helper = next(
+        node
+        for node in ast.parse(source).body
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "authored_outcome_paging"
+    )
+    body = next(node for node in helper.body if isinstance(node, ast.Try)).body
+    statements = [ast.unparse(node) for node in body]
+    marker = statements.index("checkpoint('outcomes_late_organization')")
+    assert "name='Jobs'" in statements[marker - 3]
+    assert "to_contain_text('Page 1: 25 article outcomes')" in statements[marker - 2]
+    assert "name='Next article outcome page'" in statements[marker - 1]
+    assert statements[marker - 1].endswith(".to_be_enabled()")
+    following = statements[marker + 1 :]
+    assert following.index("held_offset = None") < following.index("hold = True")
+    held_assertion = following.index("assert held_offset == 25")
+    assert "requested.wait()" in following[held_assertion - 1]
+    assert following.index("hold = True") < held_assertion
+    code = ast.unparse(helper)
+    assert "if hold and offset == 25:" in code
+    assert code.count("assert held_offset == 25") == 2

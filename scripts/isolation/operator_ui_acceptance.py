@@ -186,6 +186,7 @@ async def authored_outcome_paging(
     requested_pages: list[int] = []
     denied = False
     hold = False
+    held_offset: int | None = None
     requested = asyncio.Event()
     release = asyncio.Event()
     finished = asyncio.Event()
@@ -213,6 +214,7 @@ async def authored_outcome_paging(
                 raise
 
     async def outcomes(route: Route) -> None:
+        nonlocal held_offset
         methods.append(route.request.method)
         assert route.request.method == "GET"
         query = parse_qs(urlsplit(route.request.url).query)
@@ -248,7 +250,8 @@ async def authored_outcome_paging(
             for index in range(offset, min(offset + 25, 127))
         ]
         payload = {"items": items, "next_cursor": str(offset + 25) if offset + 25 < 127 else None}
-        if hold:
+        if hold and offset == 25:
+            held_offset = offset
             requested.set()
             await asyncio.wait_for(release.wait(), timeout=8)
             await fulfill(route, payload)
@@ -425,6 +428,7 @@ async def authored_outcome_paging(
             page, region.get_by_role("button", name="Next article outcome page", exact=True)
         )
         await asyncio.wait_for(requested.wait(), timeout=5)
+        assert held_offset == 25
         await activate(page, page.get_by_role("button", name="Back to recent jobs", exact=True))
         other_job = (
             page.get_by_role("button", name=re.compile(r"^Open job "))
@@ -442,7 +446,7 @@ async def authored_outcome_paging(
         checkpoint("outcomes_scoped_contacts")
         await activate(page, page.get_by_role("button", name="Contacts for this job", exact=True))
         await expect(page.get_by_label("Job UUID (optional)", exact=True)).to_have_value(job)
-        await expect(page.get_by_label("Association state", exact=True)).to_have_value("accepted")
+        await expect(page.get_by_label(re.compile(r"^Association state"))).to_have_value("accepted")
         await expect(page.get_by_label("Search loaded scope", exact=True)).to_have_value("")
         # Return filters to the existing actual contact journey's all-job scope.
         await type_text(page, page.get_by_label("Job UUID (optional)", exact=True), "")
@@ -452,11 +456,16 @@ async def authored_outcome_paging(
             page, page.get_by_role("button", name="Review queue for this job", exact=True)
         )
         await expect(page.get_by_label("Job UUID (optional)", exact=True)).to_have_value(job)
-        await expect(page.get_by_label("Association state", exact=True)).to_have_value(
+        await expect(page.get_by_label(re.compile(r"^Association state"))).to_have_value(
             "needs_review"
         )
         await activate(page, page.get_by_role("button", name="Jobs", exact=True))
+        await expect(region).to_contain_text("Page 1: 25 article outcomes")
+        await expect(
+            region.get_by_role("button", name="Next article outcome page", exact=True)
+        ).to_be_enabled()
         checkpoint("outcomes_late_organization")
+        held_offset = None
         requested.clear()
         release.clear()
         finished.clear()
@@ -465,6 +474,7 @@ async def authored_outcome_paging(
             page, region.get_by_role("button", name="Next article outcome page", exact=True)
         )
         await asyncio.wait_for(requested.wait(), timeout=5)
+        assert held_offset == 25
         organization_select = page.get_by_role("combobox", name="Active organization", exact=True)
         values = await organization_select.locator("option").evaluate_all(
             "nodes => nodes.map(node => node.value)"
