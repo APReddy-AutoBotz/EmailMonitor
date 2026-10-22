@@ -326,3 +326,192 @@ def test_jit_setup_stops_between_statements_when_budget_expires(
         probe.configure_jit(connection, False, 20)
     assert connection.sql == [probe.STATEMENT_TEMPLATES["timeout_settings"]]
     assert not connection.committed
+
+
+def sample_plan() -> list[dict[str, Any]]:
+    return [
+        {
+            "Planning Time": 12.4,
+            "Execution Time": 3.6,
+            "Plan": {
+                "Node Type": "Result",
+                "Actual Rows": 1,
+                "Actual Loops": 1,
+                "Shared Hit Blocks": 7,
+                "Shared Read Blocks": 0,
+                "Filter": "private synthetic value",
+            },
+        }
+    ]
+
+
+def test_plan_summary_has_only_closed_numeric_metrics() -> None:
+    receipt = probe.plan_metrics(sample_plan())
+    assert receipt == {
+        "planning_ms": 12,
+        "execution_ms": 4,
+        "nodes": 1,
+        "root_rows": 1,
+        "root_loops": 1,
+        "root_shared_hits": 7,
+        "root_shared_reads": 0,
+        "outer_jit_present": False,
+        "outer_jit_functions": 0,
+        "metrics_capped": False,
+    }
+    assert "private" not in str(receipt)
+
+
+@pytest.mark.parametrize("bad", [True, None, "private", -1, float("inf"), float("nan")])
+def test_plan_summary_rejects_invalid_numbers_without_echo(bad: object) -> None:
+    plan = sample_plan()
+    plan[0]["Planning Time"] = bad
+    with pytest.raises(AssertionError, match="^Diagnostic plan metric invalid$"):
+        probe.plan_metrics(plan)
+
+
+def test_plan_summary_saturates_counts_and_time_and_counts_nodes() -> None:
+    plan = sample_plan()
+    plan[0]["Planning Time"] = 25000
+    plan[0]["Plan"]["Shared Hit Blocks"] = 10**1000
+    plan[0]["Plan"]["Plans"] = [{"Node Type": "Result"}]
+    plan[0]["JIT"] = {"Functions": 4}
+    receipt = probe.plan_metrics(plan)
+    assert receipt["planning_ms"] == 20000
+    assert receipt["root_shared_hits"] == 1000000
+    assert receipt["nodes"] == 2
+    assert receipt["outer_jit_functions"] == 4
+    assert receipt["metrics_capped"] is True
+
+
+def test_plan_summary_rejects_hostile_and_oversized_json_without_stringify() -> None:
+    class Hostile:
+        def __str__(self) -> str:
+            raise AssertionError("No raw plan stringify")
+
+        __repr__ = __str__
+
+    for value in (Hostile(), [{"Plan": Hostile()}], ["x" * 1048577], [None] * 8193):
+        with pytest.raises(
+            AssertionError, match="^Diagnostic plan (shape invalid|bounds exceeded)$"
+        ):
+            probe.plan_metrics(value)
+    plan = sample_plan()
+    plan[0]["Plan"]["Plans"] = [{}] * 513
+    with pytest.raises(AssertionError, match="^Diagnostic plan bounds exceeded$"):
+        probe.plan_metrics(plan)
+    plan = sample_plan()
+    child = plan[0]["Plan"]
+    for _ in range(35):
+        child["Plans"] = [{}]
+        child = child["Plans"][0]
+    with pytest.raises(AssertionError, match="^Diagnostic plan bounds exceeded$"):
+        probe.plan_metrics(plan)
+
+
+def test_fixed_leaf_extraction_parameterization_and_metadata() -> None:
+    from pathlib import Path
+
+    source = (
+        Path(probe.__file__).parents[1] / "migrations/versions/0014_service_authority.sql"
+    ).read_text()
+    body = probe.leaf_body(source)
+    query = probe.leaf_query(body)
+    assert "p_org" not in query and "p_id" not in query
+    assert ":org" in query and ":grant" in query
+    assert "clock_timestamp()" in query
+    assert "session_user" not in body
+    row = (
+        body,
+        "sql",
+        "v",
+        True,
+        ["search_path=pg_catalog, emailmonitor"],
+        "emailmonitor_owner",
+        True,
+        True,
+        False,
+        ["p_org", "p_id"],
+    )
+    probe.validate_leaf_metadata(row, body)
+    for index, wrong in enumerate(
+        ("private", "plpgsql", "s", False, [], "private", False, False, True, [])
+    ):
+        changed = list(row)
+        changed[index] = wrong
+        with pytest.raises(AssertionError, match="^Diagnostic function metadata mismatch$"):
+            probe.validate_leaf_metadata(tuple(changed), body)
+    for changed_source in ("", source + source, source.replace("$$;", "", 1)):
+        # Removal elsewhere does not alter this function; only its exact slice
+        # matters. Missing/duplicate declaration always fails closed.
+        if changed_source.count(probe.LEAF_HEADER) != 1:
+            with pytest.raises(AssertionError, match="^Fixed diagnostic function source required$"):
+                probe.leaf_body(changed_source)
+
+
+def test_explain_failure_is_sanitized_and_budget_precedes_execution() -> None:
+    from sqlalchemy.exc import SQLAlchemyError
+
+    class Broken:
+        def execute(self, *_args: object) -> None:
+            raise SQLAlchemyError("private SQL and parameters")
+
+    with pytest.raises(AssertionError, match="^Diagnostic plan execution failed$") as error:
+        probe.explain(Broken(), "SELECT 1", {}, time.monotonic() + 20)
+    assert error.value.__suppress_context__
+    with pytest.raises(AssertionError, match="^SQL plan measurement budget exhausted$"):
+        probe.explain(Broken(), "SELECT 1", {}, time.monotonic() - 1)
+
+
+@pytest.mark.parametrize("failure", ["none", "metadata", "setup", "explain", "sanitizer"])
+def test_owner_leaf_transaction_always_rolls_back(failure: str) -> None:
+    from sqlalchemy.exc import SQLAlchemyError
+
+    class Owner:
+        def __init__(self) -> None:
+            self.calls = 0
+            self.rolled_back = False
+
+        def begin(self) -> "Owner":
+            return self
+
+        def execute(self, *_args: object) -> "Owner":
+            self.calls += 1
+            if (failure == "setup" and self.calls == 3) or (
+                failure == "explain" and self.calls == 5
+            ):
+                raise SQLAlchemyError("private diagnostic input")
+            return self
+
+        def one(self) -> tuple[object, ...]:
+            return (
+                "private" if failure == "metadata" else "SELECT true",
+                "sql",
+                "v",
+                True,
+                ["search_path=pg_catalog, emailmonitor"],
+                "emailmonitor_owner",
+                True,
+                True,
+                False,
+                ["p_org", "p_id"],
+            )
+
+        def scalar_one(self) -> object:
+            return [{"Plan": None}] if failure == "sanitizer" else sample_plan()
+
+        def rollback(self) -> None:
+            self.rolled_back = True
+
+    owner = Owner()
+    if failure == "none":
+        rows = probe.owner_leaf_plans(
+            owner, "SELECT true", object(), object(), time.monotonic() + 20
+        )
+        assert len(rows) == 2
+    else:
+        with pytest.raises(AssertionError, match="^Diagnostic "):
+            probe.owner_leaf_plans(owner, "SELECT true", object(), object(), time.monotonic() + 20)
+    assert owner.rolled_back
+    if failure == "metadata":
+        assert owner.calls == 2  # No role switch or authored body execution.

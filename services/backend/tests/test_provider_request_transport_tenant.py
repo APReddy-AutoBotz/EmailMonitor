@@ -1,26 +1,27 @@
-"""Test-only session-JIT A/B; identical real SQL authority checks, no speedup gate.
+"""Bounded disposable query plans; no raw plans or production changes.
 
-This measures the existing disposable PostgreSQL fixture, not installed-container
-transport. No production setting, query cache or authority bypass exists.
-Setup SQL is excluded from measured cursor spans but included in the cooperative
-20-second admission budget; existing in-flight SQL timeout caps still apply.
+Worker fence plans measure actual service calls. The separately labelled owner
+leaf-body surrogate measures standalone planning/execution, not nested function
+planning or cache behavior. The 20-second budget is cooperative; existing SQL
+caps remain in force. Historical A/B pure helpers are retained for regression.
 """
 
 import json
 import math
-import socket
-import ssl
+import re
 import time
+from pathlib import Path
 from typing import Any
 
 import pg8000.legacy  # type: ignore[import-untyped]
 import pytest
+from emailmonitor.organizations.roles import Capability
 from emailmonitor.progress.binding import bound
 from emailmonitor.progress.provider import ProviderJourney
 from emailmonitor.progress.service import Progress
-from emailmonitor.runtime.database import ServiceDatabase
-from sqlalchemy import event, text
+from sqlalchemy import text
 from sqlalchemy.dialects.postgresql.pg8000 import PGDialect_pg8000
+from sqlalchemy.exc import SQLAlchemyError
 from test_durable_jobs import SETTINGS
 from test_progress_tenant import claim
 from test_provider_journey_tenant import NoDispatch
@@ -190,128 +191,230 @@ class CursorMeasurement:
         }
 
 
+# This source is authored fixture/migration text, never database-supplied SQL.
+LEAF_HEADER = """CREATE FUNCTION emailmonitor.service_delegation_current(p_org uuid,p_id uuid)
+ RETURNS boolean LANGUAGE sql VOLATILE SECURITY DEFINER
+ SET search_path=pg_catalog,emailmonitor AS $$"""
+
+
+def leaf_body(source: str) -> str:
+    if type(source) is not str or source.count(LEAF_HEADER) != 1:
+        raise AssertionError("Fixed diagnostic function source required")
+    remaining = source.split(LEAF_HEADER, 1)[1]
+    if "$$;" not in remaining:
+        raise AssertionError("Fixed diagnostic function source required")
+    body = remaining.split("$$;", 1)[0]
+    if not body.lstrip().startswith("SELECT ") or ";" in body or len(body) > 12000:
+        raise AssertionError("Fixed diagnostic function source required")
+    return body
+
+
+def leaf_query(body: str) -> str:
+    return re.sub(r"\bp_(org|id)\b", lambda m: ":org" if m[1] == "org" else ":grant", body)
+
+
+LEAF_METADATA = """SELECT p.prosrc, l.lanname, p.provolatile, p.prosecdef,
+ p.proconfig, r.rolname,
+ p.proacl=ARRAY['emailmonitor_owner=X/emailmonitor_owner'::aclitem],
+ p.prorettype='boolean'::regtype, p.proretset, p.proargnames
+ FROM pg_proc p JOIN pg_language l ON l.oid=p.prolang
+ JOIN pg_roles r ON r.oid=p.proowner
+ WHERE p.oid='emailmonitor.service_delegation_current(uuid,uuid)'::regprocedure"""
+
+
+def validate_leaf_metadata(row: object, body: str) -> None:
+    expected = (
+        body,
+        "sql",
+        "v",
+        True,
+        ["search_path=pg_catalog, emailmonitor"],
+        "emailmonitor_owner",
+        True,
+        True,
+        False,
+        ["p_org", "p_id"],
+    )
+    # SQLAlchemy Row is converted by the caller; reject unexpected result shapes
+    # without formatting any installed source/security metadata.
+    if type(row) is not tuple or len(row) != len(expected):
+        raise AssertionError("Diagnostic function metadata mismatch")
+    if any(
+        type(actual) is not type(wanted) or actual != wanted
+        for actual, wanted in zip(row, expected, strict=True)
+    ):
+        raise AssertionError("Diagnostic function metadata mismatch")
+
+
+def plan_metrics(value: object) -> dict[str, object]:
+    """Closed numeric summary; traverse bounded JSON without rendering strings."""
+    items = 0
+    characters = 0
+
+    def bounded_json(part: object, depth: int) -> None:
+        nonlocal items, characters
+        items += 1
+        if depth > 64 or items > 8192:
+            raise AssertionError("Diagnostic plan bounds exceeded")
+        if type(part) is dict:
+            for key, child in part.items():
+                if type(key) is not str:
+                    raise AssertionError("Diagnostic plan shape invalid")
+                characters += len(key)
+                bounded_json(child, depth + 1)
+        elif type(part) is list:
+            for child in part:
+                bounded_json(child, depth + 1)
+        elif type(part) is str:
+            characters += len(part)
+        elif part is not None and type(part) not in (int, float, bool):
+            raise AssertionError("Diagnostic plan shape invalid")
+        if characters > 1048576:
+            raise AssertionError("Diagnostic plan bounds exceeded")
+
+    bounded_json(value, 0)
+    if type(value) is not list or len(value) != 1 or type(value[0]) is not dict:
+        raise AssertionError("Diagnostic plan shape invalid")
+    document = value[0]
+    root = document.get("Plan")
+    if type(root) is not dict:
+        raise AssertionError("Diagnostic plan shape invalid")
+    capped = False
+
+    def numeric(value: Any, ceiling: int, rounded: bool = False) -> int:
+        nonlocal capped
+        if (
+            type(value) not in (int, float)
+            or (type(value) is float and not math.isfinite(value))
+            or value < 0
+        ):
+            raise AssertionError("Diagnostic plan metric invalid")
+        if not rounded and int(value) != value:
+            raise AssertionError("Diagnostic plan metric invalid")
+        capped |= value >= ceiling
+        return int(min(ceiling, round(value)))
+
+    nodes = 0
+
+    def count_nodes(node: object, depth: int) -> None:
+        nonlocal nodes
+        if type(node) is not dict or depth > 32:
+            raise AssertionError("Diagnostic plan tree invalid")
+        nodes += 1
+        if nodes > 512:
+            raise AssertionError("Diagnostic plan bounds exceeded")
+        children = node.get("Plans", [])
+        if type(children) is not list:
+            raise AssertionError("Diagnostic plan tree invalid")
+        for child in children:
+            count_nodes(child, depth + 1)
+
+    count_nodes(root, 0)
+    jit = document.get("JIT", {})
+    if type(jit) is not dict:
+        raise AssertionError("Diagnostic plan shape invalid")
+    result = {
+        "planning_ms": numeric(document.get("Planning Time"), 20000, True),
+        "execution_ms": numeric(document.get("Execution Time"), 20000, True),
+        "nodes": nodes,
+        "root_rows": numeric(root.get("Actual Rows"), 1000000),
+        "root_loops": numeric(root.get("Actual Loops"), 1000000),
+        "root_shared_hits": numeric(root.get("Shared Hit Blocks", 0), 1000000),
+        "root_shared_reads": numeric(root.get("Shared Read Blocks", 0), 1000000),
+        "outer_jit_present": "JIT" in document,
+        "outer_jit_functions": numeric(jit.get("Functions", 0), 1000000),
+    }
+    return {**result, "metrics_capped": capped}
+
+
+def plan_budget(deadline: float) -> None:
+    if time.monotonic() >= deadline:
+        raise AssertionError("SQL plan measurement budget exhausted")
+
+
+def explain(
+    connection: Any, sql: str, params: dict[str, object], deadline: float
+) -> dict[str, object]:
+    plan_budget(deadline)
+    try:
+        raw = connection.execute(
+            text("EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON, TIMING OFF) " + sql), params
+        ).scalar_one()
+    except SQLAlchemyError:
+        raise AssertionError("Diagnostic plan execution failed") from None
+    result = plan_metrics(raw)
+    plan_budget(deadline)
+    return result
+
+
+def owner_leaf_plans(
+    owner: Any, body: str, org: object, grant: object, deadline: float
+) -> list[dict[str, object]]:
+    samples: list[dict[str, object]] = []
+    transaction = owner.begin()
+    try:
+        plan_budget(deadline)
+        owner.execute(text(STATEMENT_TEMPLATES["timeout_settings"]))
+        installed = tuple(owner.execute(text(LEAF_METADATA)).one())
+        validate_leaf_metadata(installed, body)
+        owner.execute(text("SET LOCAL ROLE emailmonitor_owner"))
+        owner.execute(text("SET LOCAL search_path=pg_catalog,emailmonitor"))
+        for position in range(2):
+            metrics = explain(owner, leaf_query(body), {"org": org, "grant": grant}, deadline)
+            samples.append({"slice": "owner_leaf_surrogate", "position": position, **metrics})
+    except SQLAlchemyError:
+        raise AssertionError("Diagnostic owner setup failed") from None
+    finally:
+        transaction.rollback()
+    return samples
+
+
 @pytest.mark.parametrize("route", ["discover", "article"])
-def test_provider_current_jit_ab(
+def test_provider_current_fixed_plans(
     provider_service_case: ServiceCase, route: str, capsys: pytest.CaptureFixture[str]
 ) -> None:
     case = provider_service_case
     org, job = case.scope.organization, case.scope.resource
     work = claim(Progress(case.database, case.scope, SETTINGS), org, job)
     assert work.kind == route
-    started = time.monotonic()
-    deadline = started + 20
-    baseline: object = None
-    peer_identity: object = None
-    socket_option: int | None = None
-    jit_environment: tuple[bool, bool] | None = None
-    physical: list[object] = []
-    rows: list[dict[str, object]] = []
-    expected_counts: list[int] = []
-    expected_categories: list[dict[str, int]] = []
+    deadline = time.monotonic() + 20
+    samples: list[dict[str, object]] = []
+    body = leaf_body(
+        (Path(__file__).parents[1] / "migrations/versions/0014_service_authority.sql").read_text()
+    )
     with bound(work.lease):
-        for arm, enabled in enumerate((False, True, True, False)):
-            assert time.monotonic() < deadline, "SQL A/B measurement budget exhausted"
-            database = ServiceDatabase(case.url, case.database.process)
-            checkout = None
+        journey = ProviderJourney(Progress(case.database, case.scope, SETTINGS), NoDispatch())
+        _, row, _ = journey._request(work)
+        params: dict[str, object] = {"org": org, "job": job, "version": row["policy_version"]}
+        with case.database.tenant(case.scope, org, Capability.ACQUIRE_SOURCE) as (connection, _):
+            # Roll back only diagnostic fence acquisitions; service_begin/end
+            # retain their normal transaction and audit behavior.
+            savepoint = connection.begin_nested()
             try:
-                with database.engine.connect() as connection:
-                    assert not connection.in_transaction()
-                    raw: Any = connection.connection.dbapi_connection
-                    require_driver_connection(raw)
-                    assert all(raw is not earlier for earlier in physical)
-                    physical.append(raw)
-                    transport = raw._usock
-                    assert type(transport) in (socket.socket, ssl.SSLSocket)
-                    assert transport.family in (socket.AF_INET, socket.AF_INET6)
-                    assert (
-                        transport.getsockopt(socket.SOL_SOCKET, socket.SO_TYPE)
-                        == socket.SOCK_STREAM
-                    )
-                    identity = (transport.getpeername(), type(transport))
-                    if peer_identity is None:
-                        peer_identity = identity
-                    assert identity == peer_identity
-                    option = transport.getsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY)
-                    if socket_option is None:
-                        socket_option = option
-                    assert option == socket_option
-                    environment = configure_jit(connection, enabled, deadline)
-                    if jit_environment is None:
-                        jit_environment = environment
-                    assert environment == jit_environment
-
-                def same_connection(
-                    dbapi_connection: Any,
-                    *_ignored: Any,
-                    expected_raw: Any = raw,
-                    expected_transport: Any = transport,
-                    expected_option: int = option,
-                ) -> None:
-                    assert dbapi_connection is expected_raw, "SQL A/B physical connection changed"
-                    assert expected_raw._usock is expected_transport
-                    assert (
-                        expected_transport.getsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY)
-                        == expected_option
-                    )
-
-                checkout = same_connection
-                event.listen(database.engine, "checkout", checkout)
-                journey = ProviderJourney(Progress(database, case.scope, SETTINGS), NoDispatch())
                 for position in range(2):
-                    assert time.monotonic() < deadline, "SQL A/B measurement budget exhausted"
-                    measured = CursorMeasurement(deadline)
-                    event.listen(database.engine, "before_cursor_execute", measured.before)
-                    event.listen(database.engine, "after_cursor_execute", measured.after)
-                    try:
-                        request_started = time.monotonic()
-                        result = journey._request(work)
-                        elapsed = time.monotonic() - request_started
-                    finally:
-                        try:
-                            event.remove(database.engine, "before_cursor_execute", measured.before)
-                        finally:
-                            event.remove(database.engine, "after_cursor_execute", measured.after)
-                    assert time.monotonic() < deadline, "SQL A/B measurement budget exhausted"
-                    if baseline is None:
-                        baseline = result
-                    if result != baseline:
-                        raise AssertionError("SQL A/B authorized result mismatch")
-                    if arm == 0:
-                        expected_counts.append(measured.count)
-                        expected_categories.append(dict(measured.category_counts))
-                    assert measured.count == expected_counts[position]
-                    assert measured.category_counts == expected_categories[position]
-                    rows.append(
-                        {
-                            "arm": arm,
-                            "jit_enabled": enabled,
-                            "jit_baseline": environment[0],
-                            "jit_available": environment[1],
-                            "position": position,
-                            **measured.receipt(elapsed),
-                        }
-                    )
+                    for category in ("job_lock", "source_fence"):
+                        metrics = explain(
+                            connection, STATEMENT_TEMPLATES[category], params, deadline
+                        )
+                        samples.append({"slice": category, "position": position, **metrics})
             finally:
-                try:
-                    if checkout is not None:
-                        event.remove(database.engine, "checkout", checkout)
-                finally:
-                    database.engine.dispose()
-            assert time.monotonic() < deadline, "SQL A/B measurement budget exhausted"
-    total_ms, capped = bounded_ms(time.monotonic() - started)
-    assert not capped and len(rows) == 8
-    # Explicit test receipt even when the application suite otherwise captures stdout.
+                savepoint.rollback()
+        # Separate existing disposable administrator connection only. This is a
+        # labelled leaf surrogate, never a worker authorization or acceptance.
+        with case.admin.connect() as owner:
+            samples.extend(owner_leaf_plans(owner, body, org, case.grant, deadline))
+    plan_budget(deadline)
+    assert len(samples) == 6
     with capsys.disabled():
         print(
             json.dumps(
                 {
-                    "proof": "PROVIDER_CURRENT_JIT_AB",
+                    "proof": "PROVIDER_CURRENT_FIXED_PLANS",
                     "route": route,
-                    "total_ms": total_ms,
-                    "total_capped": capped,
-                    "samples": rows,
+                    "samples": samples,
                     "cleanup": True,
-                    "performance_claim": False,
+                    "leaf_is_standalone_surrogate": True,
+                    "nested_planning_claim": False,
                 },
                 sort_keys=True,
             ),

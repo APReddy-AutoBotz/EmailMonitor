@@ -457,3 +457,47 @@ documentation, inventory and frontend build. Backend timings: 109.19s and 113.33
 Fresh installations were absent before setup; dependency caches reused. The local
 default aggregate still runs every original command. Actual hosted JIT results,
 new split orchestration and complete installed acceptance remain pending.
+
+## JIT discriminator and split result
+
+Head `1efcac84129f2d6f542874ffd38c9d2bc3a0bf37`, tree
+`c5645a068ab24f9fa9c66c2005bf5087263b9298`, completed seven successful workflows.
+Application [39734828698](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/39734828698)
+passed the complete actual backend suite (4677 cases/no skips, 1100.93s), owned
+cleanup, separate static/frontend worker and required scaffold success join.
+Packaging and parser passed; four installed XML cases still failed (366.65s), with
+broker/HTML passed and owned cleanup verified.
+
+JIT was available and baseline enabled in every experiment arm. OFF/ON request
+costs overlapped (roughly 620-779ms), with job-lock/source-fence spans persisting.
+Identical outputs/counts/category vectors and cleanup were verified. This does not
+justify a production JIT setting change. Neither socket nor JIT experiments have
+identified a useful transport/runtime toggle.
+
+PostgreSQL 17 implementation documents SQL-function cache lifetime within the
+calling query, while PL/pgSQL can retain prepared SPI statements. Repeated nested
+SQL authority-function planning is therefore a concrete candidate, still unmeasured.
+Next test-only evidence uses fixed EXPLAIN ANALYZE calls for job-lock/source-fence
+under existing service authority, with bounded numeric summaries only. Separately,
+the existing disposable fixture administrator may SET LOCAL ROLE to the existing
+owner solely to explain a trusted leaf query after exact installed body/security
+metadata checks. That transaction is rolled back; no grants or persistent roles
+are created. The product worker never assumes this role. The leaf is explicitly a
+standalone surrogate: different invocation/plan caching means it cannot directly
+measure nested planning or establish migration equivalence. No function rewrite
+or production optimization is approved by these measurements alone.
+
+Fixed-plan implementation focused checks passed 59 pure cases with two explicit
+SQL skips, including metadata rejection before owner-role use and unconditional
+rollback after setup/execution/sanitizer failures. Independent source review GO.
+Plan/node bounds apply after driver JSON decoding, not as a wire-byte cap; queries
+are fixed trusted synthetic statements. Worker diagnostic locks use a savepoint
+rollback before the normal service end/audit commit; owner surrogate always rolls
+back its separate transaction.
+
+Final serial normal and empty-checkout aggregates passed 4314 backend cases with
+379 infrastructure skips, 77 React cases, 347-file mypy, 349-file Ruff/format and
+all documentation/inventory/frontend checks (108.94s/117.69s backend). An earlier
+normal pass preceded final cleanup-test extraction; final normal was rerun after
+files froze. Fresh installations absent before setup; caches reused. No actual
+plan output or production optimization is claimed before hosted execution.
