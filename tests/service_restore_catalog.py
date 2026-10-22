@@ -10,7 +10,11 @@ CATALOG_QUERIES = {
     """,
     "relations": """
         SELECT c.relname,c.relkind,pg_get_userbyid(c.relowner),c.relrowsecurity,
-        c.relforcerowsecurity,c.relacl::text,c.reloptions
+        c.relforcerowsecurity,
+        (CASE WHEN c.relkind IN ('r','p','v','m','f','S') THEN
+          COALESCE(c.relacl,acldefault(
+            CASE WHEN c.relkind='S' THEN 's'::"char" ELSE 'r'::"char" END,c.relowner))
+          ELSE c.relacl END)::text AS relacl,c.reloptions
         FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
         WHERE n.nspname='emailmonitor' ORDER BY c.relname
     """,

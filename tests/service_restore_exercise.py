@@ -78,6 +78,38 @@ def seal(snapshot: SafetySnapshot) -> ServiceSeal:
     return snapshot.service
 
 
+def snapshot_difference_sections(before: ServiceSnapshot, restored: ServiceSnapshot) -> list[str]:
+    """Fixed labels only: never include row values, identifiers, hashes or tokens."""
+    labels = []
+    for name in ("organizations", "identities", "sessions", "catalog"):
+        if fingerprint(getattr(before, name)) != fingerprint(getattr(restored, name)):
+            labels.append(name)
+    for name in ("rows", "shared", "frontier"):
+        if fingerprint(getattr(before, name)) != fingerprint(getattr(restored, name)):
+            labels.append(name)
+    old, new = seal(before), seal(restored)
+    for name in ("principals", "delegations", "audit"):
+        if fingerprint(getattr(old, name)) != fingerprint(getattr(new, name)):
+            labels.append("service." + name)
+    for name, keys in (
+        ("roles", ("roles", "memberships")),
+        ("catalog", tuple(CATALOG_QUERIES)),
+        ("exports", EXPORT_TABLES),
+    ):
+        a, b = getattr(old, name), getattr(new, name)
+        if not isinstance(a, dict) or not isinstance(b, dict):
+            labels.append("service." + name + ".shape")
+            continue
+        for key in keys:
+            if fingerprint(a.get(key)) != fingerprint(b.get(key)):
+                labels.append("service." + name + "." + key)
+        if set(a) != set(b) or (
+            fingerprint(a) != fingerprint(b) and ((set(a) | set(b)) - set(keys))
+        ):
+            labels.append("service." + name + ".shape")
+    return labels
+
+
 def stamp(value: Any) -> datetime:
     try:
         result = datetime.fromisoformat(value)

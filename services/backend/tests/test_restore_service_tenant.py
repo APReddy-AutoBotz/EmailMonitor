@@ -28,6 +28,7 @@ from service_restore_exercise import (
     ServiceRestoreExercise,
     seal,
     service_rows,
+    snapshot_difference_sections,
     supported_service_delta,
 )
 from sqlalchemy import Connection, Engine, create_engine, text
@@ -365,6 +366,27 @@ def test_actual_service_restore_keeps_revocations_privacy_and_sql_boundary_close
         results_b.database.engine.dispose()
         scenario.foundation.authentication.engine.dispose()
         with admin.connect() as c:
+            # REVOKE on these new tables materializes the owner-only default.
+            # pg_dump omits that redundant ACL, so restore legitimately stores
+            # NULL. Compare the complete effective grants, not their storage.
+            source_acls: dict[str, str] = {}
+            for table in SERVICE_TABLES:
+                acl = (
+                    c.execute(
+                        text(
+                            "SELECT relacl IS NOT NULL AND "
+                            "relacl=acldefault('r',relowner) AS owner_default,"
+                            "COALESCE(relacl,acldefault('r',relowner))::text AS effective "
+                            "FROM pg_class WHERE oid=CAST(:table AS regclass)"
+                        ),
+                        {"table": "emailmonitor." + table},
+                    )
+                    .mappings()
+                    .one()
+                )
+                if acl["owner_default"] is not True:
+                    raise RestoreRefused("restore_source_default_acl_refused")
+                source_acls[table] = acl["effective"]
             # PostgreSQL's raw JSON representation of oid is a string. The
             # capture boundary changes only this field to an exact integer.
             raw = (
@@ -469,6 +491,25 @@ def test_actual_service_restore_keeps_revocations_privacy_and_sql_boundary_close
         assert all(row["action"] != "transaction" for row in seal(current).audit)
         target.restore_closed()
         assert_closed(target, owned)
+        with target.target.connect() as c:
+            for table in SERVICE_TABLES:
+                acl_matches = c.execute(
+                    text(
+                        "SELECT relacl IS NULL,"
+                        "COALESCE(relacl,acldefault('r',relowner))::text=:source_acl "
+                        "FROM pg_class WHERE oid=CAST(:table AS regclass)"
+                    ),
+                    {"table": "emailmonitor." + table, "source_acl": source_acls[table]},
+                ).one() == (True, True)
+                if not acl_matches:
+                    raise RestoreRefused("restore_effective_acl_mismatch")
+        restored = target.capture(target.target, scenario.organizations)
+        if fingerprint(restored) != fingerprint(before):
+            # Fixed section labels only: never print authority rows or hashes.
+            sections = snapshot_difference_sections(before, restored)
+            error = RestoreRefused("restore_snapshot_mismatch")
+            error.add_note("snapshot sections: " + ",".join(sections))
+            raise error
         # These Results fixtures retain ordinary human tokens, not service scopes.
         assert isinstance(results_a.token, str) and isinstance(results_b.token, str)
         human_tokens = {org_a: results_a.token, org_b: results_b.token}

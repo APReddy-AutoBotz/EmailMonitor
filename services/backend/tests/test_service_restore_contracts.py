@@ -22,11 +22,13 @@ from restore_exercise import (
     fingerprint,
     supported_delta,
 )
+from service_restore_catalog import CATALOG_QUERIES
 from service_restore_exercise import (
     ServiceRestoreExercise,
     ServiceSeal,
     ServiceSnapshot,
     service_rows,
+    snapshot_difference_sections,
     supported_service_delta,
     validate_service_seal,
 )
@@ -1322,3 +1324,149 @@ def test_service_rows_refuses_unlisted_tables_before_any_query(table: str) -> No
     with pytest.raises(RestoreRefused, match="^restore_service_table_refused$"):
         service_rows(cast(Connection, connection), table)
     connection.execute.assert_not_called()
+
+
+def diagnostic_snapshot() -> ServiceSnapshot:
+    return amend(
+        snapshot(),
+        roles={"roles": [], "memberships": []},
+        catalog={key: [] for key in CATALOG_QUERIES},
+    )
+
+
+def test_snapshot_difference_sections_is_empty_for_identical_capture() -> None:
+    before = diagnostic_snapshot()
+    assert snapshot_difference_sections(before, deepcopy(before)) == []
+
+
+@pytest.mark.parametrize(
+    "field", ["organizations", "identities", "sessions", "catalog", "rows", "shared", "frontier"]
+)
+def test_snapshot_difference_sections_localizes_inherited_sections_without_values(
+    field: str,
+) -> None:
+    before = diagnostic_snapshot()
+    changes: dict[str, Any]
+    if field == "organizations":
+        changes = {field: tuple(reversed(before.organizations))}
+    elif field in ("identities", "sessions", "catalog"):
+        rows = deepcopy(getattr(before, field))
+        column = {"identities": "active", "sessions": "revoked_at", "catalog": "enabled"}[field]
+        rows[0][column] = REVOKED if field == "sessions" else False
+        changes = {field: rows}
+    else:
+        tables = deepcopy(getattr(before, field))
+        if field == "rows":
+            tables["jobs"][0]["state"] = "failed"
+        elif field == "shared":
+            tables["source_resource_buckets"] = []
+        else:
+            tables["execution_runs"] = [
+                {"organization_id": identifier(100), "job_id": identifier(102), "digest": "a" * 64}
+            ]
+        changes = {field: tables}
+    assert snapshot_difference_sections(before, replace(before, **changes)) == [field]
+
+
+@pytest.mark.parametrize("field", ["principals", "delegations", "audit"])
+def test_snapshot_difference_sections_localizes_service_rows_without_values(field: str) -> None:
+    before = diagnostic_snapshot()
+    assert snapshot_difference_sections(before, final_drift(before, field)) == ["service." + field]
+
+
+@pytest.mark.parametrize(
+    "section,key",
+    [
+        *(("roles", key) for key in ("roles", "memberships")),
+        *(("catalog", key) for key in CATALOG_QUERIES),
+        *(("exports", key) for key in EXPORT_TABLES),
+    ],
+)
+def test_snapshot_difference_sections_uses_only_fixed_subsection_labels(
+    section: str, key: str
+) -> None:
+    before = diagnostic_snapshot()
+    values = deepcopy(getattr(seal(before), section))
+    values[key] = [{"private-synthetic-key": "private-synthetic-value"}]
+    restored = amend(before, **{section: values})
+    assert snapshot_difference_sections(before, restored) == ["service." + section + "." + key]
+
+
+@pytest.mark.parametrize("section", ["roles", "catalog", "exports"])
+@pytest.mark.parametrize("operation", ["add", "remove", "change"])
+def test_snapshot_difference_sections_never_leaks_unknown_keys_or_their_values(
+    section: str, operation: str
+) -> None:
+    before = diagnostic_snapshot()
+    old = deepcopy(getattr(seal(before), section))
+    new = deepcopy(old)
+    private_key = "private-synthetic-unknown-section"
+    if operation in ("remove", "change"):
+        old[private_key] = [{"secret": "private-synthetic-before"}]
+    if operation in ("add", "change"):
+        new[private_key] = [{"secret": "private-synthetic-after"}]
+    before = amend(before, **{section: old})
+    restored = amend(before, **{section: new})
+    assert fingerprint(before) != fingerprint(restored)
+    assert snapshot_difference_sections(before, restored) == ["service." + section + ".shape"]
+
+
+@pytest.mark.parametrize("section", ["roles", "catalog", "exports"])
+def test_snapshot_difference_sections_sanitizes_a_nondictionary_section(section: str) -> None:
+    before = diagnostic_snapshot()
+    restored = amend(before, **{section: "private-synthetic-invalid-section"})
+    assert snapshot_difference_sections(before, restored) == ["service." + section + ".shape"]
+
+
+def test_snapshot_difference_sections_detects_integer_boolean_serialization_difference() -> None:
+    before = diagnostic_snapshot()
+    restored = change_row(before, "principals", revision=True)
+    assert seal(before).principals == seal(restored).principals
+    assert fingerprint(before) != fingerprint(restored)
+    assert snapshot_difference_sections(before, restored) == ["service.principals"]
+
+
+def test_snapshot_difference_sections_has_fixed_order_independent_of_dictionary_insertion() -> None:
+    before = diagnostic_snapshot()
+    restored = change_row(before, "principals", active=False, revision=2)
+    identities = deepcopy(before.identities)
+    identities[0]["active"] = False
+    rows = deepcopy(before.rows)
+    rows["jobs"][0]["state"] = "failed"
+    restored = replace(restored, identities=identities, rows=rows)
+    for section, keys in (
+        ("roles", ("memberships", "roles")),
+        ("catalog", ("revision_acl", "schemas")),
+        ("exports", ("export_events", "export_members")),
+    ):
+        values = dict(reversed(list(getattr(seal(restored), section).items())))
+        for key in keys:
+            values[key] = [{"private-synthetic-value": "never printed"}]
+        restored = amend(restored, **{section: values})
+    expected = [
+        "identities",
+        "rows",
+        "service.principals",
+        "service.roles.roles",
+        "service.roles.memberships",
+        "service.catalog.schemas",
+        "service.catalog.revision_acl",
+        "service.exports.export_members",
+        "service.exports.export_events",
+    ]
+    assert snapshot_difference_sections(before, restored) == expected
+    assert snapshot_difference_sections(restored, before) == expected
+
+
+def test_relation_catalog_sql_normalizes_only_null_supported_relation_acls() -> None:
+    # SQL-source contract only: actual dump/restore ACL equivalence requires
+    # PostgreSQL acceptance. COALESCE leaves an explicit empty ACL untouched.
+    query = " ".join(CATALOG_QUERIES["relations"].split())
+    assert (
+        "CASE WHEN c.relkind IN ('r','p','v','m','f','S') THEN "
+        "COALESCE(c.relacl,acldefault( "
+        "CASE WHEN c.relkind='S' THEN 's'::\"char\" ELSE 'r'::\"char\" END,c.relowner)) "
+        "ELSE c.relacl END"
+    ) in query
+    assert "NULLIF" not in query.upper()
+    assert "c.relrowsecurity" in query and "c.relforcerowsecurity" in query

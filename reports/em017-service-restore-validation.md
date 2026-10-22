@@ -83,3 +83,35 @@ passed in each. All static, documentation/contracts, inventory and frontend gate
 passed. Focused service plus legacy contracts passed 413 tests. This paragraph is
 an evidence-only update after those gates; corrected actual hosted acceptance is
 still pending and recorded separately in PR48.
+
+
+## Second hosted candidate and effective-ACL correction
+
+Candidate `d2502712b980862e32a8663fb4d23b875e143809` passed seven required
+workflows and 5,153 backend tests. The new actual test verified PostgreSQL OID
+serialization and full-range numeric preservation, captured the baseline, and
+completed the actual dump and closed restore. The exact restored-baseline seal
+then refused a mismatch before replay. This candidate is not accepted.
+
+Independent PostgreSQL source review established a nonportable catalog
+representation: a no-op REVOKE on the three service tables stores an explicit
+owner-only default ACL, whereas pg_dump omits commands equal to the default and
+restore leaves NULL. The relation catalog now expands only NULL ACLs to the exact
+PostgreSQL effective default for table-like relations and sequences. Explicit
+empty ACLs, all entries, grantors, privileges and grant options remain intact;
+non-ACL-bearing relations retain their raw representation. The sequence acldefault
+code is lowercase `s`, distinct from uppercase `S` relkind. Existing migration
+compatibility and restore comparisons share the same strict projection.
+
+The actual restore test asserts the source/restored raw representation distinction
+and complete effective-ACL equality for the three service tables. Fixed,
+allowlisted section diagnostics can identify any further seal mismatch without
+printing row values, identifiers, tokens or digests. The full fingerprint comparison
+remains mandatory. Corrected normal/fresh and hosted acceptance remain required.
+
+ACL-corrected source tree `59429c6f7f271dbe1b421eaa6a7e9051594b9c53` passed
+independent review and complete normal/fresh serial gates: 4,810 backend tests
+passed with 389 explicit infrastructure skips and 77 React tests passed in each.
+All static, documentation/contracts, inventory and frontend gates passed. Focused
+service plus legacy contracts passed 458 tests. This paragraph alone records the
+post-gate evidence; full corrected hosted acceptance remains pending in PR48.
