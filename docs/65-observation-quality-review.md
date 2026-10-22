@@ -16,7 +16,7 @@ The new version is a read-view version only. Existing Bundle JSON, input digests
 
 ## Operator reach and validation
 
-The drawer is reached through existing contact/review rows. Zero-candidate outcomes cannot be opened there; this is not a complete article-outcome dashboard. The projection still represents supported no-contact and unsupported outcomes, and the endpoint can serve a visible retained batch independently of a contact row. Loading/error messaging does not block existing author-email review permissions or replace the server's review checks.
+The original drawer is reached through existing contact/review rows. The additive [job investigation view](68-retained-job-outcome-investigation.md) also opens retained quality directly from an article outcome, including zero-candidate observations; it does not add new outcome filters. The projection still represents supported no-contact and unsupported outcomes, and the endpoint can serve a visible retained batch independently of a contact row. Loading/error messaging does not block existing author-email review permissions or replace the server's review checks.
 
 Validation covers authored partial-affiliation facts, unchanged acceptance/replay serialization, closed response values, source mismatch refusal, empty-candidate outcomes, runtime-role SQL/API visibility and current-authority refusal. The actual disposable XML pipeline checks the view before/after review. The required keyboard browser journeys check HTML/XML presentation; the HTML journey holds a response across refresh, aborts a subsequent response, and checks that prior quality stays hidden before recovery. These tests use synthetic sources only. Full service/container proof requires CI, not local skipped tests.
 

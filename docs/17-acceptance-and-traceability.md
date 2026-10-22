@@ -431,3 +431,14 @@ populated dump/restore, no revived work and closed target cleanup. Legacy restor
 actual service-login/broker and installed operator tests remain mandatory.
 [Evidence](../reports/em017-service-restore-validation.md) separates pending actual
 acceptance from local skips; no production RPO/RTO or serving restore is claimed.
+
+## Retained job outcome investigation
+
+EM-010/011/012 and FR-021/023/025, existing FR-017 presentation, NFR-001/009/011
+map to the [job investigation scope](68-retained-job-outcome-investigation.md).
+Authored pagination/quality UI cases and actual runtime-role SQL tests remain
+separate from hosted keyboard operator acceptance. Required checks cover more
+than 100 outcomes, no-contact quality without associations, missing batches,
+inherited lineage, current visibility, stale response suppression and keyboard
+focus restoration. This slice does not complete all FR-023 filters.
+[Candidate evidence](../reports/job-outcome-investigation-validation.md).

@@ -493,6 +493,16 @@ def test_real_failed_pagination_retry_inherits_committed_articles_without_new_ef
     continuation = progress.retry(org, job, original.revision)
     inherited = progress.items(org, continuation)
     assert sum(item.inherited_job_id == job for item in inherited) == 2
+    from emailmonitor.results.service import Results
+
+    outcomes = Results(progress.database, progress.token, SETTINGS).outcomes(
+        org, continuation, limit=25
+    )
+    retained = [item for item in outcomes.items if item.inherited_job_id == job]
+    assert len(retained) == 2 and all(item.batch_id is not None for item in retained)
+    for item in retained:
+        assert item.batch_id is not None
+        assert progress.associations.quality(org, item.batch_id).scope == "article"
     assert (
         progress.snapshot(org, continuation).accepted_associations == original.accepted_associations
     )
