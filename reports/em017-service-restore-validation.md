@@ -115,3 +115,16 @@ passed with 389 explicit infrastructure skips and 77 React tests passed in each.
 All static, documentation/contracts, inventory and frontend gates passed. Focused
 service plus legacy contracts passed 458 tests. This paragraph alone records the
 post-gate evidence; full corrected hosted acceptance remains pending in PR48.
+
+
+## Third hosted candidate and void-return assertion
+
+Candidate `f8b8e8e7540b79ec5c7231a7fa312f682ad0179e` passed seven required
+workflows and 5,198 backend tests. The new actual test passed raw/effective ACL
+assertions, the exact restored-baseline seal, revocation/privacy replay, repeated
+replay and the early revoked/disabled/expired denial probes. A later publisher
+probe failed only because its assertion expected Python None from the SQL void
+`service_end` function; pinned pg8000 returns PostgreSQL's empty text void value.
+The assertion now expects that exact value while retaining the function call and
+its authority fence. No SQL behavior or restore constraint is changed. The full
+remaining actual probe sequence and complete hosted matrix remain required.

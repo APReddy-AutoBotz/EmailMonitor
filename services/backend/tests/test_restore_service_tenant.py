@@ -645,12 +645,13 @@ def test_actual_service_restore_keeps_revocations_privacy_and_sql_boundary_close
                 assert [item["event_id"] for item in rows] == [row["event_id"]]
                 assert begin(c, authority) == authority.grant
                 assert publication(c, authority, row) == phase
+                # PostgreSQL void is an empty text value in pinned pg8000, not SQL NULL.
                 assert (
                     c.execute(
                         text("SELECT emailmonitor.service_end(:org,:resource,:purpose,:kind)"),
                         authority.parameters(),
                     ).scalar_one()
-                    is None
+                    == ""
                 )
         # Actual claim and finish SQL succeeds for the unchanged grant, all rolled
         # back. Then revoke that same claimed grant inside the isolated probe and
