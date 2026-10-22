@@ -321,6 +321,25 @@ def bounded_rows(
     return [dict(row) for row in values]
 
 
+def service_rows(c: Connection, table: str) -> list[dict[str, Any]]:
+    # PostgreSQL serializes oid as a JSON string. Normalize only this trusted SQL
+    # field to bigint, preserving every other column and strict snapshot types.
+    if table not in SERVICE_TABLES:
+        raise RestoreRefused("restore_service_table_refused")
+    record = (
+        "(row_to_json(t)::jsonb || jsonb_build_object('login_oid',t.login_oid::bigint))"
+        if table == "service_principals"
+        else "row_to_json(t)"
+    )
+    return [
+        row["record"]
+        for row in bounded_rows(
+            c,
+            f"SELECT {record} AS record FROM emailmonitor.{table} t ORDER BY organization_id,id",
+        )
+    ]
+
+
 def export_seal(c: Connection, organizations: tuple[UUID, UUID]) -> dict[str, list[dict[str, Any]]]:
     return {
         table: bounded_rows(
@@ -343,17 +362,7 @@ def capture_service(engine: Engine, organizations: tuple[UUID, UUID]) -> Service
     ):
         c.execute(text("SET LOCAL statement_timeout='5000'"))
         base = capture_rows(c, organizations)
-        authority = [
-            [
-                row["record"]
-                for row in bounded_rows(
-                    c,
-                    f"SELECT row_to_json(t) AS record FROM emailmonitor.{table} t "
-                    "ORDER BY organization_id,id",
-                )
-            ]
-            for table in SERVICE_TABLES
-        ]
+        authority = [service_rows(c, table) for table in SERVICE_TABLES]
         if c.execute(text("SELECT version_num FROM public.alembic_version")).scalars().all() != [
             "0015_service_plan_cache"
         ]:
@@ -517,14 +526,7 @@ class ServiceRestoreExercise(RestoreExercise):
             (authority.principals, authority.delegations, authority.audit),
             strict=True,
         ):
-            actual = [
-                row["record"]
-                for row in bounded_rows(
-                    c,
-                    f"SELECT row_to_json(t) AS record FROM emailmonitor.{table} t "
-                    "ORDER BY organization_id,id",
-                )
-            ]
+            actual = service_rows(c, table)
             if actual != expected:
                 raise RestoreRefused("restore_service_reconciliation_failed")
         if export_seal(c, current.organizations) != authority.exports:

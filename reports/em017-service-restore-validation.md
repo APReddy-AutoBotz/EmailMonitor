@@ -54,3 +54,32 @@ skips never substitute for those actual proofs.
 This milestone does not establish a production restore procedure, real login
 activation into a restored database, business-history merge, staging deployment or
 measured production RPO/RTO.
+
+## First hosted candidate and representation correction
+
+Draft PR48 candidate `e3d7e5559f6e4b0133426a6f6146d5ea5948da45`, tree
+`e676fde3b80079f565ea8210015d4e049e8848a8`, ran the complete hosted matrix.
+Seven required workflows passed, including all four installed controlled XML
+scenarios and verified owned cleanup. Application acceptance reported 5,142 passed
+and one failure during baseline capture in the new service-restore test, before
+any dump or restore. It did
+not complete the actual restore proof and is not an accepted candidate.
+
+The failure exposed PostgreSQL's JSON representation of the `oid` type as a
+string. A shared bounded service-row reader now projects only the trusted SQL
+`login_oid` field to `bigint` for principal capture and reconciliation. It retains
+all other fields, exact role/OID checks, the row cap and strict snapshot integer
+validation; arbitrary snapshot strings are not coerced or accepted. PostgreSQL's
+full unsigned 32-bit OID range fits bigint. Native driver role OID values and
+existing delegation bigint fields need no conversion. Pure query-contract tests
+and an actual SQL representation assertion cover this boundary. Repeated normal,
+fresh and full hosted acceptance of the corrected candidate remain required.
+
+
+The corrected source tree `1395acbb014da99d53a75abf5323ca51c71e0162` passed
+independent source review and repeated normal/fresh serial local gates: 4,765
+backend tests passed with 389 explicit infrastructure skips, and 77 React tests
+passed in each. All static, documentation/contracts, inventory and frontend gates
+passed. Focused service plus legacy contracts passed 413 tests. This paragraph is
+an evidence-only update after those gates; corrected actual hosted acceptance is
+still pending and recorded separately in PR48.

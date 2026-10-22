@@ -27,6 +27,7 @@ from service_restore_exercise import (
     SERVICE_TABLES,
     ServiceRestoreExercise,
     seal,
+    service_rows,
     supported_service_delta,
 )
 from sqlalchemy import Connection, Engine, create_engine, text
@@ -364,6 +365,45 @@ def test_actual_service_restore_keeps_revocations_privacy_and_sql_boundary_close
         results_b.database.engine.dispose()
         scenario.foundation.authentication.engine.dispose()
         with admin.connect() as c:
+            # PostgreSQL's raw JSON representation of oid is a string. The
+            # capture boundary changes only this field to an exact integer.
+            raw = (
+                c.execute(
+                    text(
+                        "SELECT row_to_json(t) AS record,t.login_oid::bigint AS login_oid "
+                        "FROM emailmonitor.service_principals t "
+                        "WHERE t.organization_id=:org AND t.id=:id"
+                    ),
+                    {"org": org_b, "id": current_worker.principal},
+                )
+                .mappings()
+                .one()
+            )
+            assert type(raw["record"]["login_oid"]) is str
+            assert type(raw["login_oid"]) is int
+            assert raw["record"]["login_oid"] == str(raw["login_oid"])
+            normalized = next(
+                row
+                for row in service_rows(c, "service_principals")
+                if row["id"] == str(current_worker.principal)
+            )
+            assert type(normalized["login_oid"]) is int
+            assert normalized == {**raw["record"], "login_oid": raw["login_oid"]}
+            # OID is unsigned32: the SQL boundary must not narrow it to int4.
+            maximum = (
+                c.execute(
+                    text(
+                        "SELECT row_to_json(t) AS raw_record,"
+                        "jsonb_build_object('login_oid',t.login_oid::bigint) AS projected_record "
+                        "FROM (SELECT '4294967295'::oid AS login_oid) t"
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            assert maximum["raw_record"] == {"login_oid": "4294967295"}
+            assert maximum["projected_record"] == {"login_oid": 4294967295}
+            assert type(maximum["projected_record"]["login_oid"]) is int
             for login, _ in owned:
                 assert (
                     c.execute(

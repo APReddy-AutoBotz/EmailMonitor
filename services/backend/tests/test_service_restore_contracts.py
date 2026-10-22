@@ -26,10 +26,11 @@ from service_restore_exercise import (
     ServiceRestoreExercise,
     ServiceSeal,
     ServiceSnapshot,
+    service_rows,
     supported_service_delta,
     validate_service_seal,
 )
-from sqlalchemy import Engine
+from sqlalchemy import Connection, Engine
 
 EXPORT_TABLES = (
     "export_members",
@@ -723,6 +724,7 @@ def test_malformed_service_uuid_is_a_fixed_refusal(table: str) -> None:
         ("principals", "revision", "1"),
         ("principals", "login_oid", True),
         ("principals", "login_oid", 0),
+        ("principals", "login_oid", "110"),
         ("principals", "kind", "administrator"),
         ("delegations", "principal_revision", True),
         ("delegations", "generation", 0),
@@ -1253,3 +1255,70 @@ def test_fingerprint_seals_every_private_service_field_despite_redacted_repr(fie
     assert repr(seal(before)) == repr(seal(current))
     assert fingerprint(before) == fingerprint(deepcopy(before))
     assert fingerprint(before) != fingerprint(current)
+
+
+def test_service_rows_projects_only_principal_oid_to_bigint_and_retains_the_full_row() -> None:
+    # The mocked driver supplies the projected value. This checks SQL shape and
+    # passthrough only; it does not prove PostgreSQL's actual OID serialization.
+    rows = deepcopy(seal(snapshot()).principals)
+    connection = MagicMock(spec=Connection)
+    connection.execute.return_value.mappings.return_value.all.return_value = [
+        {"record": row} for row in rows
+    ]
+    actual = service_rows(cast(Connection, connection), "service_principals")
+    assert actual == rows and type(actual[0]["login_oid"]) is int
+    connection.execute.assert_called_once()
+    assert str(connection.execute.call_args.args[0]) == (
+        "SELECT (row_to_json(t)::jsonb || "
+        "jsonb_build_object('login_oid',t.login_oid::bigint)) AS record "
+        "FROM emailmonitor.service_principals t ORDER BY organization_id,id LIMIT 501"
+    )
+
+
+@pytest.mark.parametrize(
+    "table,field", [("service_delegations", "delegations"), ("service_audit", "audit")]
+)
+def test_service_rows_keeps_other_authority_queries_and_all_fields_unchanged(
+    table: str, field: str
+) -> None:
+    rows = deepcopy(getattr(seal(snapshot()), field))
+    connection = MagicMock(spec=Connection)
+    connection.execute.return_value.mappings.return_value.all.return_value = [
+        {"record": row} for row in rows
+    ]
+    assert service_rows(cast(Connection, connection), table) == rows
+    connection.execute.assert_called_once()
+    assert str(connection.execute.call_args.args[0]) == (
+        f"SELECT row_to_json(t) AS record FROM emailmonitor.{table} t "
+        "ORDER BY organization_id,id LIMIT 501"
+    )
+
+
+@pytest.mark.parametrize(
+    "table,field",
+    [
+        ("service_principals", "principals"),
+        ("service_delegations", "delegations"),
+        ("service_audit", "audit"),
+    ],
+)
+def test_service_rows_inherits_the_bounded_reader_cap(table: str, field: str) -> None:
+    row = getattr(seal(snapshot()), field)[0]
+    connection = MagicMock(spec=Connection)
+    connection.execute.return_value.mappings.return_value.all.return_value = [
+        {"record": deepcopy(row)} for _ in range(501)
+    ]
+    with pytest.raises(RestoreRefused, match="^restore_row_cap$"):
+        service_rows(cast(Connection, connection), table)
+    connection.execute.assert_called_once()
+    assert str(connection.execute.call_args.args[0]).endswith(" LIMIT 501")
+
+
+@pytest.mark.parametrize(
+    "table", ["jobs", "public.service_principals", "service_principals;SELECT 1", ""]
+)
+def test_service_rows_refuses_unlisted_tables_before_any_query(table: str) -> None:
+    connection = MagicMock(spec=Connection)
+    with pytest.raises(RestoreRefused, match="^restore_service_table_refused$"):
+        service_rows(cast(Connection, connection), table)
+    connection.execute.assert_not_called()
