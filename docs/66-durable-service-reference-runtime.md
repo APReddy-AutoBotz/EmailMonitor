@@ -134,3 +134,11 @@ capability. [Candidate evidence](../reports/em017-installed-controlled-xml-valid
 records completed checks and outstanding actual acceptance. This is not live
 Elsevier activation or production readiness; host-network SQL service workers
 are not described as protected-egress sandboxes.
+
+## Closed synthetic restore candidate
+
+A separate [closed service-authority exercise](67-closed-service-authority-restore.md)
+adds a revocation-aware seal without enabling the legacy profile or opening a
+restored service database. Exact existing authority, immutable deadlines, audit,
+roles/schema and export state remain protected. This code/test candidate does not
+authorize serving restored work or production recovery.

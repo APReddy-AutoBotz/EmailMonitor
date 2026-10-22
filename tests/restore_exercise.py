@@ -7,7 +7,7 @@ import re
 import subprocess
 import time
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field, is_dataclass
 from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
@@ -100,7 +100,9 @@ def fingerprint(value: object) -> str:
             value,
             sort_keys=True,
             separators=(",", ":"),
-            default=lambda item: item.__dict__ if isinstance(item, SafetySnapshot) else str(item),
+            default=lambda item: (
+                asdict(item) if is_dataclass(item) and not isinstance(item, type) else str(item)
+            ),
         ).encode()
     ).hexdigest()
 
@@ -113,7 +115,8 @@ def database_name(value: str) -> str:
 
 def require_tool_version(program: str, value: str) -> None:
     if program not in ("pg_dump", "pg_restore") or not re.fullmatch(
-        rf"{program} \(PostgreSQL\) 17\.11(?: \(Debian 17\.11-[A-Za-z0-9.+~]+\))?", value
+        rf"{program} \(PostgreSQL\) 17\.11(?: \(Debian 17\.11-[A-Za-z0-9.+~]+\))?",
+        value,
     ):
         raise RestoreRefused("restore_tool_version_refused")
 
@@ -212,7 +215,10 @@ def unaffected_frontier(
 def capture(engine: Engine, organizations: tuple[UUID, UUID]) -> SafetySnapshot:
     if len(set(organizations)) != 2:
         raise RestoreRefused("restore_tenant_scope_refused")
-    with engine.connect().execution_options(isolation_level="REPEATABLE READ") as c, c.begin():
+    with (
+        engine.connect().execution_options(isolation_level="REPEATABLE READ") as c,
+        c.begin(),
+    ):
         # This legacy restore profile has no service-role/authority seal. Refuse
         # rather than replay an older principal or delegation revocation state.
         if c.execute(
@@ -223,80 +229,84 @@ def capture(engine: Engine, organizations: tuple[UUID, UUID]) -> SafetySnapshot:
             )
         ).scalar_one():
             raise RestoreRefused("restore_service_authority_unsupported")
-        rows = {table: records(c, table, organizations) for table in TABLES}
-        active: bool = c.execute(
+        return capture_rows(c, organizations)
+
+
+def capture_rows(c: Connection, organizations: tuple[UUID, UUID]) -> SafetySnapshot:
+    rows = {table: records(c, table, organizations) for table in TABLES}
+    active: bool = c.execute(
+        text(
+            "SELECT EXISTS(SELECT 1 FROM emailmonitor.admission_requests "
+            "WHERE organization_id IN (:a,:b) AND state='active') "
+            "OR EXISTS(SELECT 1 FROM emailmonitor.execution_items "
+            "WHERE organization_id IN (:a,:b) AND state='running') "
+            "OR EXISTS(SELECT 1 FROM emailmonitor.job_items "
+            "WHERE organization_id IN (:a,:b) AND state='running') "
+            "OR EXISTS(SELECT 1 FROM emailmonitor.exports "
+            "WHERE organization_id IN (:a,:b) AND lease_nonce IS NOT NULL) "
+            "OR EXISTS(SELECT 1 FROM emailmonitor.source_resource_requests "
+            "WHERE organization_id IN (:a,:b) AND state='active')"
+        ),
+        {"a": organizations[0], "b": organizations[1]},
+    ).scalar_one()
+    if active:
+        raise RestoreRefused("restore_not_quiesced")
+    identities: list[dict[str, Any]] = list(
+        c.execute(
             text(
-                "SELECT EXISTS(SELECT 1 FROM emailmonitor.admission_requests "
-                "WHERE organization_id IN (:a,:b) AND state='active') "
-                "OR EXISTS(SELECT 1 FROM emailmonitor.execution_items "
-                "WHERE organization_id IN (:a,:b) AND state='running') "
-                "OR EXISTS(SELECT 1 FROM emailmonitor.job_items "
-                "WHERE organization_id IN (:a,:b) AND state='running') "
-                "OR EXISTS(SELECT 1 FROM emailmonitor.exports "
-                "WHERE organization_id IN (:a,:b) AND lease_nonce IS NOT NULL) "
-                "OR EXISTS(SELECT 1 FROM emailmonitor.source_resource_requests "
-                "WHERE organization_id IN (:a,:b) AND state='active')"
+                "SELECT row_to_json(i) FROM emailmonitor.identities i WHERE id IN "
+                "(SELECT identity_id FROM emailmonitor.memberships "
+                "WHERE organization_id IN (:a,:b)) "
+                "ORDER BY i.id LIMIT 501"
             ),
             {"a": organizations[0], "b": organizations[1]},
-        ).scalar_one()
-        if active:
-            raise RestoreRefused("restore_not_quiesced")
-        identities: list[dict[str, Any]] = list(
-            c.execute(
-                text(
-                    "SELECT row_to_json(i) FROM emailmonitor.identities i WHERE id IN "
-                    "(SELECT identity_id FROM emailmonitor.memberships "
-                    "WHERE organization_id IN (:a,:b)) "
-                    "ORDER BY i.id LIMIT 501"
-                ),
-                {"a": organizations[0], "b": organizations[1]},
-            ).scalars()
-        )
-        sessions: list[dict[str, Any]] = list(
-            c.execute(
-                text(
-                    "SELECT row_to_json(s) FROM emailmonitor.sessions s WHERE identity_id IN "
-                    "(SELECT identity_id FROM emailmonitor.memberships "
-                    "WHERE organization_id IN (:a,:b)) "
-                    "ORDER BY s.token_hash LIMIT 501"
-                ),
-                {"a": organizations[0], "b": organizations[1]},
-            ).scalars()
-        )
-        catalog: list[dict[str, Any]] = list(
-            c.execute(
-                text(
-                    "SELECT row_to_json(s) FROM emailmonitor.source_catalog s "
-                    "ORDER BY source_id LIMIT 501"
-                )
-            ).scalars()
-        )
-        if any(len(value) > 500 for value in (identities, sessions, catalog)):
-            raise RestoreRefused("restore_row_cap")
-        shared: dict[str, list[dict[str, Any]]] = {}
-        for table in ("source_resource_buckets", "admission_pools"):
-            values: Sequence[dict[str, Any]] = (
-                c.execute(
-                    text(
-                        f"SELECT row_to_json(t) FROM emailmonitor.{table} t "
-                        "ORDER BY row_to_json(t)::text LIMIT 501"
-                    )
-                )
-                .scalars()
-                .all()
+        ).scalars()
+    )
+    sessions: list[dict[str, Any]] = list(
+        c.execute(
+            text(
+                "SELECT row_to_json(s) FROM emailmonitor.sessions s WHERE identity_id IN "
+                "(SELECT identity_id FROM emailmonitor.memberships "
+                "WHERE organization_id IN (:a,:b)) "
+                "ORDER BY s.token_hash LIMIT 501"
+            ),
+            {"a": organizations[0], "b": organizations[1]},
+        ).scalars()
+    )
+    catalog: list[dict[str, Any]] = list(
+        c.execute(
+            text(
+                "SELECT row_to_json(s) FROM emailmonitor.source_catalog s "
+                "ORDER BY source_id LIMIT 501"
             )
-            if len(values) > 500:
-                raise RestoreRefused("restore_row_cap")
-            shared[table] = list(values)
-        return SafetySnapshot(
-            organizations,
-            rows,
-            identities,
-            sessions,
-            catalog,
-            shared,
-            frontier_records(c, organizations),
+        ).scalars()
+    )
+    if any(len(value) > 500 for value in (identities, sessions, catalog)):
+        raise RestoreRefused("restore_row_cap")
+    shared: dict[str, list[dict[str, Any]]] = {}
+    for table in ("source_resource_buckets", "admission_pools"):
+        values: Sequence[dict[str, Any]] = (
+            c.execute(
+                text(
+                    f"SELECT row_to_json(t) FROM emailmonitor.{table} t "
+                    "ORDER BY row_to_json(t)::text LIMIT 501"
+                )
+            )
+            .scalars()
+            .all()
         )
+        if len(values) > 500:
+            raise RestoreRefused("restore_row_cap")
+        shared[table] = list(values)
+    return SafetySnapshot(
+        organizations,
+        rows,
+        identities,
+        sessions,
+        catalog,
+        shared,
+        frontier_records(c, organizations),
+    )
 
 
 def supported_delta(before: SafetySnapshot, current: SafetySnapshot) -> None:
@@ -363,6 +373,22 @@ def supported_delta(before: SafetySnapshot, current: SafetySnapshot) -> None:
 
 
 class RestoreExercise:
+    capture = staticmethod(capture)
+    supported_delta = staticmethod(supported_delta)
+
+    def replay_authority(
+        self, c: Connection, before: SafetySnapshot, current: SafetySnapshot
+    ) -> None:
+        """Legacy profile has no additional supported authority."""
+
+    def reconcile_authority(self, c: Connection, current: SafetySnapshot) -> None:
+        """Legacy profile reconciles its protected rows below."""
+
+    def validate_final(
+        self, before: SafetySnapshot, current: SafetySnapshot, restored: SafetySnapshot
+    ) -> None:
+        """Additional closed-profile seals may verify the final captured target."""
+
     def __init__(self, directory: Path) -> None:
         self.container = require_ci(dict(os.environ))
         self.name = database_name("em_restore_" + uuid4().hex)
@@ -480,15 +506,16 @@ class RestoreExercise:
         if self.validated:
             if self.replay_seal != fingerprint(
                 (before, current)
-            ) or self.target_seal != fingerprint(capture(self.target, current.organizations)):
+            ) or self.target_seal != fingerprint(self.capture(self.target, current.organizations)):
                 raise RestoreRefused("restore_state_refused")
             return
-        supported_delta(before, current)
-        restored = capture(self.target, current.organizations)
+        self.supported_delta(before, current)
+        restored = self.capture(self.target, current.organizations)
         if fingerprint(restored) != fingerprint(before):
             raise RestoreRefused("restore_snapshot_mismatch")
         with self.target.begin() as c:
             c.execute(text("SET LOCAL statement_timeout='5000'"))
+            self.replay_authority(c, before, current)
             # Exact stored keys/digests, never recovered raw contacts, and earliest
             # retained deadlines are installed before any application connection.
             for table, columns, keys in (
@@ -514,7 +541,12 @@ class RestoreExercise:
                 ),
                 (
                     "lifecycle_job_deadlines",
-                    ("organization_id", "job_id", "contact_deadline", "excerpt_deadline"),
+                    (
+                        "organization_id",
+                        "job_id",
+                        "contact_deadline",
+                        "excerpt_deadline",
+                    ),
                     ("organization_id", "job_id"),
                 ),
             ):
@@ -539,7 +571,10 @@ class RestoreExercise:
                         "SELECT set_config('emailmonitor.organization_id',:org,true), "
                         "set_config('emailmonitor.session_hash',:token,true)"
                     ),
-                    {"org": str(org), "token": hashlib.sha256(tokens[org].encode()).hexdigest()},
+                    {
+                        "org": str(org),
+                        "token": hashlib.sha256(tokens[org].encode()).hexdigest(),
+                    },
                 )
                 for row in current.rows["deletion_tombstones"]:
                     if row["organization_id"] != str(org):
@@ -599,14 +634,15 @@ class RestoreExercise:
             ):
                 if records(c, table, current.organizations) != current.rows[table]:
                     raise RestoreRefused("restore_authority_reconciliation_failed")
-        if fingerprint(capture(self.admin, current.organizations)) != fingerprint(current):
+            self.reconcile_authority(c, current)
+        if fingerprint(self.capture(self.admin, current.organizations)) != fingerprint(current):
             raise RestoreRefused("restore_source_changed")
-        if unaffected_frontier(
-            capture(self.target, current.organizations), current
-        ) != unaffected_frontier(current, current):
+        restored = self.capture(self.target, current.organizations)
+        if unaffected_frontier(restored, current) != unaffected_frontier(current, current):
             raise RestoreRefused("restore_frontier_reconciliation_failed")
+        self.validate_final(before, current, restored)
         self.current = current
-        self.target_seal = fingerprint(capture(self.target, current.organizations))
+        self.target_seal = fingerprint(restored)
         self.replay_seal = fingerprint((before, current))
         self.validated = True
 
@@ -620,9 +656,10 @@ class RestoreExercise:
             raise RestoreRefused("restore_state_refused")
         if (
             self.current is None
-            or fingerprint(capture(self.admin, self.current.organizations))
+            or fingerprint(self.capture(self.admin, self.current.organizations))
             != fingerprint(self.current)
-            or fingerprint(capture(self.target, self.current.organizations)) != self.target_seal
+            or fingerprint(self.capture(self.target, self.current.organizations))
+            != self.target_seal
         ):
             raise RestoreRefused("restore_state_changed")
         with self.admin.connect() as c:

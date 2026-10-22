@@ -555,3 +555,14 @@ required container-level worker confinement after rejecting descriptor filtering
 alone. Actual SQL/broker/parser/operator and final combined gates are outstanding;
 see [candidate validation](../reports/em017-installed-controlled-xml-validation.md).
 No live source, credential, deployment or merge is included.
+
+### EM-017 closed service-authority restore — candidate (2026-10-22)
+
+A separate dependent slice after accepted PR47 implements the
+[closed synthetic service restore seal](67-closed-service-authority-restore.md).
+Independent design review passed before implementation. The legacy populated-state
+refusal remains; the new target never grants CONNECT or serves work. Exact
+revocation/audit/role/schema/export/privacy reconciliation passed independent source
+review. Normal and separate fresh local gates each passed 4,754 backend and 77 React
+tests with 389 explicit infrastructure skips. [Validation](../reports/em017-service-restore-validation.md)
+tracks the required actual hosted gates; this entry is not a completion claim.
