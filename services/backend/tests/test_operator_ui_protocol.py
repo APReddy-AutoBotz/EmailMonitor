@@ -828,3 +828,94 @@ def test_owned_channel_sixteen_admitted_limit_has_distinct_fixed_failure() -> No
         assert not channel.pending and channel.admitted == 0 and channel.capacity._value == 8
 
     asyncio.run(run())
+
+
+def test_outcome_investigation_phases_are_closed_failure_only_categories() -> None:
+    """Localize assertions without publishing DOM, records, URLs or IDs."""
+    import ast
+
+    from operator_ui_protocol import OUTCOME_PHASES, DiagnosticFrame
+
+    root = Path(__file__).resolve().parents[3]
+    source = (root / "scripts/isolation/operator_ui_acceptance.py").read_text()
+    module = ast.parse(source)
+    observed = {
+        call.args[0].value
+        for call in ast.walk(module)
+        if isinstance(call, ast.Call)
+        and isinstance(call.func, ast.Name)
+        and call.func.id in {"checkpoint", "outcome_checkpoint"}
+        and call.args
+        and isinstance(call.args[0], ast.Constant)
+        and isinstance(call.args[0].value, str)
+        and call.args[0].value.startswith("outcomes_")
+    }
+    assert observed == set(OUTCOME_PHASES) and len(observed) == 24
+    old = {"kind": "failure", "stage": "url_worker", "error": "AssertionError"}
+    assert DiagnosticFrame.model_validate(old).outcome_phase is None
+    for phase in OUTCOME_PHASES:
+        frame = DiagnosticFrame.model_validate({**old, "outcome_phase": phase})
+        assert frame.outcome_phase == phase and frame.stage == "url_worker"
+        assert frame.api_statuses == [] and frame.reason == "unknown"
+        for changes in (
+            {"kind": "stage", "error": None},
+            {"stage": "keyword_worker"},
+            {"stage": phase},
+            {"outcome_phase": phase + ":private-record"},
+            {"outcome_phase": [phase]},
+            {"body": "private"},
+        ):
+            with pytest.raises(ValidationError):
+                DiagnosticFrame.model_validate({**old, "outcome_phase": phase, **changes})
+    helper = next(
+        node
+        for node in module.body
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "authored_outcome_paging"
+    )
+    assert not any(
+        isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "print"
+        for node in ast.walk(helper)
+    )
+
+
+def test_outcome_failure_phase_preserves_stage_identity_cap_and_reset() -> None:
+    import ast
+
+    root = Path(__file__).resolve().parents[3]
+    module = ast.parse((root / "scripts/isolation/operator_ui_acceptance.py").read_text())
+    callbacks = {
+        node.name: ast.unparse(node)
+        for node in ast.walk(module)
+        if isinstance(node, ast.FunctionDef) and node.name in {"checkpoint", "outcome_checkpoint"}
+    }
+    code = callbacks["outcome_checkpoint"]
+    assert "stage != 'url_worker'" in code and "value not in OUTCOME_PHASES" in code
+    assert "outcome_phase = value" in code and "stage = value" not in code and "print(" not in code
+    assert "outcome_phase = None" in callbacks["checkpoint"]
+    host = (root / "scripts/isolation/run_operator_ui_acceptance.py").read_text()
+    assert "if stages > 32:" in host and "if diagnostic.stage != stage:" in host
+    assert '"; outcome phase=" + diagnostic.outcome_phase' in host
+
+
+def test_native_outcome_modal_checks_controls_without_forcing_dom_focus_wrap() -> None:
+    import ast
+
+    root = Path(__file__).resolve().parents[3]
+    source = (root / "scripts/isolation/operator_ui_acceptance.py").read_text()
+    start = source.index('checkpoint("outcomes_modal_tab")')
+    end = source.index('checkpoint("outcomes_quality_pending")', start)
+    segment = source[start:end]
+    assert "range(6)" not in segment and "document.activeElement" not in segment
+    assert segment.count("node.matches(':modal')") == 2
+    assert segment.count("await expect(close).to_be_focused()") == 2
+    assert 'name="Refresh article observation"' in segment
+    keys = [
+        call.args[0].value
+        for call in ast.walk(ast.parse("async def check():\n        " + segment))
+        if isinstance(call, ast.Call)
+        and isinstance(call.func, ast.Attribute)
+        and call.func.attr == "press"
+        and call.args
+        and isinstance(call.args[0], ast.Constant)
+    ]
+    assert keys == ["Tab", "Shift+Tab"]

@@ -1,6 +1,5 @@
 """Actual authorized outcome paging; fixed authored routes, no widened source grants."""
 
-from typing import Literal
 from uuid import UUID, uuid4
 
 import pytest
@@ -19,6 +18,23 @@ from test_tenant_foundation import Scenario
 from test_tenant_foundation import scenario as scenario
 
 
+def paging_request() -> JobRequest:
+    body = request_body()
+    body["input"] = {
+        "type": "keyword",
+        "source_id": "synthetic-publisher",
+        "original_query": "Myocardial Infarction",
+    }
+    body["options"] = {"max_articles": 4, "max_search_pages": 2, "author_target": "both"}
+    return JobRequest.model_validate(body)
+
+
+def test_paging_fixture_request_explicitly_covers_four_articles_and_two_pages() -> None:
+    request = paging_request()
+    assert request.options.max_articles == 4 and request.options.max_search_pages == 2
+    assert request.input.type == "keyword" and request.input.source_id == "synthetic-publisher"
+
+
 def test_actual_more_than_100_outcomes_have_no_omissions_or_duplicates(scenario: Scenario) -> None:
     # A job has at most seven allowed authored article routes. Exercise 104 actual
     # outcomes across 26 jobs rather than bypassing that production constraint.
@@ -27,16 +43,11 @@ def test_actual_more_than_100_outcomes_have_no_omissions_or_duplicates(scenario:
     discovery = Discovery(ledger.database, ledger.token, SETTINGS)
     progress = Progress(ledger.database, ledger.token, SETTINGS)
     results = Results(ledger.database, ledger.token, SETTINGS)
-    body = request_body()
-    body["input"] = {
-        "type": "keyword",
-        "source_id": "synthetic-publisher",
-        "original_query": "Myocardial Infarction",
-    }
+    request = paging_request()
     expected: set[tuple[UUID, UUID]] = set()
     jobs = []
     for _ in range(26):
-        job = ledger.create(org, JobRequest.model_validate(body), str(uuid4()))
+        job = ledger.create(org, request, str(uuid4()))
         discovery.plan(org, job, 1)
         progress.start(org, job, progress.snapshot(org, job).revision)
         drain(progress, org, job)
@@ -91,24 +102,68 @@ def test_actual_more_than_100_outcomes_have_no_omissions_or_duplicates(scenario:
         assert quality.json()["observation_status"] == "no_contact"
 
 
-@pytest.mark.parametrize(
-    "failure,state", [("worker_failure", "failed"), ("source_policy_changed", "policy_blocked")]
-)
-def test_actual_failed_or_blocked_outcome_without_batch_is_retained(
-    scenario: Scenario, failure: Literal["worker_failure", "source_policy_changed"], state: str
-) -> None:
+def test_actual_failed_outcome_without_batch_is_retained(scenario: Scenario) -> None:
     from test_progress_tenant import claim, planned
 
     progress, job = planned(scenario, "https://synthetic.publisher.example/article-a.html")
     org = scenario.organizations[0]
     progress.start(org, job, progress.snapshot(org, job).revision)
-    for _ in range(3 if failure == "worker_failure" else 1):
-        progress.finish(claim(progress, org, job), failure=failure)
+    for _ in range(3):
+        progress.finish(claim(progress, org, job), failure="worker_failure")
     results = Results(progress.database, progress.token, SETTINGS)
     outcome = results.outcomes(org, job, limit=25).items[0]
-    assert outcome.state == state and outcome.batch_id is None
+    assert outcome.state == "failed" and outcome.batch_id is None
     assert outcome.observation_status is None
     assert results.contacts(org, Filters(job_id=job)).items == ()
+
+
+def test_actual_policy_block_is_durable_while_runtime_results_remain_denied(
+    scenario: Scenario,
+) -> None:
+    from emailmonitor.organizations.database import AuthorizationDenied
+    from sqlalchemy import create_engine, text
+    from test_progress_tenant import claim, planned
+    from test_source_foundation import source_path
+    from test_tenant_foundation import ORIGIN
+
+    progress, job = planned(scenario, "https://synthetic.publisher.example/article-a.html")
+    org = scenario.organizations[0]
+    progress.start(org, job, progress.snapshot(org, job).revision)
+    work = claim(progress, org, job)
+    results = Results(progress.database, progress.token, SETTINGS)
+    before = results.outcomes(org, job, limit=25)
+    assert len(before.items) == 1 and before.items[0].state == "running"
+    with scenario.client() as api:
+        csrf = scenario.login(api, "owner")
+        response = api.post(
+            source_path(scenario) + "/policy-state",
+            headers={"Origin": ORIGIN, "X-CSRF-Token": csrf},
+            json={"expected_version": 1, "expected_revision": 2, "state": "suspended"},
+        )
+        assert response.status_code == 200, response.text
+    with pytest.raises(AuthorizationDenied):
+        results.outcomes(org, job, limit=25)
+    assert progress.finish(work, failure="source_policy_changed") == "policy_blocked"
+    # A real policy denial is intentionally not currently readable through Results.
+    # Verify retention through the existing owner test connection, without changing
+    # policy state, grants, or runtime visibility to manufacture a readable row.
+    admin = create_engine(scenario.admin_url)
+    try:
+        with admin.begin() as c:
+            c.execute(text("SET LOCAL ROLE emailmonitor_owner"))
+            row = c.execute(
+                text(
+                    "SELECT state,reason,batch_id,effect_id,completed_at IS NOT NULL "
+                    "FROM emailmonitor.execution_items "
+                    "WHERE organization_id=:org AND job_id=:job AND work_kind='article'"
+                ),
+                {"org": org, "job": job},
+            ).one()
+            assert tuple(row) == ("policy_blocked", "source_policy_changed", None, None, True)
+    finally:
+        admin.dispose()
+    with pytest.raises(AuthorizationDenied):
+        results.outcomes(org, job, limit=25)
 
 
 @pytest.mark.parametrize("fence", ["policy", "session", "deletion", "excerpt_days", "contact_days"])

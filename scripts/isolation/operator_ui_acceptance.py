@@ -17,6 +17,7 @@ from urllib.parse import parse_qs, urlsplit
 from browser_acceptance import sandbox_status
 from operator_ui_protocol import (
     ERRORS,
+    OUTCOME_PHASES,
     STAGES,
     asset_manifest,
     failure_reason,
@@ -166,7 +167,9 @@ async def select_index(page: Page, target: Locator, index: int) -> None:
     await page.keyboard.press("Enter")
 
 
-async def authored_outcome_paging(page: Page, organization: str) -> None:
+async def authored_outcome_paging(
+    page: Page, organization: str, checkpoint: Callable[[str], None]
+) -> None:
     """Separate authored browser contract; these 127 rows are not SQL/worker evidence."""
     job_heading = page.get_by_role("heading", name=re.compile(r"^Job [0-9a-f-]{36}$"))
     job = (await job_heading.inner_text()).removeprefix("Job ")
@@ -284,12 +287,14 @@ async def authored_outcome_paging(page: Page, organization: str) -> None:
     await page.route(pattern, outcomes)
     await page.route(quality_pattern, quality)
     try:
+        checkpoint("outcomes_authored_load")
         await activate(page, page.get_by_role("button", name="Refresh current view", exact=True))
         region = page.get_by_role("region", name="Article outcomes", exact=True)
         table = region.get_by_role("table", name="Current-authorized article outcomes", exact=True)
         seen = []
         heading = region.get_by_role("heading", name="Article outcomes", exact=True)
         for number in range(6):
+            checkpoint("outcomes_next_rows")
             count = 25 if number < 5 else 2
             await expect(region).to_contain_text(f"Page {number + 1}: {count} article outcomes")
             rows = table.locator("tbody tr")
@@ -299,10 +304,13 @@ async def authored_outcome_paging(page: Page, organization: str) -> None:
                 await activate(
                     page, region.get_by_role("button", name="Next article outcome page", exact=True)
                 )
+                checkpoint("outcomes_next_focus")
                 await expect(heading).to_be_focused()
                 await expect(table).to_be_visible()
+                checkpoint("outcomes_next_tab")
                 await page.keyboard.press("Tab")
                 assert await region.evaluate("node => node.contains(document.activeElement)")
+        checkpoint("outcomes_complete_page_set")
         assert len(seen) == len(set(seen)) == 127
         assert seen == [
             f"https://synthetic.publisher.example/authored-outcome-{index:03d}.html"
@@ -312,13 +320,17 @@ async def authored_outcome_paging(page: Page, organization: str) -> None:
             region.get_by_role("button", name="Next article outcome page", exact=True)
         ).to_be_disabled()
         for number in range(5, 0, -1):
+            checkpoint("outcomes_previous_rows")
             await activate(
                 page, region.get_by_role("button", name="Previous article outcome page", exact=True)
             )
             await expect(region).to_contain_text(f"Page {number}: 25 article outcomes")
+            checkpoint("outcomes_previous_focus")
             await expect(heading).to_be_focused()
+            checkpoint("outcomes_previous_tab")
             await page.keyboard.press("Tab")
             assert await region.evaluate("node => node.contains(document.activeElement)")
+        checkpoint("outcomes_counts_and_states")
         await expect(
             page.get_by_text("1 of 1 discovered article units terminal", exact=True)
         ).to_be_visible()
@@ -329,16 +341,26 @@ async def authored_outcome_paging(page: Page, organization: str) -> None:
         await expect(
             region.get_by_role("button", name="Previous article outcome page", exact=True)
         ).to_be_disabled()
+        checkpoint("outcomes_authored_modal")
         opener = region.get_by_role("button", name="Inspect article observation", exact=True)
         await activate(page, opener)
         dialog = page.get_by_role("dialog", name="Article observation details", exact=True)
         close = dialog.get_by_role("button", name="Close article observation", exact=True)
         await expect(close).to_be_focused()
         await expect(dialog).to_contain_text("Retained parser outcome: no contact")
-        # Native modal focus remains inside during keyboard traversal.
-        for _ in range(6):
-            await page.keyboard.press("Tab")
-            assert await dialog.evaluate("node => node.contains(document.activeElement)")
+        checkpoint("outcomes_modal_tab")
+        # Check document controls without requiring focus to wrap inside the DOM:
+        # native sequential navigation may move focus to browser chrome at an edge.
+        assert await dialog.evaluate("node => node.matches(':modal')")
+        await expect(close).to_be_focused()
+        await page.keyboard.press("Tab")
+        await expect(
+            dialog.get_by_role("button", name="Refresh article observation", exact=True)
+        ).to_be_focused()
+        await page.keyboard.press("Shift+Tab")
+        await expect(close).to_be_focused()
+        assert await dialog.evaluate("node => node.matches(':modal')")
+        checkpoint("outcomes_quality_pending")
         quality_hold = True
         await activate(
             page, dialog.get_by_role("button", name="Refresh article observation", exact=True)
@@ -346,6 +368,7 @@ async def authored_outcome_paging(page: Page, organization: str) -> None:
         await asyncio.wait_for(quality_requested.wait(), timeout=5)
         await expect(dialog).to_contain_text("Loading current article quality")
         await expect(dialog).not_to_contain_text("Retained parser outcome:")
+        checkpoint("outcomes_quality_escape")
         await page.keyboard.press("Escape")
         await expect(dialog).not_to_be_visible()
         await expect(opener).to_be_focused()
@@ -355,6 +378,7 @@ async def authored_outcome_paging(page: Page, organization: str) -> None:
         await expect(dialog).not_to_be_visible()
         await activate(page, opener)
         await expect(dialog).to_contain_text("Retained parser outcome: no contact")
+        checkpoint("outcomes_quality_denied")
         quality_denied = True
         await activate(
             page, dialog.get_by_role("button", name="Refresh article observation", exact=True)
@@ -366,6 +390,7 @@ async def authored_outcome_paging(page: Page, organization: str) -> None:
         quality_denied = False
         await activate(page, opener)
         await expect(dialog).to_contain_text("Retained parser outcome: no contact")
+        checkpoint("outcomes_stream_invalidation")
         # The native modal makes outside controls inert. A one-shot authored
         # stream failure exercises the real SSE invalidation path while it is open.
         stream_failed = asyncio.Event()
@@ -384,6 +409,7 @@ async def authored_outcome_paging(page: Page, organization: str) -> None:
             await expect(page.locator("dialog[open]")).to_have_count(0)
         finally:
             await page.unroute(events_pattern, fail_next_stream)
+        checkpoint("outcomes_page_denied")
         denied = True
         await activate(page, page.get_by_role("button", name="Refresh current view", exact=True))
         await expect(region).to_contain_text("Current article outcomes are unavailable")
@@ -391,6 +417,7 @@ async def authored_outcome_paging(page: Page, organization: str) -> None:
         denied = False
         await activate(page, page.get_by_role("button", name="Refresh current view", exact=True))
         await expect(table).to_be_visible()
+        checkpoint("outcomes_late_job")
         # Abandon a held second page, change jobs, then release it. Old rows must not
         # overwrite the newly selected job or its page cursor.
         hold = True
@@ -412,6 +439,7 @@ async def authored_outcome_paging(page: Page, organization: str) -> None:
         await activate(page, page.get_by_role("button", name="Back to recent jobs", exact=True))
         await activate(page, page.get_by_role("button", name="Open job " + job, exact=True))
         await expect(region).to_contain_text("Page 1: 25 article outcomes")
+        checkpoint("outcomes_scoped_contacts")
         await activate(page, page.get_by_role("button", name="Contacts for this job", exact=True))
         await expect(page.get_by_label("Job UUID (optional)", exact=True)).to_have_value(job)
         await expect(page.get_by_label("Association state", exact=True)).to_have_value("accepted")
@@ -419,6 +447,7 @@ async def authored_outcome_paging(page: Page, organization: str) -> None:
         # Return filters to the existing actual contact journey's all-job scope.
         await type_text(page, page.get_by_label("Job UUID (optional)", exact=True), "")
         await activate(page, page.get_by_role("button", name="Jobs", exact=True))
+        checkpoint("outcomes_scoped_review")
         await activate(
             page, page.get_by_role("button", name="Review queue for this job", exact=True)
         )
@@ -427,6 +456,7 @@ async def authored_outcome_paging(page: Page, organization: str) -> None:
             "needs_review"
         )
         await activate(page, page.get_by_role("button", name="Jobs", exact=True))
+        checkpoint("outcomes_late_organization")
         requested.clear()
         release.clear()
         finished.clear()
@@ -448,6 +478,7 @@ async def authored_outcome_paging(page: Page, organization: str) -> None:
         await select_index(page, organization_select, values.index(organization))
         await activate(page, page.get_by_role("button", name="Open job " + job, exact=True))
         await expect(region).to_contain_text("Page 1: 25 article outcomes")
+        checkpoint("outcomes_read_only")
         assert api_methods and set(api_methods) == {"GET"}
         assert methods and set(methods) == {"GET"}
         assert set(requested_pages) == {0, 25, 50, 75, 100, 125}
@@ -515,13 +546,22 @@ async def main() -> None:
     api_statuses: list[int] = []
     download_seen = asyncio.Event()
     stage = "browser_launch"
+    outcome_phase: str | None = None
 
     def checkpoint(value: str) -> None:
-        nonlocal stage
+        nonlocal stage, outcome_phase
         if value not in STAGES:
             raise RuntimeError("Fixed UI stage required")
         stage = value
+        outcome_phase = None
         print(json.dumps({"kind": "stage", "stage": value}), flush=True)
+
+    def outcome_checkpoint(value: str) -> None:
+        nonlocal outcome_phase
+        if stage != "url_worker" or value not in OUTCOME_PHASES:
+            raise RuntimeError("Fixed outcome diagnostic phase required")
+        # Preserve emitted stage identity and its existing 32-frame cap.
+        outcome_phase = value
 
     try:
         checkpoint("browser_launch")
@@ -1317,6 +1357,7 @@ async def main() -> None:
             )
             checkpoint("url_worker")
             await page.get_by_text("no contact", exact=True).first.wait_for()
+            outcome_checkpoint("outcomes_actual_modal")
             outcome_region = page.get_by_role("region", name="Article outcomes", exact=True)
             opener = outcome_region.get_by_role(
                 "button", name="Inspect article observation", exact=True
@@ -1325,16 +1366,20 @@ async def main() -> None:
             observation_dialog = page.get_by_role(
                 "dialog", name="Article observation details", exact=True
             )
+            outcome_checkpoint("outcomes_actual_quality")
             await expect(observation_dialog).to_contain_text("Retained parser outcome: no contact")
             await expect(
                 observation_dialog.get_by_role(
                     "button", name="Close article observation", exact=True
                 )
             ).to_be_focused()
+            outcome_checkpoint("outcomes_actual_escape")
             await page.keyboard.press("Escape")
             await expect(observation_dialog).not_to_be_visible()
             await expect(opener).to_be_focused()
-            await authored_outcome_paging(page, str(setup["initial_organization"]))
+            await authored_outcome_paging(
+                page, str(setup["initial_organization"]), outcome_checkpoint
+            )
             await activate(page, page.get_by_role("button", name="Contacts", exact=True))
             await type_text(
                 page,
@@ -1446,6 +1491,7 @@ async def main() -> None:
                     "stage": stage,
                     "error": name if name in ERRORS else "UnexpectedError",
                     "reason": failure_reason(error),
+                    **({"outcome_phase": outcome_phase} if outcome_phase is not None else {}),
                     "api_statuses": api_statuses,
                 }
             ),

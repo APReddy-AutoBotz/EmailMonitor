@@ -3,7 +3,7 @@
 import base64
 import re
 from pathlib import Path
-from typing import Literal
+from typing import Literal, get_args
 from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -186,6 +186,35 @@ InstalledReason = Literal[
 ]
 
 
+OutcomePhase = Literal[
+    "outcomes_actual_escape",
+    "outcomes_actual_modal",
+    "outcomes_actual_quality",
+    "outcomes_authored_load",
+    "outcomes_authored_modal",
+    "outcomes_complete_page_set",
+    "outcomes_counts_and_states",
+    "outcomes_late_job",
+    "outcomes_late_organization",
+    "outcomes_modal_tab",
+    "outcomes_next_focus",
+    "outcomes_next_rows",
+    "outcomes_next_tab",
+    "outcomes_page_denied",
+    "outcomes_previous_focus",
+    "outcomes_previous_rows",
+    "outcomes_previous_tab",
+    "outcomes_quality_denied",
+    "outcomes_quality_escape",
+    "outcomes_quality_pending",
+    "outcomes_read_only",
+    "outcomes_scoped_contacts",
+    "outcomes_scoped_review",
+    "outcomes_stream_invalidation",
+]
+OUTCOME_PHASES = get_args(OutcomePhase)
+
+
 class DiagnosticFrame(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     kind: Literal["stage", "failure"]
@@ -219,6 +248,7 @@ class DiagnosticFrame(BaseModel):
         ]
         | InstalledReason
     ) = "unknown"
+    outcome_phase: OutcomePhase | None = None
     installed_login_phase: InstalledLoginPhase | None = None
     api_statuses: list[int] = Field(default_factory=list, max_length=512)
 
@@ -235,6 +265,10 @@ class DiagnosticFrame(BaseModel):
             and (self.error is not None or self.api_statuses or self.reason != "unknown")
         ):
             raise ValueError("Explicit failure or fixed stage required")
+        if self.outcome_phase is not None and (
+            self.kind != "failure" or self.stage != "url_worker"
+        ):
+            raise ValueError("Outcome phase requires its exact failure stage")
         if self.installed_login_phase is not None and (
             self.kind != "failure" or self.stage not in {"assets_session", "keyword_worker"}
         ):
