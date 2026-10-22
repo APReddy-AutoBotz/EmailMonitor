@@ -105,3 +105,59 @@ document/contracts checks, inventory, frontend peers/type/lint/build. Backend
 elapsed times were 103.25s and 104.73s. Dependency caches and frontend installation
 were reused for the fresh Python run; no prior result is counted. Actual Docker,
 PostgreSQL and broker execution remains pending hosted acceptance.
+
+## Reconstructed correction: hosted evidence and diagnostic follow-up
+
+Published head `7dab35328ed2433c7fdfa50142f8c2b007e29559`, tree
+`5311cb70b628e15eae1130459ef7192437c6eb17`, passed seven of eight first-attempt
+workflows. Application [39711432703](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/39711432703)
+passed 4379 backend cases without skips in 1086.95s, 77 React cases and owned
+cleanup. A separate newly empty archived checkout also passed the full local gate
+(4004 passed/375 infrastructure skips in 108.43s, 77 React); Python and frontend
+installations were absent before creation, while package caches were reused.
+
+Service [39711432970](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/39711432970)
+failed two jobs. Packaging job 119603440264 hit the unchanged five-second
+start/attach limit for build one's first API production-refusal probe. Its earlier
+full installed-image probe succeeded; cleanup verified removal of the exact owned
+container, observed running and not OOM-killed. Guest outcome remains unknown.
+The packaging path does not call the changed controlled launcher. Docker startup,
+import duration or a guest stall remain possible; runner load is not established.
+After all protected runs completed, a bounded retry of this job alone was requested
+on the unchanged head; its result is recorded separately when available.
+
+Installed-operator job 119603439824 passed 12 actual broker checks (112.82s) and
+the inherited HTML journey (112.74s). The four XML cases failed in 385.86s with
+owned wrapper cleanup verified. Keyword/direct URL passed initial startup but
+later timed out at the UI worker stage. Crash recovery observed worker exit 137
+before its observation barrier; revocation observed no held provider request.
+Exit 137 can result from the supervisor's failure kill and does not establish OOM.
+No root cause is established. The approximately 21-second worker connections and
+open-transaction EOFs are consistent with a failed capability exchange; SQL logs
+show no XML-phase lock-timeout or authority-denial error. None of these failed
+cases establishes the intended XML acceptance assertion.
+
+Independent review approved a narrow diagnostic follow-up: supervisor-owned fixed
+phase/failure enums and saturating callback counters, an immutable constant-size
+snapshot retaining the first failure before cleanup, and failure-only harness
+rendering. No raw frames, identifiers, URLs, configuration, exception text or
+stderr may be included. No new SQL reads, protocol messages, retries, deadline
+resets, permission changes or cleanup changes are permitted. The snapshot can
+identify the last observed hop; it cannot establish why a worker/SQL callback
+failed. Corrected XML acceptance remains outstanding.
+
+Packaging-only retry job 119609965260 passed on unchanged head `7dab35328`:
+two uncached builds, equal artifacts/base inventories/image contents, 14
+network-none containers, five production-refusal checks per image, and verified
+cleanup. The first timeout remains unexplained and preserved above; retry success
+does not establish its cause. Installed XML acceptance is still failed.
+
+Diagnostic-only candidate local gates: 88 focused runtime/channel/pipe cases and
+81 harness cases passed; serial normal and separate empty-checkout canonical gates
+each exited zero with 4058 backend passed/375 infrastructure skips, 77 React,
+340-file strict mypy, 342-file Ruff/format and all documentation, inventory and
+frontend checks. Backend times were 105.70s and 113.23s. Fresh Python/frontend
+installations were absent before creation; dependency caches were reused.
+Independent source review found no blocker. Counters are worker-session totals;
+startup failures before yielding a handle report diagnostics unavailable. Final
+immutable-tree review and diagnostic-head hosted execution remain required.

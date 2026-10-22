@@ -28,6 +28,14 @@ from emailmonitor.runtime.controlled_channel import (
     require_expectation,
     require_request,
 )
+from emailmonitor.runtime.controlled_diagnostics import (
+    CallbackKind,
+    DiagnosticSnapshot,
+    DiagnosticTracker,
+    Failure,
+    Origin,
+    Phase,
+)
 from emailmonitor.runtime.controlled_pipes import FramedPipes
 from emailmonitor.runtime.pinned_xml import parse_pinned
 from emailmonitor.sources.policy import Operation
@@ -37,34 +45,52 @@ class _Relay:
     """The token is local bookkeeping only. The SQL ticket never leaves the worker."""
 
     def __init__(
-        self, pipe: FramedSocket | FramedPipes, identifier: str, binding: ProviderBinding
+        self,
+        pipe: FramedSocket | FramedPipes,
+        identifier: str,
+        binding: ProviderBinding,
+        diagnostics: DiagnosticTracker,
     ) -> None:
         self.pipe, self.identifier, self.binding = pipe, identifier, binding
         self.sequence = 0
+        self.diagnostics = diagnostics
         self.ticket: object | None = None
 
     def callback(self, kind: str, arguments: dict[str, object]) -> None:
-        sequence = self.sequence
-        self.sequence += 1
-        if sequence >= MAX_CALLBACKS:
-            raise RuntimeError("Controlled callback limit")
-        self.pipe.send(
-            {
-                "kind": kind,
-                "id": self.identifier,
-                "sequence": sequence,
-                "binding": self.binding.model_dump(mode="json"),
-                "arguments": arguments,
-            },
-            self.binding.deadline,
-        )
-        reply = self.pipe.receive(self.binding.deadline)
-        if (
-            reply != {"kind": "callback", "id": self.identifier, "sequence": sequence, "ok": True}
-            or type(reply.get("sequence")) is not int
-            or reply.get("ok") is not True
-        ):
-            raise RuntimeError("Controlled callback failed")
+        self.diagnostics.phase(Phase.CALLBACK_SEND, CallbackKind(kind))
+        try:
+            sequence = self.sequence
+            self.sequence += 1
+            if sequence >= MAX_CALLBACKS:
+                raise RuntimeError("Controlled callback limit")
+            self.pipe.send(
+                {
+                    "kind": kind,
+                    "id": self.identifier,
+                    "sequence": sequence,
+                    "binding": self.binding.model_dump(mode="json"),
+                    "arguments": arguments,
+                },
+                self.binding.deadline,
+            )
+            self.diagnostics.count("sent")
+            self.diagnostics.phase(Phase.CALLBACK_WAIT)
+            reply = self.pipe.receive(self.binding.deadline)
+            self.diagnostics.count("received")
+            self.diagnostics.phase(Phase.CALLBACK_RETURN)
+            if (
+                reply
+                != {"kind": "callback", "id": self.identifier, "sequence": sequence, "ok": True}
+                or type(reply.get("sequence")) is not int
+                or reply.get("ok") is not True
+            ):
+                self.diagnostics.fail(Failure.FRAMING, Origin.CALLBACK)
+                raise RuntimeError("Controlled callback failed")
+            self.diagnostics.count("validated")
+            self.diagnostics.phase(Phase.ACQUIRE_PROVIDER)
+        except Exception:
+            self.diagnostics.fail(Failure.REFUSED, Origin.CALLBACK)
+            raise
 
     def current(self) -> ProviderBinding:
         self.callback("current", {})
@@ -92,10 +118,15 @@ def serve_request(
     gateway: GatewayPipe,
     parser_image_id: str,
     parser_started: Callable[[], None] = lambda: None,
+    *,
+    diagnostics: DiagnosticTracker | None = None,
 ) -> None:
     """One sequential exchange, callable by the owning supervisor thread only."""
+    diagnostics = diagnostics if diagnostics is not None else DiagnosticTracker()
     try:
+        diagnostics.phase(Phase.REQUEST_READ)
         frame = pipe.receive(time.monotonic() + 20)
+        diagnostics.phase(Phase.REQUEST_VALIDATE)
         identifier = frame.get("id")
         if (
             type(identifier) is not str
@@ -115,11 +146,13 @@ def serve_request(
                 or not 0 < binding.deadline - time.monotonic() <= 20
             ):
                 raise ValueError
-            relay = _Relay(pipe, identifier, binding)
+            relay = _Relay(pipe, identifier, binding, diagnostics)
+            diagnostics.phase(Phase.ACQUIRE_PROVIDER)
             boundary = ProviderBoundary(request, binding, relay.current)
             acquired = ProviderProxy(gateway).acquire(boundary, resources=relay)
             if len(acquired.body) > 65536:
                 raise ValueError
+            diagnostics.phase(Phase.RESULT_WRITE)
             pipe.send(
                 {
                     "kind": "acquired",
@@ -137,6 +170,7 @@ def serve_request(
                 raise ValueError
             data = base64.b64decode(frame["body"], validate=True)
             require_expectation(expected, data)
+            diagnostics.phase(Phase.PARSE)
             parser_started()
             observed = parse_pinned(
                 Settings(environment="test", fixture_mode=True),
@@ -145,6 +179,7 @@ def serve_request(
                 image_id=parser_image_id,
             )
             expected.check_observation(observed)
+            diagnostics.phase(Phase.RESULT_WRITE)
             pipe.send(
                 {
                     "kind": "parsed",
@@ -155,7 +190,16 @@ def serve_request(
             )
         else:
             raise ValueError
+        diagnostics.phase(Phase.IDLE, CallbackKind.NONE)
     except Exception:
+        origin = (
+            Origin.PARSER
+            if diagnostics.snapshot.phase is Phase.PARSE
+            else Origin.PROVIDER
+            if diagnostics.snapshot.phase is Phase.ACQUIRE_PROVIDER
+            else Origin.LAUNCHER
+        )
+        diagnostics.fail(Failure.REFUSED, origin)
         pipe.poisoned = True
         gateway.poisoned = True
         raise RuntimeError("Controlled capability failed") from None
@@ -311,10 +355,21 @@ def verify_worker(metadata: dict[str, Any], image_id: str, name: str, owner: str
 class OwnedWorker:
     """Process-like handle controls the owned container, never merely docker attach."""
 
-    def __init__(self, identifier: str, attached: subprocess.Popen[bytes]) -> None:
+    def __init__(
+        self,
+        identifier: str,
+        attached: subprocess.Popen[bytes],
+        *,
+        diagnostics: DiagnosticTracker | None = None,
+    ) -> None:
         self.identifier, self.attached = identifier, attached
+        self._diagnostics = diagnostics if diagnostics is not None else DiagnosticTracker()
         self.returncode: int | None = None
         self.parser_calls = 0
+
+    @property
+    def diagnostic_snapshot(self) -> DiagnosticSnapshot:
+        return self._diagnostics.snapshot
 
     def wait_started(self, deadline: float) -> None:
         """Prove first running state; Docker's initial created state is not an exit."""
@@ -425,6 +480,8 @@ def launched_worker(
     stopped = threading.Event()
     failures: list[bool] = []
     attempted = False
+    diagnostics = DiagnosticTracker()
+    diagnostics.phase(Phase.STARTUP)
     unclaimed: list[int] = []
     try:
         attempted = True
@@ -465,11 +522,16 @@ def launched_worker(
         )
         for source_stream in (attached.stdout, attached.stdin, attached.stderr):
             unclaimed.append(os.dup(source_stream.fileno()))
-        pipe = FramedPipes(*unclaimed)
+        pipe = FramedPipes(*unclaimed, diagnostics=diagnostics)
         unclaimed.clear()
-        process = OwnedWorker(identifier, attached)
+        process = OwnedWorker(identifier, attached, diagnostics=diagnostics)
         pipe.send({"kind": "bootstrap", "config": bootstrap}, startup_deadline)
-        process.wait_started(startup_deadline)
+        try:
+            process.wait_started(startup_deadline)
+        except Exception:
+            diagnostics.fail(Failure.REFUSED, Origin.LAUNCHER)
+            raise
+        diagnostics.phase(Phase.IDLE)
 
         def serve() -> None:
             assert pipe is not None and process is not None
@@ -494,9 +556,12 @@ def launched_worker(
                             raise RuntimeError("Controlled parser session exhausted")
                         process.parser_calls += 1
 
-                    serve_request(pipe, gateway, parser_image_id, parser_started)
+                    serve_request(
+                        pipe, gateway, parser_image_id, parser_started, diagnostics=diagnostics
+                    )
             except Exception:
                 if not stopped.is_set():
+                    diagnostics.fail(Failure.REFUSED, Origin.LAUNCHER)
                     failures.append(True)
                     gateway.poisoned = True
                     pipe.close()
@@ -509,6 +574,7 @@ def launched_worker(
         thread.start()
         yield process
         if failures or process.poll() is not None:
+            diagnostics.fail(Failure.WORKER_EXIT, Origin.WORKER)
             raise RuntimeError("Controlled worker capability failed")
     finally:
         primary = sys.exception()

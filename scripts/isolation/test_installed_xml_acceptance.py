@@ -26,6 +26,13 @@ import pytest
 from emailmonitor.extraction.xml_retained import RetainedXml
 from emailmonitor.runtime.api_entrypoint import ReferenceAPI, ReferenceIdentity
 from emailmonitor.runtime.authority import ServiceProcess
+from emailmonitor.runtime.controlled_diagnostics import (
+    CallbackKind,
+    DiagnosticSnapshot,
+    Failure,
+    Origin,
+    Phase,
+)
 from emailmonitor.runtime.controlled_launcher import launched_worker
 from emailmonitor.runtime.delegation import ServiceBinding, ServiceBindings
 from emailmonitor.runtime.worker import ServiceRuntimeConfig, broker_application
@@ -53,6 +60,53 @@ from transport_topology import Topology, resource
 from xml_image_evidence import require_packaged_image
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def worker_failure_note(worker: Any) -> str:
+    """Render only the closed diagnostic vocabulary, never arbitrary object data."""
+    unavailable = "Installed XML worker diagnostic unavailable"
+    try:
+        value = worker.diagnostic_snapshot
+        if type(value) is not DiagnosticSnapshot:
+            return unavailable
+        fields: dict[str, object] = {}
+        for name, expected in (
+            ("phase", Phase),
+            ("origin", Origin),
+            ("failure", Failure),
+            ("callback_kind", CallbackKind),
+        ):
+            member = getattr(value, name)
+            if type(member) is not expected or member not in expected:
+                return unavailable
+            fields[name] = member.name
+        for name in ("callback_sent", "callback_received", "callback_validated"):
+            count = getattr(value, name)
+            if type(count) is not int or not 0 <= count <= 128:
+                return unavailable
+            fields[name] = count
+        return "Installed XML worker diagnostic " + json.dumps(fields, sort_keys=True)
+    except BaseException:
+        return unavailable
+
+
+@contextmanager
+def diagnosed_worker(*args: Any, **kwargs: Any) -> Iterator[Any]:
+    """Annotate the original failure before cleanup, without affecting ownership."""
+    worker = None
+    noted: BaseException | None = None
+    try:
+        with launched_worker(*args, **kwargs) as worker:
+            try:
+                yield worker
+            except BaseException as error:
+                BaseException.add_note(error, worker_failure_note(worker))
+                noted = error
+                raise
+    except BaseException as error:
+        if error is not noted:
+            BaseException.add_note(error, worker_failure_note(worker))
+        raise
 
 
 def require_xml_context(environment: dict[str, str]) -> None:
@@ -372,7 +426,7 @@ def test_installed_controlled_xml_operator(
                     ).status_code
                     == 401
                 )
-                with launched_worker(
+                with diagnosed_worker(
                     configs["worker"],
                     topology.processes["gateway"],
                     image_id,
@@ -708,7 +762,7 @@ def test_installed_controlled_xml_post_observation_crash_recovery(
                     )
                     barrier_pid = barrier.exec_driver_sql("SELECT pg_backend_pid()").scalar_one()
                     with pytest.raises(RuntimeError, match="^Controlled worker capability failed$"):
-                        with launched_worker(
+                        with diagnosed_worker(
                             configs["worker"],
                             first.processes["gateway"],
                             image_id,
@@ -752,7 +806,7 @@ def test_installed_controlled_xml_post_observation_crash_recovery(
         # A failed capability is never reopened. Fresh owned topology, same
         # committed observation and broker delivery, fresh installed process.
         with owned_topology() as fresh:
-            with launched_worker(
+            with diagnosed_worker(
                 configs["worker"],
                 fresh.processes["gateway"],
                 image_id,
@@ -841,7 +895,7 @@ def test_installed_controlled_xml_delegation_revoked_before_response_release(
                     raise
 
             with pytest.raises(RuntimeError, match="^Controlled worker capability failed$"):
-                with launched_worker(
+                with diagnosed_worker(
                     configs["worker"],
                     network.processes["gateway"],
                     image_id,

@@ -356,3 +356,143 @@ def test_actual_revocation_release_is_once_only_even_after_ambiguous_failure(
     previous = list(calls)
     action()
     assert calls == previous
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "phase",
+        "origin",
+        "failure",
+        "callback_kind",
+        "callback_sent",
+        "callback_received",
+        "callback_validated",
+    ],
+)
+@pytest.mark.parametrize("hostile", ["SECRET https://private.invalid", True, -1, 129, object()])
+def test_worker_failure_note_refuses_untrusted_fields(field: str, hostile: object) -> None:
+    from dataclasses import replace
+    from types import SimpleNamespace
+
+    from emailmonitor.runtime.controlled_diagnostics import (
+        CallbackKind,
+        DiagnosticSnapshot,
+        Failure,
+        Origin,
+        Phase,
+    )
+
+    valid = DiagnosticSnapshot(
+        phase=next(iter(Phase)),
+        origin=next(iter(Origin)),
+        failure=next(iter(Failure)),
+        callback_kind=next(iter(CallbackKind)),
+        callback_sent=0,
+        callback_received=0,
+        callback_validated=0,
+    )
+    damaged = replace(valid, **{field: hostile})  # type: ignore[arg-type]
+    assert (
+        harness.worker_failure_note(SimpleNamespace(diagnostic_snapshot=damaged))
+        == "Installed XML worker diagnostic unavailable"
+    )
+
+
+def test_worker_failure_note_property_failure_is_not_rendered() -> None:
+    class Hostile:
+        @property
+        def diagnostic_snapshot(self) -> object:
+            raise RuntimeError("SECRET private configuration")
+
+    assert harness.worker_failure_note(Hostile()) == "Installed XML worker diagnostic unavailable"
+    assert (
+        harness.worker_failure_note({"diagnostic_snapshot": "SECRET"})
+        == "Installed XML worker diagnostic unavailable"
+    )
+
+
+@pytest.mark.parametrize("body_fails", [True, False])
+def test_diagnosed_worker_preserves_original_failure_and_cleanup(
+    monkeypatch: pytest.MonkeyPatch, body_fails: bool
+) -> None:
+    from contextlib import contextmanager
+    from types import SimpleNamespace
+
+    from emailmonitor.runtime.controlled_diagnostics import (
+        CallbackKind,
+        DiagnosticSnapshot,
+        Failure,
+        Origin,
+        Phase,
+    )
+
+    worker = SimpleNamespace(
+        diagnostic_snapshot=DiagnosticSnapshot(
+            phase=next(iter(Phase)),
+            origin=next(iter(Origin)),
+            failure=next(iter(Failure)),
+            callback_kind=next(iter(CallbackKind)),
+            callback_sent=128,
+            callback_received=3,
+            callback_validated=2,
+        )
+    )
+    original = AssertionError("original failure")
+    events: list[str] = []
+
+    @contextmanager
+    def launch(*args: object, **kwargs: object) -> Any:
+        assert args == ("config", "gateway", "parser")
+        assert kwargs == {"service_image_id": "image"}
+        try:
+            yield worker
+        finally:
+            if body_fails:
+                assert len(original.__notes__) == 1
+            events.append("cleanup")
+        if not body_fails:
+            raise original
+
+    monkeypatch.setattr(harness, "launched_worker", launch)
+    with pytest.raises(AssertionError) as caught:
+        with harness.diagnosed_worker(
+            "config", "gateway", "parser", service_image_id="image"
+        ) as running:
+            assert running is worker
+            if body_fails:
+                raise original
+    assert caught.value is original
+    assert events == ["cleanup"]
+    assert len(original.__notes__) == 1
+    note = original.__notes__[0]
+    assert note.startswith("Installed XML worker diagnostic {")
+    assert len(note) < 400
+    assert '"callback_sent": 128' in note
+
+
+def test_all_installed_xml_worker_cases_have_failure_diagnostics() -> None:
+    source = inspect.getsource(harness)
+    assert source.count("with diagnosed_worker(") == 4
+    assert source.count("with launched_worker(") == 1
+
+
+def test_diagnosed_worker_success_does_not_read_diagnostics(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from contextlib import contextmanager
+
+    class Worker:
+        @property
+        def diagnostic_snapshot(self) -> object:
+            raise AssertionError("Success must not inspect diagnostics")
+
+    worker = Worker()
+
+    @contextmanager
+    def launch() -> Any:
+        yield worker
+
+    monkeypatch.setattr(harness, "launched_worker", launch)
+    with harness.diagnosed_worker() as running:
+        assert running is worker

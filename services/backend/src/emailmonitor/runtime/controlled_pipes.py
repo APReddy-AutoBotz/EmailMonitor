@@ -9,16 +9,25 @@ import time
 from typing import Any
 
 from emailmonitor.runtime.controlled_channel import MAX_FRAME, _constant, _float, _pairs
+from emailmonitor.runtime.controlled_diagnostics import DiagnosticTracker, Failure, Origin
 
 
 class FramedPipes:
-    def __init__(self, incoming: int, outgoing: int, errors: int | None = None) -> None:
+    def __init__(
+        self,
+        incoming: int,
+        outgoing: int,
+        errors: int | None = None,
+        *,
+        diagnostics: DiagnosticTracker | None = None,
+    ) -> None:
         if incoming == outgoing or any(
             type(fd) is not int or fd < 0 for fd in (incoming, outgoing)
         ):
             raise ValueError("Dedicated pipe descriptors required")
         self.incoming, self.outgoing, self.errors = incoming, outgoing, errors
         self.poisoned = False
+        self.diagnostics = diagnostics
         self._errors = 0
         self._buffer = bytearray()
         for fd in (incoming, outgoing, errors):
@@ -26,29 +35,47 @@ class FramedPipes:
                 os.set_inheritable(fd, False)
                 os.set_blocking(fd, False)
 
+    def _fail(self, failure: Failure) -> None:
+        if self.diagnostics is not None:
+            self.diagnostics.fail(failure, Origin.PIPE)
+
     def _remaining(self, deadline: float) -> float:
         remaining = deadline - time.monotonic()
         if self.poisoned or not math.isfinite(deadline) or remaining <= 0:
+            self._fail(
+                Failure.ALREADY_POISONED
+                if self.poisoned
+                else Failure.TIMEOUT
+                if math.isfinite(deadline)
+                else Failure.FRAMING
+            )
             raise RuntimeError("Controlled pipe unavailable")
         return remaining
 
     def _error(self) -> None:
         assert self.errors is not None
-        chunk = os.read(self.errors, 4096)
+        try:
+            chunk = os.read(self.errors, 4096)
+        except OSError:
+            self._fail(Failure.READ)
+            raise
         self._errors += len(chunk)
         if self._errors > 4096:
+            self._fail(Failure.STDERR_LIMIT)
             raise ValueError("Controlled diagnostic limit")
         if not chunk:
             os.close(self.errors)
             self.errors = None
 
     def send(self, value: dict[str, Any], deadline: float) -> None:
+        failure = Failure.FRAMING
         try:
             raw = json.dumps(value, allow_nan=False, separators=(",", ":")).encode("ascii")
             if not 1 <= len(raw) <= MAX_FRAME:
                 raise ValueError
             packet = struct.pack("!I", len(raw)) + raw
             offset = 0
+            failure = Failure.WRITE
             while offset < len(packet):
                 with selectors.DefaultSelector() as selector:
                     selector.register(self.outgoing, selectors.EVENT_WRITE)
@@ -56,6 +83,7 @@ class FramedPipes:
                         selector.register(self.errors, selectors.EVENT_READ)
                     events = selector.select(self._remaining(deadline))
                     if not events:
+                        self._fail(Failure.TIMEOUT)
                         raise ValueError
                     for key, _ in events:
                         if key.fd == self.outgoing:
@@ -66,6 +94,7 @@ class FramedPipes:
                         else:
                             self._error()
         except Exception:
+            self._fail(failure)
             self.poisoned = True
             raise RuntimeError("Controlled pipe failed") from None
 
@@ -77,11 +106,13 @@ class FramedPipes:
                     selector.register(self.errors, selectors.EVENT_READ)
                 events = selector.select(self._remaining(deadline))
                 if not events:
+                    self._fail(Failure.TIMEOUT)
                     raise ValueError
                 for key, _ in events:
                     if key.fd == self.incoming:
                         chunk = os.read(self.incoming, min(65536, count - len(self._buffer)))
                         if not chunk:
+                            self._fail(Failure.EOF)
                             raise ValueError
                         self._buffer.extend(chunk)
                     else:
@@ -91,12 +122,16 @@ class FramedPipes:
         return result
 
     def receive(self, deadline: float) -> dict[str, Any]:
+        failure = Failure.READ
         try:
             count = struct.unpack("!I", self._read(4, deadline))[0]
             if not 1 <= count <= MAX_FRAME:
+                self._fail(Failure.FRAMING)
                 raise ValueError
+            raw = self._read(count, deadline)
+            failure = Failure.FRAMING
             value = json.loads(
-                self._read(count, deadline),
+                raw,
                 object_pairs_hook=_pairs,
                 parse_constant=_constant,
                 parse_float=_float,
@@ -105,6 +140,7 @@ class FramedPipes:
                 raise ValueError
             return value
         except Exception:
+            self._fail(failure)
             self.poisoned = True
             raise RuntimeError("Controlled pipe failed") from None
 
