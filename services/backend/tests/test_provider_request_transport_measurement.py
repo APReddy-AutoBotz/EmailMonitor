@@ -41,7 +41,17 @@ def test_cursor_observer_ignores_hostile_sql_and_values(monkeypatch: pytest.Monk
     measurement = probe.CursorMeasurement(10)
     measurement.before(Hostile(), Hostile())
     measurement.after(Hostile())
-    assert measurement.receipt(0.25) == {
+    receipt = measurement.receipt(0.25)
+    categories = receipt.pop("categories")
+    assert isinstance(categories, list)
+    assert len(categories) == 13
+    assert categories[-1] == {
+        "category": "UNKNOWN",
+        "count": 1,
+        "cursor_ms": 125,
+        "cursor_capped": False,
+    }
+    assert receipt == {
         "request_ms": 250,
         "request_capped": False,
         "cursor_ms": 125,
@@ -83,3 +93,123 @@ def test_connection_guard_rejects_other_driver_classes_and_subclasses() -> None:
             AssertionError, match="^Exact dialect-selected pg8000 connection required$"
         ):
             probe.require_driver_connection(value)
+
+
+@pytest.mark.parametrize("statement", [None, True, 5, "SELECT private", "x" * 4097])
+def test_unrecognized_statement_has_only_closed_unknown_category(statement: object) -> None:
+    assert probe.statement_category(statement) == "UNKNOWN"
+
+
+def test_statement_classifier_never_stringifies_hostile_values() -> None:
+    class Hostile:
+        def __str__(self) -> str:
+            raise AssertionError("No statement stringify")
+
+        __repr__ = __str__
+
+    class StringSubclass(str):
+        def split(self, *args: Any, **kwargs: Any) -> Any:
+            raise AssertionError("Only exact strings may be normalized")
+
+    assert probe.statement_category(Hostile()) == "UNKNOWN"
+    assert probe.statement_category(StringSubclass("SELECT private")) == "UNKNOWN"
+
+
+def test_known_production_sql_shapes_match_fixed_categories() -> None:
+    import ast
+    import inspect
+
+    from emailmonitor.administration.binding import apply as fixture_apply
+    from emailmonitor.discovery.service import Discovery
+    from emailmonitor.jobs.ledger import Ledger
+    from emailmonitor.progress.binding import allowed, apply, matches
+    from emailmonitor.runtime.database import ServiceDatabase
+    from emailmonitor.sources.access import current_policy
+    from sqlalchemy import text
+
+    found: set[str] = set()
+    for method in (
+        ServiceDatabase.tenant,
+        fixture_apply,
+        Discovery._row,
+        Discovery._authorize,
+        Ledger._lock,
+        allowed,
+        apply,
+        matches,
+        current_policy,
+    ):
+        source = inspect.getsource(method)
+        tree = ast.parse("if True:\n" + source if source.startswith(" ") else source)
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id == "text"
+            ):
+                assert isinstance(node.args[0], ast.Constant)
+                assert type(node.args[0].value) is str
+                raw = str(
+                    text(node.args[0].value).compile(
+                        dialect=probe.DIALECT_FACTORY(paramstyle="format")
+                    )
+                )
+                category = probe.statement_category(raw)
+                assert category != "UNKNOWN"
+                assert probe.statement_category(" \n" + raw.replace(" ", "  ") + "\n") == category
+                found.add(category)
+    assert found == set(probe.CATEGORIES) - {"UNKNOWN"}
+
+
+@pytest.mark.parametrize("article", [False, True])
+def test_category_totals_reconcile_for_fixed_request_sequence(
+    monkeypatch: pytest.MonkeyPatch, article: bool
+) -> None:
+    import itertools
+
+    from sqlalchemy import text
+
+    sequence = [
+        "timeout_settings",
+        "service_begin",
+        "work_binding",
+        "fixture_binding",
+        "timeout_settings",
+        "job_lock",
+        "job_permission",
+        "discovery_read",
+    ]
+    if not article:
+        sequence.append("execution_allowed")
+    sequence += [
+        "execution_match",
+        "source_fence",
+        "policy_read",
+        "source_fence",
+        "policy_read",
+        "service_end",
+    ]
+    ticks = itertools.count()
+    monkeypatch.setattr(time, "monotonic", lambda: next(ticks) / 1000)
+    measured = probe.CursorMeasurement(20)
+    for category in sequence:
+        sql = str(
+            text(probe.STATEMENT_TEMPLATES[category]).compile(
+                dialect=probe.DIALECT_FACTORY(paramstyle="format")
+            )
+        )
+        measured.before(None, None, sql, object())
+        measured.after()
+    receipt = measured.receipt(0.1)
+    categories = receipt["categories"]
+    assert isinstance(categories, list)
+    assert (
+        sum(row["count"] for row in categories)
+        == receipt["cursor_count"]
+        == (14 if article else 15)
+    )
+    assert {row["category"] for row in categories} == set(probe.CATEGORIES)
+    assert all(
+        set(row) == {"category", "count", "cursor_ms", "cursor_capped"} for row in categories
+    )
+    assert measured.category_counts["UNKNOWN"] == 0

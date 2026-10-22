@@ -364,3 +364,41 @@ checks. Backend times: 99.56s and 105.73s. Fresh installations were absent befor
 setup; caches reused. The added regression verifies the actual installed dialect's
 selected class and rejects alternate/subclass shapes without opening connections.
 Actual SQL A/B measurements remain pending; no production transport change exists.
+
+## Actual A/B result
+
+Head `3047f1ff465670e057398d9dfd9361e8aa1917b7`, tree
+`058e1e76d247814d424dcbaea981647569adf373`, completed seven successful workflows.
+Application [39726824687](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/39726824687)
+passed 4580 backend cases without skips in 941.31s, plus 77 React cases and cleanup.
+Both real PostgreSQL A/B cases completed with identical outputs and statement
+counts, verified connection/peer/TLS identity and cleanup. Keyword requests took
+492-636ms, with 489-631ms in 15 cursor executions; article requests took 476-570ms,
+with 473-565ms in 14 cursor executions. OFF/ON samples overlap, showing no useful
+TCP_NODELAY improvement in this small workload. No production socket hook follows.
+Total experiment times were 4301ms and 4105ms, with no saturated measurements.
+These aggregates attribute most elapsed time to DBAPI execution, not to a precise
+SQL statement, server execution versus protocol cost, or installed timeout cause.
+
+Packaging and parser passed first attempts. Installed broker/HTML passed but four
+XML cases still failed (358.75s), with cleanup verified and unchanged completed-
+callback timing pattern. The next authorized test-only attribution adds fixed
+statement-category totals/counts to the same synthetic authority path, preserving
+all checks, transactions, locks and deadlines. Raw SQL/parameters/identifiers and
+credentials must not enter receipts. No production optimization is included until
+specific cost is established and independently reviewed.
+
+Category attribution implementation uses twelve fixed trusted statement shapes
+plus UNKNOWN, bounded exact-string whitespace matching, and no parameter/result
+inspection. Per-category counts reconcile with existing totals and vectors match
+across arms. Unknown shapes retain ordinary execution and emit only UNKNOWN.
+Times include client/driver/network cursor execution, not server-only SQL cost.
+Focused checks: 25 passed, two SQL skips; independent source GO.
+
+Normal and final separately empty-checkout gates passed 4210 backend cases with
+379 infrastructure skips, 77 React cases, 346-file mypy, 348-file Ruff/format and
+all documentation/inventory/frontend checks. Backend times: 104.69s and 111.12s.
+An earlier fresh run also passed (111.28s), but its setup briefly overlapped the
+normal frontend tail; a second empty checkout was run after completion to preserve
+serial final validation. Fresh installations were absent before setup; caches
+reused. Actual statement-category measurements remain pending.
