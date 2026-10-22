@@ -85,9 +85,9 @@ def service_api(config: ServiceAPIConfig, provider: OIDCProvider) -> Iterator[Fa
         @application.get("/api/v1/runtime-profile", include_in_schema=False)
         def profile() -> dict[str, object]:
             return {
-                "profile": "authored-html-service-reference",
+                "profile": bindings.profile,
                 "production_ready": False,
-                "xml_available": False,
+                "xml_available": bindings.profile == "controlled-xml-service-reference",
                 "pdf_available": False,
                 "dynamic_browser_available": False,
                 "live_sources_available": False,

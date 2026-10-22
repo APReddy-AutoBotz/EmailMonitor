@@ -76,7 +76,13 @@ are external activation work requiring their own authorization. The reference
 acceptance harness uses only uniquely owned disposable synthetic roles and data.
 Neither API nor worker startup creates or expands access.
 
-The runtime accepts exactly schema version `0014_service_authority`; a future
+Migration 0015 replaces only the private delegation-current function with a
+VOLATILE PL/pgSQL wrapper around the unchanged SELECT, allowing executable-plan
+reuse without caching authority results. Its companion schema-readiness update
+accepts exactly `0015_service_plan_cache`, never both heads. Existing rows, grants,
+function identity and caller lock order are preserved; every invocation retains
+fresh predicates and live deadline checks. Apply through the separate migration
+identity, then run the matching runtime. No automatic activation occurs. A future
 migration requires an explicitly reviewed compatible runtime change. Role ACLs
 must preserve non-owner/non-BYPASSRLS separation, deny opposite service roles and
 authenticator/session-minting access, and retain forced RLS. Do not weaken these
@@ -116,3 +122,15 @@ Traceability: FR-001/021/022/024/025/029/030, NFR-001/003/006/008/013/015/016/01
 This reference milestone does not establish production deployment, real IdP or
 source certification, private storage activation, measured RPO/RTO or extraction
 accuracy/completeness.
+
+## Next candidate: installed controlled XML
+
+The accepted HTML reference boundary above remains the default. A dependent
+code-only candidate adds the explicit `controlled-xml-service-reference` profile
+using the existing three synthetic provider routes and separately approved XML
+policy. [ADR0007](adr/0007-installed-controlled-xml.md) defines the reviewed
+supervisor/gateway trust root, confined installed worker and isolated parser
+capability. [Candidate evidence](../reports/em017-installed-controlled-xml-validation.md)
+records completed checks and outstanding actual acceptance. This is not live
+Elsevier activation or production readiness; host-network SQL service workers
+are not described as protected-egress sandboxes.

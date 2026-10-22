@@ -544,3 +544,14 @@ SQL/broker, migration equivalence, installed keyboard operator and full exact-he
 CI acceptance remain pending. Local fixture/package/TLS checks do not establish
 production readiness. Legacy restore refuses service-authority state until its
 revocation seal is supported; downgrade is forward repair only.
+
+### Installed controlled XML integration — local candidate
+
+Dependent on accepted Draft PR46 head `713c517750bb98c5330b26292b2582cd4aef5676`.
+Work connects the existing controlled keyword/direct XML workflow to the installed
+service runtime. Explicit runtime capability and source-policy approval remain
+separate. The default authored HTML route is preserved. Independent design review
+required container-level worker confinement after rejecting descriptor filtering
+alone. Actual SQL/broker/parser/operator and final combined gates are outstanding;
+see [candidate validation](../reports/em017-installed-controlled-xml-validation.md).
+No live source, credential, deployment or merge is included.

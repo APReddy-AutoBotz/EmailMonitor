@@ -368,3 +368,18 @@ Add a trusted Python-only executor factory to the normal claimed Celery path, re
 - Add forward-only migration 0014 without historical grants or actual logins;
   refuse legacy restore of unsupported service authority state.
 - Track remaining actual runtime/operator/CI acceptance in [document 66](docs/66-durable-service-reference-runtime.md).
+
+## Pending — installed controlled XML reference integration
+
+- Add an explicit synthetic XML service profile, normal installed capability and
+  preflight display, and narrow supervisor-owned provider/parser transport.
+- Preserve default authored HTML, separate XML policy approval, XML v1 warnings,
+  review/export permissions and all legacy private one-file controls.
+- Require confined installed worker, immutable parser identity, owned cleanup and
+  verified local Docker-control exposure. Actual acceptance remains pending.
+
+- Add forward-only migration 0015 for private delegation executable-plan reuse,
+  preserving fresh authority predicates and exact schema readiness. Actual SQL
+  warm-cache revocation and installed XML performance acceptance remain required.
+- Keep minimal rejected service configuration validation independent of worker
+  execution imports, with the existing configuration class re-export preserved.

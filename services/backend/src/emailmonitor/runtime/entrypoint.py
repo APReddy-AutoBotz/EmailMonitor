@@ -8,18 +8,21 @@ configuration remains refused until its separate identity/deployment gates pass.
 import argparse
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from emailmonitor.runtime.service_publisher import publish_service_once
-from emailmonitor.runtime.worker import ServiceRuntimeConfig, ServiceWorker
+if TYPE_CHECKING:
+    from emailmonitor.runtime.service_config import ServiceRuntimeConfig
 
 
-def load_config(path: Path) -> ServiceRuntimeConfig:
+def load_config(path: Path) -> "ServiceRuntimeConfig":
     if path.is_symlink() or not path.is_file() or path.stat().st_size > 16_384:
         raise ValueError("Bounded explicit service configuration required")
     with path.open("rb") as source:
         body = source.read(16_385)
     if len(body) > 16_384:
         raise ValueError("Bounded explicit service configuration required")
+    from emailmonitor.runtime.service_config import ServiceRuntimeConfig
+
     return ServiceRuntimeConfig.model_validate_json(body)
 
 
@@ -34,8 +37,6 @@ def main() -> int:
     status = 0
     try:
         if options.command == "api":
-            from emailmonitor.runtime.api_entrypoint import ReferenceAPI, run_api
-
             path = options.config
             if path.is_symlink() or not path.is_file() or path.stat().st_size > 65_536:
                 raise ValueError("Bounded API configuration required")
@@ -43,10 +44,14 @@ def main() -> int:
                 body = source.read(65_537)
             if len(body) > 65_536:
                 raise ValueError("Bounded API configuration required")
+            from emailmonitor.runtime.api_entrypoint import ReferenceAPI, run_api
+
             run_api(ReferenceAPI.model_validate_json(body))
         else:
             config = load_config(options.config)
             if options.command == "publish-once":
+                from emailmonitor.runtime.service_publisher import publish_service_once
+
                 count = publish_service_once(config)
                 print(f"published={count}")
             elif options.command == "check":
@@ -60,6 +65,8 @@ def main() -> int:
                     database.engine.dispose()
                 print("service_identity_ready")
             else:
+                from emailmonitor.runtime.worker import ServiceWorker
+
                 worker = ServiceWorker(config)
                 if options.command == "reconcile-once":
                     print(f"reconciled={worker.reconcile()}")

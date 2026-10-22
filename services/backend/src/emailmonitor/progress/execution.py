@@ -9,6 +9,7 @@ registering a factory does not enable live sources or grant a source permission.
 from collections.abc import Callable
 from typing import Protocol
 
+from emailmonitor.extraction.provider_xml import XmlParser
 from emailmonitor.progress.provider import ProviderDispatch, ProviderJourney
 from emailmonitor.progress.service import Progress, Work
 from emailmonitor.progress.tooltip import TOOLTIP_URL, TooltipDispatch, TooltipJourney
@@ -31,10 +32,21 @@ class ExecutionDispatcher:
         provider: ProviderDispatch | None = None,
         *,
         tooltip: TooltipDispatch | None = None,
+        parser: XmlParser | None = None,
     ) -> None:
         self.progress = progress
         self.tooltip = TooltipJourney(progress, tooltip) if tooltip is not None else None
-        self.provider = ProviderJourney(progress, provider) if provider is not None else None
+        if parser is not None and provider is None:
+            raise ValueError("Parser capability requires controlled provider")
+        self.provider = (
+            (
+                ProviderJourney(progress, provider, parser=parser)
+                if parser is not None
+                else ProviderJourney(progress, provider)
+            )
+            if provider is not None
+            else None
+        )
 
     def process(self, work: Work, *, after_observation: Callable[[], None] | None = None) -> str:
         # Only a server-claimed Work can reach here from broker.process. Never

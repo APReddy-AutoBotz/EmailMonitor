@@ -5,7 +5,7 @@ It does not fetch anything, enable provider policy, or grant retention/export ri
 """
 
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Literal, Protocol
 
 from emailmonitor.config import Settings
 from emailmonitor.extraction.sciencedirect import XmlObservation
@@ -13,6 +13,12 @@ from emailmonitor.fetching.safety import FetchDenied
 from emailmonitor.fetching.sciencedirect import AcquiredResponse, ProviderBoundary
 from emailmonitor.parsing.xml_channel import parse_isolated
 from emailmonitor.parsing.xml_protocol import XmlExpectation
+
+
+class XmlParser(Protocol):
+    def __call__(
+        self, settings: Settings, data: bytes, *, expected: XmlExpectation
+    ) -> XmlObservation: ...
 
 
 @dataclass(frozen=True)
@@ -27,6 +33,7 @@ def parse_response(
     acquired: AcquiredResponse,
     *,
     profile: Literal["article_retrieval_response", "xocs_document"],
+    parser: XmlParser | None = None,
 ) -> BoundXmlObservation:
     boundary.require_response(acquired)
     identifier = acquired.request.article
@@ -37,7 +44,7 @@ def parse_response(
         content_digest=acquired.content_digest,
         source_profile=profile,
     )
-    observed = parse_isolated(settings, acquired.body, expected=expected)
+    observed = (parser or parse_isolated)(settings, acquired.body, expected=expected)
     # Reject a compromised/misbound child before any host record is released.
     observed = XmlObservation.model_validate(observed.model_dump())
     expected.check_observation(observed)

@@ -211,21 +211,25 @@ CAST(:checkpoint AS jsonb),:pages,:articles)"""),
 
     def prepare(self, org: UUID, job: UUID) -> dict[str, object]:
         with self._tenant(org, Capability.ACQUIRE_SOURCE) as (c, _):
-            parent = Ledger._lock(c, org, job)
-            row = self._row(c, org, job)
-            if (
-                not execution_allowed(c, org, job)
-                or parent["generation"] != row["generation"]
-                or parent["deletion_generation"] != row["deletion_generation"]
-            ):
-                raise AuthorizationDenied()
-            state = DiscoveryState.model_validate(row["checkpoint"])
-            if state.status != "pending" or state.next_url is None:
-                raise HTTPException(409, "Discovery has stopped")
-            if not execution_matches(c, org, job, "discover", state.next_url):
-                raise AuthorizationDenied()
-            self._authorize(c, org, job, int(str(row["policy_version"])), state.next_url, True)
-            return row
+            return self._prepare(c, org, job)
+
+    def _prepare(self, c: Connection, org: UUID, job: UUID) -> dict[str, object]:
+        """Existing scope checks within a caller-owned, fresh tenant transaction."""
+        parent = Ledger._lock(c, org, job)
+        row = self._row(c, org, job)
+        if (
+            not execution_allowed(c, org, job)
+            or parent["generation"] != row["generation"]
+            or parent["deletion_generation"] != row["deletion_generation"]
+        ):
+            raise AuthorizationDenied()
+        state = DiscoveryState.model_validate(row["checkpoint"])
+        if state.status != "pending" or state.next_url is None:
+            raise HTTPException(409, "Discovery has stopped")
+        if not execution_matches(c, org, job, "discover", state.next_url):
+            raise AuthorizationDenied()
+        self._authorize(c, org, job, int(str(row["policy_version"])), state.next_url, True)
+        return row
 
     def commit(
         self, org: UUID, job: UUID, expected_revision: int, page: SearchPage

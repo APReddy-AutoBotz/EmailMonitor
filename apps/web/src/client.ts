@@ -31,7 +31,7 @@ export async function readBounded(response: Response, maximum = 2 * 1024 * 1024)
   return all
 }
 export async function sessionRequest<T>(path: string, signal?: AbortSignal): Promise<T> {
-  if (!['/auth/session', '/auth/callback', '/capabilities'].includes(path.split('?')[0])) throw new ApiError(0, 'Unsupported session route.')
+  if (!['/auth/session', '/auth/callback', '/capabilities', '/runtime-profile'].includes(path.split('?')[0])) throw new ApiError(0, 'Unsupported session route.')
   const controller = new AbortController(), abort = () => controller.abort()
   signal?.addEventListener('abort', abort, { once: true })
   if (signal?.aborted) abort()

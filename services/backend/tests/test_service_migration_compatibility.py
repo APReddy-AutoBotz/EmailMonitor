@@ -24,7 +24,8 @@ from sqlalchemy.exc import DBAPIError
 from test_source_foundation import policy_body
 
 ROOT = Path(__file__).resolve().parents[3]
-HEAD = "0014_service_authority"
+HEAD = "0015_service_plan_cache"
+SERVICE_PREVIOUS = "0014_service_authority"
 PREVIOUS = "0013_provider_journey"
 AUTHORITY_TABLES = ("service_principals", "service_delegations", "service_audit")
 HISTORY_TABLES = (
@@ -183,7 +184,7 @@ class OwnedDatabase:
             raise RuntimeError("Disposable migration database ownership mismatch")
 
     def migrate(self, revision: str) -> None:
-        assert revision in (PREVIOUS, HEAD)
+        assert revision in (PREVIOUS, SERVICE_PREVIOUS, HEAD)
         with self.admin.connect() as c:
             self.verify(c)
         result = subprocess.run(
@@ -367,6 +368,18 @@ class MigrationPair:
     roles: dict[str, list[tuple[object, ...]]]
 
 
+def service_function_metadata(c: Connection) -> list[tuple[object, ...]]:
+    """Replacement may change language/source, but no other function property."""
+    return rows(
+        c,
+        """SELECT oid,proname,proowner,proacl::text,proargtypes::text,
+prorettype,proretset,provolatile,prosecdef,proleakproof,proisstrict,proparallel,
+procost,prorows,proconfig,proargnames FROM pg_proc WHERE oid IN (
+'emailmonitor.service_delegation_current(uuid,uuid)'::regprocedure,
+'emailmonitor.service_schema_ready()'::regprocedure) ORDER BY proname""",
+    )
+
+
 @pytest.fixture(scope="module")
 def migration_pair() -> Iterator[MigrationPair]:
     if os.environ.get("EM_REQUIRE_SYNTHETIC_RESTORE") != "true":
@@ -401,7 +414,56 @@ def migration_pair() -> Iterator[MigrationPair]:
                     assert all(before[table] for table in HISTORY_TABLES)
             finally:
                 database.dispose()
-            upgraded.migrate(HEAD)
+            upgraded.migrate(SERVICE_PREVIOUS)
+            # Keep one already-used physical connection across replacement. The
+            # plan changes, but OIDs, permissions and live function results do not.
+            database = engine(upgraded.url)
+            try:
+                with database.connect() as reused:
+                    raw = reused.connection.dbapi_connection
+                    metadata_before = service_function_metadata(reused)
+                    for _ in range(6):
+                        assert (
+                            reused.execute(
+                                text("SELECT emailmonitor.service_delegation_current(NULL,NULL)")
+                            ).scalar_one()
+                            is False
+                        )
+                    assert (
+                        reused.execute(
+                            text("SELECT emailmonitor.service_schema_ready()")
+                        ).scalar_one()
+                        is True
+                    )
+                    reused.commit()
+                    upgraded.migrate(HEAD)
+                    assert reused.connection.dbapi_connection is raw
+                    assert service_function_metadata(reused) == metadata_before
+                    assert (
+                        reused.execute(
+                            text("SELECT emailmonitor.service_delegation_current(NULL,NULL)")
+                        ).scalar_one()
+                        is False
+                    )
+                    assert (
+                        reused.execute(
+                            text("SELECT emailmonitor.service_schema_ready()")
+                        ).scalar_one()
+                        is True
+                    )
+                    assert (
+                        reused.execute(
+                            text(
+                                "SELECT l.lanname FROM pg_proc p "
+                                "JOIN pg_language l ON l.oid=p.prolang "
+                                "WHERE p.oid="
+                                "'emailmonitor.service_delegation_current(uuid,uuid)'::regprocedure"
+                            )
+                        ).scalar_one()
+                        == "plpgsql"
+                    )
+            finally:
+                database.dispose()
             fresh.migrate(HEAD)
             # Reapplication must be a no-op, including populated historical rows.
             upgraded.migrate(HEAD)
@@ -508,7 +570,9 @@ def test_actual_fresh_and_populated_upgrade_schema_acl_rls_equivalence(
     assert snapshots[0] == snapshots[1]
 
 
-@pytest.mark.parametrize("revisions", [(), (PREVIOUS,), ("9999_unsupported",), (HEAD, PREVIOUS)])
+@pytest.mark.parametrize(
+    "revisions", [(), (PREVIOUS,), (SERVICE_PREVIOUS,), ("9999_unsupported",), (HEAD, PREVIOUS)]
+)
 def test_actual_service_schema_guard_refuses_old_missing_or_ambiguous_revision(
     migration_pair: MigrationPair, revisions: tuple[str, ...]
 ) -> None:

@@ -60,11 +60,27 @@ class ProcessFailure(Enum):
     UNKNOWN = "unknown"
 
 
+class StdoutPresence(Enum):
+    UNKNOWN = "unknown"
+    EMPTY = "empty"
+    PRESENT = "present"
+
+
+class StderrClass(Enum):
+    UNKNOWN = "unknown"
+    EMPTY = "empty"
+    EXACT_REFUSAL_MARKER = "exact_refusal_marker"
+    OTHER = "other"
+
+
 @dataclass
 class ProcessDiagnostics:
-    """Optional first-failure metadata; never changes or formats an exception."""
+    """Optional first-failure enums; never retains output or formats an exception."""
 
     failure: ProcessFailure | None = None
+    capture_refusal_output: bool = False
+    stdout_presence: StdoutPresence = StdoutPresence.UNKNOWN
+    stderr_class: StderrClass = StderrClass.UNKNOWN
 
     def record(self, reason: ProcessFailure) -> None:
         if self.failure is None:
@@ -77,6 +93,26 @@ class ProcessDiagnostics:
             self.record(ProcessFailure.OS_ERROR)
         else:
             self.record(ProcessFailure.UNKNOWN)
+
+    def record_output(self, stdout: bytearray, stderr: bytearray) -> None:
+        """Classify existing failure buffers only for the service-refusal caller."""
+        if (
+            self.capture_refusal_output is not True
+            or self.stdout_presence is not StdoutPresence.UNKNOWN
+            or self.stderr_class is not StderrClass.UNKNOWN
+            or type(stdout) is not bytearray
+            or type(stderr) is not bytearray
+        ):
+            return
+        presence = StdoutPresence.PRESENT if stdout else StdoutPresence.EMPTY
+        classification = (
+            StderrClass.EMPTY
+            if not stderr
+            else StderrClass.EXACT_REFUSAL_MARKER
+            if stderr == b"service_runtime_failed\n"
+            else StderrClass.OTHER
+        )
+        self.stdout_presence, self.stderr_class = presence, classification
 
 
 def bounded_process(
@@ -125,6 +161,12 @@ def bounded_process(
             except BaseException as error:
                 if type(diagnostics) is ProcessDiagnostics:
                     diagnostics.record_exception(error)
+                    if diagnostics.capture_refusal_output is True:
+                        try:
+                            diagnostics.record_output(buffers["stdout"], buffers["stderr"])
+                        except BaseException:
+                            # Optional classification must not replace the primary failure.
+                            pass
                 process.kill()
                 process.wait(timeout=5)
                 raise

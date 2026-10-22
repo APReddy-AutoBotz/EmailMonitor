@@ -33,6 +33,22 @@ scripts/check.sh
 
 `check.sh` executes docs/schema/example/fixture consistency, Python lint/format/type tests, API/configuration/fixture/contract tests, inventory parity, strict frontend peer validation, type/lint/component tests and production build. Installation needs official registry access; tests are local and do not crawl publishers. Runtime-only Python installation uses `--no-dev`.
 
+The default aggregate still runs every check in that order. CI uses only the
+closed `static`, `backend`, and `frontend` phases: documentation/Python static
+checks and the complete frontend sequence share one job; the unfiltered backend
+suite and inventory run in a separate job with the actual disposable SQL/broker,
+restore and installed XML-image requirements. The existing `scaffold` check is
+an always-evaluated join that requires both jobs to succeed, including the final
+frontend build. No failed, cancelled, or skipped dependency satisfies it.
+
+The backend retains its 1200-second XML wrapper and consumer bounds, up to ten
+seconds for owned process-group stop/reap, and a separate 180-second verified
+cleanup budget under the existing 25-minute job ceiling. This leaves at most
+110 seconds for setup and final overhead. Splitting the gates does not guarantee
+runtime headroom; the observed backend workload remains close to its bound.
+The full `application` XML-integration mode remains available; CI selects only
+the fixed `application-backend` mode, never arbitrary commands or test filters.
+
 Separate terminals:
 
 ```sh
