@@ -224,8 +224,8 @@ LEAF_METADATA = """SELECT p.prosrc, l.lanname, p.provolatile, p.prosecdef,
 
 def validate_leaf_metadata(row: object, body: str) -> None:
     expected = (
-        body,
-        "sql",
+        "\nBEGIN\n RETURN (" + body + ");\nEND;\n",
+        "plpgsql",
         "v",
         True,
         ["search_path=pg_catalog, emailmonitor"],

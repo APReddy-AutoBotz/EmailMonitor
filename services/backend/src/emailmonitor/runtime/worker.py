@@ -5,12 +5,11 @@ lease; no caller-supplied role, browser session or executor selector is accepted
 """
 
 import time
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from celery import Celery, bootsteps
 from kombu import Exchange, Queue
-from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import text
 
 from emailmonitor.config import Settings
@@ -23,39 +22,13 @@ from emailmonitor.progress.service import Progress
 from emailmonitor.results.broker import ExportEvent
 from emailmonitor.results.broker import process as export
 from emailmonitor.results.service import Results
-from emailmonitor.runtime.assembly import _database_target
-from emailmonitor.runtime.authority import ServiceProcess, ServiceWork
+from emailmonitor.runtime.authority import ServiceWork
 from emailmonitor.runtime.database import ServiceDatabase
-from emailmonitor.runtime.publisher import TestPublisherConfig
+from emailmonitor.runtime.service_config import ServiceRuntimeConfig as ServiceRuntimeConfig
 from emailmonitor.runtime.signal_wake import SignalWakeState, register_signal_wake
 
 if TYPE_CHECKING:
     from emailmonitor.runtime.controlled_channel import ControlledChannel
-
-
-class ServiceRuntimeConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
-
-    environment: Literal["test"]
-    database_url: str = Field(repr=False)
-    broker_url: str = Field(repr=False)
-    queue: str
-    organization: UUID
-    process: ServiceProcess
-    lease_seconds: int = Field(default=30, ge=1, le=120)
-    profile: Literal["authored-html-service-reference", "controlled-xml-service-reference"] = (
-        "authored-html-service-reference"
-    )
-
-    @model_validator(mode="after")
-    def isolated(self) -> "ServiceRuntimeConfig":
-        if self.queue != "em-fixture-" + self.organization.hex:
-            raise ValueError("Tenant-isolated queue namespace required")
-        _database_target(self.database_url)
-        TestPublisherConfig(
-            environment=self.environment, broker_url=self.broker_url, queue=self.queue
-        )
-        return self
 
 
 def broker_application(config: ServiceRuntimeConfig) -> Any:

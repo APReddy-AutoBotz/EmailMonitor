@@ -31,7 +31,7 @@ def guarded(name, *args, **kwargs):
     return original_import(name, *args, **kwargs)
 builtins.__import__ = guarded
 from emailmonitor.runtime import entrypoint
-sys.argv = ['service', 'api', '--config', sys.argv[2]]
+sys.argv = ['service', sys.argv[3] if len(sys.argv) > 3 else 'api', '--config', sys.argv[2]]
 result = entrypoint.main()
 assert not attempts
 assert not any(matches(name) for name in sys.modules)
@@ -86,6 +86,64 @@ def test_api_file_boundaries_still_refuse_before_execution_imports(
         config.mkdir()
     result = subprocess.run(
         [sys.executable, "-I", "-B", "-c", REFUSAL_PROBE, str(SOURCE), str(config)],
+        capture_output=True,
+        timeout=5,
+        check=False,
+    )
+    assert (result.returncode, result.stdout, result.stderr) == (
+        1,
+        b"",
+        b"service_runtime_failed\n",
+    )
+
+
+@pytest.mark.parametrize("command", ["worker", "publish-once", "reconcile-once", "check"])
+@pytest.mark.parametrize(
+    "body",
+    [
+        b'{"environment":"production"}',
+        b'{"environment":"production"}' + b" " * (16_384 - 28),
+        b'{"environment":"test"}',
+        b'{"environment":"invalid"}',
+        b'{"environment":false}',
+        b"{}",
+        b"[]",
+        b"null",
+        b"{malformed",
+        b"\xff",
+    ],
+)
+def test_service_refusal_precedes_execution_imports_in_fresh_process(
+    tmp_path: Path, command: str, body: bytes
+) -> None:
+    config = tmp_path / "synthetic-config.json"
+    config.write_bytes(body)
+    result = subprocess.run(
+        [sys.executable, "-I", "-B", "-c", REFUSAL_PROBE, str(SOURCE), str(config), command],
+        capture_output=True,
+        timeout=5,
+        check=False,
+    )
+    assert (result.returncode, result.stdout, result.stderr) == (
+        1,
+        b"",
+        b"service_runtime_failed\n",
+    )
+
+
+@pytest.mark.parametrize("kind", ["oversized", "symlink", "directory", "missing"])
+def test_service_file_boundaries_refuse_before_execution_imports(tmp_path: Path, kind: str) -> None:
+    config = tmp_path / "synthetic-config.json"
+    if kind == "oversized":
+        config.write_bytes(b" " * 16_385)
+    elif kind == "symlink":
+        target = tmp_path / "target.json"
+        target.write_bytes(b'{"environment":"production"}')
+        config.symlink_to(target)
+    elif kind == "directory":
+        config.mkdir()
+    result = subprocess.run(
+        [sys.executable, "-I", "-B", "-c", REFUSAL_PROBE, str(SOURCE), str(config), "worker"],
         capture_output=True,
         timeout=5,
         check=False,

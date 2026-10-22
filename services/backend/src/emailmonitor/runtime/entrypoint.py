@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from emailmonitor.runtime.worker import ServiceRuntimeConfig
+    from emailmonitor.runtime.service_config import ServiceRuntimeConfig
 
 
 def load_config(path: Path) -> "ServiceRuntimeConfig":
@@ -21,7 +21,7 @@ def load_config(path: Path) -> "ServiceRuntimeConfig":
         body = source.read(16_385)
     if len(body) > 16_384:
         raise ValueError("Bounded explicit service configuration required")
-    from emailmonitor.runtime.worker import ServiceRuntimeConfig
+    from emailmonitor.runtime.service_config import ServiceRuntimeConfig
 
     return ServiceRuntimeConfig.model_validate_json(body)
 

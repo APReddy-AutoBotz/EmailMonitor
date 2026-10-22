@@ -501,3 +501,57 @@ all documentation/inventory/frontend checks (108.94s/117.69s backend). An earlie
 normal pass preceded final cleanup-test extraction; final normal was rerun after
 files froze. Fresh installations absent before setup; caches reused. No actual
 plan output or production optimization is claimed before hosted execution.
+
+### Hosted fixed-plan evidence (2026-10-22)
+
+Published head `c52be10803816e9183ead50c1279213505e16885`, tree
+`272f4bef41edb742fffcb73aec54d30db1f22f8a`, completed seven of eight workflows
+successfully. Application run 39739239826 passed all 4693 actual backend tests in
+1031.63s, static checks and the mandatory success join; owned cleanup verified.
+
+Both authored routes reported job-lock execution 147-149ms and source-fence
+99-102ms, with rounded outer planning 0ms, no outer JIT and no shared reads.
+The separately validated owner leaf surrogate reported planning 4-9ms and execution
+0-1ms across 25 nodes. This narrows the candidate to nested function overhead, but
+does not directly measure nested planning or prove equivalent rewrite behavior.
+Every diagnostic reported cleanup true and uncapped numeric metrics.
+
+Service run 39739239787 failed: broker 12 tests and authored HTML journey passed;
+all four XML scenarios failed in 378.56s with owned cleanup verified. Keyword
+reached 128 validated callbacks and direct URL 93 before UI timeouts; crash recovery
+missed the expected durable state and delegation revocation hit a callback timeout.
+Packaging job 119692177509 failed the unchanged 5-second worker refusal attach
+probe with empty captured output, running/non-OOM container and verified cleanup.
+No retry was performed. All runs were terminal before subsequent source edits.
+
+### Bounded planning and refusal-startup candidate
+
+Independent design/source review permits forward migration 0015 wrapping the
+byte-identical private delegation SELECT in VOLATILE PL/pgSQL, plus the mechanical
+exact-head readiness update. No authority result is cached. Existing function
+identity, ownership, ACL, search path, live clocks and caller lock order remain
+required invariants. New guarded actual SQL tests warm the same physical session
+and transaction before committed delegation/policy/principal/identity/session/
+membership/catalog changes, cover both purposes and tenant/null/unknown denials,
+and require private EXECUTE denial and natural deadline expiry. Migration upgrade
+coverage compares metadata/OID/ACL and uses an already connected pool. PostgreSQL
+is absent locally; authored SQL regressions are not executed acceptance yet.
+
+A separate mechanical ServiceRuntimeConfig extraction avoids importing the worker
+execution graph for configurations already rejected by the unchanged model.
+Independent source review and 808 focused tests passed. Schema/defaults, validation
+order, same-class legacy re-export, valid worker/publisher configurations and
+execution/cleanup behavior are retained. Local module counts and timing identified
+avoidable work but do not establish the cause of hosted Docker attach failures.
+Neither candidate changes production deadlines or grants. Installed performance
+and the four XML scenarios still require exact-head hosted proof.
+
+Final serial normal and empty-checkout aggregates passed 4389 backend tests with
+388 explicit infrastructure skips, 77 React tests, 352-file mypy and complete
+lint/format/docs/inventory/frontend gates (120.30s/126.24s backend). The first fresh
+attempt lost its executor session at approximately 91% backend progress and has
+no terminal result; it is not a pass. Read-only reconciliation found no remaining
+test process before a new empty checkout repeated the complete gate successfully.
+The expiry regression normally issues a 10-second synthetic grant and uses bounded
+server-clock waits; it never changes the immutable issued deadline or production
+limits. Independent final source review GO; actual SQL and installed gates pending.

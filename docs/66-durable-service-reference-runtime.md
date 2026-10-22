@@ -76,7 +76,13 @@ are external activation work requiring their own authorization. The reference
 acceptance harness uses only uniquely owned disposable synthetic roles and data.
 Neither API nor worker startup creates or expands access.
 
-The runtime accepts exactly schema version `0014_service_authority`; a future
+Migration 0015 replaces only the private delegation-current function with a
+VOLATILE PL/pgSQL wrapper around the unchanged SELECT, allowing executable-plan
+reuse without caching authority results. Its companion schema-readiness update
+accepts exactly `0015_service_plan_cache`, never both heads. Existing rows, grants,
+function identity and caller lock order are preserved; every invocation retains
+fresh predicates and live deadline checks. Apply through the separate migration
+identity, then run the matching runtime. No automatic activation occurs. A future
 migration requires an explicitly reviewed compatible runtime change. Role ACLs
 must preserve non-owner/non-BYPASSRLS separation, deny opposite service roles and
 authenticator/session-minting access, and retain forced RLS. Do not weaken these

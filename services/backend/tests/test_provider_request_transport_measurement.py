@@ -422,8 +422,8 @@ def test_fixed_leaf_extraction_parameterization_and_metadata() -> None:
     assert "clock_timestamp()" in query
     assert "session_user" not in body
     row = (
-        body,
-        "sql",
+        "\nBEGIN\n RETURN (" + body + ");\nEND;\n",
+        "plpgsql",
         "v",
         True,
         ["search_path=pg_catalog, emailmonitor"],
@@ -435,7 +435,7 @@ def test_fixed_leaf_extraction_parameterization_and_metadata() -> None:
     )
     probe.validate_leaf_metadata(row, body)
     for index, wrong in enumerate(
-        ("private", "plpgsql", "s", False, [], "private", False, False, True, [])
+        ("private", "sql", "s", False, [], "private", False, False, True, [])
     ):
         changed = list(row)
         changed[index] = wrong
@@ -485,8 +485,8 @@ def test_owner_leaf_transaction_always_rolls_back(failure: str) -> None:
 
         def one(self) -> tuple[object, ...]:
             return (
-                "private" if failure == "metadata" else "SELECT true",
-                "sql",
+                "private" if failure == "metadata" else "\nBEGIN\n RETURN (SELECT true);\nEND;\n",
+                "plpgsql",
                 "v",
                 True,
                 ["search_path=pg_catalog, emailmonitor"],
