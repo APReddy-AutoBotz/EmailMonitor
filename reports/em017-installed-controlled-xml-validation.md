@@ -555,3 +555,41 @@ test process before a new empty checkout repeated the complete gate successfully
 The expiry regression normally issues a 10-second synthetic grant and uses bounded
 server-clock waits; it never changes the immutable issued deadline or production
 limits. Independent final source review GO; actual SQL and installed gates pending.
+
+### Hosted plan-cache candidate (2026-10-22)
+
+Head `e0847b5124162352652ac64619557c31da558a11`, tree
+`1081096b6f65dbf05cb0c574bc601b3e7648c56f`, completed with six workflows green.
+Application backend job 119710932082 passed 4776 tests and failed one in 1078.31s;
+cleanup verified. The new membership freshness fixture attempted to suspend the
+sole owner and correctly encountered LAST_OWNER_REQUIRED. The other migration/
+warm-cache SQL cases passed. Static checks passed and the required join correctly
+failed. No protective database guard was relaxed.
+
+Actual fixed plans now report job-lock execution 25-35ms (previously 147-149ms)
+and source-fence 18-27ms (previously 99-102ms), with rounded outer planning 0ms,
+no outer JIT or shared reads. These are observed separate hosted runs, not a
+randomized causal experiment or proof of nested-planning internals.
+
+Packaging passed on its first attempt. Installed service job 119710931880 passed
+broker/HTML and the complete direct-URL XML review/export journey. Keyword reached
+completed processing but its harness expected input omitted the existing false
+query-change-confirmation default. Crash/revocation cases hit their expected
+primary failure, but exact regex matching also included diagnostic exception
+notes and prevented post-context assertions. Service XML total: one passed, three
+failed in 259.46s; cleanup verified. Revocation logs separately showed SQL authority
+denial; its timeout reflects bounded fail-closed teardown, not prompt protocol
+refusal. Explicit milestones and all post-effect checks remain mandatory. All runs
+were terminal before subsequent test-only corrections.
+
+The subsequent test-only corrections use the ordinary authenticated membership
+API to establish a second active owner before warming/revoking the original
+membership. Keyword expectations include the existing normalized false default.
+Expected failures compare exact exception arguments while retaining diagnostics;
+post-exception milestones require completed SIGKILL, held GET, committed revocation,
+verified release acknowledgement and completed test body as applicable. Every
+original tenant/no-effect/lease/ticket/deadline assertion remains required.
+Independent source review GO. Serial normal and new empty-checkout full gates
+passed 4397 backend tests with 388 explicit infrastructure skips, 77 React tests,
+352-file mypy and all lint/format/docs/inventory/frontend gates (118.41s/128.93s).
+Actual membership and complete installed acceptance remain pending hosted execution.

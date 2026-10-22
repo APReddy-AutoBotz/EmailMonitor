@@ -14,7 +14,7 @@ from test_progress_tenant import drain
 from test_service_authority_tenant import ServiceCase
 from test_service_authority_tenant import _service_ci_guard as _service_ci_guard
 from test_service_authority_tenant import service_case as service_case
-from test_tenant_foundation import Scenario
+from test_tenant_foundation import ORIGIN, Scenario
 from test_tenant_foundation import scenario as scenario
 
 
@@ -65,6 +65,27 @@ def test_warm_same_session_function_observes_committed_authority_change(
 ) -> None:
     case = service_case
     org = case.scope.organization
+    if mutation == "membership":
+        # Keep the real last-owner guard: promote the existing synthetic admin
+        # through the normal API before attempting to revoke the grant's owner.
+        # The delegated owner's identity and membership remain unchanged here.
+        with scenario.client() as client:
+            csrf = scenario.login(client, "owner")
+            response = client.patch(
+                f"/api/v1/organizations/{org}/members/{scenario.identities['admin']}",
+                headers={"Origin": ORIGIN, "X-CSRF-Token": csrf},
+                json={"role": "owner", "status": "active", "expected_revision": 1},
+            )
+            assert response.status_code == 200
+            assert response.json() == {"row_version": 2}
+            members = client.get(f"/api/v1/organizations/{org}/members")
+            assert members.status_code == 200
+            owners = {
+                member["identity_id"]
+                for member in members.json()
+                if member["role"] == "owner" and member["status"] == "active"
+            }
+            assert owners == {str(scenario.identities["owner"]), str(scenario.identities["admin"])}
     statements = {
         "delegation": (
             "UPDATE emailmonitor.service_delegations SET revoked_at=clock_timestamp() "

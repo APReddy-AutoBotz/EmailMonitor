@@ -319,9 +319,12 @@ def test_actual_revocation_release_is_once_only_even_after_ambiguous_failure(
         for node in ast.walk(test)
         if isinstance(node, ast.FunctionDef) and node.name == "release"
     )
-    wrapper = ast.parse("def build():\n    released = False\n    return None\n").body[0]
+    wrapper = ast.parse(
+        "def build():\n    release_attempted = False\n    release_ack = False\n"
+        "    return release, lambda: (release_attempted, release_ack)\n"
+    ).body[0]
     assert isinstance(wrapper, ast.FunctionDef)
-    wrapper.body[1:] = [release, ast.Return(value=ast.Name(id="release", ctx=ast.Load()))]
+    wrapper.body.insert(2, release)
     module = ast.fix_missing_locations(ast.Module(body=[wrapper], type_ignores=[]))
     calls: list[str] = []
 
@@ -345,7 +348,7 @@ def test_actual_revocation_release_is_once_only_even_after_ambiguous_failure(
         "time": SimpleNamespace(monotonic=lambda: 3.0),
     }
     exec(compile(module, "actual-installed-revocation-release", "exec"), namespace)
-    action = namespace["build"]()
+    action, state = namespace["build"]()
     if failure is None:
         action()
         assert calls == ["send", "receive"] and not fixture.poisoned
@@ -353,9 +356,11 @@ def test_actual_revocation_release_is_once_only_even_after_ambiguous_failure(
         with pytest.raises((RuntimeError, AssertionError)):
             action()
         assert fixture.poisoned
+    assert state() == (True, failure is None)
     previous = list(calls)
     action()
     assert calls == previous
+    assert state() == (True, failure is None)
 
 
 @pytest.mark.parametrize(
@@ -500,3 +505,94 @@ def test_diagnosed_worker_success_does_not_read_diagnostics(
     monkeypatch.setattr(harness, "launched_worker", launch)
     with harness.diagnosed_worker() as running:
         assert running is worker
+
+
+@pytest.mark.parametrize("direct", [False, True])
+def test_expected_persisted_input_matches_existing_normalization(direct: bool) -> None:
+    from emailmonitor.jobs.models import KeywordInput, URLInput
+
+    expected = harness.expected_job_input(direct)
+    model = URLInput if direct else KeywordInput
+    supplied = dict(expected)
+    supplied.pop("query_change_confirmed", None)
+    assert model.model_validate(supplied).model_dump(exclude_none=True) == expected
+    if not direct:
+        assert expected["query_change_confirmed"] is False
+    assert {**expected, "unexpected": True} != expected
+
+
+def test_expected_worker_failure_preserves_diagnostic_notes_and_original_arguments() -> None:
+    original = RuntimeError("Controlled worker capability failed")
+    original.add_note("Installed XML worker diagnostic TIMEOUT")
+    with pytest.raises(RuntimeError) as caught:
+        raise original
+    harness.assert_expected_worker_failure(caught.value)
+    assert caught.value is original
+    assert original.__notes__ == ["Installed XML worker diagnostic TIMEOUT"]
+    assert original.args == ("Controlled worker capability failed",)
+
+
+@pytest.mark.parametrize(
+    "arguments", [(), ("different failure",), ("Controlled worker capability failed", "extra")]
+)
+def test_expected_worker_failure_rejects_other_arguments(arguments: tuple[str, ...]) -> None:
+    error = RuntimeError(*arguments)
+    error.add_note("Controlled worker capability failed")
+    with pytest.raises(AssertionError):
+        harness.assert_expected_worker_failure(error)
+
+
+@pytest.mark.parametrize(
+    ("function", "milestones"),
+    [
+        (
+            harness.test_installed_controlled_xml_post_observation_crash_recovery,
+            ("crash_kill_completed",),
+        ),
+        (
+            harness.test_installed_controlled_xml_delegation_revoked_before_response_release,
+            (
+                "held_request_validated",
+                "revocation_committed",
+                "release_ack",
+                "test_body_completed",
+            ),
+        ),
+    ],
+)
+def test_expected_failure_requires_completed_milestones_after_raises(
+    function: Any, milestones: tuple[str, ...]
+) -> None:
+    tree = ast.parse(inspect.getsource(function))
+    raises = next(
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.With)
+        and any(
+            ast.unparse(item.context_expr) == "pytest.raises(RuntimeError)" for item in node.items
+        )
+    )
+    assert raises.end_lineno is not None
+    for name in milestones:
+        assignments = [
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Assign)
+            and any(isinstance(target, ast.Name) and target.id == name for target in node.targets)
+        ]
+        assert {ast.unparse(node.value) for node in assignments} == {"False", "True"}
+        final_check = next(
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Assert) and ast.unparse(node.test) == name
+        )
+        assert final_check.lineno > raises.end_lineno
+        # An early expected launcher failure must still fail the milestone check.
+        statement = ast.Module(body=[final_check], type_ignores=[])
+        with pytest.raises(AssertionError):
+            exec(compile(statement, "<authored milestone>", "exec"), {name: False})
+    source = inspect.getsource(function)
+    if "revocation_committed" in milestones:
+        assert source.index("revocation_committed = True") > source.index("assert revoked ==")
+        assert source.index("release_ack = True") > source.index("fixture.receive(deadline) ==")
+        assert "nonlocal release_attempted, release_ack" in source

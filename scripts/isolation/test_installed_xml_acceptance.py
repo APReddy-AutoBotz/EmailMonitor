@@ -114,6 +114,26 @@ def diagnosed_worker(*args: Any, **kwargs: Any) -> Iterator[Any]:
         raise
 
 
+def expected_job_input(direct_url: bool) -> dict[str, object]:
+    """Exact persisted input, including the ordinary keyword confirmation default."""
+    return (
+        {"type": "url", "url": catalog.DOI_URL}
+        if direct_url
+        else {
+            "type": "keyword",
+            "source_id": catalog.SOURCE,
+            "original_query": catalog.QUERY,
+            "query_change_confirmed": False,
+        }
+    )
+
+
+def assert_expected_worker_failure(error: RuntimeError) -> None:
+    # pytest's regex matcher includes diagnostic notes. Compare only the exact
+    # original arguments, retaining the original exception and its useful notes.
+    assert error.args == ("Controlled worker capability failed",)
+
+
 def require_xml_context(environment: dict[str, str]) -> None:
     if (
         environment.get("EM_REQUIRE_XML_INTEGRATION") != "synthetic-test-only"
@@ -573,15 +593,7 @@ def test_installed_controlled_xml_operator(
                             .all()
                         )
                         assert len(rows) == 1
-                        assert rows[0]["input"] == (
-                            {"type": "url", "url": catalog.DOI_URL}
-                            if direct_url
-                            else {
-                                "type": "keyword",
-                                "source_id": catalog.SOURCE,
-                                "original_query": catalog.QUERY,
-                            }
-                        )
+                        assert rows[0]["input"] == expected_job_input(direct_url)
                         policy: Any = connection.execute(
                             text(
                                 "SELECT policy FROM emailmonitor.source_policies WHERE "
@@ -766,7 +778,8 @@ def test_installed_controlled_xml_post_observation_crash_recovery(
                         "LOCK TABLE emailmonitor.association_batches IN SHARE MODE"
                     )
                     barrier_pid = barrier.exec_driver_sql("SELECT pg_backend_pid()").scalar_one()
-                    with pytest.raises(RuntimeError, match="^Controlled worker capability failed$"):
+                    crash_kill_completed = False
+                    with pytest.raises(RuntimeError) as failure:
                         with diagnosed_worker(
                             configs["worker"],
                             first.processes["gateway"],
@@ -804,6 +817,9 @@ def test_installed_controlled_xml_post_observation_crash_recovery(
                             assert worker.parser_calls == 1
                             worker.kill()
                             assert worker.wait(timeout=5) == 137
+                            crash_kill_completed = True
+                    assert_expected_worker_failure(failure.value)
+                    assert crash_kill_completed
                 finally:
                     transaction.rollback()
             assert count("article_observations") == 1
@@ -881,13 +897,17 @@ def test_installed_controlled_xml_delegation_revoked_before_response_release(
             configure(network, "slow")
             # The existing fixture holds this response for at most 15 seconds.
             # No new wait mode, transport hook or deadline extension is introduced.
-            released = False
+            release_attempted = False
+            release_ack = False
+            held_request_validated = False
+            revocation_committed = False
+            test_body_completed = False
 
             def release() -> None:
-                nonlocal released
-                if released:
+                nonlocal release_attempted, release_ack
+                if release_attempted:
                     return
-                released = True  # Never retry an ambiguous control exchange.
+                release_attempted = True  # Never retry an ambiguous control exchange.
                 fixture = network.processes["fixture-a"]
                 if fixture.poisoned:
                     raise RuntimeError("Held fixture control unavailable")
@@ -895,11 +915,12 @@ def test_installed_controlled_xml_delegation_revoked_before_response_release(
                 try:
                     fixture.send({"kind": "release"}, deadline)
                     assert fixture.receive(deadline) == {"kind": "released"}
+                    release_ack = True
                 except BaseException:
                     fixture.poisoned = True
                     raise
 
-            with pytest.raises(RuntimeError, match="^Controlled worker capability failed$"):
+            with pytest.raises(RuntimeError) as failure:
                 with diagnosed_worker(
                     configs["worker"],
                     network.processes["gateway"],
@@ -941,6 +962,7 @@ def test_installed_controlled_xml_delegation_revoked_before_response_release(
                                 {"org": org, "job": job},
                             ).one()
                             assert ticket.state == "active" and ticket.lease_until is not None
+                            held_request_validated = True
                             revoked = (
                                 c.execute(
                                     text(
@@ -960,11 +982,20 @@ def test_installed_controlled_xml_delegation_revoked_before_response_release(
                                 .all()
                             )
                             assert revoked == [ticket.service_delegation]
+                        revocation_committed = True
                         assert time.monotonic() - calls[0]["received_monotonic"] < 15
                     finally:
                         release()
                     wait_for(lambda: worker.poll() is not None, seconds=25)
                     assert worker.parser_calls == 0
+                    test_body_completed = True
+            assert_expected_worker_failure(failure.value)
+            assert held_request_validated
+            assert revocation_committed
+            assert release_ack
+            assert test_body_completed
+            # A timeout may follow SQL refusal without a callback reply. This
+            # proves bounded fail-closed suppression, not prompt protocol denial.
             calls = snapshot(network)["calls"]
             assert len(calls) == 1  # No retry, alternate identity or fallback.
             with admin.connect() as c:
