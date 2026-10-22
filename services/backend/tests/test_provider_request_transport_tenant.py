@@ -1,7 +1,9 @@
-"""Test-only client-socket A/B; identical real SQL authority checks, no speedup gate.
+"""Test-only session-JIT A/B; identical real SQL authority checks, no speedup gate.
 
 This measures the existing disposable PostgreSQL fixture, not installed-container
-transport. No production connection hook, query cache or authority bypass exists.
+transport. No production setting, query cache or authority bypass exists.
+Setup SQL is excluded from measured cursor spans but included in the cooperative
+20-second admission budget; existing in-flight SQL timeout caps still apply.
 """
 
 import json
@@ -87,6 +89,39 @@ def require_driver_connection(value: object) -> None:
         raise AssertionError("Exact dialect-selected pg8000 connection required")
 
 
+def jit_setting(value: object) -> bool:
+    if type(value) is not str or value not in ("on", "off"):
+        raise AssertionError("SQL A/B JIT setting invalid")
+    return value == "on"
+
+
+def configure_jit(connection: Any, enabled: bool, deadline: float) -> tuple[bool, bool]:
+    """Only this disposable engine retains the session setting until disposal."""
+    if type(enabled) is not bool or connection.in_transaction():
+        raise AssertionError("SQL A/B JIT setup scope invalid")
+
+    def execute(sql: str) -> Any:
+        assert time.monotonic() < deadline, "SQL A/B measurement budget exhausted"
+        return connection.execute(text(sql))
+
+    execute(STATEMENT_TEMPLATES["timeout_settings"])
+    baseline = jit_setting(execute("SHOW jit").scalar_one())
+    # pg_jit_available() also requires jit=on. Probe identically before each arm,
+    # then set the requested value before any measured authority transaction.
+    execute("SET SESSION jit = on")
+    available = execute("SELECT pg_catalog.pg_jit_available()").scalar_one()
+    if type(available) is not bool:
+        raise AssertionError("SQL A/B JIT availability invalid")
+    execute("SET SESSION jit = on" if enabled else "SET SESSION jit = off")
+    effective = jit_setting(execute("SHOW jit").scalar_one())
+    if effective is not enabled:
+        raise AssertionError("SQL A/B JIT setting mismatch")
+    connection.commit()
+    assert not connection.in_transaction()
+    assert time.monotonic() < deadline, "SQL A/B measurement budget exhausted"
+    return baseline, available
+
+
 def bounded_ms(seconds: float) -> tuple[int, bool]:
     if type(seconds) not in (int, float) or not math.isfinite(seconds) or seconds < 0:
         raise ValueError("Finite nonnegative measurement required")
@@ -156,7 +191,7 @@ class CursorMeasurement:
 
 
 @pytest.mark.parametrize("route", ["discover", "article"])
-def test_provider_current_socket_option_ab(
+def test_provider_current_jit_ab(
     provider_service_case: ServiceCase, route: str, capsys: pytest.CaptureFixture[str]
 ) -> None:
     case = provider_service_case
@@ -167,12 +202,14 @@ def test_provider_current_socket_option_ab(
     deadline = started + 20
     baseline: object = None
     peer_identity: object = None
+    socket_option: int | None = None
+    jit_environment: tuple[bool, bool] | None = None
     physical: list[object] = []
     rows: list[dict[str, object]] = []
     expected_counts: list[int] = []
     expected_categories: list[dict[str, int]] = []
     with bound(work.lease):
-        for arm, enabled in enumerate((0, 1, 1, 0)):
+        for arm, enabled in enumerate((False, True, True, False)):
             assert time.monotonic() < deadline, "SQL A/B measurement budget exhausted"
             database = ServiceDatabase(case.url, case.database.process)
             checkout = None
@@ -194,21 +231,27 @@ def test_provider_current_socket_option_ab(
                     if peer_identity is None:
                         peer_identity = identity
                     assert identity == peer_identity
-                    transport.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, enabled)
-                    assert transport.getsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY) == enabled
+                    option = transport.getsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY)
+                    if socket_option is None:
+                        socket_option = option
+                    assert option == socket_option
+                    environment = configure_jit(connection, enabled, deadline)
+                    if jit_environment is None:
+                        jit_environment = environment
+                    assert environment == jit_environment
 
                 def same_connection(
                     dbapi_connection: Any,
                     *_ignored: Any,
                     expected_raw: Any = raw,
                     expected_transport: Any = transport,
-                    expected_enabled: int = enabled,
+                    expected_option: int = option,
                 ) -> None:
                     assert dbapi_connection is expected_raw, "SQL A/B physical connection changed"
                     assert expected_raw._usock is expected_transport
                     assert (
                         expected_transport.getsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY)
-                        == expected_enabled
+                        == expected_option
                     )
 
                 checkout = same_connection
@@ -241,7 +284,9 @@ def test_provider_current_socket_option_ab(
                     rows.append(
                         {
                             "arm": arm,
-                            "nodelay": bool(enabled),
+                            "jit_enabled": enabled,
+                            "jit_baseline": environment[0],
+                            "jit_available": environment[1],
                             "position": position,
                             **measured.receipt(elapsed),
                         }
@@ -260,7 +305,7 @@ def test_provider_current_socket_option_ab(
         print(
             json.dumps(
                 {
-                    "proof": "PROVIDER_CURRENT_SOCKET_AB",
+                    "proof": "PROVIDER_CURRENT_JIT_AB",
                     "route": route,
                     "total_ms": total_ms,
                     "total_capped": capped,

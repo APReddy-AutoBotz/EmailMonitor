@@ -235,6 +235,19 @@ def test_new_composer_preserves_original_one_shot_guest_parser_and_gates(
 ) -> None:
     content = (ROOT / relative).read_bytes()
     if relative == ".github/workflows/application.yml":
+        # Independently reviewed split: preserve the original backend bytes.
+        # The new static/join suffix is covered by test_application_check_phases,
+        # including every command and non-success result, not this original pin.
+        suffix = b"\n  static:\n"
+        backend = b"\n  backend:\n"
+        command = b"run_xml_integration.py application-backend\n"
+        assert content.count(suffix) == 1
+        assert content.count(backend) == 1
+        assert content.count(command) == 1
+        content = content.split(suffix, 1)[0]
+        assert content.count(backend) == content.count(command) == 1
+        content = content.replace(backend, b"\n  scaffold:\n")
+        content = content.replace(command, b"run_xml_integration.py application\n")
         # Independently reviewed EM-017 aggregate capacity-only adjustment.
         # Normalize precisely that field; every other original byte stays pinned.
         assert content.count(b"    timeout-minutes: 25\n") == 1

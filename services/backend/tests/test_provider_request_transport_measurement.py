@@ -213,3 +213,116 @@ def test_category_totals_reconcile_for_fixed_request_sequence(
         set(row) == {"category", "count", "cursor_ms", "cursor_capped"} for row in categories
     )
     assert measured.category_counts["UNKNOWN"] == 0
+
+
+@pytest.mark.parametrize("value", [None, True, 1, "private", "ON", object()])
+def test_jit_setting_rejects_unknown_values_without_echo(value: object) -> None:
+    with pytest.raises(AssertionError, match="^SQL A/B JIT setting invalid$"):
+        probe.jit_setting(value)
+
+
+class SetupConnection:
+    def __init__(self, replies: list[object]) -> None:
+        self.replies = iter(replies)
+        self.sql: list[str] = []
+        self.active = False
+        self.committed = False
+
+    def in_transaction(self) -> bool:
+        return self.active
+
+    def execute(self, statement: Any) -> "SetupConnection":
+        self.active = True
+        self.sql.append(str(statement))
+        return self
+
+    def scalar_one(self) -> object:
+        return next(self.replies)
+
+    def commit(self) -> None:
+        self.active = False
+        self.committed = True
+
+
+@pytest.mark.parametrize("enabled", [False, True])
+@pytest.mark.parametrize("available", [False, True])
+def test_jit_setup_probes_with_on_then_commits_requested_arm(
+    enabled: bool, available: bool
+) -> None:
+    connection = SetupConnection(["off", available, "on" if enabled else "off"])
+    assert probe.configure_jit(connection, enabled, time.monotonic() + 20) == (False, available)
+    assert connection.sql == [
+        probe.STATEMENT_TEMPLATES["timeout_settings"],
+        "SHOW jit",
+        "SET SESSION jit = on",
+        "SELECT pg_catalog.pg_jit_available()",
+        "SET SESSION jit = on" if enabled else "SET SESSION jit = off",
+        "SHOW jit",
+    ]
+    assert connection.committed and not connection.in_transaction()
+
+
+@pytest.mark.parametrize(
+    "replies,error",
+    [
+        (["private"], "setting invalid"),
+        (["on", 1], "availability invalid"),
+        (["on", True, "private"], "setting invalid"),
+        (["on", True, "on"], "setting mismatch"),
+    ],
+)
+def test_invalid_jit_setup_cannot_commit(replies: list[object], error: str) -> None:
+    connection = SetupConnection(replies)
+    with pytest.raises(AssertionError, match=f"^SQL A/B JIT {error}$"):
+        probe.configure_jit(connection, False, time.monotonic() + 20)
+    assert not connection.committed
+
+
+def test_jit_setup_budget_and_active_transaction_guards() -> None:
+    connection = SetupConnection([])
+    with pytest.raises(AssertionError, match="measurement budget exhausted"):
+        probe.configure_jit(connection, False, time.monotonic() - 1)
+    assert connection.sql == []
+    connection.active = True
+    with pytest.raises(AssertionError, match="setup scope invalid"):
+        probe.configure_jit(connection, False, time.monotonic() + 20)
+    assert connection.sql == []
+
+
+def test_jit_setup_commit_failure_prevents_return() -> None:
+    class CommitFailure(SetupConnection):
+        def commit(self) -> None:
+            raise RuntimeError("synthetic commit failure")
+
+    connection = CommitFailure(["on", True, "off"])
+    with pytest.raises(RuntimeError, match="synthetic commit failure"):
+        probe.configure_jit(connection, False, time.monotonic() + 20)
+    assert not connection.committed
+
+
+def test_jit_setting_does_not_inspect_hostile_values() -> None:
+    class Hostile:
+        def __str__(self) -> str:
+            raise AssertionError("No raw values")
+
+        __repr__ = __str__
+
+    class HostileString(str):
+        def __eq__(self, other: object) -> bool:
+            raise AssertionError("No subclass comparison")
+
+    for value in (Hostile(), HostileString("on")):
+        with pytest.raises(AssertionError, match="^SQL A/B JIT setting invalid$"):
+            probe.jit_setting(value)
+
+
+def test_jit_setup_stops_between_statements_when_budget_expires(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ticks = iter([1.0, 21.0])
+    monkeypatch.setattr(time, "monotonic", lambda: next(ticks))
+    connection = SetupConnection([])
+    with pytest.raises(AssertionError, match="measurement budget exhausted"):
+        probe.configure_jit(connection, False, 20)
+    assert connection.sql == [probe.STATEMENT_TEMPLATES["timeout_settings"]]
+    assert not connection.committed

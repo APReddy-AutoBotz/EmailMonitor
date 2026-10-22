@@ -21,10 +21,21 @@ if TYPE_CHECKING:
 ROOT = Path(__file__).resolve().parents[2]
 ALIAS = "emailmonitor-parser-diagnostic:local"
 MARKER = "synthetic-test-only"
-CONSUMER_SECONDS = {"application": 1200, "transport": 900, "installed": 900}
-WRAPPER_SECONDS = {"application": 1200, "transport": 1200, "installed": 1200}
+CONSUMER_SECONDS = {
+    "application": 1200,
+    "application-backend": 1200,
+    "transport": 900,
+    "installed": 900,
+}
+WRAPPER_SECONDS = {
+    "application": 1200,
+    "application-backend": 1200,
+    "transport": 1200,
+    "installed": 1200,
+}
 MODES = {
     "application": ("bash", "scripts/check_tenant_foundation.sh"),
+    "application-backend": ("bash", "scripts/check_tenant_foundation.sh", "backend"),
     "transport": ("bash", "scripts/packaging/check_xml_transport.sh"),
     "installed": ("bash", "scripts/packaging/check_xml_installed.sh"),
 }
@@ -205,7 +216,7 @@ def run_consumer(
     }
     commands = (
         (MODES[mode],)
-        if mode in {"application", "installed"}
+        if mode in {"application", "application-backend", "installed"}
         else (MODES[mode] + ("transport",), MODES[mode] + ("operator",))
     )
     for arguments in commands:
@@ -426,10 +437,10 @@ def main() -> None:
         kind: signal.signal(kind, interrupted)
         for kind in (signal.SIGINT, signal.SIGTERM, signal.SIGALRM)
     }
-    # Both workflow ceilings are 25 minutes. The application aggregate grew
-    # with actual service acceptance; per-test/runtime bounds remain unchanged.
-    # Setup and final runner overhead must still fit outside this deadline and
-    # the separate 180-second cleanup plus owned consumer stop/reap bounds.
+    # Image-owning jobs retain 25-minute ceilings. Static/frontend CI gates run
+    # separately; the full application mode and all per-test bounds remain.
+    # 1200 + 180 cleanup + up to 10 stop/reap seconds leaves at most 110 seconds
+    # for setup/final runner overhead. Workload headroom is a separate risk.
     signal.alarm(WRAPPER_SECONDS[mode])
     try:
         execute(mode, dict(os.environ))

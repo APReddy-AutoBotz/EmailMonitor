@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  scaffold:
+  backend:
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     services:
@@ -73,4 +73,40 @@ jobs:
           EM_REQUIRE_SYNTHETIC_RESTORE: "true"
           EM_REQUIRE_XML_ISOLATION: "true"
           EM_REQUIRE_XML_INTEGRATION: "synthetic-test-only"
-        run: uv run --project services/backend python scripts/packaging/run_xml_integration.py application
+        run: uv run --project services/backend python scripts/packaging/run_xml_integration.py application-backend
+
+  static:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.19.0
+      - name: Install pinned development tools
+        run: |
+          python3 -m venv "$RUNNER_TEMP/tooling"
+          "$RUNNER_TEMP/tooling/bin/python" -m pip install uv==0.12.23
+          echo "$RUNNER_TEMP/tooling/bin" >> "$GITHUB_PATH"
+          npm install --global pnpm@11.25.0
+      - name: Execute all documentation and Python static checks
+        run: scripts/check.sh static
+      - name: Execute all frontend checks and production build
+        run: scripts/check.sh frontend
+
+  scaffold:
+    if: ${{ always() }}
+    needs: [backend, static]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 1
+    steps:
+      - name: Require every application gate to succeed
+        env:
+          BACKEND_RESULT: ${{ needs.backend.result }}
+          STATIC_RESULT: ${{ needs.static.result }}
+        run: |
+          set -euo pipefail
+          test "$BACKEND_RESULT" = success
+          test "$STATIC_RESULT" = success

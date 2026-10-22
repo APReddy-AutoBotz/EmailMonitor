@@ -402,3 +402,58 @@ An earlier fresh run also passed (111.28s), but its setup briefly overlapped the
 normal frontend tail; a second empty checkout was run after completion to preserve
 serial final validation. Fresh installations were absent before setup; caches
 reused. Actual statement-category measurements remain pending.
+
+## Statement attribution and bounded CI split
+
+Head `fe315a3e9f2f25116ddef64313cddc118d12492e`, tree
+`ae62f549b6098b3a7123517b010b450c4a3e772a`, completed six successful workflows.
+Application [39730072508](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/39730072508)
+passed all 4589 backend cases (1146.44s) and 77 React cases, but the unchanged
+1200-second wrapper expired during final frontend build. Cleanup was verified;
+this is an overall failed gate, not a complete application pass.
+
+Actual category receipts had UNKNOWN=0 and identical output/count vectors. Source
+fences (two executions) took 199-269ms; job lock 151-180ms; execution match 90-114ms;
+job permission 65-95ms. Binding/settings were about 0-1ms. The nonuniform pattern
+supports investigating nested authority functions rather than socket tuning, but
+does not distinguish planning, JIT or server execution. These categories preserve
+repeated live permission/delegation/write checks; none is removed or cached.
+
+Service [39730072443](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/39730072443)
+passed broker/HTML and failed four XML cases (473.74s), with cleanup verified.
+Packaging worker refusal timed out despite capturing the exact refusal marker;
+stdout was empty, container remained running/non-OOM, and cleanup was verified.
+This distinguishes observed refusal emission from completed process/attach exit;
+it does not establish why completion exceeded the bound.
+
+The next test-only discriminator replaces socket variation with JIT OFF/ON/ON/OFF
+on fresh disposable connections, retaining the same measured requests, fixed socket
+settings and authority semantics. Six fixed setup statements per arm apply existing
+local caps, read baseline, enable JIT to test availability, set/read back the desired
+arm and commit before measurement. No thresholds or production settings change.
+Only booleans and existing bounded category receipts are emitted. Constructor/setup
+can warm connection-local state identically across arms; any benefit establishes
+workload sensitivity, not by itself the installed timeout's cause.
+
+Separately reviewed CI orchestration splits static/frontend checks from the complete
+unfiltered actual backend suite. Closed script phases retain the full default local
+aggregate; an always-evaluated scaffold join requires explicit success from both
+workers. No test, integration requirement, image guard or per-test/runtime deadline
+is dropped. Existing backend wrapper 1200s + stop/reap up to 10s + cleanup 180s
+leaves at most 110s within the 25-minute job for setup/finalization. Approximately
+35s observed backend work headroom is distinct and still variance-sensitive. No
+additional backend capacity, test sharding or retries are introduced by this split.
+
+JIT/split candidate focused checks: 43 pure experiment tests with two SQL skips;
+548 split/integration/packaging checks passed. Independent source review approved
+both slices, including fixed setup readbacks, unknown-input sanitization and the
+strict success join. The inherited workflow snapshot retains its original hash
+through a narrow reviewed normalization with unique boundaries; separate tests
+cover the new phases, suffix and failure/cancellation/skipped join outcomes.
+
+Final serial normal and empty-checkout aggregates passed 4298 backend cases with
+379 infrastructure skips, 77 React cases, 347-file strict mypy, 349-file Ruff/format,
+documentation, inventory and frontend build. Backend timings: 109.19s and 113.33s.
+Fresh installations were absent before setup; dependency caches reused. The local
+default aggregate still runs every original command. Actual hosted JIT results,
+new split orchestration and complete installed acceptance remain pending.
