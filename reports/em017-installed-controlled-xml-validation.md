@@ -276,3 +276,52 @@ documentation, inventory and frontend build. Backend times were 101.09s and 104.
 The fresh checkout had no Python/frontend installation before setup; dependency
 caches were reused. Independent source review found no blocker. Hosted exact-head
 verification is pending and previous service failures remain unresolved.
+
+## Timing/import head hosted result and test-only experiment
+
+Head `dd0e02aa1c4dd7c8e2518d1c3d6953d8d91f7537`, tree
+`33939c0fb4a97a865f1f6054270dfd9bd12494fb`, completed seven successful workflows.
+Application [39721294305](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/39721294305)
+passed 4562 backend cases without skips in 1125.15s, plus 77 React cases and owned
+cleanup. Service [39721294262](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/39721294262)
+packaging passed on its first attempt: two uncached builds, equal artifacts/base
+inventories/image contents, 14 network-none containers, five production refusals
+per image and verified cleanup. Prior timeout causality remains unestablished.
+
+Installed broker (12 cases, 114.13s) and HTML (112.56s) passed, but all four XML
+cases failed (361.17s); cleanup was verified. Last-completed CURRENT callbacks
+reported worker elapsed and supervisor roundtrip in [100ms,1s); initial acquire
+remaining budget was [5s,20s). Keyword/direct/crash timed out after 21/22/24 valid
+replies. Revocation was waiting on RESOURCE_ACQUIRE after six valid replies.
+These observations do not isolate SQL or network latency.
+
+Pinned pg8000 inspection found three exchanges per parameterized query and no
+TCP_NODELAY option enabled by default. Its buffered writes and response reads do
+not establish a Nagle/delayed-ACK stall. A bounded local actual-driver/authored-wire
+loopback experiment (six alternating modes, 16 parameterized queries per round,
+no injected delays) found medians about 0.17-0.20ms in both modes, maximum 0.434ms.
+It reproduced no stall or meaningful benefit and omitted actual SQL, TLS and the
+container path. No production socket change is justified by that experiment.
+
+The next independently reviewed change is test-only: existing disposable service
+fixtures compare OFF/ON/ON/OFF socket settings on fresh physical connections with
+the same provider request/fence sequence, route, endpoint and TLS state. It checks
+physical identity/readback and identical results/SQL counts, uses fixed small
+samples within an unchanged lease and a 20-second whole-experiment cap, and removes
+listeners/disposes each engine. Only rounded saturated timing totals and fixed
+labels/counts may be reported, never SQL, parameters, endpoints or credentials.
+There is no production hook, caching, speedup assertion or deadline extension.
+Actual hosted execution and interpretation remain pending.
+
+Implementation detail: the experiment's 20-second budget is cooperative admission/
+observation checking, not asynchronous interruption of an in-flight SQL call.
+Existing five-second SQL limits remain unchanged. Nested cleanup guarantees engine
+disposal even if listener removal raises. Initial focused checks passed 14 pure
+cases with two explicit PostgreSQL-dependent skips; independent source review GO.
+
+Test-only experiment candidate final serial normal/empty-checkout gates each passed
+4199 backend cases with 379 infrastructure skips, 77 React cases, 346-file strict
+mypy, 348-file Ruff/format, documentation, inventory and frontend build. Backend
+timings were 97.65s and 102.98s. Fresh Python/frontend installations were absent
+before setup; caches were reused. Neither local run executes the PostgreSQL A/B
+experiment. Independent source review GO; exact-head hosted measurements pending.
