@@ -420,3 +420,14 @@ keyboard review/export and post-observation crash recovery run in the installed
 XML consumer of the existing owned packaging wrapper; inherited tenant,
 revocation, source, parser, browser and cleanup gates remain required.
 [Current evidence and gaps](../reports/em017-installed-controlled-xml-validation.md).
+
+## EM-017 closed service-authority restore candidate
+
+FR-001/021/022/024/025/029/030 and NFR-001/003/006/008/013/015/016/018 map to
+[the closed restore contract](67-closed-service-authority-restore.md). Pure service
+restore contracts cover immutable authority, monotonic revocation, coherent audit
+and security/export drift refusal; actual service restore tenant tests must prove
+populated dump/restore, no revived work and closed target cleanup. Legacy restore,
+actual service-login/broker and installed operator tests remain mandatory.
+[Evidence](../reports/em017-service-restore-validation.md) separates pending actual
+acceptance from local skips; no production RPO/RTO or serving restore is claimed.

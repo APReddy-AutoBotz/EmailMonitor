@@ -1,3 +1,9 @@
+## 2026-10-22 — Closed synthetic service restore candidate
+
+- Add a separate bounded service-principal/delegation/audit restore seal and refusal tests.
+- Preserve immutable deadlines, current privacy and export state, role/schema controls and legacy refusal.
+- Keep the owned synthetic target closed; actual acceptance remains pending in the [report](reports/em017-service-restore-validation.md).
+
 ## 2026-10-20 — Retained article-quality review candidate
 
 - Add a current-authorized article-quality read view and evidence-drawer warnings for retained parser reasons.

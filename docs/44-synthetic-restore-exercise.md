@@ -28,3 +28,10 @@ The coordinator refuses an unrepresented job, new policy version, changed identi
 `test_restore_tenant.py` must execute in application CI with EM_REQUIRE_SYNTHETIC_RESTORE=true and the already-owned PostgreSQL container ID. It requires actual dump/restore, closed CONNECT checks, coherent current suppression/tombstone/source replay, physical stale-content removal, direct restored-runtime contextless/forged-scope/cross-tenant SQL refusal with forced-RLS/ownership checks, denied old artifact download, exact unaffected artifact hash, conserved job/usage state and actual broker work reconstruction. Pure `test_restore_contracts.py` tests refusal/state/grammar and archive integrity; they do not supply database or recovery evidence. Other controlled/browser/parser/UI gates remain mandatory and unchanged.
 
 Record `exercise_seconds` for this disposable exercise only. `production_rpo_rto_measured` remains false. Actual encrypted backup/object manifests, independent regional infrastructure, real OIDC/secrets, operating access, staging deployments, backup expiry and measured production/staging RPO/RTO are remaining EM-017 work. Restoration of newer policy/authentication/business histories is outside this partial profile. Production/live execution remains unavailable.
+
+## Separate populated-service candidate
+
+This legacy profile continues to refuse populated service authority. The separate
+[closed service seal](67-closed-service-authority-restore.md) tests monotonic service
+revocation and current audit/role/schema/export state in a target that never opens.
+It does not relax this profile or provide a general service restore command.
