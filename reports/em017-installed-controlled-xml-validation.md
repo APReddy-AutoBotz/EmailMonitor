@@ -226,3 +226,53 @@ not execute the two SQL regressions or establish runtime performance improvement
 Independent source review approved the exact-writer lock evidence, transaction
 composition and closed packaging diagnostics. Hosted exact-head acceptance is
 still required; the preceding diagnostic-head service failures remain unresolved.
+
+## Single-transaction head hosted result
+
+Head `fcc8626f39ecc39f2e212eb53e4292be8af4c55c`, tree
+`6599585bbe30ac610be3f7dd14e5be8bf8590d75`, completed seven successful workflows.
+Application [39718602096](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/39718602096)
+passed all 4486 backend cases without skips in 787.11s, including both new actual
+SQL lock/revocation cases, plus 77 React cases and owned cleanup. Cross-run elapsed
+time differences do not establish a causal performance improvement.
+
+Service [39718601847](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/39718601847)
+passed 12 broker cases (100.67s) and inherited installed HTML (98.23s), but all four
+XML cases failed (349.74s), with owned cleanup verified. Keyword and crash snapshots
+showed CURRENT waits after 25 and 28 validated replies; direct URL showed
+RESOURCE_FINISH after 26 replies. Revocation saw CURRENT after eight validated
+replies at its assertion, without a recorded failure. These observations do not
+establish the cause of an unanswered callback or satisfy installed XML acceptance.
+
+Packaging again failed the unchanged first API production-refusal attach limit:
+captured stdout and stderr were empty, shared budget remained, container was
+running/non-OOM and cleanup was verified. Captured-empty is not emitted-empty.
+No retry was performed. Read-only source inspection found avoidable application,
+server and broker imports before configuration rejection; import latency remains
+an unmeasured candidate, not an established cause.
+
+The next independently reviewed slice defers unnecessary imports while preserving
+the existing Pydantic models, validators and single bounded configuration read.
+It also explicitly extends the strict callback reply schema with closed elapsed
+and initial remaining-budget buckets, without additional messages. The supervisor
+records its own round-trip bucket; all last-completed fields update atomically
+only after full reply validation and freeze on first failure. Worker timings are
+untrusted diagnostic observations, never authority/deadline inputs. They describe
+completed callbacks, not the unanswered callback, and cannot isolate SQL or wire
+latency precisely. No SQL observer, timeout extension or authority reduction is
+included. Final implementation review and all exact-head gates remain required.
+
+Timing/import candidate local verification: 230 focused channel/launcher/diagnostic/
+harness tests and 434 import/API/delegation/cleanup/packaging tests passed. Fresh
+process tests demonstrate exact minimal production refusal without unnecessary
+execution imports and valid actual FastAPI route registration. AST comparison
+preserved executable logic apart from imports and function annotations; existing
+models/validators are unchanged. The reply is explicitly six keys: four existing
+correlation/success fields plus two finite timing enums, with no legacy fallback.
+
+Serial normal and empty-checkout gates each passed 4185 backend cases with 377
+infrastructure skips, 77 React cases, 344-file strict mypy, 346-file Ruff/format,
+documentation, inventory and frontend build. Backend times were 101.09s and 104.81s.
+The fresh checkout had no Python/frontend installation before setup; dependency
+caches were reused. Independent source review found no blocker. Hosted exact-head
+verification is pending and previous service failures remain unresolved.

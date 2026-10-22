@@ -418,7 +418,7 @@ def test_cli_returns_failure_and_only_fixed_diagnostics_for_cleanup_errors(
     if cleanup_fails:
         worker.close.side_effect = RuntimeError(f"cleanup-{SECRET}: {config.broker_url}")
     factory = Mock(return_value=worker)
-    monkeypatch.setattr(entrypoint, "ServiceWorker", factory)
+    monkeypatch.setattr(worker_module, "ServiceWorker", factory)
     monkeypatch.setattr(sys, "argv", ["emailmonitor-service", command, "--config", str(path)])
     assert entrypoint.main() == int(work_fails or cleanup_fails)
     factory.assert_called_once_with(config)
@@ -672,7 +672,7 @@ def test_cli_preserves_worker_failure_status_and_closes_resources(
     worker = Mock()
     controller = worker.application.Worker.return_value
     controller.exitcode = exitcode
-    monkeypatch.setattr(entrypoint, "ServiceWorker", Mock(return_value=worker))
+    monkeypatch.setattr(worker_module, "ServiceWorker", Mock(return_value=worker))
     monkeypatch.setattr(sys, "argv", ["service", "worker", "--config", str(path)])
     assert entrypoint.main() == 1
     controller.start.assert_called_once_with()
@@ -690,7 +690,7 @@ def test_cli_controller_stop_failure_still_closes_database_application(
     controller = worker.application.Worker.return_value
     controller.exitcode = 0
     controller.stop.side_effect = RuntimeError(SECRET)
-    monkeypatch.setattr(entrypoint, "ServiceWorker", Mock(return_value=worker))
+    monkeypatch.setattr(worker_module, "ServiceWorker", Mock(return_value=worker))
     monkeypatch.setattr(sys, "argv", ["service", "worker", "--config", str(path)])
     assert entrypoint.main() == 1
     worker.close.assert_called_once_with()
@@ -708,6 +708,7 @@ sys.path.insert(0,sys.argv[2])
 from types import SimpleNamespace
 from emailmonitor.runtime import entrypoint
 from emailmonitor.runtime.worker import broker_application
+from emailmonitor.runtime import worker as worker_module
 config = entrypoint.load_config(__import__('pathlib').Path(sys.argv[1]))
 app = broker_application(config)
 original = app.Worker
@@ -726,7 +727,7 @@ def controller(**options):
     value.blueprint.start = fail
     return value
 app.Worker = controller
-entrypoint.ServiceWorker = lambda supplied: SimpleNamespace(application=app,close=app.close)
+worker_module.ServiceWorker = lambda supplied: SimpleNamespace(application=app,close=app.close)
 sys.argv = ['service','worker','--config',sys.argv[1]]
 assert entrypoint.main() == 1
 assert (sys.stdout, sys.stderr) == streams

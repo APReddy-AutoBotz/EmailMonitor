@@ -22,6 +22,7 @@ from emailmonitor.fetching.resources import HopResources
 from emailmonitor.fetching.safety import FetchDenied, classify_url
 from emailmonitor.fetching.sciencedirect import AcquiredResponse, ProviderBoundary, ProviderRequest
 from emailmonitor.parsing.xml_protocol import XmlExpectation
+from emailmonitor.runtime.controlled_diagnostics import bucket_elapsed
 from emailmonitor.sources.provider_documents import QUERY
 from emailmonitor.sources.sciencedirect import ArticleIdentifier, SearchRequest
 
@@ -189,6 +190,8 @@ class ControlledChannel:
         ticket: object | None = None
         admitted = finished = False
         deadline = min(boundary.binding.deadline, time.monotonic() + 20)
+        # Observational initial budget, repeated unchanged; never a deadline input.
+        initial_remaining = bucket_elapsed(max(0.0, boundary.binding.deadline - time.monotonic()))
         try:
             self.pipe.send(
                 {
@@ -227,6 +230,7 @@ class ControlledChannel:
                 ):
                     raise ValueError
                 arguments = frame["arguments"]
+                callback_started = time.monotonic()
                 boundary.check_current()
                 if kind == "current" and arguments == {}:
                     pass
@@ -268,7 +272,14 @@ class ControlledChannel:
                 else:
                     raise ValueError
                 self.pipe.send(
-                    {"kind": "callback", "id": identifier, "sequence": sequence, "ok": True},
+                    {
+                        "kind": "callback",
+                        "id": identifier,
+                        "sequence": sequence,
+                        "ok": True,
+                        "elapsed_bucket": bucket_elapsed(time.monotonic() - callback_started).value,
+                        "initial_acquire_remaining_bucket": initial_remaining.value,
+                    },
                     deadline,
                 )
             raise ValueError

@@ -7,21 +7,15 @@ import ssl
 import threading
 import time
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 from urllib.parse import urlencode, urlsplit
 
-import uvicorn
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
-from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from emailmonitor.config import Settings
-from emailmonitor.identity.oidc import AuthenticationDenied, OIDCProvider
-from emailmonitor.runtime.assembly import TestRuntimeConfig
 from emailmonitor.runtime.delegation import ServiceBindings
-from emailmonitor.runtime.service_api import ServiceAPIConfig, service_api
+
+if TYPE_CHECKING:
+    from emailmonitor.runtime.assembly import TestRuntimeConfig
 
 
 def loopback_https(value: str) -> None:
@@ -53,6 +47,9 @@ class ReferenceIdentity(BaseModel):
 
     @model_validator(mode="after")
     def validate_reference(self) -> "ReferenceIdentity":
+        from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
+
         for endpoint in (
             self.issuer,
             self.authorization_endpoint,
@@ -93,7 +90,10 @@ class ReferenceAPI(BaseModel):
             raise ValueError("Explicit service bindings required")
         return self
 
-    def runtime(self) -> TestRuntimeConfig:
+    def runtime(self) -> "TestRuntimeConfig":
+        from emailmonitor.config import Settings
+        from emailmonitor.runtime.assembly import TestRuntimeConfig
+
         return TestRuntimeConfig(
             settings=Settings(environment="test", fixture_mode=True, identity_stub=True),
             runtime_database_url=self.runtime_database_url,
@@ -169,6 +169,8 @@ class ReferenceExchange:
         self.identity = identity
 
     def exchange(self, code: str, verifier: str, redirect_uri: str) -> str:
+        from emailmonitor.identity.oidc import AuthenticationDenied
+
         connection = None
         try:
             if (
@@ -217,6 +219,13 @@ class ReferenceExchange:
 
 
 def run_api(config: ReferenceAPI) -> None:
+    import uvicorn
+    from fastapi.responses import FileResponse
+    from fastapi.staticfiles import StaticFiles
+
+    from emailmonitor.identity.oidc import OIDCProvider
+    from emailmonitor.runtime.service_api import ServiceAPIConfig, service_api
+
     identity = config.identity
     provider = OIDCProvider(
         issuer=identity.issuer,

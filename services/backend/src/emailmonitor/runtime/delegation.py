@@ -4,14 +4,15 @@ Deployment supplies existing registered principals. This module cannot provision
 logins or enroll historical work, and request bodies never select principals.
 """
 
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from sqlalchemy import Connection, text
 
-from emailmonitor.organizations.database import AuthorizationDenied
 from emailmonitor.runtime.authority import MAX_WORK_SECONDS, WorkPurpose
+
+if TYPE_CHECKING:
+    from sqlalchemy import Connection
 
 
 class ServiceBinding(BaseModel):
@@ -46,8 +47,12 @@ class ServiceBindings(BaseModel):
         return self
 
     def issue(
-        self, connection: Connection, org: UUID, resource: UUID, purpose: WorkPurpose
+        self, connection: "Connection", org: UUID, resource: UUID, purpose: WorkPurpose
     ) -> None:
+        from sqlalchemy import text
+
+        from emailmonitor.organizations.database import AuthorizationDenied
+
         binding = next((entry for entry in self.tenants if entry.organization == org), None)
         if binding is None:
             raise ValueError("Explicit service binding required for this tenant")

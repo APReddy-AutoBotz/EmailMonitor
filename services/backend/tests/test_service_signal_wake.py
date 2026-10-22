@@ -17,6 +17,7 @@ from unittest.mock import MagicMock
 import pytest
 from celery.concurrency.solo import TaskPool  # type: ignore[import-untyped]
 from emailmonitor.runtime import entrypoint
+from emailmonitor.runtime import worker as worker_module
 from emailmonitor.runtime.signal_wake import SignalWakeState
 from emailmonitor.runtime.worker import ServiceWorker
 from kombu.asynchronous import Hub  # type: ignore[import-untyped]
@@ -397,7 +398,7 @@ def test_entrypoint_rejects_latched_signal_cleanup_failure_and_closes_pools(
     controller.exitcode = 0
     if late:
         controller.stop.side_effect = lambda: setattr(worker.signal_wake, "failed", True)
-    monkeypatch.setattr(entrypoint, "ServiceWorker", lambda _: worker)
+    monkeypatch.setattr(worker_module, "ServiceWorker", lambda _: worker)
     monkeypatch.setattr(entrypoint, "load_config", lambda _: None)
     monkeypatch.setattr(sys, "argv", ["service", "worker", "--config", "unused.json"])
     assert entrypoint.main() == 1

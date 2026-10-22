@@ -32,9 +32,11 @@ from emailmonitor.runtime.controlled_diagnostics import (
     CallbackKind,
     DiagnosticSnapshot,
     DiagnosticTracker,
+    ElapsedBucket,
     Failure,
     Origin,
     Phase,
+    bucket_elapsed,
 )
 from emailmonitor.runtime.controlled_pipes import FramedPipes
 from emailmonitor.runtime.pinned_xml import parse_pinned
@@ -63,6 +65,7 @@ class _Relay:
             self.sequence += 1
             if sequence >= MAX_CALLBACKS:
                 raise RuntimeError("Controlled callback limit")
+            callback_started = time.monotonic()
             self.pipe.send(
                 {
                     "kind": kind,
@@ -79,13 +82,39 @@ class _Relay:
             self.diagnostics.count("received")
             self.diagnostics.phase(Phase.CALLBACK_RETURN)
             if (
-                reply
-                != {"kind": "callback", "id": self.identifier, "sequence": sequence, "ok": True}
+                set(reply)
+                != {
+                    "kind",
+                    "id",
+                    "sequence",
+                    "ok",
+                    "elapsed_bucket",
+                    "initial_acquire_remaining_bucket",
+                }
+                or reply.get("kind") != "callback"
+                or reply.get("id") != self.identifier
                 or type(reply.get("sequence")) is not int
+                or reply.get("sequence") != sequence
                 or reply.get("ok") is not True
+                or any(
+                    type(reply.get(field)) is not str
+                    or reply[field]
+                    not in {
+                        bucket.value
+                        for bucket in ElapsedBucket
+                        if bucket is not ElapsedBucket.UNKNOWN
+                    }
+                    for field in ("elapsed_bucket", "initial_acquire_remaining_bucket")
+                )
             ):
                 self.diagnostics.fail(Failure.FRAMING, Origin.CALLBACK)
                 raise RuntimeError("Controlled callback failed")
+            self.diagnostics.completed(
+                CallbackKind(kind),
+                ElapsedBucket(reply["elapsed_bucket"]),
+                bucket_elapsed(time.monotonic() - callback_started),
+                ElapsedBucket(reply["initial_acquire_remaining_bucket"]),
+            )
             self.diagnostics.count("validated")
             self.diagnostics.phase(Phase.ACQUIRE_PROVIDER)
         except Exception:

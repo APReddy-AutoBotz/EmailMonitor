@@ -368,6 +368,10 @@ def test_actual_revocation_release_is_once_only_even_after_ambiguous_failure(
         "callback_sent",
         "callback_received",
         "callback_validated",
+        "last_completed_kind",
+        "worker_elapsed_bucket",
+        "supervisor_roundtrip_bucket",
+        "initial_acquire_remaining_bucket",
     ],
 )
 @pytest.mark.parametrize("hostile", ["SECRET https://private.invalid", True, -1, 129, object()])
@@ -467,7 +471,7 @@ def test_diagnosed_worker_preserves_original_failure_and_cleanup(
     assert len(original.__notes__) == 1
     note = original.__notes__[0]
     assert note.startswith("Installed XML worker diagnostic {")
-    assert len(note) < 400
+    assert len(note) < 640
     assert '"callback_sent": 128' in note
 
 

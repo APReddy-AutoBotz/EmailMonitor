@@ -29,6 +29,7 @@ from emailmonitor.runtime.authority import ServiceProcess
 from emailmonitor.runtime.controlled_diagnostics import (
     CallbackKind,
     DiagnosticSnapshot,
+    ElapsedBucket,
     Failure,
     Origin,
     Phase,
@@ -75,6 +76,10 @@ def worker_failure_note(worker: Any) -> str:
             ("origin", Origin),
             ("failure", Failure),
             ("callback_kind", CallbackKind),
+            ("last_completed_kind", CallbackKind),
+            ("worker_elapsed_bucket", ElapsedBucket),
+            ("supervisor_roundtrip_bucket", ElapsedBucket),
+            ("initial_acquire_remaining_bucket", ElapsedBucket),
         ):
             member = getattr(value, name)
             if type(member) is not expected or member not in expected:

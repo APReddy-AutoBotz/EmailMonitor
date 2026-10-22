@@ -49,6 +49,10 @@ def test_snapshot_is_immutable_bounded_and_first_failure_survives_cleanup() -> N
         "callback_sent",
         "callback_received",
         "callback_validated",
+        "last_completed_kind",
+        "worker_elapsed_bucket",
+        "supervisor_roundtrip_bucket",
+        "initial_acquire_remaining_bucket",
     }
 
 
@@ -113,7 +117,14 @@ def test_callback_sent_received_and_validated_are_separate(kind: str) -> None:
         def receive(self, deadline: float) -> dict[str, object]:
             assert tracker.snapshot.phase is Phase.CALLBACK_WAIT
             assert tracker.snapshot.callback_sent == 1
-            return {"kind": "callback", "id": "fixed", "sequence": 0, "ok": True}
+            return {
+                "kind": "callback",
+                "id": "fixed",
+                "sequence": 0,
+                "ok": True,
+                "elapsed_bucket": "lt_1ms",
+                "initial_acquire_remaining_bucket": "lt_20s",
+            }
 
     relay = _Relay(cast(Any, Pipe()), "fixed", bound.binding, tracker)
     relay.callback(kind, {})
