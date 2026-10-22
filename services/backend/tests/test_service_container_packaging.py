@@ -16,7 +16,7 @@ from unittest.mock import Mock
 import pytest
 import run_service_acceptance as runner
 import service_probe
-from run_xml_acceptance import ProcessDiagnostics, ProcessFailure
+from run_xml_acceptance import ProcessDiagnostics, ProcessFailure, StderrClass, StdoutPresence
 
 from artifacts import PackagingRefused
 
@@ -309,12 +309,10 @@ def test_default_entrypoint_is_exercised_without_override(
 
     monkeypatch.setattr(owned, "inspect", inspect)
     monkeypatch.setattr(runner, "command", execute)
-    monkeypatch.setattr(
-        runner,
-        "bounded_process",
-        Mock(return_value=subprocess.CompletedProcess([], 0, b"usage:", b"")),
-    )
+    control = Mock(return_value=subprocess.CompletedProcess([], 0, b"usage:", b""))
+    monkeypatch.setattr(runner, "bounded_process", control)
     assert owned.smoke(IMAGE, 1) == b"usage:"
+    assert control.call_args.kwargs["diagnostics"].capture_refusal_output is False
 
 
 def test_guest_model_refusals_never_launch_an_application_child(
@@ -537,6 +535,8 @@ def test_failure_stage_is_bounded_and_first_failure_survives_cleanup(
             "host_phase": "unknown",
             "shared_budget_state": "inactive",
             "process_failure": "unknown",
+            "stdout_presence": "unknown",
+            "stderr_class": "unknown",
             "cleanup_container_state": "not_observed",
             "cleanup_oom": "unknown",
         }
@@ -571,6 +571,8 @@ def test_failure_report_never_formats_arbitrary_values(
         "host_phase",
         "shared_budget_state",
         "process_failure",
+        "stdout_presence",
+        "stderr_class",
         "cleanup_container_state",
         "cleanup_oom",
     ):
@@ -589,6 +591,8 @@ def test_failure_report_never_formats_arbitrary_values(
             "host_phase": "unknown",
             "shared_budget_state": "unknown",
             "process_failure": "unknown",
+            "stdout_presence": "unknown",
+            "stderr_class": "unknown",
             "cleanup_container_state": "unknown",
             "cleanup_oom": "unknown",
         }
@@ -627,6 +631,8 @@ def test_orchestration_failure_emits_only_exact_closed_diagnostic(
             "host_phase": "unknown",
             "shared_budget_state": "inactive",
             "process_failure": "unknown",
+            "stdout_presence": "unknown",
+            "stderr_class": "unknown",
             "cleanup_container_state": "not_observed",
             "cleanup_oom": "unknown",
         }
@@ -657,6 +663,8 @@ def test_primary_probe_failure_is_preserved_when_cleanup_also_fails(
             "host_phase": "unknown",
             "shared_budget_state": "inactive",
             "process_failure": "unknown",
+            "stdout_presence": "unknown",
+            "stderr_class": "unknown",
             "cleanup_container_state": "not_observed",
             "cleanup_oom": "unknown",
         }
@@ -682,6 +690,8 @@ def test_failure_before_resource_creation_has_no_cleanup_claim(
         "host_phase": "unknown",
         "shared_budget_state": "inactive",
         "process_failure": "unknown",
+        "stdout_presence": "unknown",
+        "stderr_class": "unknown",
         "cleanup_container_state": "not_observed",
         "cleanup_oom": "unknown",
     }
@@ -1067,14 +1077,18 @@ def test_primary_refusal_diagnostics_are_frozen_before_cleanup(
         self.refusal_index = 4
         self.host_phase = "stopped_inspect"
         self.shared_budget_state = "remaining"
-        self.process_diagnostics = ProcessDiagnostics(ProcessFailure.DEADLINE)
+        self.process_diagnostics = ProcessDiagnostics(
+            ProcessFailure.DEADLINE, True, StdoutPresence.EMPTY, StderrClass.EXACT_REFUSAL_MARKER
+        )
         raise PackagingRefused("private primary context")
 
     def cleanup(self: Any) -> None:
         self.refusal_index = 5
         self.host_phase = "container_create"
         self.shared_budget_state = "exhausted"
-        self.process_diagnostics = ProcessDiagnostics(ProcessFailure.OS_ERROR)
+        self.process_diagnostics = ProcessDiagnostics(
+            ProcessFailure.OS_ERROR, True, StdoutPresence.PRESENT, StderrClass.OTHER
+        )
         self.cleanup_container_state = "exited"
         self.cleanup_oom = "yes"
         raise PackagingRefused("private cleanup context")
@@ -1096,6 +1110,8 @@ def test_primary_refusal_diagnostics_are_frozen_before_cleanup(
         "host_phase": "stopped_inspect",
         "shared_budget_state": "remaining",
         "process_failure": "deadline",
+        "stdout_presence": "empty",
+        "stderr_class": "exact_refusal_marker",
         "cleanup_container_state": "exited",
         "cleanup_oom": "yes",
     }
@@ -1117,6 +1133,8 @@ def test_added_diagnostics_reject_nonexact_types_and_unknown_values(
         diagnostics.host_phase = String("start_attach")
         diagnostics.shared_budget_state = String("remaining")
         diagnostics.process_failure = String("deadline")
+        diagnostics.stdout_presence = String("present")
+        diagnostics.stderr_class = String("exact_refusal_marker")
         diagnostics.cleanup_container_state = String("running")
         diagnostics.cleanup_oom = String("yes")
         diagnostics.report()
@@ -1125,12 +1143,16 @@ def test_added_diagnostics_reject_nonexact_types_and_unknown_values(
         assert value["host_phase"] == "unknown"
         assert value["shared_budget_state"] == "unknown"
         assert value["process_failure"] == "unknown"
+        assert value["stdout_presence"] == "unknown"
+        assert value["stderr_class"] == "unknown"
         assert value["cleanup_container_state"] == "unknown"
         assert value["cleanup_oom"] == "unknown"
     diagnostics = runner.Diagnostics()
     diagnostics.host_phase = "private phase"
     diagnostics.shared_budget_state = "private budget"
     diagnostics.process_failure = "private cause"
+    diagnostics.stdout_presence = "private stdout"
+    diagnostics.stderr_class = "private stderr"
     diagnostics.cleanup_container_state = "private state"
     diagnostics.cleanup_oom = "private OOM"
     diagnostics.report()
@@ -1272,7 +1294,9 @@ def test_attach_failure_retains_exact_failed_target_and_typed_cause(
         assert kwargs["timeout"] <= 5
         assert kwargs["stdout_limit"] == 65536 and kwargs["stderr_limit"] == 4096
         assert type(kwargs["diagnostics"]) is ProcessDiagnostics
+        assert kwargs["diagnostics"].capture_refusal_output is True
         kwargs["diagnostics"].record(ProcessFailure.DEADLINE)
+        kwargs["diagnostics"].record_output(bytearray(), bytearray(b"service_runtime_failed\n"))
         raise PackagingRefused("xml_package_command_failed")
 
     control = Mock(side_effect=attach)
@@ -1284,7 +1308,30 @@ def test_attach_failure_retains_exact_failed_target_and_typed_cause(
     assert owned.failed_container == (target, "c" * 64, IMAGE)
     assert owned.process_diagnostics is not None
     assert owned.process_diagnostics.failure is ProcessFailure.DEADLINE
+    assert owned.process_diagnostics.stdout_presence is StdoutPresence.EMPTY
+    assert owned.process_diagnostics.stderr_class is StderrClass.EXACT_REFUSAL_MARKER
     assert owned.host_phase == "start_attach" and owned.refusal_index == 1
     assert inspect.call_count == 3
     assert control.call_count == 1
     assert control.call_args.args[0] == ["docker", "start", "--attach", target]
+
+
+@pytest.mark.parametrize("presence", list(StdoutPresence))
+@pytest.mark.parametrize("classification", list(StderrClass))
+def test_failure_output_classifications_roundtrip_only_closed_values(
+    presence: StdoutPresence, classification: StderrClass, capsys: pytest.CaptureFixture[str]
+) -> None:
+    diagnostics = runner.Diagnostics(
+        stage="production_refusals",
+        ordinal=1,
+        process_failure="deadline",
+        stdout_presence=presence.value,
+        stderr_class=classification.value,
+    )
+    diagnostics.report()
+    output = capsys.readouterr()
+    assert output.out == ""
+    assert len(output.err.encode()) < 512
+    result = json.loads(output.err)["service_packaging_failure"]
+    assert result["stdout_presence"] == presence.value
+    assert result["stderr_class"] == classification.value

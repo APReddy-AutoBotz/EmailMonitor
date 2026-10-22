@@ -30,7 +30,6 @@ from emailmonitor.organizations.roles import Capability
 from emailmonitor.progress.binding import bound
 from emailmonitor.progress.service import Progress, Work
 from emailmonitor.sources import provider_documents as catalog
-from emailmonitor.sources.access import current_policy
 from emailmonitor.sources.policy import Operation
 from emailmonitor.sources.sciencedirect import DiscoveryState, SearchRequest, advance
 
@@ -86,28 +85,32 @@ class ProviderJourney:
         lease = work.lease
         if work.url not in catalog.URLS:
             raise FetchDenied("controlled_provider_route_denied")
-        if work.kind == "discover":
-            row = self.progress.discovery.prepare(lease.organization, lease.job)
-            plan = row["plan"]
-            if not isinstance(plan, dict) or plan.get("effective_query") not in (
-                None,
-                catalog.QUERY,
-            ):
-                raise FetchDenied("controlled_provider_query_denied")
-            request = ProviderRequest(search=SearchRequest(query=catalog.QUERY, show=10))
-            if work.url != catalog.SEARCH_URL:
-                raise FetchDenied("controlled_provider_route_denied")
-        else:
-            row = self.xml.prepare(lease.organization, lease.job, work.url)
-            request = None
-        if row["source_id"] != catalog.SOURCE:
-            raise FetchDenied("controlled_provider_source_denied")
+        # One fresh authority transaction per check, committed before returning
+        # to the capability/network caller. Never reuse its connection or policy
+        # across checks; preserve both preparation and final policy fences.
         with self.progress.discovery._tenant(lease.organization, Capability.ACQUIRE_SOURCE) as (
             c,
             _,
         ):
-            # Fresh policy read after the lease/scope fence, never caller-owned policy.
-            self.progress.discovery._authorize(
+            if work.kind == "discover":
+                row = self.progress.discovery._prepare(c, lease.organization, lease.job)
+                plan = row["plan"]
+                if not isinstance(plan, dict) or plan.get("effective_query") not in (
+                    None,
+                    catalog.QUERY,
+                ):
+                    raise FetchDenied("controlled_provider_query_denied")
+                request = ProviderRequest(search=SearchRequest(query=catalog.QUERY, show=10))
+                if work.url != catalog.SEARCH_URL:
+                    raise FetchDenied("controlled_provider_route_denied")
+            else:
+                row = self.xml._scope(c, lease.organization, lease.job, work.url, browser=False)
+                request = None
+            if row["source_id"] != catalog.SOURCE:
+                raise FetchDenied("controlled_provider_source_denied")
+            # _authorize returns the policy it freshly read and authorized under
+            # its source locks. A second identical SELECT adds no authority.
+            policy = self.progress.discovery._authorize(
                 c,
                 lease.organization,
                 lease.job,
@@ -115,7 +118,6 @@ class ProviderJourney:
                 work.url,
                 work.kind == "discover",
             )
-            policy = current_policy(c, lease.organization, str(row["source_id"]))
         registry = catalog.documents(policy["support"], str(row["source_id"]))
         if request is None:
             registered = next((d for d in registry if d.source_url == work.url), None)

@@ -9,7 +9,9 @@ import shutil
 import subprocess
 import sys
 import tarfile
+import time
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, Mock
 
 import pytest
@@ -539,9 +541,13 @@ def test_control_reader_bounds_each_stream_while_running(stream: str) -> None:
     assert diagnostics.failure is runner.ProcessFailure.OUTPUT_LIMIT
 
 
-def test_control_reader_timeout_is_sanitized_and_kills_owned_process() -> None:
+def test_control_reader_timeout_is_sanitized_and_kills_owned_process(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     import run_xml_acceptance as runner
 
+    classify = Mock(side_effect=AssertionError("Other consumers must not expose their buffers"))
+    monkeypatch.setattr(runner.ProcessDiagnostics, "record_output", classify)
     diagnostics = runner.ProcessDiagnostics()
     with pytest.raises(PackagingRefused, match="^xml_package_command_failed$"):
         runner.bounded_process(
@@ -550,6 +556,148 @@ def test_control_reader_timeout_is_sanitized_and_kills_owned_process() -> None:
             diagnostics=diagnostics,
         )
     assert diagnostics.failure is runner.ProcessFailure.DEADLINE
+    assert diagnostics.stdout_presence is runner.StdoutPresence.UNKNOWN
+    assert diagnostics.stderr_class is runner.StderrClass.UNKNOWN
+    classify.assert_not_called()
+
+
+@pytest.mark.parametrize("enabled", [False, True])
+@pytest.mark.parametrize(
+    ("stdout", "stderr", "presence", "classification"),
+    [
+        (b"", b"", "empty", "empty"),
+        (b"", b"service_runtime_failed\n", "empty", "exact_refusal_marker"),
+        (b"private stdout", b"service_runtime_failed\n", "present", "exact_refusal_marker"),
+        (b"", b"service_runtime_failed", "empty", "other"),
+        (b"", b"service_runtime_failed\nprivate stderr", "empty", "other"),
+        (b"", b"private stderr\nservice_runtime_failed\n", "empty", "other"),
+        (b"", b"service_runtime_failed\n" * 2, "empty", "other"),
+        (b"", b"XML_PARSER_REFUSED\n", "empty", "other"),
+        (b"", b"\xff\x00private stderr", "empty", "other"),
+    ],
+)
+def test_refusal_timeout_classifies_only_existing_buffers_without_retaining_them(
+    stdout: bytes,
+    stderr: bytes,
+    presence: str,
+    classification: str,
+    enabled: bool,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import run_xml_acceptance as runner
+
+    process = MagicMock()
+    process.__enter__.return_value = process
+    process.stdout.fileno.return_value = 10
+    process.stderr.fileno.return_value = 11
+    selector = MagicMock()
+    selector.__enter__.return_value = selector
+    selector.get_map.return_value = {10: object(), 11: object()}
+    selector.select.return_value = [
+        (SimpleNamespace(fd=descriptor, data=name), None)
+        for descriptor, name, data in ((10, "stdout", stdout), (11, "stderr", stderr))
+        if data
+    ]
+    monkeypatch.setattr(subprocess, "Popen", Mock(return_value=process))
+    monkeypatch.setattr(selectors, "DefaultSelector", Mock(return_value=selector))
+    monkeypatch.setattr(os, "set_blocking", Mock())
+    read = Mock(side_effect=lambda descriptor, size: {10: stdout, 11: stderr}[descriptor])
+    monkeypatch.setattr(os, "read", read)
+    monkeypatch.setattr(time, "monotonic", Mock(side_effect=[100.0, 100.0, 101.0]))
+    diagnostics = runner.ProcessDiagnostics(capture_refusal_output=enabled)
+    with pytest.raises(PackagingRefused, match="^xml_package_command_failed$"):
+        runner.bounded_process(["fixed"], timeout=1, diagnostics=diagnostics)
+    assert diagnostics.failure is runner.ProcessFailure.DEADLINE
+    assert diagnostics.stdout_presence.value == (presence if enabled else "unknown")
+    assert diagnostics.stderr_class.value == (classification if enabled else "unknown")
+    assert vars(diagnostics) == {
+        "failure": runner.ProcessFailure.DEADLINE,
+        "capture_refusal_output": enabled,
+        "stdout_presence": runner.StdoutPresence(presence if enabled else "unknown"),
+        "stderr_class": runner.StderrClass(classification if enabled else "unknown"),
+    }
+    assert "private" not in repr(diagnostics)
+    assert read.call_count == bool(stdout) + bool(stderr)
+    selector.select.assert_called_once_with(1)
+    process.kill.assert_called_once_with()
+    process.wait.assert_called_once_with(timeout=5)
+
+
+@pytest.mark.parametrize("error_type", [RuntimeError, KeyboardInterrupt, SystemExit])
+@pytest.mark.parametrize("deadline", [False, True])
+def test_output_classification_failure_never_replaces_original_failure(
+    error_type: type[BaseException], deadline: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import run_xml_acceptance as runner
+
+    primary = RuntimeError("original private failure")
+    process = MagicMock()
+    process.__enter__.return_value = process
+    process.stdout.fileno.return_value = 10
+    process.stderr.fileno.return_value = 11
+    selector = MagicMock()
+    selector.__enter__.return_value = selector
+    selector.get_map.return_value = {10: object()}
+    if deadline:
+        selector.select.return_value = []
+        monkeypatch.setattr(time, "monotonic", Mock(side_effect=[100.0, 100.0, 101.0]))
+    else:
+        selector.select.side_effect = primary
+    monkeypatch.setattr(subprocess, "Popen", Mock(return_value=process))
+    monkeypatch.setattr(selectors, "DefaultSelector", Mock(return_value=selector))
+    monkeypatch.setattr(os, "set_blocking", Mock())
+    classify = Mock(side_effect=error_type("private classifier detail"))
+    monkeypatch.setattr(runner.ProcessDiagnostics, "record_output", classify)
+    diagnostics = runner.ProcessDiagnostics(capture_refusal_output=True)
+    with pytest.raises(PackagingRefused if deadline else RuntimeError) as caught:
+        runner.bounded_process(["fixed"], timeout=1, diagnostics=diagnostics)
+    if deadline:
+        assert str(caught.value) == "xml_package_command_failed"
+        assert diagnostics.failure is runner.ProcessFailure.DEADLINE
+    else:
+        assert caught.value is primary
+        assert diagnostics.failure is runner.ProcessFailure.UNKNOWN
+    assert diagnostics.stdout_presence is runner.StdoutPresence.UNKNOWN
+    assert diagnostics.stderr_class is runner.StderrClass.UNKNOWN
+    classify.assert_called_once_with(bytearray(), bytearray())
+    process.kill.assert_called_once_with()
+    process.wait.assert_called_once_with(timeout=5)
+
+
+def test_refusal_output_snapshot_is_first_only_and_exact_type_opt_in() -> None:
+    import run_xml_acceptance as runner
+
+    diagnostics = runner.ProcessDiagnostics(capture_refusal_output=True)
+    diagnostics.record_output(bytearray(b"private stdout"), bytearray(b"private stderr"))
+    diagnostics.record_output(bytearray(), bytearray(b"service_runtime_failed\n"))
+    assert diagnostics.stdout_presence is runner.StdoutPresence.PRESENT
+    assert diagnostics.stderr_class is runner.StderrClass.OTHER
+    assert "private" not in repr(diagnostics)
+    for enabled in (None, False, 1, "true"):
+        diagnostics = runner.ProcessDiagnostics(capture_refusal_output=enabled)  # type: ignore[arg-type]
+        diagnostics.record_output(bytearray(b"private"), bytearray(b"service_runtime_failed\n"))
+        assert diagnostics.stdout_presence is runner.StdoutPresence.UNKNOWN
+        assert diagnostics.stderr_class is runner.StderrClass.UNKNOWN
+
+
+def test_success_never_classifies_output_even_with_refusal_diagnostics(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import run_xml_acceptance as runner
+
+    classify = Mock(side_effect=AssertionError("Success must not classify"))
+    monkeypatch.setattr(runner.ProcessDiagnostics, "record_output", classify)
+    diagnostics = runner.ProcessDiagnostics(capture_refusal_output=True)
+    result = runner.bounded_process(
+        [sys.executable, "-c", "import sys;sys.stderr.write('service_runtime_failed\\n')"],
+        timeout=2,
+        diagnostics=diagnostics,
+    )
+    assert result.returncode == 0 and result.stderr == b"service_runtime_failed\n"
+    assert diagnostics.failure is None
+    assert diagnostics.stdout_presence is runner.StdoutPresence.UNKNOWN
+    assert diagnostics.stderr_class is runner.StderrClass.UNKNOWN
+    classify.assert_not_called()
 
 
 def test_control_command_never_exposes_failure_output() -> None:

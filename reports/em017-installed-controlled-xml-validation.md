@@ -161,3 +161,68 @@ installations were absent before creation; dependency caches were reused.
 Independent source review found no blocker. Counters are worker-session totals;
 startup failures before yielding a handle report diagnostics unavailable. Final
 immutable-tree review and diagnostic-head hosted execution remain required.
+
+## Diagnostic-head result and fresh authority composition
+
+Diagnostic head `a54bd4502db705a88cd32385efb45c907d403e17`, tree
+`477f8d766f3f40ed60cf019d36327fc9dcb88574`, completed seven successful workflows.
+Application [39714597160](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/39714597160)
+passed 4433 actual backend cases without skips in 1095.10s, 77 React cases and
+owned cleanup. Service [39714597193](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/39714597193)
+again failed the first packaging API refusal's five-second start/attach limit,
+with exact-owned cleanup verified and no observed OOM. No further blind retry was
+performed. The cause remains unestablished.
+
+Its installed job passed 12 actual broker cases (116.86s) and inherited HTML
+(115.92s), then failed all four XML cases (387.37s), with wrapper cleanup verified.
+The new snapshots showed CURRENT callback waits timing out after 18, 20 and 22
+validated replies for keyword, direct URL and crash respectively. Revocation's
+assertion observed RESOURCE_ACQUIRE waiting after six validated replies, with no
+failure yet recorded. These are session totals; snapshots identify the observed
+hop, not a worker-side root cause. Repeated valid exchanges rule out an initial
+attach/framing failure for those sessions.
+
+Source tracing identified avoidable repeated SQL work: each fresh provider request
+check opens two authorized transactions and reads policy again after authorization
+already returned it. The next independently reviewed composition uses one fresh
+short transaction per check, retaining preparation, scope and final authorization
+calls, then uses the final authorized policy. The existing service end fence and
+commit must finish before returning; no connection, row lock or authority snapshot
+survives across a callback/network boundary. Transaction and service-audit counts
+intentionally decrease from two to one per check. This is not caching or permission
+expansion; all callbacks and deadlines remain unchanged. Runtime benefit and
+installed acceptance must still be measured.
+
+A separate approved packaging diagnostic classifies only already-bounded output
+on failure: stdout presence and stderr empty/exact fixed refusal marker/other.
+It must preserve the first failure, original exception, output limits, deadlines,
+success assertions and cleanup. No raw output or new I/O is permitted. This can
+establish whether a refusal marker was observed, not why startup timed out.
+
+The authority composition and packaging classification received independent source
+GO. New pure tests cover both request routes, fresh transaction state, final policy
+selection and failures during preparation, authorization, service end and commit.
+Two new actual-SQL cases reuse the existing disposable service-role fixtures:
+keyword delegation revocation and article policy revocation. They identify the
+exact submitted writer and callback backend, require real lock contention, then
+require writer commit after authority transaction release and before binding
+return. The next fresh callback must deny. These cases complement, rather than
+replace, inherited lease/source/tenant denial coverage. Local PostgreSQL absence
+means those two cases are explicit skips until hosted execution.
+
+Packaging classifications describe bytes already captured when failure occurred;
+"empty" does not prove the guest emitted nothing. Focused packaging consumers
+passed 409 tests. A preliminary normal gate passed 4109 backend cases with 377
+infrastructure skips and 77 React cases; its SQL observer was then tightened to
+match the exact writer PID, so final normal/fresh gates are recorded separately.
+No migration, dependency, credential, persistent grant or deadline change is made.
+
+Final serial normal and separate empty-checkout gates both passed: 4109 backend
+cases/377 infrastructure skips, 77 React cases, 342-file strict mypy, 344-file
+Ruff/format, documentation, inventory and frontend build checks. Backend timings
+were 98.82s and 103.71s respectively. The fresh checkout started without Python or
+frontend installations; existing dependency caches were reused. These results do
+not execute the two SQL regressions or establish runtime performance improvement.
+Independent source review approved the exact-writer lock evidence, transaction
+composition and closed packaging diagnostics. Hosted exact-head acceptance is
+still required; the preceding diagnostic-head service failures remain unresolved.

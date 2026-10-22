@@ -15,7 +15,13 @@ from typing import Any
 from uuid import uuid4
 
 from base_inventory import validate_base_inventory
-from run_xml_acceptance import ProcessDiagnostics, ProcessFailure, bounded_process
+from run_xml_acceptance import (
+    ProcessDiagnostics,
+    ProcessFailure,
+    StderrClass,
+    StdoutPresence,
+    bounded_process,
+)
 from service_artifacts import collect_service, tracked_service_sources, verify_service_archive
 
 from artifacts import BASE, PLATFORM, PackagingRefused, archive, digest, materialize, read
@@ -99,6 +105,8 @@ HOST_PHASES = frozenset(
 )
 SHARED_BUDGET_STATES = frozenset({"unknown", "inactive", "remaining", "exhausted"})
 PROCESS_FAILURES = frozenset(reason.value for reason in ProcessFailure)
+STDOUT_PRESENCES = frozenset(presence.value for presence in StdoutPresence)
+STDERR_CLASSES = frozenset(classification.value for classification in StderrClass)
 CLEANUP_CONTAINER_STATES = frozenset(
     {"not_observed", "unknown", "missing", "created", "running", "exited", "other"}
 )
@@ -119,6 +127,8 @@ class Diagnostics:
     host_phase: str = "unknown"
     shared_budget_state: str = "inactive"
     process_failure: str = "unknown"
+    stdout_presence: str = "unknown"
+    stderr_class: str = "unknown"
     cleanup_container_state: str = "not_observed"
     cleanup_oom: str = "unknown"
 
@@ -164,6 +174,12 @@ class Diagnostics:
         process = self.process_failure if type(self.process_failure) is str else "unknown"
         if process not in PROCESS_FAILURES:
             process = "unknown"
+        stdout = self.stdout_presence if type(self.stdout_presence) is str else "unknown"
+        if stdout not in STDOUT_PRESENCES:
+            stdout = "unknown"
+        stderr = self.stderr_class if type(self.stderr_class) is str else "unknown"
+        if stderr not in STDERR_CLASSES:
+            stderr = "unknown"
         container = (
             self.cleanup_container_state if type(self.cleanup_container_state) is str else "unknown"
         )
@@ -185,6 +201,8 @@ class Diagnostics:
                         "host_phase": phase,
                         "shared_budget_state": budget,
                         "process_failure": process,
+                        "stdout_presence": stdout,
+                        "stderr_class": stderr,
                         "cleanup_container_state": container,
                         "cleanup_oom": oom,
                     }
@@ -620,7 +638,7 @@ class OwnedServiceBuilds:
         validate_profile(record, image_id, script)
         self.host_phase = "start_attach"
         self.failed_container = name, created.decode("ascii").strip(), image_id
-        self.process_diagnostics = ProcessDiagnostics()
+        self.process_diagnostics = ProcessDiagnostics(capture_refusal_output=refusal)
         result = bounded_process(
             ["docker", "start", "--attach", name],
             timeout=self.timeout(5 if refusal else 45),
@@ -851,6 +869,10 @@ def execute(diagnostics: Diagnostics) -> None:
             and type(process_diagnostics.failure) is ProcessFailure
         ):
             diagnostics.process_failure = process_diagnostics.failure.value
+            if type(process_diagnostics.stdout_presence) is StdoutPresence:
+                diagnostics.stdout_presence = process_diagnostics.stdout_presence.value
+            if type(process_diagnostics.stderr_class) is StderrClass:
+                diagnostics.stderr_class = process_diagnostics.stderr_class.value
         raise
     finally:
         diagnostics.mark("cleanup")
