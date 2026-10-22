@@ -325,3 +325,42 @@ mypy, 348-file Ruff/format, documentation, inventory and frontend build. Backend
 timings were 97.65s and 102.98s. Fresh Python/frontend installations were absent
 before setup; caches were reused. Neither local run executes the PostgreSQL A/B
 experiment. Independent source review GO; exact-head hosted measurements pending.
+
+## Initial A/B harness result
+
+Head `fb1a3ce4de0248ae8b609e0d0ebd81301fc314ec`, tree
+`a190116cb4e52ac25f2085c1992c86a903a2a3c0`, did not produce A/B measurements.
+Application [39724307394](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/39724307394)
+passed 4576 cases but failed both new experiment cases (917.11s), with cleanup
+verified. The harness incorrectly expected exact `pg8000.dbapi.Connection`;
+SQLAlchemy's pinned dialect imports top-level `pg8000`, which exports
+`pg8000.legacy.Connection`. Both cases stopped at this check before measurement.
+This is a test assumption failure, not transport/performance evidence. The next
+correction retains exact supported-class validation and adds an offline regression
+against the dialect's actual selected class; production behavior is unchanged.
+
+Service [39724307418](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/39724307418)
+again passed broker/HTML and failed four XML cases with the same timing pattern,
+with owned cleanup verified. Packaging failed the second (worker) production
+refusal's unchanged five-second attach limit, captured streams empty, container
+running/non-OOM and cleanup verified. No packaging/XML retry was performed.
+
+Inherited parser [39724307446](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/39724307446)
+passed functional fixtures but correctly refused memory-enforcement proof:
+11 observations showed stopped/exit137 with OOMKilled=false. Parser inputs were
+unchanged. Removal commands completed by control-flow evidence, but this harness
+has no post-removal absence/image-cleanup receipt. After all original runs became
+terminal, one unchanged parser-job retry was requested; original failure and all
+memory/deadline assertions are preserved. Its outcome remains pending.
+
+The single unchanged parser retry passed (job 119650270659): its first memory
+state observation was OOMKilled=true/exit137. Original failure remains recorded;
+retry success does not identify why its OOM flag differed.
+
+Exact-class correction source review GO. Serial normal and empty-checkout gates
+both passed 4201 backend cases with 379 infrastructure skips, 77 React cases,
+346-file strict mypy, 348-file Ruff/format and documentation/inventory/frontend
+checks. Backend times: 99.56s and 105.73s. Fresh installations were absent before
+setup; caches reused. The added regression verifies the actual installed dialect's
+selected class and rejects alternate/subclass shapes without opening connections.
+Actual SQL A/B measurements remain pending; no production transport change exists.

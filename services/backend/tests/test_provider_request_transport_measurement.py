@@ -3,6 +3,8 @@
 import time
 from typing import Any
 
+import pg8000.dbapi  # type: ignore[import-untyped]
+import pg8000.legacy  # type: ignore[import-untyped]
 import pytest
 import test_provider_request_transport_tenant as probe
 
@@ -59,3 +61,25 @@ def test_cursor_measurement_refuses_exhausted_budget(
     with pytest.raises(AssertionError, match="SQL A/B"):
         measurement.before()
     assert measurement.started is None
+
+
+def test_exact_connection_matches_installed_sqlalchemy_dialect() -> None:
+    from sqlalchemy.dialects.postgresql.pg8000 import PGDialect_pg8000
+
+    selected = PGDialect_pg8000.import_dbapi()  # type: ignore[no-untyped-call]
+    assert selected.Connection is pg8000.legacy.Connection
+    assert selected.Connection is not pg8000.dbapi.Connection
+    # Allocate without connecting: no sockets, authentication or database needed.
+    probe.require_driver_connection(object.__new__(selected.Connection))
+
+
+def test_connection_guard_rejects_other_driver_classes_and_subclasses() -> None:
+
+    class Derived(pg8000.legacy.Connection):  # type: ignore[misc]
+        pass
+
+    for value in (object(), object.__new__(pg8000.dbapi.Connection), object.__new__(Derived)):
+        with pytest.raises(
+            AssertionError, match="^Exact dialect-selected pg8000 connection required$"
+        ):
+            probe.require_driver_connection(value)

@@ -11,7 +11,7 @@ import ssl
 import time
 from typing import Any
 
-import pg8000.dbapi  # type: ignore[import-untyped]
+import pg8000.legacy  # type: ignore[import-untyped]
 import pytest
 from emailmonitor.progress.binding import bound
 from emailmonitor.progress.provider import ProviderJourney
@@ -26,6 +26,13 @@ from test_service_authority_tenant import ServiceCase
 from test_service_authority_tenant import _service_ci_guard as _service_ci_guard
 from test_service_authority_tenant import service_case as service_case
 from test_tenant_foundation import scenario as scenario
+
+
+def require_driver_connection(value: object) -> None:
+    # The pinned SQLAlchemy dialect imports top-level pg8000, whose Connection
+    # export is legacy.Connection, not the distinct pg8000.dbapi.Connection.
+    if type(value) is not pg8000.legacy.Connection:
+        raise AssertionError("Exact dialect-selected pg8000 connection required")
 
 
 def bounded_ms(seconds: float) -> tuple[int, bool]:
@@ -92,7 +99,7 @@ def test_provider_current_socket_option_ab(
                 with database.engine.connect() as connection:
                     assert not connection.in_transaction()
                     raw: Any = connection.connection.dbapi_connection
-                    assert type(raw) is pg8000.dbapi.Connection
+                    require_driver_connection(raw)
                     assert all(raw is not earlier for earlier in physical)
                     physical.append(raw)
                     transport = raw._usock
