@@ -1,28 +1,28 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { ApiError, ApiScope, errorMessage } from './client'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { ApiScope, errorMessage } from './client'
 import type { RuntimeProfile } from './runtimeProfile'
 import { scheduleSearch } from './search'
 export type Resource<T> = { data?: T; loading: boolean; error?: string; stale?: boolean }
 export function useResource<T>(scope: ApiScope, path: string | null, revision = 0): Resource<T> {
-  const [state, setState] = useState<Resource<T>>({ loading: true })
-  const lastPath = useRef<string | null>(null)
+  const request = useMemo(() => ({ scope, path, revision }), [scope, path, revision])
+  const [owned, setOwned] = useState<{ request: typeof request; resource: Resource<T> }>()
   useEffect(() => {
-    if (!path) { setState({ loading: false }); return }
+    const { scope, path } = request
+    if (!path) return
     const controller = new AbortController()
-    const changed = lastPath.current !== path
-    lastPath.current = path
-    setState(previous => changed ? { loading: true } : { ...previous, loading: true, error: undefined })
     scope.request<T>(path, { signal: controller.signal }).then(data => {
-      if (!controller.signal.aborted && !scope.closed) setState({ data, loading: false })
+      if (!controller.signal.aborted && !scope.closed) setOwned({ request, resource: { data, loading: false } })
     }).catch((error: unknown) => {
       if (controller.signal.aborted || scope.closed) return
-      setState(previous => ({ loading: false, error: errorMessage(error),
-        data: error instanceof ApiError && [401, 403, 404].includes(error.status) ? undefined : previous.data,
-        stale: !(error instanceof ApiError && [401, 403, 404].includes(error.status)) && previous.data !== undefined }))
+      setOwned(current => ({ request, resource: { loading: false, error: errorMessage(error), stale: current?.request.scope === scope && current.request.path === path && current.resource.data !== undefined } }))
     })
     return () => controller.abort()
-  }, [scope, path, revision])
-  return state
+  }, [request])
+  // A return to a previous path is a new request, including null/disabled intervals.
+  // Memo eviction also starts a new request; its old result can never gain ownership.
+  if (scope.closed || !path) return { loading: false }
+  if (owned?.request !== request) return { loading: true }
+  return owned.resource
 }
 export function useSettledSearch(scope: ApiScope, value: string): string | null {
   const [settled, setSettled] = useState({ scope, value })
@@ -46,4 +46,4 @@ export const truth = (value: boolean | null) => value === true ? 'Observed' : va
 export const uid = (value: string) => encodeURIComponent(value)
 export type Action = (label: string, work: () => Promise<unknown>, success?: string) => Promise<void>
 export type Confirm = (title: string, detail: string, work: () => Promise<unknown>) => void
-export type Context = { runtimeProfile?: RuntimeProfile; scope: ApiScope; revision: number; refresh: () => void; act: Action; confirm: Confirm; can: (capability: string) => boolean; identity: string; zone: string; openJob: (id: string) => void; openJobContacts?: (id: string, review: boolean) => void }
+export type Context = { runtimeProfile?: RuntimeProfile; scope: ApiScope; revision: number; refresh: () => void; act: Action; confirm: Confirm; can: (capability: string) => boolean; identity: string; zone: string; openJob: (id: string) => void; openJobContacts?: (id: string, review: boolean, item?: string) => void }

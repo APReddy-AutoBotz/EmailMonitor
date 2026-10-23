@@ -70,3 +70,8 @@ Deferred: new server-side outcome filters, attempts on each outcome row, histori
 events, cursor-security redesign, new evidence or review semantics. No live
 credentials, source activation, contact publication, merge or deployment follows
 from this UI slice.
+
+The subsequent [retained article filter increment](69-retained-article-filters.md)
+adds exact-item navigation and outcomes-only presence. The descriptions above
+record this earlier job-level slice; its unchanged 104-outcome acceptance remains
+required for the dependent increment.

@@ -585,3 +585,15 @@ The preceding actual operator proof passed, but two full-backend attempts reache
 the unchanged wrapper bound without final pytest summaries; both verified owned
 cleanup. New exact-tree normal/fresh, independent review and hosted receipts remain
 required. The linked validation record preserves those failed receipts.
+
+### FR-023 retained article filters — candidate (2026-10-23)
+
+A separate dependent increment after accepted PR49 adds exact job/item selection
+and outcomes-only candidate presence. It retains original Contact provenance,
+legacy default request/snapshot/cursor identity and current authority. Forward-only
+migration 0016 keeps existing service visibility private and uses exact-export
+captured binding validation for no-contact and inherited contacts-only work.
+[Scope](69-retained-article-filters.md) and [validation](../reports/retained-article-filters-validation.md)
+separate authored pure/browser cases from required actual SQL/service/operator
+proof. Frozen source review, serial normal/fresh gates and all hosted checks remain
+pending; this entry does not complete general FR-023 source/date/paper-equivalence filters.

@@ -76,6 +76,32 @@
       "title": "Optional Contact Fields",
       "type": "array",
       "uniqueItems": true
+    },
+    "item_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Item Id",
+      "description": "Exact retained article item; job_id is required when non-null."
+    },
+    "article_outcome_presence": {
+      "type": "string",
+      "enum": [
+        "all",
+        "observed_candidate",
+        "completed_without_candidate",
+        "unresolved"
+      ],
+      "default": "all",
+      "title": "Article Outcome Presence",
+      "description": "Filters only separate article outcomes; does not prune Contacts."
     }
   },
   "required": [
@@ -84,5 +110,30 @@
   ],
   "title": "ExportInput",
   "type": "object",
-  "$schema": "https://json-schema.org/draft/2020-12/schema"
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "allOf": [
+    {
+      "if": {
+        "required": [
+          "item_id"
+        ],
+        "properties": {
+          "item_id": {
+            "type": "string"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "job_id"
+        ],
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      }
+    }
+  ]
 }

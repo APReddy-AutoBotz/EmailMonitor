@@ -18,6 +18,7 @@ from emailmonitor.organizations.roles import Capability
 from emailmonitor.results.cursor import decode, encode
 from emailmonitor.results.models import (
     ArticleOutcome,
+    ArticleOutcomePresence,
     Contact,
     ContactPage,
     EvidenceView,
@@ -121,19 +122,31 @@ class Results:
             )
 
     def outcomes(
-        self, org: UUID, job: UUID | None = None, cursor: str | None = None, limit: int = 50
+        self,
+        org: UUID,
+        job: UUID | None = None,
+        cursor: str | None = None,
+        limit: int = 50,
+        *,
+        item_id: UUID | None = None,
+        article_outcome_presence: ArticleOutcomePresence = "all",
     ) -> OutcomePage:
         if not 1 <= limit <= 200:
             raise ValueError("Bounded page required")
-        filters = Filters(job_id=job)
+        filters = Filters(
+            job_id=job, item_id=item_id, article_outcome_presence=article_outcome_presence
+        )
         after = decode(org, "outcomes", filters, cursor)
         with self._tenant(org) as c:
             rows: Sequence[object] = (
                 c.execute(
-                    text("SELECT emailmonitor.result_outcomes(:org,:job,:first,:second,:limit)"),
+                    text(
+                        "SELECT emailmonitor.result_outcomes_filtered(:org,CAST(:filters AS jsonb),"
+                        ":first,:second,:limit)"
+                    ),
                     {
                         "org": org,
-                        "job": job,
+                        "filters": filters.model_dump_json(),
                         "first": after[0] if after else None,
                         "second": after[1] if after else None,
                         "limit": limit + 1,

@@ -24,3 +24,12 @@ EM-015d adds internal Python request/dispatch-binding and `xml-input-v1` byte-ch
 EM-015e adds the internal dispatch-only `CredentialResolver`/`CredentialLease` interface and closed controlled-provider owned-pipe diagnostic in [runbook50](../docs/50-controlled-provider-gateway.md). Neither is a public credential API, authority grant or production transport registration. Credential values are confined to the gateway and excluded from all request/response/parser/pipe contracts. The existing public JSON schemas, fixed synthetic policy and persistence guards remain unchanged.
 
 EM-015f extends `xml-retained-observation.schema.json` with optional provider provenance: controlled acquisition mode, source ID, exact canonical transport URL/fingerprint and requested FULL view. Server catalog/SQL guards independently bind identifier, profile and digest; schema shape cannot grant permission. An omitted provider block retains the exact original fixed-XML semantics. Search rows never supply fetch URLs, and synthetic logical routes remain distinct from API transport URLs. [Runbook51](../docs/51-controlled-provider-journey.md) documents the additive forward-only migration and retained evidence behavior.
+
+The bounded retained-article filter increment adds optional `item_id` and
+`article_outcome_presence` to `export-request.schema.json`. A non-null item requires
+`job_id`; the exact selector applies to both tables, while presence filters only
+article outcomes. Legacy defaults serialize without the new default keys; existing
+outcome records remain unchanged. Internal filtered snapshots contain exact
+captured item/source fingerprints for private current-authority validation.
+See [document 69](../docs/69-retained-article-filters.md); these fields authorize no
+new source, worker capability or acquisition route.

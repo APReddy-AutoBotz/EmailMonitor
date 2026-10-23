@@ -79,7 +79,7 @@ function Workspace(props: WorkspaceProps) {
   const brand = currentBrand(configuration.data, props.scope.organization)
   // Organization detail is the base resource; scoped paths intentionally require a trailing slash.
   const context: Context = { runtimeProfile: props.runtimeProfile, scope: props.scope, revision: props.revision, refresh: props.refresh, identity: props.identity, zone: organization.data?.timezone ?? 'UTC', can: capability => props.membership.capabilities.includes(capability), openJob: id => { props.setJob(id); props.setScreen('Jobs') },
-    openJobContacts: (id, review) => { setFilters(previous => ({ ...previous, [review ? 'review' : 'contacts']: { query: '', state: review ? 'needs_review' : 'accepted', target: 'all', job: id } })); props.setScreen(review ? 'Review queue' : 'Contacts'); props.setNotice('') },
+    openJobContacts: (id, review, item) => { setFilters(previous => ({ ...previous, [review ? 'review' : 'contacts']: { query: '', state: review ? 'needs_review' : 'accepted', target: 'all', job: id, item } })); props.setScreen(review ? 'Review queue' : 'Contacts'); props.setNotice('') },
     confirm: (title, detail, work) => props.confirm({ title, detail, work }), act: async (label, work, success = 'Saved. Current organization data refreshed.') => {
       if (props.busy || props.scope.closed) return
       props.setBusy(label); props.setNotice('')

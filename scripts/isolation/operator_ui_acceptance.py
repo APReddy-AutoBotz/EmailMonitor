@@ -225,6 +225,32 @@ async def authored_outcome_paging(
         offset = int(query.get("cursor", ["0"])[0])
         assert offset in {0, 25, 50, 75, 100, 125}
         requested_pages.append(offset)
+        presence = query.get("article_outcome_presence", ["all"])[0]
+        assert presence in {
+            "all",
+            "observed_candidate",
+            "completed_without_candidate",
+            "unresolved",
+        }
+        indices = (
+            list(range(127))
+            if presence == "all"
+            else (
+                [0]
+                if presence == "completed_without_candidate"
+                else (
+                    list(range(5, 127, 6))
+                    if presence == "observed_candidate"
+                    else [index for index in range(1, 127) if index % 6 != 5]
+                )
+            )
+        )
+        if query.get("item_id"):
+            indices = [
+                index
+                for index in indices
+                if query["item_id"] == [f"00000000-0000-4000-8000-{index + 1:012d}"]
+            ]
         items = [
             {
                 "organization_id": organization,
@@ -247,9 +273,12 @@ async def authored_outcome_paging(
                 "technical_status": "not_checked",
                 "outreach_eligibility": "not_assessed",
             }
-            for index in range(offset, min(offset + 25, 127))
+            for index in indices[offset : offset + 25]
         ]
-        payload = {"items": items, "next_cursor": str(offset + 25) if offset + 25 < 127 else None}
+        payload = {
+            "items": items,
+            "next_cursor": str(offset + 25) if offset + 25 < len(indices) else None,
+        }
         if hold and offset == 25:
             held_offset = offset
             requested.set()
@@ -302,10 +331,15 @@ async def authored_outcome_paging(
             await expect(region).to_contain_text(f"Page {number + 1}: {count} article outcomes")
             rows = table.locator("tbody tr")
             await expect(rows).to_have_count(count)
-            seen.extend(await rows.locator("td:first-child").all_text_contents())
+            seen.extend(
+                await rows.locator("td:first-child").evaluate_all(
+                    "nodes => nodes.map(node => node.firstChild.textContent)"
+                )
+            )
             if number < 5:
                 await activate(
-                    page, region.get_by_role("button", name="Next article outcome page", exact=True)
+                    page,
+                    region.get_by_role("button", name="Next article outcome page", exact=True),
                 )
                 checkpoint("outcomes_next_focus")
                 await expect(heading).to_be_focused()
@@ -325,7 +359,8 @@ async def authored_outcome_paging(
         for number in range(5, 0, -1):
             checkpoint("outcomes_previous_rows")
             await activate(
-                page, region.get_by_role("button", name="Previous article outcome page", exact=True)
+                page,
+                region.get_by_role("button", name="Previous article outcome page", exact=True),
             )
             await expect(region).to_contain_text(f"Page {number}: 25 article outcomes")
             checkpoint("outcomes_previous_focus")
@@ -366,7 +401,8 @@ async def authored_outcome_paging(
         checkpoint("outcomes_quality_pending")
         quality_hold = True
         await activate(
-            page, dialog.get_by_role("button", name="Refresh article observation", exact=True)
+            page,
+            dialog.get_by_role("button", name="Refresh article observation", exact=True),
         )
         await asyncio.wait_for(quality_requested.wait(), timeout=5)
         await expect(dialog).to_contain_text("Loading current article quality")
@@ -384,7 +420,8 @@ async def authored_outcome_paging(
         checkpoint("outcomes_quality_denied")
         quality_denied = True
         await activate(
-            page, dialog.get_by_role("button", name="Refresh article observation", exact=True)
+            page,
+            dialog.get_by_role("button", name="Refresh article observation", exact=True),
         )
         await expect(dialog).to_contain_text("Current article quality is unavailable")
         await expect(dialog).not_to_contain_text("Retained parser outcome:")
@@ -420,12 +457,61 @@ async def authored_outcome_paging(
         denied = False
         await activate(page, page.get_by_role("button", name="Refresh current view", exact=True))
         await expect(table).to_be_visible()
+        checkpoint("outcomes_presence_keyboard")
+        presence_select = region.get_by_role(
+            "combobox", name="Article-outcome candidate presence", exact=True
+        )
+        await activate(
+            page,
+            region.get_by_role("button", name="Next article outcome page", exact=True),
+        )
+        await expect(region).to_contain_text("Page 2: 25 article outcomes")
+        await select_index(page, presence_select, 2)
+        await expect(region).to_contain_text("Page 1: 1 article outcomes")
+        await expect(region).to_contain_text("authored-outcome-000.html")
+        await expect(
+            region.get_by_role("button", name="Previous article outcome page", exact=True)
+        ).to_be_disabled()
+        await expect(
+            region.get_by_role("button", name="Next article outcome page", exact=True)
+        ).to_be_disabled()
+        await select_index(page, presence_select, 1)
+        await expect(region).to_contain_text("Page 1: 21 article outcomes")
+        await expect(region).not_to_contain_text("authored-outcome-000.html")
+        await select_index(page, presence_select, 3)
+        await expect(region).to_contain_text("Page 1: 25 article outcomes")
+        await expect(region).not_to_contain_text("authored-outcome-005.html")
+        await select_index(page, presence_select, 0)
+        await expect(region).to_contain_text("Page 1: 25 article outcomes")
+        checkpoint("outcomes_late_filter")
+        hold = True
+        requested.clear()
+        release.clear()
+        finished.clear()
+        await activate(
+            page,
+            region.get_by_role("button", name="Next article outcome page", exact=True),
+        )
+        await asyncio.wait_for(requested.wait(), timeout=5)
+        await select_index(page, presence_select, 2)
+        await expect(region).to_contain_text("Page 1: 1 article outcomes")
+        hold = False
+        release.set()
+        await asyncio.wait_for(finished.wait(), timeout=5)
+        await expect(region).not_to_contain_text("authored-outcome-025.html")
+        await expect(page.locator("dialog[open]")).to_have_count(0)
+        await select_index(page, presence_select, 0)
+        await expect(region).to_contain_text("Page 1: 25 article outcomes")
+        requested.clear()
+        release.clear()
+        finished.clear()
         checkpoint("outcomes_late_job")
         # Abandon a held second page, change jobs, then release it. Old rows must not
         # overwrite the newly selected job or its page cursor.
         hold = True
         await activate(
-            page, region.get_by_role("button", name="Next article outcome page", exact=True)
+            page,
+            region.get_by_role("button", name="Next article outcome page", exact=True),
         )
         await asyncio.wait_for(requested.wait(), timeout=5)
         assert held_offset == 25
@@ -443,6 +529,35 @@ async def authored_outcome_paging(
         await activate(page, page.get_by_role("button", name="Back to recent jobs", exact=True))
         await activate(page, page.get_by_role("button", name="Open job " + job, exact=True))
         await expect(region).to_contain_text("Page 1: 25 article outcomes")
+        checkpoint("outcomes_exact_article_navigation")
+        await activate(
+            page,
+            region.get_by_role("button", name="Contacts for this article", exact=True).first,
+        )
+        await expect(page.get_by_label("Job UUID (optional)", exact=True)).to_have_value(job)
+        await expect(
+            page.get_by_label("Article item UUID (optional; requires job)", exact=True)
+        ).to_have_value("00000000-0000-4000-8000-000000000001")
+        await expect(page.get_by_label(re.compile(r"^Association state"))).to_have_value("accepted")
+        await activate(page, page.get_by_role("button", name="Jobs", exact=True))
+        await activate(
+            page,
+            region.get_by_role("button", name="Review queue for this article", exact=True).first,
+        )
+        await expect(
+            page.get_by_label("Article item UUID (optional; requires job)", exact=True)
+        ).to_have_value("00000000-0000-4000-8000-000000000001")
+        await expect(page.get_by_label(re.compile(r"^Association state"))).to_have_value(
+            "needs_review"
+        )
+        await type_text(page, page.get_by_label("Job UUID (optional)", exact=True), "")
+        await expect(
+            page.get_by_label("Article item UUID (optional; requires job)", exact=True)
+        ).to_have_value("")
+        await expect(
+            page.get_by_label("Article item UUID (optional; requires job)", exact=True)
+        ).to_be_disabled()
+        await activate(page, page.get_by_role("button", name="Jobs", exact=True))
         checkpoint("outcomes_scoped_contacts")
         await activate(page, page.get_by_role("button", name="Contacts for this job", exact=True))
         await expect(page.get_by_label("Job UUID (optional)", exact=True)).to_have_value(job)
@@ -453,7 +568,8 @@ async def authored_outcome_paging(
         await activate(page, page.get_by_role("button", name="Jobs", exact=True))
         checkpoint("outcomes_scoped_review")
         await activate(
-            page, page.get_by_role("button", name="Review queue for this job", exact=True)
+            page,
+            page.get_by_role("button", name="Review queue for this job", exact=True),
         )
         await expect(page.get_by_label("Job UUID (optional)", exact=True)).to_have_value(job)
         await expect(page.get_by_label(re.compile(r"^Association state"))).to_have_value(
@@ -471,7 +587,8 @@ async def authored_outcome_paging(
         finished.clear()
         hold = True
         await activate(
-            page, region.get_by_role("button", name="Next article outcome page", exact=True)
+            page,
+            region.get_by_role("button", name="Next article outcome page", exact=True),
         )
         await asyncio.wait_for(requested.wait(), timeout=5)
         assert held_offset == 25
@@ -498,6 +615,118 @@ async def authored_outcome_paging(
         page.remove_listener("request", observe_request)
         await page.unroute(pattern, outcomes)
         await page.unroute(quality_pattern, quality)
+    await activate(page, page.get_by_role("button", name="Refresh current view", exact=True))
+
+
+async def authored_contact_request_ownership(page: Page, checkpoint: Callable[[str], None]) -> None:
+    """Actual Contacts hook with authored replies; hosted execution remains required."""
+    checkpoint("outcomes_request_generation")
+    pattern = "**/contacts?*"
+    empty = page.get_by_text("No contacts match these server filters.", exact=True)
+    error = page.get_by_text(
+        "Resource unavailable. Permissions or retention may have changed.", exact=False
+    )
+    loading = page.locator("#main > p").filter(
+        has_text=re.compile("^Loading current organization data…$")
+    )
+    search = page.get_by_label("Search loaded scope", exact=True)
+    target = page.get_by_role("combobox", name="Author role", exact=True)
+    await expect(search).to_have_value("")
+    await expect(target).to_have_value("all")
+
+    async def run_case(seed_error: bool, disabled_interval: bool) -> None:
+        phase = "seed"
+        seeded = asyncio.Event()
+        returned = asyncio.Event()
+        changed = asyncio.Event()
+        release_returned = asyncio.Event()
+        release_changed = asyncio.Event()
+        finished_returned = asyncio.Event()
+        finished_changed = asyncio.Event()
+        changed_requests = 0
+
+        async def fulfill(route: Route, failure: bool) -> None:
+            try:
+                await route.fulfill(
+                    status=404 if failure else 200,
+                    content_type="application/json",
+                    body=json.dumps(
+                        {"detail": "Unavailable"} if failure else {"items": [], "next_cursor": None}
+                    ),
+                )
+            except Error:
+                if route.request.failure != "net::ERR_ABORTED":
+                    raise
+
+        async def contacts(route: Route) -> None:
+            nonlocal changed_requests
+            assert route.request.method == "GET"
+            query = parse_qs(urlsplit(route.request.url).query, keep_blank_values=True)
+            is_original = query.get("author_target") == ["all"] and query.get("query") == [""]
+            if phase == "seed":
+                assert is_original
+                await fulfill(route, seed_error)
+                seeded.set()
+            elif is_original:
+                returned.set()
+                await asyncio.wait_for(release_returned.wait(), timeout=8)
+                await fulfill(route, not seed_error)
+                finished_returned.set()
+            else:
+                changed_requests += 1
+                changed.set()
+                await asyncio.wait_for(release_changed.wait(), timeout=8)
+                await fulfill(route, seed_error)
+                finished_changed.set()
+
+        await page.route(pattern, contacts)
+        try:
+            await activate(
+                page, page.get_by_role("button", name="Refresh current view", exact=True)
+            )
+            await asyncio.wait_for(seeded.wait(), timeout=5)
+            await expect(error if seed_error else empty).to_be_visible()
+            phase = "held"
+            if disabled_interval:
+                # Search temporarily disables this same hook with path=null.
+                # Return before debounce settles B, so reopening is null -> A.
+                await focus(page, search)
+                await page.keyboard.type("x")
+                await expect(
+                    page.get_by_text("Applying server search…", exact=True)
+                ).to_be_visible()
+                await page.keyboard.press("Backspace")
+            else:
+                await select_index(page, target, 1)
+                await asyncio.wait_for(changed.wait(), timeout=5)
+                await select_index(page, target, 0)
+            await asyncio.wait_for(returned.wait(), timeout=5)
+            if disabled_interval:
+                assert changed_requests == 0
+            else:
+                assert changed_requests == 1
+            # Request identity, not equality with the old path, owns display.
+            await expect(loading).to_be_visible()
+            await expect(empty).not_to_be_visible()
+            await expect(error).not_to_be_visible()
+            await expect(page.locator("dialog[open]")).to_have_count(0)
+            release_returned.set()
+            await asyncio.wait_for(finished_returned.wait(), timeout=5)
+            await expect(empty if seed_error else error).to_be_visible()
+            if not disabled_interval:
+                release_changed.set()
+                await asyncio.wait_for(finished_changed.wait(), timeout=5)
+                await expect(empty if seed_error else error).to_be_visible()
+                await expect(error if seed_error else empty).not_to_be_visible()
+        finally:
+            release_returned.set()
+            release_changed.set()
+            await page.unroute(pattern, contacts)
+
+    # Both settled success and settled error must lose ownership on either route.
+    for seed_error in (False, True):
+        for disabled_interval in (False, True):
+            await run_case(seed_error, disabled_interval)
     await activate(page, page.get_by_role("button", name="Refresh current view", exact=True))
 
 
@@ -1387,10 +1616,94 @@ async def main() -> None:
             await page.keyboard.press("Escape")
             await expect(observation_dialog).not_to_be_visible()
             await expect(opener).to_be_focused()
+            outcome_checkpoint("outcomes_actual_filter_preview")
+            actual_job = (
+                await page.get_by_role(
+                    "heading", name=re.compile(r"^Job [0-9a-f-]{36}$")
+                ).inner_text()
+            ).removeprefix("Job ")
+            actual_cell = outcome_region.get_by_role(
+                "table", name="Current-authorized article outcomes"
+            ).locator("tbody tr td:first-child")
+            actual_item = re.search(r"Item: ([0-9a-f-]{36})", await actual_cell.inner_text())
+            assert actual_item is not None
+            presence_select = outcome_region.get_by_role(
+                "combobox", name="Article-outcome candidate presence", exact=True
+            )
+            await select_index(page, presence_select, 1)
+            await expect(outcome_region).to_contain_text("Page 1: 0 article outcomes")
+            await select_index(page, presence_select, 2)
+            await expect(outcome_region).to_contain_text("Page 1: 1 article outcomes")
+            await activate(
+                page,
+                outcome_region.get_by_role("button", name="Contacts for this article", exact=True),
+            )
+            await expect(
+                page.get_by_label("Article item UUID (optional; requires job)", exact=True)
+            ).to_have_value(actual_item.group(1))
+            await expect(
+                page.get_by_text("No contacts match these server filters.", exact=True)
+            ).to_be_visible()
+            await activate(page, page.get_by_role("button", name="Exports", exact=True))
+            await type_text(
+                page,
+                page.get_by_label("Job UUID (blank selects authorized matching jobs)", exact=True),
+                actual_job,
+            )
+            await type_text(
+                page,
+                page.get_by_label("Article item UUID (optional; requires job)", exact=True),
+                actual_item.group(1),
+            )
+            export_presence = page.get_by_role(
+                "combobox", name="Article-outcome candidate presence", exact=True
+            )
+            await select_index(page, export_presence, 2)
+            await activate(
+                page,
+                page.get_by_role("button", name="Preview eligible export counts", exact=True),
+            )
+            filtered_preview = page.get_by_role("region", name="Current export preview")
+            await expect(filtered_preview).to_contain_text(
+                "0 contacts; 1 separate article outcomes"
+            )
+            await expect(filtered_preview).to_contain_text(
+                actual_job + " / " + actual_item.group(1)
+            )
+            await expect(filtered_preview).to_contain_text(
+                "This predicate does not filter Contacts."
+            )
+            await select_index(page, export_presence, 3)
+            await expect(filtered_preview).not_to_be_visible()
+            await activate(
+                page,
+                page.get_by_role("button", name="Preview eligible export counts", exact=True),
+            )
+            await expect(filtered_preview).to_contain_text(
+                "0 contacts; 0 separate article outcomes"
+            )
+            await type_text(
+                page,
+                page.get_by_label("Job UUID (blank selects authorized matching jobs)", exact=True),
+                "",
+            )
+            await expect(
+                page.get_by_label("Article item UUID (optional; requires job)", exact=True)
+            ).to_have_value("")
+            await expect(filtered_preview).not_to_be_visible()
+            await activate(page, page.get_by_role("button", name="Jobs", exact=True))
+            await select_index(
+                page,
+                outcome_region.get_by_role(
+                    "combobox", name="Article-outcome candidate presence", exact=True
+                ),
+                0,
+            )
             await authored_outcome_paging(
                 page, str(setup["initial_organization"]), outcome_checkpoint
             )
             await activate(page, page.get_by_role("button", name="Contacts", exact=True))
+            await authored_contact_request_ownership(page, outcome_checkpoint)
             await type_text(
                 page,
                 page.get_by_label("Search loaded scope", exact=True),

@@ -11,6 +11,7 @@ from emailmonitor.config import Settings
 from emailmonitor.fetching.safety import FetchDenied
 from emailmonitor.organizations.database import Database, RevisionConflict
 from emailmonitor.results.models import (
+    ArticleOutcomePresence,
     Contact,
     ContactPage,
     EvidenceView,
@@ -48,6 +49,7 @@ def result_router(
         request: Request,
         organization_id: UUID,
         job_id: UUID | None = None,
+        item_id: UUID | None = None,
         state: Annotated[
             list[Literal["accepted", "needs_review", "unmatched", "rejected"]] | None, Query()
         ] = None,
@@ -59,6 +61,7 @@ def result_router(
         try:
             filters = Filters(
                 job_id=job_id,
+                item_id=item_id,
                 states=tuple(state) if state is not None else ("accepted",),
                 author_target=author_target,
                 query=query,
@@ -78,11 +81,20 @@ def result_router(
         request: Request,
         organization_id: UUID,
         job_id: UUID | None = None,
+        item_id: UUID | None = None,
+        article_outcome_presence: ArticleOutcomePresence = "all",
         cursor: str | None = Query(default=None, max_length=2048),
         limit: int = Query(default=50, ge=1, le=200),
     ) -> OutcomePage:
         try:
-            return service(token(request)).outcomes(organization_id, job_id, cursor, limit)
+            return service(token(request)).outcomes(
+                organization_id,
+                job_id,
+                cursor,
+                limit,
+                item_id=item_id,
+                article_outcome_presence=article_outcome_presence,
+            )
         except ValueError as error:
             raise HTTPException(422, "Bounded tenant/filter cursor required") from error
 

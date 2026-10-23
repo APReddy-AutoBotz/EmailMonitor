@@ -451,3 +451,18 @@ unchanged full local commands, retained infrastructure prerequisites and the
 always-evaluated three-success join. Existing XML wrapper contracts cover the new
 closed mode with unchanged timeouts and owned cleanup. These pure checks do not
 replace actual hosted SQL execution.
+
+### FR-023 exact retained article selector and outcomes-only presence
+
+[Document 69](69-retained-article-filters.md) maps this increment to
+`test_retained_article_filters.py`, `test_retained_article_filters_tenant.py`,
+`test_retained_article_filters_service_tenant.py` and
+`retainedArticleFilters.test.tsx`. Required cases include HTML/XML partial and
+unsupported semantics, independent review/syntax, exact original-batch binding,
+two continuations, corrupt/expired/deleted source authority, cursor mismatches,
+pre-limit paging, legacy snapshots and preview/idempotency. Actual narrow-worker
+completion must prove no-contact and inherited contacts-only exports without
+expanded read authority, with claim/finish/download race denials. Operator acceptance
+adds keyboard selection, paging reset, exact-item navigation and preview invalidation.
+The unchanged 104-outcome partition and complete backend complement remain mandatory.
+[Evidence and pending gates](../reports/retained-article-filters-validation.md).

@@ -1,3 +1,10 @@
+## 2026-10-23 — Retained article filters candidate
+
+- Add exact retained job/item selection across Contacts, Review, outcomes and export tables.
+- Add outcomes-only candidate-presence filtering with current retained binding and unchanged defaults.
+- Capture immutable filtered-export authority without widening worker job/batch reads; preserve legacy requests and snapshots.
+- Add forward-only migration 0016, SQL/service/operator acceptance and [scope](docs/69-retained-article-filters.md); hosted evidence remains pending.
+
 ## 2026-10-22 — Retained job outcome investigation candidate
 
 - Add job-scoped Article outcomes pagination and retained observation quality even without contact candidates.

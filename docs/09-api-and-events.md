@@ -71,3 +71,16 @@ Download URLs are authenticated API routes, not public object storage links. Val
 ## Contract evolution
 
 Schema `1.0` uses explicit nulls and enums. Additive optional fields require tests for older clients; incompatible semantics require a versioned contract/migration. Backend validation models and generated frontend clients must match committed contracts. Do not maintain a disconnected fictional OpenAPI file that passes no integration tests.
+
+## Retained article filters (bounded implementation candidate)
+
+`GET /organizations/{org}/contacts` accepts optional exact `job_id`/`item_id`.
+`GET /organizations/{org}/article-outcomes` additionally accepts
+`article_outcome_presence=all|observed_candidate|completed_without_candidate|unresolved`.
+A non-null item requires its job. Presence applies only to outcomes, not Contacts;
+state/author/text filters retain their existing Contact meaning. Export preview and
+create accept the same exact selector and outcomes-only predicate. Defaults remain
+accepted-only Contacts and all outcomes, with new default keys omitted from legacy
+serialized filters/requests. Filters precede keyset limits and bind cursor identity.
+The existing outcome row shape and legacy SQL entrypoint remain unchanged.
+See [current binding, export and migration contract](69-retained-article-filters.md).

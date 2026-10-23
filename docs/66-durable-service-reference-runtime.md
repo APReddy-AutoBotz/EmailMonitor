@@ -142,3 +142,10 @@ adds a revocation-aware seal without enabling the legacy profile or opening a
 restored service database. Exact existing authority, immutable deadlines, audit,
 roles/schema and export state remain protected. This code/test candidate does not
 authorize serving restored work or production recovery.
+
+Migration 0016's retained-article filter increment advances the exact compatible
+schema sentinel to `0016_retained_article_filters`; 0015 above describes its
+historical plan-cache change. The new private exact-export binding validator
+supports selected inherited children and no-contact outcomes without broadening
+shared job/batch visibility. Existing activation/role restrictions and closed restore
+controls remain. See [document 69](69-retained-article-filters.md).
