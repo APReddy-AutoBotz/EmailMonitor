@@ -65,3 +65,5 @@ Versioning: documents use Git history; public API uses `/api/v1`; event/schema r
   and [candidate validation](../reports/em017-installed-controlled-xml-validation.md).
 
 - [67 — Closed synthetic service-authority restore seal](67-closed-service-authority-restore.md)
+
+- [68 — Retained job outcome investigation](68-retained-job-outcome-investigation.md)

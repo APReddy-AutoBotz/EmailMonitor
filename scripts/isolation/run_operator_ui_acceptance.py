@@ -189,6 +189,11 @@ def conversation(
                                         if diagnostic.installed_login_phase is not None
                                         else ""
                                     )
+                                    + (
+                                        "; outcome phase=" + diagnostic.outcome_phase
+                                        if diagnostic.outcome_phase is not None
+                                        else ""
+                                    )
                                     + "; actual reply statuses="
                                     + str(diagnostic.api_statuses)
                                 )

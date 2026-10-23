@@ -566,3 +566,22 @@ revocation/audit/role/schema/export/privacy reconciliation passed independent so
 review. Normal and separate fresh local gates each passed 4,754 backend and 77 React
 tests with 389 explicit infrastructure skips. [Validation](../reports/em017-service-restore-validation.md)
 tracks the required actual hosted gates; this entry is not a completion claim.
+
+### EM-010/011/012 retained job investigation — candidate (2026-10-22)
+
+A separate dependent slice after accepted PR48 adds job-scoped paginated article
+outcomes and retained-batch quality independently of contact candidates. Whole-job
+progress and first-100 execution diagnostics remain distinct. Existing Contacts,
+evidence/review and lifecycle authorization are preserved. No migrations or
+backend contracts change. [Scope](68-retained-job-outcome-investigation.md) and
+[validation](../reports/job-outcome-investigation-validation.md) track source,
+normal/fresh and actual hosted acceptance, which remain pending in this entry.
+
+The investigation candidate now separates only the unchanged long 104-outcome
+SQL traversal into a mandatory hosted job, with a complete backend complement
+and exact collection/execution receipts joined against the same source/config.
+Full local aggregates and all per-job security/cleanup/deadline controls remain.
+The preceding actual operator proof passed, but two full-backend attempts reached
+the unchanged wrapper bound without final pytest summaries; both verified owned
+cleanup. New exact-tree normal/fresh, independent review and hosted receipts remain
+required. The linked validation record preserves those failed receipts.

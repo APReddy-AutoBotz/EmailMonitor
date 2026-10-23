@@ -17,6 +17,8 @@ jobs:
   backend:
     runs-on: ubuntu-24.04
     timeout-minutes: 25
+    outputs:
+      partition_receipt: ${{ steps.tests.outputs.partition_receipt }}
     services:
       rabbitmq:
         image: rabbitmq:4.3.6@sha256:42b190dffdd0cdb656f989f5404c30e1049d6b7d9c987089669b1905e5e3a1a6
@@ -67,6 +69,7 @@ jobs:
           EM_MIGRATION_DATABASE_URL="$EM_TEST_ADMIN_DATABASE_URL" uv run --project services/backend alembic -c services/backend/alembic.ini upgrade head
           uv run --project services/backend python scripts/create_ci_runtime.py
       - name: Execute offline scaffold and real tenant SQL/API checks
+        id: tests
         env:
           EM_TEST_BROKER_CONTAINER: ${{ job.services.rabbitmq.id }}
           EM_TEST_POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
@@ -74,6 +77,70 @@ jobs:
           EM_REQUIRE_XML_ISOLATION: "true"
           EM_REQUIRE_XML_INTEGRATION: "synthetic-test-only"
         run: uv run --project services/backend python scripts/packaging/run_xml_integration.py application-backend
+
+  outcome_sql:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    outputs:
+      partition_receipt: ${{ steps.tests.outputs.partition_receipt }}
+    services:
+      rabbitmq:
+        image: rabbitmq:4.3.6@sha256:42b190dffdd0cdb656f989f5404c30e1049d6b7d9c987089669b1905e5e3a1a6
+        env:
+          RABBITMQ_DEFAULT_USER: em_fixture
+          RABBITMQ_DEFAULT_PASS: emailmonitor-ci-broker-only
+        ports:
+          - 5672:5672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 18
+      postgres:
+        image: postgres:17.11-bookworm@sha256:3645570cccdfa447589da9f57dd740faa29b30938e861289a5574b6ca6b03826
+        env:
+          POSTGRES_PASSWORD: emailmonitor-ci-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      EM_REQUIRE_REAL_BROKER: "true"
+      EM_TEST_DISPOSABLE_BROKER: "true"
+      EM_TEST_BROKER_URL: pyamqp://em_fixture:emailmonitor-ci-broker-only@127.0.0.1:5672//
+      EM_TEST_ADMIN_DATABASE_URL: postgresql+pg8000://postgres:emailmonitor-ci-only@127.0.0.1:5432/postgres
+      EM_TEST_AUTH_DATABASE_URL: postgresql+pg8000://em_ci_authenticator:emailmonitor-ci-auth-only@127.0.0.1:5432/postgres
+      EM_TEST_DATABASE_URL: postgresql+pg8000://em_ci_runtime:emailmonitor-ci-runtime-only@127.0.0.1:5432/postgres
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.19.0
+      - name: Install pinned development tools
+        run: |
+          python3 -m venv "$RUNNER_TEMP/tooling"
+          "$RUNNER_TEMP/tooling/bin/python" -m pip install uv==0.12.23
+          echo "$RUNNER_TEMP/tooling/bin" >> "$GITHUB_PATH"
+          npm install --global pnpm@11.25.0
+      - name: Install locked dependencies and create disposable database roles
+        run: |
+          uv sync --project services/backend --locked
+          EM_MIGRATION_DATABASE_URL="$EM_TEST_ADMIN_DATABASE_URL" uv run --project services/backend alembic -c services/backend/alembic.ini upgrade head
+          uv run --project services/backend python scripts/create_ci_runtime.py
+      - name: Execute the complete 104-outcome actual SQL acceptance
+        id: tests
+        env:
+          EM_TEST_BROKER_CONTAINER: ${{ job.services.rabbitmq.id }}
+          EM_TEST_POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+          EM_REQUIRE_SYNTHETIC_RESTORE: "true"
+          EM_REQUIRE_XML_ISOLATION: "true"
+          EM_REQUIRE_XML_INTEGRATION: "synthetic-test-only"
+        run: uv run --project services/backend python scripts/packaging/run_xml_integration.py application-outcome-sql
 
   static:
     runs-on: ubuntu-24.04
@@ -98,15 +165,18 @@ jobs:
 
   scaffold:
     if: ${{ always() }}
-    needs: [backend, static]
+    needs: [backend, outcome_sql, static]
     runs-on: ubuntu-24.04
     timeout-minutes: 1
     steps:
-      - name: Require every application gate to succeed
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Require every application gate and matching partition receipts to succeed
         env:
           BACKEND_RESULT: ${{ needs.backend.result }}
+          OUTCOME_SQL_RESULT: ${{ needs.outcome_sql.result }}
           STATIC_RESULT: ${{ needs.static.result }}
-        run: |
-          set -euo pipefail
-          test "$BACKEND_RESULT" = success
-          test "$STATIC_RESULT" = success
+          BACKEND_RECEIPT: ${{ needs.backend.outputs.partition_receipt }}
+          OUTCOME_SQL_RECEIPT: ${{ needs.outcome_sql.outputs.partition_receipt }}
+        run: python3 scripts/packaging/application_test_partition.py join

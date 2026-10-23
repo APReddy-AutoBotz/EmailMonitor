@@ -31,7 +31,7 @@ def test_untrusted_content_and_credentials_refuse(field: str) -> None:
         ("organization_id", "not-a-uuid"),
         ("generation", 0),
         ("generation", True),
-        ("job_id", str(uuid4()).upper()),
+        pytest.param("job_id", str(uuid4()).upper(), id="job_id-uppercase-uuid"),
     ],
 )
 def test_invalid_work_identity_refuses(field: str, value: object) -> None:

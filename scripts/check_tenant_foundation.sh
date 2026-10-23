@@ -6,7 +6,7 @@ if (( $# > 1 )); then
   exit 2
 fi
 case "$phase" in
-  all|backend) ;;
+  all|backend|ci-backend|ci-outcome-sql) ;;
   *) exit 2 ;;
 esac
 : "${EM_TEST_DATABASE_URL:?A disposable non-owner PostgreSQL test URL is required}"

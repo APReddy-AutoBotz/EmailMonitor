@@ -33,21 +33,38 @@ scripts/check.sh
 
 `check.sh` executes docs/schema/example/fixture consistency, Python lint/format/type tests, API/configuration/fixture/contract tests, inventory parity, strict frontend peer validation, type/lint/component tests and production build. Installation needs official registry access; tests are local and do not crawl publishers. Runtime-only Python installation uses `--no-dev`.
 
-The default aggregate still runs every check in that order. CI uses only the
-closed `static`, `backend`, and `frontend` phases: documentation/Python static
-checks and the complete frontend sequence share one job; the unfiltered backend
-suite and inventory run in a separate job with the actual disposable SQL/broker,
-restore and installed XML-image requirements. The existing `scaffold` check is
-an always-evaluated join that requires both jobs to succeed, including the final
-frontend build. No failed, cancelled, or skipped dependency satisfies it.
+The default aggregate and explicit `backend` phase still run the full, unfiltered
+suite. Normal/fresh local checks use that unchanged path. Hosted CI additionally
+has only two closed test phases: `ci-backend` runs every test except the exact
+104-outcome SQL traversal; `ci-outcome-sql` runs that single unchanged traversal.
+Both collect the complete `services/backend/tests tests` roots under the same
+explicit configuration and root directory. New tests enter the backend complement;
+a missing/renamed dedicated case, duplicate or unclassified node refuses the gate.
 
-The backend retains its 1200-second XML wrapper and consumer bounds, up to ten
-seconds for owned process-group stop/reap, and a separate 180-second verified
-cleanup budget under the existing 25-minute job ceiling. This leaves at most
-110 seconds for setup and final overhead. Splitting the gates does not guarantee
-runtime headroom; the observed backend workload remains close to its bound.
-The full `application` XML-integration mode remains available; CI selects only
-the fixed `application-backend` mode, never arbitrary commands or test filters.
+The partition runner verifies duplicate-free, disjoint collection multisets whose
+union equals the full collection, the final selected/deselected lists and exactly
+one passing setup/call/teardown per assigned node. Collection errors, skips, xfails,
+extra/missing execution and source changes cannot produce a success receipt.
+Ambient pytest options/plugins are refused; the existing locked AnyIO plugin is
+loaded explicitly. There is no arbitrary command or test-selector interface.
+
+Each hosted job publishes a bounded receipt containing its clean source tree,
+configuration/lock digest, full and partition manifests, executed and deselected
+manifests, and zero skips. The always-evaluated `scaffold` join requires `backend`,
+`outcome_sql` and `static` to succeed, validates both receipts, and compares their
+common source/configuration/collection identities with its own checkout. Missing,
+malformed, swapped or differing receipts fail. A receipt cannot override a failed,
+cancelled or skipped job, including inventory or owned-cleanup failure. Static
+checks and the full frontend sequence remain together in their original job.
+
+Both SQL jobs retain disposable non-owner runtime/auth/admin roles, all existing
+broker/restore/XML requirements, the same pinned services and owned XML-image
+wrapper. Each keeps its 1200-second wrapper/consumer limits, up to ten seconds for
+owned process-group stop/reap, and separate 180-second verified cleanup budget
+under the existing 25-minute ceiling. No deadline or security guard is widened.
+The full `application` mode remains unchanged; hosted CI selects only the fixed
+`application-backend` and `application-outcome-sql` modes. Actual hosted receipts
+must establish headroom; collection or local infrastructure skips cannot do so.
 
 Separate terminals:
 

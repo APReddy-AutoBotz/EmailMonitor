@@ -302,6 +302,8 @@ WHERE i.organization_id=:org AND j.kind='extraction' LIMIT 33
                     "keyboard",
                     "keyword_partial",
                     "url_no_contact",
+                    "actual_zero_contact_quality_dialog",
+                    "authored_127_outcome_paging",
                     "review",
                     "pause_resume_cancel_dismiss",
                     "dialog_focus_restore",

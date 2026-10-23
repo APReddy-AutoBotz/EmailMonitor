@@ -235,16 +235,21 @@ def test_new_composer_preserves_original_one_shot_guest_parser_and_gates(
 ) -> None:
     content = (ROOT / relative).read_bytes()
     if relative == ".github/workflows/application.yml":
-        # Independently reviewed split: preserve the original backend bytes.
-        # The new static/join suffix is covered by test_application_check_phases,
-        # including every command and non-success result, not this original pin.
-        suffix = b"\n  static:\n"
+        # Preserve the original backend bytes, normalizing only its fixed receipt
+        # wiring. Additional mandatory jobs/join have executable contract tests.
+        suffix = b"\n  outcome_sql:\n"
         backend = b"\n  backend:\n"
         command = b"run_xml_integration.py application-backend\n"
         assert content.count(suffix) == 1
         assert content.count(backend) == 1
         assert content.count(command) == 1
         content = content.split(suffix, 1)[0]
+        outputs = (
+            b"    outputs:\n      partition_receipt: ${{ steps.tests.outputs.partition_receipt }}\n"
+        )
+        step_id = b"        id: tests\n"
+        assert content.count(outputs) == content.count(step_id) == 1
+        content = content.replace(outputs, b"").replace(step_id, b"")
         assert content.count(backend) == content.count(command) == 1
         content = content.replace(backend, b"\n  scaffold:\n")
         content = content.replace(command, b"run_xml_integration.py application\n")

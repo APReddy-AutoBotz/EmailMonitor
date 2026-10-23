@@ -46,4 +46,4 @@ export const truth = (value: boolean | null) => value === true ? 'Observed' : va
 export const uid = (value: string) => encodeURIComponent(value)
 export type Action = (label: string, work: () => Promise<unknown>, success?: string) => Promise<void>
 export type Confirm = (title: string, detail: string, work: () => Promise<unknown>) => void
-export type Context = { runtimeProfile?: RuntimeProfile; scope: ApiScope; revision: number; refresh: () => void; act: Action; confirm: Confirm; can: (capability: string) => boolean; identity: string; zone: string; openJob: (id: string) => void }
+export type Context = { runtimeProfile?: RuntimeProfile; scope: ApiScope; revision: number; refresh: () => void; act: Action; confirm: Confirm; can: (capability: string) => boolean; identity: string; zone: string; openJob: (id: string) => void; openJobContacts?: (id: string, review: boolean) => void }
