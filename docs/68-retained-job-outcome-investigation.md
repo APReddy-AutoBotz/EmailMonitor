@@ -54,6 +54,14 @@ real SQL pagination over more than 100 rows therefore uses multiple authored job
 with separate job-scoped/cursor and current-authority tests. These are distinct
 proofs: route-intercepted browser data is not SQL-backed extraction evidence.
 
+The unchanged 104-outcome SQL test is a separate mandatory hosted application job.
+Its backend complement must execute every other test. A closed collection/execution
+proof and matching source/configuration/manifests at the required three-job join
+prevent omitted or duplicate coverage; skips and incomplete execution fail. The
+[development runbook](25-development-runbook.md) records the fixed profiles and
+unchanged wrapper, cleanup and workflow budgets. Full normal/fresh local aggregates
+remain unfiltered.
+
 Normal/fresh serial local gates, independent source review and all inherited
 hosted actual SQL/operator/service/packaging gates remain required. Local
 infrastructure skips are not acceptance proof. See the [validation record](../reports/job-outcome-investigation-validation.md).

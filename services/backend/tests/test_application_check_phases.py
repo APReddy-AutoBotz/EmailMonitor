@@ -8,6 +8,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import application_test_partition as partition
 import pytest
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -38,6 +39,17 @@ EXPECTED = [
         "pnpm --dir apps/web build",
     )
 ]
+HOSTED = {
+    phase: [
+        EXPECTED[0],
+        shlex.split(
+            "uv run --project services/backend python "
+            "scripts/packaging/application_test_partition.py " + profile
+        ),
+        *([EXPECTED[7]] if profile == "backend" else []),
+    ]
+    for phase, profile in (("ci-backend", "backend"), ("ci-outcome-sql", "outcome_sql"))
+}
 DATABASE_KEYS = (
     "EM_TEST_DATABASE_URL",
     "EM_TEST_AUTH_DATABASE_URL",
@@ -96,6 +108,7 @@ if len(log.read_text().splitlines()) == int(os.environ['CHECK_FAIL_AT']):
         (("static",), EXPECTED[:6]),
         (("backend",), [EXPECTED[0], *EXPECTED[6:8]]),
         (("frontend",), EXPECTED[8:]),
+        *[((phase,), commands) for phase, commands in HOSTED.items()],
     ],
 )
 def test_closed_phases_keep_exact_commands_and_default_order(
@@ -132,14 +145,15 @@ def test_tenant_entrypoint_cannot_select_non_backend_phase(tmp_path: Path, phase
 
 
 @pytest.mark.parametrize("missing", DATABASE_KEYS)
+@pytest.mark.parametrize("phase", ["backend", *HOSTED])
 def test_backend_phase_still_requires_every_disposable_database_url(
-    tmp_path: Path, missing: str
+    tmp_path: Path, missing: str, phase: str
 ) -> None:
-    result, calls = invoke(tmp_path, ("backend",), tenant=True, missing=missing)
+    result, calls = invoke(tmp_path, (phase,), tenant=True, missing=missing)
     assert result.returncode != 0 and calls == []
 
 
-@pytest.mark.parametrize("arguments", [(), ("all",), ("backend",)])
+@pytest.mark.parametrize("arguments", [(), ("all",), ("backend",), *((key,) for key in HOSTED)])
 def test_tenant_entrypoint_keeps_both_migrations_before_closed_phase(
     tmp_path: Path, arguments: tuple[str, ...]
 ) -> None:
@@ -148,6 +162,8 @@ def test_tenant_entrypoint_keeps_both_migrations_before_closed_phase(
         "uv run --project services/backend alembic -c services/backend/alembic.ini upgrade head"
     )
     expected = [EXPECTED[0], *EXPECTED[6:8]] if arguments == ("backend",) else EXPECTED
+    if arguments and arguments[0] in HOSTED:
+        expected = HOSTED[arguments[0]]
     assert result.returncode == 0 and calls == [migration, migration, *expected]
     source = (ROOT / "scripts/check_tenant_foundation.sh").read_text()
     assert source.count('EM_MIGRATION_DATABASE_URL="$EM_TEST_ADMIN_DATABASE_URL"') == 2
@@ -168,7 +184,7 @@ def workflow_jobs() -> dict[str, str]:
 def test_workflow_requires_complete_backend_and_static_frontend_jobs() -> None:
     workflow = (ROOT / ".github/workflows/application.yml").read_text()
     jobs = workflow_jobs()
-    assert set(jobs) == {"backend", "static", "scaffold"}
+    assert set(jobs) == {"backend", "outcome_sql", "static", "scaffold"}
     assert "continue-on-error" not in workflow
     assert "timeout-minutes: 25" in jobs["backend"]
     for required in (
@@ -190,7 +206,13 @@ def test_workflow_requires_complete_backend_and_static_frontend_jobs() -> None:
     assert "timeout-minutes: 10" in jobs["static"]
     assert jobs["static"].count("run: scripts/check.sh static\n") == 1
     assert jobs["static"].count("run: scripts/check.sh frontend\n") == 1
-    for job in ("backend", "static"):
+    assert jobs["outcome_sql"] == jobs["backend"].replace(
+        "Execute offline scaffold and real tenant SQL/API checks",
+        "Execute the complete 104-outcome actual SQL acceptance",
+    ).replace("application-backend", "application-outcome-sql")
+    assert "partition_receipt: ${{ steps.tests.outputs.partition_receipt }}" in jobs["backend"]
+    assert "id: tests" in jobs["backend"]
+    for job in ("backend", "outcome_sql", "static"):
         assert "node-version: 24.19.0" in jobs[job]
         assert "pip install uv==0.12.23" in jobs[job]
         assert "npm install --global pnpm@11.25.0" in jobs[job]
@@ -198,21 +220,34 @@ def test_workflow_requires_complete_backend_and_static_frontend_jobs() -> None:
 
 
 @pytest.mark.parametrize("backend", ["success", "failure", "cancelled", "skipped", ""])
+@pytest.mark.parametrize("outcome", ["success", "failure", "cancelled", "skipped", ""])
 @pytest.mark.parametrize("static", ["success", "failure", "cancelled", "skipped", ""])
-def test_scaffold_join_accepts_only_two_explicit_successes(backend: str, static: str) -> None:
+def test_scaffold_join_accepts_only_three_explicit_successes(
+    monkeypatch: pytest.MonkeyPatch, backend: str, outcome: str, static: str
+) -> None:
     join = workflow_jobs()["scaffold"]
     assert "if: ${{ always() }}" in join
-    assert "needs: [backend, static]" in join
+    assert "needs: [backend, outcome_sql, static]" in join
     assert "timeout-minutes: 1" in join
     assert "BACKEND_RESULT: ${{ needs.backend.result }}" in join
+    assert "OUTCOME_SQL_RESULT: ${{ needs.outcome_sql.result }}" in join
     assert "STATIC_RESULT: ${{ needs.static.result }}" in join
-    command = "\n".join(
-        line.removeprefix("          ") for line in join.split("run: |\n", 1)[1].splitlines()
+    assert "BACKEND_RECEIPT: ${{ needs.backend.outputs.partition_receipt }}" in join
+    assert "OUTCOME_SQL_RECEIPT: ${{ needs.outcome_sql.outputs.partition_receipt }}" in join
+    assert "run: python3 scripts/packaging/application_test_partition.py join" in join
+    assert "persist-credentials: false" in join
+    environment = {
+        "BACKEND_RESULT": backend,
+        "OUTCOME_SQL_RESULT": outcome,
+        "STATIC_RESULT": static,
+    }
+    monkeypatch.setattr(
+        partition, "decode_receipt", lambda *args: dict.fromkeys(partition.COMMON, "a")
     )
-    result = subprocess.run(
-        ["bash", "-c", command],
-        env={"BACKEND_RESULT": backend, "STATIC_RESULT": static},
-        capture_output=True,
-        timeout=5,
-    )
-    assert (result.returncode == 0) is (backend == static == "success")
+    monkeypatch.setattr(partition, "source_tree", lambda: "a")
+    monkeypatch.setattr(partition, "configuration", lambda: "a")
+    if backend == outcome == static == "success":
+        partition.join(environment)
+    else:
+        with pytest.raises(partition.PartitionRefused, match="application_dependency_failed"):
+            partition.join(environment)

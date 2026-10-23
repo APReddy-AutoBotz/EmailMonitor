@@ -2,6 +2,7 @@
 
 - Add job-scoped Article outcomes pagination and retained observation quality even without contact candidates.
 - Separate whole-job progress, page counts and first-100 execution diagnostics; link existing scoped Contacts/review.
+- Require a separate hosted 104-outcome SQL test plus complete backend complement, with matched collection/execution receipts and unchanged per-job budgets.
 - Preserve lifecycle and authorization; no backend migration or grant change. See [scope](docs/68-retained-job-outcome-investigation.md).
 
 ## 2026-10-22 — Closed synthetic service restore candidate

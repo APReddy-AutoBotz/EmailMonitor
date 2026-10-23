@@ -150,3 +150,76 @@ current-scope checks and stale-response assertions remain unchanged. A pure orde
 regression preserves these preconditions. The preceding selector tree's two local
 aggregates (4,815 passed, 397 infrastructure skips and 91 React tests each) are
 superseded; full normal/fresh and hosted checks are required on this corrected tree.
+
+
+## Actual operator success and bounded backend capacity failure
+
+The preceding remote candidate `025cbbde23103db44426b6d26d8b5eb6ea47932f`,
+source tree `422178b904c0acdc0b4b4447749ab0c97ff7faef`, passed normal/fresh local
+aggregates with 4,816 backend passes, 397 explicit infrastructure skips and 91
+React passes per run. Actual operator run
+[39782944387](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/39782944387)
+passed its complete keyboard journey (one test, 83.91 seconds).
+
+Installed-service run
+[39782944449](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/39782944449)
+initially passed 12 broker, one HTTPS and three XML cases, but its XML keyword
+journey timed out at `export_preview`. One unchanged exact-job retry,
+`119844693785`, then passed all 12 broker, one HTTPS and four XML cases. This is a
+successful bounded retry, not proof of the original timeout's cause.
+
+Application run
+[39782944707](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/39782944707)
+reached the unchanged 1200-second wrapper limit twice: original job `119838602014`
+refused after 1200.412 seconds at 99%; unchanged retry `119850676804` refused after
+1200.241 seconds at 92%. Neither produced a final pytest summary. Both verified
+owned cleanup. All runs were terminal before this change. These remain failed
+backend receipts. The earlier `c2d823` candidate had completed 5,211 tests without
+skips in 1065.35 seconds; the new 104-outcome test alone was observed at 163–222
+seconds. This establishes bounded headroom pressure, not a reason to raise limits
+or weaken test/security requirements.
+
+## Closed hosted SQL-test separation candidate
+
+Only `test_job_outcome_investigation_tenant.py::test_actual_more_than_100_outcomes_have_no_omissions_or_duplicates`
+moves into a separate mandatory `outcome_sql` hosted job. Its fixture, 26 jobs,
+104 outcomes and assertions are unchanged. The backend job runs every other test;
+normal/fresh local `check.sh` and its `backend` phase remain full and unfiltered.
+Both hosted jobs retain the same actual SQL roles, broker/restore/XML requirements,
+owned cleanup, 1200-second wrapper/consumer limits and 25-minute job ceiling.
+
+Each closed runner verifies a duplicate-free collection multiset, exact disjoint
+partition union, unchanged final selected/deselected collections, all assigned
+setup/call/teardown passes, zero skips and unchanged source/configuration. Bounded
+job outputs bind those manifests and execution counts to the clean source tree
+and configuration/lock digest. The mandatory `scaffold` join requires both SQL
+jobs and static/frontend success, matching complete receipts and its own matching
+checkout. No missing receipt, skipped/cancelled/failed job or cleanup failure can
+satisfy that join. New ordinary tests automatically enter the complete complement;
+a missing or renamed dedicated node fails closed. Ambient pytest selectors and
+plugins are refused; the already-installed locked AnyIO plugin is explicit.
+
+Actual collection comparison uncovered one existing nondeterministic node name:
+the uppercase-UUID parameter in `test_progress_envelope.py`. Only its pytest
+parameter display ID is stabilized; its random value and refusal assertion remain
+unchanged. No production code, migration, grant, dependency or 104-outcome fixture
+change is included. Focused tests, normal/fresh and actual hosted acceptance are
+separate evidence; a collection-only check cannot establish runtime SQL success.
+
+The first focused partition-contract run found one no-selector contract failure
+(368 passed, one failed): an extra synthetic `-k` expression that happened to match
+the entire assigned complement did not alter its collection. The runner now also
+requires the exact fixed pytest invocation, so even a no-op selector refuses.
+The corrected final focused command covering application phases, partition proof,
+XML packaging, preserved diagnostic-workflow boundaries and progress envelopes
+passed 393 tests without skips in 12.74 seconds. `scripts/check.sh static` passed
+documentation/contracts, full Python lint/format and strict type checks.
+
+Two independent real full collections under the exact fixed configuration and
+explicit AnyIO plugin collected 5,418 nodes. They matched the normal full
+collection after canonicalizing only its root-relative display paths. Both
+partition multisets were exact: 5,417 backend nodes and the one unchanged SQL
+node, no intersection or duplicates. The canonical full-manifest SHA-256 was
+`e3e62de944caae638b95901a457223f1a4fd72735ae00e94ad9a7c9aff2ae556`.
+These are collection and focused local proofs only. Full serial normal/fresh,
+independent exact-tree review and new actual hosted receipts remain pending.

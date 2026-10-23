@@ -24,18 +24,21 @@ MARKER = "synthetic-test-only"
 CONSUMER_SECONDS = {
     "application": 1200,
     "application-backend": 1200,
+    "application-outcome-sql": 1200,
     "transport": 900,
     "installed": 900,
 }
 WRAPPER_SECONDS = {
     "application": 1200,
     "application-backend": 1200,
+    "application-outcome-sql": 1200,
     "transport": 1200,
     "installed": 1200,
 }
 MODES = {
     "application": ("bash", "scripts/check_tenant_foundation.sh"),
-    "application-backend": ("bash", "scripts/check_tenant_foundation.sh", "backend"),
+    "application-backend": ("bash", "scripts/check_tenant_foundation.sh", "ci-backend"),
+    "application-outcome-sql": ("bash", "scripts/check_tenant_foundation.sh", "ci-outcome-sql"),
     "transport": ("bash", "scripts/packaging/check_xml_transport.sh"),
     "installed": ("bash", "scripts/packaging/check_xml_installed.sh"),
 }
@@ -216,7 +219,7 @@ def run_consumer(
     }
     commands = (
         (MODES[mode],)
-        if mode in {"application", "application-backend", "installed"}
+        if mode != "transport"
         else (MODES[mode] + ("transport",), MODES[mode] + ("operator",))
     )
     for arguments in commands:

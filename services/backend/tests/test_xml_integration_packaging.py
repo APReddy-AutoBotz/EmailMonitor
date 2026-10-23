@@ -91,7 +91,10 @@ def alias_for(owned: FakeOwned) -> integration.OwnedAlias:
     return integration.OwnedAlias(owned, IMAGE, owned.command)  # type: ignore[arg-type]
 
 
-@pytest.mark.parametrize("mode", ["application", "application-backend", "transport", "installed"])
+@pytest.mark.parametrize(
+    "mode",
+    ["application", "application-backend", "application-outcome-sql", "transport", "installed"],
+)
 def test_ci_context_accepts_only_fixed_modes(mode: str) -> None:
     integration.require_context(ENV, mode)
 
@@ -118,7 +121,7 @@ def test_context_refuses_before_runtime_import(
         integration.execute(mode, environment)
 
 
-@pytest.mark.parametrize("mode", ["application", "application-backend"])
+@pytest.mark.parametrize("mode", ["application", "application-backend", "application-outcome-sql"])
 def test_standalone_refusal_needs_neither_site_packages_nor_pythonpath(mode: str) -> None:
     environment = {k: v for k, v in os.environ.items() if k != "PYTHONPATH" and k not in ENV}
     result = subprocess.run(
@@ -242,7 +245,7 @@ def test_invalid_container_enumeration_refuses(listed: bytes) -> None:
     assert not owned.containers
 
 
-@pytest.mark.parametrize("mode", ["application", "application-backend"])
+@pytest.mark.parametrize("mode", ["application", "application-backend", "application-outcome-sql"])
 def test_cleanup_failure_cannot_turn_a_failed_consumer_into_success(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], mode: str
 ) -> None:
@@ -298,7 +301,13 @@ class FakeConsumer:
 
 @pytest.mark.parametrize(
     "mode,count",
-    [("application", 1), ("application-backend", 1), ("transport", 2), ("installed", 1)],
+    [
+        ("application", 1),
+        ("application-backend", 1),
+        ("application-outcome-sql", 1),
+        ("transport", 2),
+        ("installed", 1),
+    ],
 )
 def test_fixed_consumers_stream_and_verify_each_gate(
     monkeypatch: pytest.MonkeyPatch, mode: str, count: int
@@ -330,15 +339,22 @@ def test_fixed_consumers_stream_and_verify_each_gate(
         assert [arguments[-1] for arguments, _ in commands] == ["transport", "operator"]
     else:
         assert [arguments for arguments, _ in commands] == [integration.MODES[mode]]
-    if mode == "application-backend":
-        assert integration.MODES[mode] == ("bash", "scripts/check_tenant_foundation.sh", "backend")
+    if mode in {"application-backend", "application-outcome-sql"}:
+        phase = "ci-backend" if mode == "application-backend" else "ci-outcome-sql"
+        assert integration.MODES[mode] == ("bash", "scripts/check_tenant_foundation.sh", phase)
     if mode == "application":
         assert integration.MODES[mode] == ("bash", "scripts/check_tenant_foundation.sh")
 
 
 @pytest.mark.parametrize(
     "mode,budget",
-    [("application", 1200), ("application-backend", 1200), ("transport", 900), ("installed", 900)],
+    [
+        ("application", 1200),
+        ("application-backend", 1200),
+        ("application-outcome-sql", 1200),
+        ("transport", 900),
+        ("installed", 900),
+    ],
 )
 @pytest.mark.parametrize("kind", ["failed", "timeout", "interrupted"])
 def test_failed_consumer_is_stopped_before_propagating(
@@ -428,7 +444,7 @@ def test_image_cleanup_refuses_unknown_names_owner_and_incomplete_removal(mutati
         assert not any(call[:3] == ["docker", "image", "rm"] for call in owned.calls)
 
 
-@pytest.mark.parametrize("mode", ["application", "application-backend"])
+@pytest.mark.parametrize("mode", ["application", "application-backend", "application-outcome-sql"])
 def test_success_requires_consumer_and_cleanup_before_success_receipt(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], mode: str
 ) -> None:
@@ -602,12 +618,14 @@ def test_closed_aggregate_budgets_preserve_cleanup_reserve() -> None:
     assert integration.CONSUMER_SECONDS == {
         "application": 1200,
         "application-backend": 1200,
+        "application-outcome-sql": 1200,
         "transport": 900,
         "installed": 900,
     }
     assert integration.WRAPPER_SECONDS == {
         "application": 1200,
         "application-backend": 1200,
+        "application-outcome-sql": 1200,
         "transport": 1200,
         "installed": 1200,
     }
@@ -634,3 +652,20 @@ def test_focused_service_gate_preserves_aggregate_and_browser_evidence() -> None
         "Installed service API and independent worker operator acceptance"
     )
     assert "pytest services/backend/tests tests" in (root / "scripts/check.sh").read_text()
+
+
+@pytest.mark.parametrize("mode", ["application-backend", "application-outcome-sql"])
+def test_successful_partition_still_fails_when_owned_cleanup_is_incomplete(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], mode: str
+) -> None:
+    owned = FakeOwned()
+    owned.cleanup_failure = True
+    runtime = SimpleNamespace(OwnedXmlBuilds=lambda owner: owned, command=owned.command)
+    monkeypatch.setattr(integration, "load_runtime", lambda: runtime)
+    monkeypatch.setattr(integration, "prepare_image", lambda *args: (IMAGE, {}))
+    monkeypatch.setattr(integration, "run_consumer", lambda *args: None)
+    with pytest.raises(integration.IntegrationRefused, match="xml_integration_cleanup_refused"):
+        integration.execute(mode, ENV)
+    output = capsys.readouterr().out
+    assert owned.closed and '"xml_integration_owned_cleanup_verified": false' in output
+    assert "xml_integration_fixed_checks_passed" not in output

@@ -442,3 +442,12 @@ than 100 outcomes, no-contact quality without associations, missing batches,
 inherited lineage, current visibility, stale response suppression and keyboard
 focus restoration. This slice does not complete all FR-023 filters.
 [Candidate evidence](../reports/job-outcome-investigation-validation.md).
+
+The long 104-outcome SQL traversal has its own mandatory hosted job while the
+backend complement contains every other collected test. `test_application_test_partition.py`
+covers collection multisets, exact execution, zero-skip refusal and cross-job
+source/configuration/manifest equality. `test_application_check_phases.py` covers
+unchanged full local commands, retained infrastructure prerequisites and the
+always-evaluated three-success join. Existing XML wrapper contracts cover the new
+closed mode with unchanged timeouts and owned cleanup. These pure checks do not
+replace actual hosted SQL execution.

@@ -576,3 +576,12 @@ evidence/review and lifecycle authorization are preserved. No migrations or
 backend contracts change. [Scope](68-retained-job-outcome-investigation.md) and
 [validation](../reports/job-outcome-investigation-validation.md) track source,
 normal/fresh and actual hosted acceptance, which remain pending in this entry.
+
+The investigation candidate now separates only the unchanged long 104-outcome
+SQL traversal into a mandatory hosted job, with a complete backend complement
+and exact collection/execution receipts joined against the same source/config.
+Full local aggregates and all per-job security/cleanup/deadline controls remain.
+The preceding actual operator proof passed, but two full-backend attempts reached
+the unchanged wrapper bound without final pytest summaries; both verified owned
+cleanup. New exact-tree normal/fresh, independent review and hosted receipts remain
+required. The linked validation record preserves those failed receipts.
