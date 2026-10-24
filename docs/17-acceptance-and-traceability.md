@@ -487,3 +487,7 @@ complete exact-source hosted acceptance remains required.
 
 A successful result can arrive before trailing stderr markers are drained; an
 absent timing marker alone is not evidence of a guest failure.
+
+The full timing-enabled host has an exact byte seal. Removing only the sealed
+diagnostic additions must reconstruct the historical host byte digest, preserving
+its original behavior fence alongside all fixture and migration digests.
