@@ -9,6 +9,7 @@
 - Add temporary fixed-code entitlement diagnostics to the owned operator fixture, preserving refusals and restoring the original SQL function; distinguish observation content from initial-focus failures with fixed checkpoints.
 - Distinguish organization-switch keyboard steps and capture value-free focus state only after the unchanged traversal limit fails.
 - Identify evidence-review actions and callback delivery progress using fixed failure diagnostics without changing keyboard or login controls.
+- Observe bounded, value-free dialog and request-owned opener transitions when the existing article-quality content assertion fails.
 - Add forward-only migration 0016, SQL/service/operator acceptance and [scope](docs/69-retained-article-filters.md); hosted evidence remains pending.
 
 ## 2026-10-22 — Retained job outcome investigation candidate

@@ -21,6 +21,7 @@ from operator_ui_protocol import (
     OUTCOME_PHASES,
     STAGES,
     FocusExhaustion,
+    ObservationTrace,
     asset_manifest,
     failure_reason,
     route_failure_reason,
@@ -29,6 +30,7 @@ from operator_ui_protocol import (
 )
 from playwright.async_api import (
     Error,
+    JSHandle,
     Locator,
     Page,
     Request,
@@ -187,6 +189,74 @@ async def focus(page: Page, target: Locator) -> None:
 async def activate(page: Page, target: Locator) -> None:
     await focus(page, target)
     await page.keyboard.press("Enter")
+
+
+async def start_observation_trace(opener: Locator) -> JSHandle | None:
+    """Bounded passive DOM observation; never retain or emit article text/identifiers."""
+    try:
+        return await asyncio.wait_for(
+            opener.evaluate_handle("""node => {
+            const region = node.closest('section');
+            const trace = {states: [], truncated: false};
+            const sample = () => {
+                const dialog = document.querySelector(
+                    'dialog[aria-labelledby="article-observation-title"]');
+                const panel = dialog?.querySelector(
+                    'section[aria-label="Article observation quality"]');
+                const text = panel?.textContent ?? '';
+                const state = {
+                    opener_connected: node.isConnected,
+                    region_connected: region?.isConnected === true,
+                    dialog_present: dialog !== null, dialog_open: dialog?.open === true,
+                    quality: !panel ? 'missing'
+                        : text.includes('Retained parser outcome: no contact') ? 'expected'
+                        : text.includes('Loading current article quality') ? 'loading'
+                        : text.includes('Current article quality is unavailable')
+                            ? 'unavailable' : 'other'
+                };
+                if (JSON.stringify(trace.states.at(-1)) !== JSON.stringify(state)) {
+                    if (trace.states.length < 8) trace.states.push(state);
+                    else { trace.truncated = true; trace.observer.disconnect(); }
+                }
+            };
+            trace.sample = sample;
+            trace.observer = new MutationObserver(sample);
+            trace.observer.observe(document.body, {
+                subtree: true, childList: true, characterData: true,
+                attributes: true, attributeFilter: ['open']});
+            trace.timer = setTimeout(() => {
+                trace.truncated = true; trace.observer.disconnect();
+            }, 10000);
+            sample();
+            return trace;
+        }"""),
+            timeout=0.1,
+        )
+    except Exception:
+        return None
+
+
+async def finish_observation_trace(
+    trace: JSHandle | None,
+) -> ObservationTrace | Literal["unavailable"]:
+    if trace is None:
+        return "unavailable"
+    try:
+        value = await asyncio.wait_for(
+            trace.evaluate("""trace => {
+            clearTimeout(trace.timer); trace.observer.disconnect(); trace.sample();
+            return {states: trace.states, truncated: trace.truncated};
+        }"""),
+            timeout=0.1,
+        )
+        return ObservationTrace.model_validate(value)
+    except Exception:
+        return "unavailable"
+    finally:
+        try:
+            await asyncio.wait_for(trace.dispose(), timeout=0.1)
+        except Exception:
+            pass
 
 
 async def type_text(page: Page, target: Locator, text: str) -> None:
@@ -827,6 +897,7 @@ async def main() -> None:
     stage = "browser_launch"
     outcome_phase: str | None = None
     evidence_phase: str | None = None
+    observation_trace: ObservationTrace | Literal["unavailable"] | None = None
 
     def checkpoint(value: str) -> None:
         nonlocal stage, outcome_phase, evidence_phase
@@ -1670,12 +1741,24 @@ async def main() -> None:
             opener = outcome_region.get_by_role(
                 "button", name="Inspect article observation", exact=True
             )
-            await activate(page, opener)
+            trace = await start_observation_trace(opener)
             observation_dialog = page.get_by_role(
                 "dialog", name="Article observation details", exact=True
             )
-            outcome_checkpoint("outcomes_actual_quality")
-            await expect(observation_dialog).to_contain_text("Retained parser outcome: no contact")
+            quality_failed = False
+            try:
+                await activate(page, opener)
+                outcome_checkpoint("outcomes_actual_quality")
+                await expect(observation_dialog).to_contain_text(
+                    "Retained parser outcome: no contact"
+                )
+            except AssertionError:
+                quality_failed = outcome_phase == "outcomes_actual_quality"
+                raise
+            finally:
+                captured = await finish_observation_trace(trace)
+                if quality_failed:
+                    observation_trace = captured
             outcome_checkpoint("outcomes_actual_initial_focus")
             await expect(
                 observation_dialog.get_by_role(
@@ -1885,6 +1968,15 @@ async def main() -> None:
                     "error": name if name in ERRORS else "UnexpectedError",
                     "reason": failure_reason(error),
                     **({"outcome_phase": outcome_phase} if outcome_phase is not None else {}),
+                    **(
+                        {
+                            "observation_trace": observation_trace.model_dump()
+                            if isinstance(observation_trace, ObservationTrace)
+                            else observation_trace
+                        }
+                        if observation_trace is not None
+                        else {}
+                    ),
                     **({"evidence_phase": evidence_phase} if evidence_phase is not None else {}),
                     **(
                         {

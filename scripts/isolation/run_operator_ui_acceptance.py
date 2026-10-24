@@ -201,6 +201,12 @@ def conversation(
                                         else ""
                                     )
                                     + (
+                                        "; observation trace="
+                                        + json.dumps(diagnostic.model_dump()["observation_trace"])
+                                        if diagnostic.observation_trace is not None
+                                        else ""
+                                    )
+                                    + (
                                         "; evidence phase=" + diagnostic.evidence_phase
                                         if diagnostic.evidence_phase is not None
                                         else ""

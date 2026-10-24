@@ -247,6 +247,21 @@ class FocusExhaustion(BaseModel):
     target_tab_stop: bool | None = None
 
 
+class ObservationState(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    opener_connected: bool
+    region_connected: bool
+    dialog_present: bool
+    dialog_open: bool
+    quality: Literal["missing", "loading", "unavailable", "expected", "other"]
+
+
+class ObservationTrace(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    states: list[ObservationState] = Field(min_length=1, max_length=8)
+    truncated: bool
+
+
 class DiagnosticFrame(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     kind: Literal["stage", "failure"]
@@ -281,6 +296,7 @@ class DiagnosticFrame(BaseModel):
         | InstalledReason
     ) = "unknown"
     outcome_phase: OutcomePhase | None = None
+    observation_trace: ObservationTrace | Literal["unavailable"] | None = None
     evidence_phase: EvidencePhase | None = None
     installed_callback_delivery: InstalledCallbackDelivery | None = None
     focus_exhaustion: FocusExhaustion | Literal["unavailable"] | None = None
@@ -304,6 +320,13 @@ class DiagnosticFrame(BaseModel):
             self.kind != "failure" or self.stage != "url_worker"
         ):
             raise ValueError("Outcome phase requires its exact failure stage")
+        if self.observation_trace is not None and (
+            self.kind != "failure"
+            or self.stage != "url_worker"
+            or self.outcome_phase != "outcomes_actual_quality"
+            or self.error != "AssertionError"
+        ):
+            raise ValueError("Observation trace requires its exact content assertion failure")
         if self.focus_exhaustion is not None and (
             self.kind != "failure"
             or self.reason != "keyboard_focus"

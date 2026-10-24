@@ -94,3 +94,12 @@ saving, waiting for closure and returning to Contacts. Failure snapshots also
 report fixed control kinds, disabled/inert/tab-stop flags, and whether the target
 and active control belong to the same open dialog. These observations do not
 change focus or prove the preceding event history; no labels or values are emitted.
+
+The actual observation-content assertion may report a passive DOM trace with at
+most eight fixed states: original opener/region attachment, dialog presence/open
+state and a fixed quality-content category. Mutation batches are observed without
+changing the DOM. Capacity overflow or automatic ten-second disconnect marks the
+trace truncated; unavailable capture never replaces the original assertion.
+Setup and collection use separate 100ms diagnostic bounds. No article text or
+identifiers are emitted, and the original assertion and journey deadline remain.
+The trace distinguishes observed DOM transitions, not the cause of every update.
