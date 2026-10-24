@@ -24,19 +24,19 @@ def test_callback_trace_refuses_stale_and_overlapping_request_attribution() -> N
     trace.observe(old_generation, old_request, "request_received")
     generation = trace.reset()
     trace.observe(old_generation, old_request, "fulfilled")
-    assert trace.value == "not_requested"
+    assert str(trace.value) == "not_requested"
     trace.observe(generation, current_request, "asset_verified")
-    assert trace.value == "not_requested"
+    assert str(trace.value) == "not_requested"
     trace.observe(generation, current_request, "request_received")
     trace.observe(generation, overlapping_request, "request_received")
     trace.observe(generation, overlapping_request, "fulfilled")
-    assert trace.value == "request_received"
+    assert str(trace.value) == "request_received"
     trace.observe(generation, current_request, "asset_verified")
     trace.observe(generation, current_request, "request_received")
-    assert trace.value == "asset_verified"
+    assert str(trace.value) == "asset_verified"
     trace.observe(generation, current_request, "fulfilled")
     trace.observe(generation, current_request, "asset_verified")
-    assert trace.value == "fulfilled"
+    assert str(trace.value) == "fulfilled"
 
 
 @pytest.mark.parametrize(
