@@ -1516,6 +1516,20 @@ async def main() -> None:
             await activate(
                 page, page.get_by_role("button", name="Evidence and review", exact=True).first
             )
+            await activate(
+                page,
+                page.get_by_role("button", name="Refresh association and evidence", exact=True),
+            )
+            await expect(quality).to_contain_text("Retained parser outcome:")
+            await activate(page, page.get_by_role("button", name="Close evidence", exact=True))
+            await page.get_by_role("dialog").wait_for(state="hidden")
+            if not await page.get_by_role(
+                "button", name="Evidence and review", exact=True
+            ).first.evaluate("node => node === document.activeElement"):
+                raise RuntimeError("Evidence dialog did not restore keyboard focus")
+            await activate(
+                page, page.get_by_role("button", name="Evidence and review", exact=True).first
+            )
             await page.get_by_role(
                 "heading", name="Actual retained citation", exact=True
             ).wait_for()

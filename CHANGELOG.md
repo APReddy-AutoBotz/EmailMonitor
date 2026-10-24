@@ -2,6 +2,7 @@
 
 - Add exact retained job/item selection across Contacts, Review, outcomes and export tables.
 - Add outcomes-only candidate-presence filtering with current retained binding and unchanged defaults.
+- Restore evidence-dialog focus to the current authorized opener after refresh, preserving stale-response guards.
 - Capture immutable filtered-export authority without widening worker job/batch reads; preserve legacy requests and snapshots.
 - Add forward-only migration 0016, SQL/service/operator acceptance and [scope](docs/69-retained-article-filters.md); hosted evidence remains pending.
 

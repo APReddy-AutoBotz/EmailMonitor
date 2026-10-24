@@ -40,6 +40,12 @@ revision and per-request identity fence late responses, including a return to an
 earlier path after another request or a disabled interval; existing modal Escape/focus
 restoration and page-heading navigation remain.
 
+Evidence-dialog closure restores focus by the exact batch/association identity to
+the currently authorized connected Evidence button, including after refresh replaces
+its DOM node. If that row is unavailable, the connected view introduction is the
+fallback. Closed scopes never restore focus. Loading and current-page membership
+guards still hide stale rows and details; focus restoration does not retain them.
+
 ## Current binding and SQL authority
 
 Classification resolves `execution_items.batch_id`, then the batch's **original**
