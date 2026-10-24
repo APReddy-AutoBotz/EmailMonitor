@@ -8,18 +8,17 @@ from threading import Event, Thread
 from uuid import UUID
 
 import pytest
-from sqlalchemy import Connection, Engine, create_engine, event, text
-from sqlalchemy.exc import DBAPIError
-from test_progress_tenant import claim, planned
-from test_tenant_foundation import Scenario
-from test_tenant_foundation import scenario as scenario
-
 from emailmonitor.fetching.fixture import HOSTS, TenantFixtureAuthorization
 from emailmonitor.fetching.safety import FetchDenied, classify_url
 from emailmonitor.organizations.database import AuthorizationDenied, Database, digest
 from emailmonitor.progress.binding import bound
 from emailmonitor.progress.service import Progress
 from emailmonitor.sources.policy import Operation
+from sqlalchemy import Connection, Engine, create_engine, event, text
+from sqlalchemy.exc import DBAPIError
+from test_progress_tenant import claim, planned
+from test_tenant_foundation import Scenario
+from test_tenant_foundation import scenario as scenario
 
 
 @contextmanager
@@ -291,9 +290,8 @@ def test_receipt_duplicates_and_rollback_preserve_durable_outbox(scenario: Scena
 def test_committed_revocation_or_deletion_fences_later_receipt(
     scenario: Scenario, mutation: str, first_receipt: bool
 ) -> None:
-    from test_lifecycle_tenant import lifecycle
-
     from emailmonitor.lifecycle.models import DeletionRequest
+    from test_lifecycle_tenant import lifecycle
 
     progress, job = planned(scenario)
     org = scenario.organizations[0]
