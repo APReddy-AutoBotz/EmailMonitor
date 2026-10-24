@@ -468,3 +468,11 @@ adds keyboard selection, paging reset, exact-item navigation and preview invalid
 The unchanged 104-outcome traversal, 29 exact retained-filter SQL cases and complete
 backend complement remain mandatory with matched receipts at the existing join.
 [Evidence and pending gates](../reports/retained-article-filters-validation.md).
+
+The owned installed XML harness records fixed export substeps on failure and a
+failure-only publisher/export/outbox receipt scoped to its synthetic organization
+and owner. The separate read-only SQL connection has bounded connect, statement
+and lock waits; unavailable diagnostics preserve the original failure. Closed
+vocabulary and ownership tests are in `test_installed_xml_harness.py` and
+`test_operator_ui_protocol.py`. These observations do not change runtime behavior
+or establish complete hosted acceptance; no migration or grants are required.

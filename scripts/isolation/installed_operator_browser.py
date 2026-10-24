@@ -24,6 +24,7 @@ from installed_operator_redirects import (
 )
 from operator_ui_protocol import (
     ORIGIN,
+    InstalledExportStep,
     InstalledLoginPhase,
     InstalledReason,
 )
@@ -107,6 +108,7 @@ async def main() -> None:
     callback_index_seen = False
     download_seen = asyncio.Event()
     stage = "browser_launch"
+    export_step: InstalledExportStep | None = None
     diagnostics = InstalledDiagnostics()
     login_phase: InstalledLoginPhase | None = None
     callback_delivery = CallbackDeliveryTrace()
@@ -115,9 +117,14 @@ async def main() -> None:
     active_redirects: LoginRedirects | None = None
 
     def checkpoint(value: str) -> None:
-        nonlocal stage
+        nonlocal stage, export_step
         stage = value
+        export_step = None
         print(json.dumps({"kind": "stage", "stage": value}), flush=True)
+
+    def export_checkpoint(phase: str, format_name: str | None) -> None:
+        nonlocal export_step
+        export_step = InstalledExportStep.model_validate({"phase": phase, "format": format_name})
 
     async def exchange(
         value: dict[str, object], operation: list[InstalledReason]
@@ -317,15 +324,21 @@ async def main() -> None:
                         return
                     # Route callback exceptions otherwise surface asynchronously and
                     # can include request URLs. Emit only the fixed diagnostic shape.
+                    fixed = diagnostics.capture(
+                        error, redirects.failure_reason or operation[0], login_phase
+                    )
                     print(
                         json.dumps(
                             {
                                 "kind": "failure",
                                 "stage": stage,
-                                **diagnostics.capture(
-                                    error,
-                                    redirects.failure_reason or operation[0],
-                                    login_phase,
+                                **fixed,
+                                **(
+                                    {"installed_export_step": export_step.model_dump()}
+                                    if stage == "export_preview"
+                                    and export_step is not None
+                                    and fixed.get("installed_login_phase") is None
+                                    else {}
                                 ),
                                 "api_statuses": statuses,
                             }
@@ -419,7 +432,9 @@ async def main() -> None:
             if controlled_xml:
                 from installed_xml_browser import xml_journey
 
-                job = await xml_journey(page, channel, setup, checkpoint, login, download_seen)
+                job = await xml_journey(
+                    page, channel, setup, checkpoint, login, download_seen, export_checkpoint
+                )
             else:
                 checkpoint("source_review")
                 await activate(page, page.get_by_role("button", name="Sources", exact=True))
@@ -664,6 +679,13 @@ async def main() -> None:
                         {"installed_callback_delivery": callback_delivery.value}
                         if login_phase == "callback_document"
                         and fixed.get("installed_login_phase") == "callback_document"
+                        else {}
+                    ),
+                    **(
+                        {"installed_export_step": export_step.model_dump()}
+                        if stage == "export_preview"
+                        and export_step is not None
+                        and fixed.get("installed_login_phase") is None
                         else {}
                     ),
                     "api_statuses": statuses,

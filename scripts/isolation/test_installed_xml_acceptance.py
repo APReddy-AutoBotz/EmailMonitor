@@ -17,8 +17,8 @@ import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
-from uuid import uuid4
+from typing import Any, Literal
+from uuid import UUID, uuid4
 from zipfile import ZipFile
 
 import httpx
@@ -41,9 +41,11 @@ from emailmonitor.sources import provider_documents as catalog
 from installed_operator_issuer import synthetic_issuer
 from installed_operator_relay import application
 from installed_xml_service_image import installed_service_image
+from pydantic import BaseModel, ConfigDict, Field
 from run_installed_operator import run_installed
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
+from sqlalchemy.pool import NullPool
 from test_installed_operator_acceptance import (
     api_process_client,
     cleanup_resources,
@@ -61,6 +63,85 @@ from transport_topology import Topology, resource
 from xml_image_evidence import require_packaged_image
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+class ExportStateReceipt(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    format: Literal["xlsx", "csv"]
+    state: Literal["queued", "running", "ready", "failed", "revoked", "expired"]
+    attempts: int = Field(ge=0, le=3)
+    lease_present: bool
+    lease_active: bool
+    pending: bool
+    confirmed: bool
+    delivered: bool
+
+
+def owned_export_states(admin_url: str, organization: UUID, owner: UUID) -> list[dict[str, Any]]:
+    """One bounded read of only this test's exports; no identifiers leave SQL."""
+    engine = create_engine(
+        admin_url, hide_parameters=True, poolclass=NullPool, connect_args={"timeout": 0.5}
+    )
+    try:
+        with engine.begin() as connection:
+            connection.exec_driver_sql("SET TRANSACTION READ ONLY")
+            connection.exec_driver_sql("SET LOCAL statement_timeout='500ms'")
+            connection.exec_driver_sql("SET LOCAL lock_timeout='100ms'")
+            rows = (
+                connection.execute(
+                    text(
+                        "SELECT e.request->>'format' AS format,e.state,e.attempts,"
+                        "e.lease_nonce IS NOT NULL AS lease_present,"
+                        "COALESCE(e.lease_until>clock_timestamp(),false) AS lease_active,"
+                        "COALESCE(o.published_at IS NULL AND o.export_id IS NOT NULL,false) "
+                        "AS pending,o.published_at IS NOT NULL AS confirmed,"
+                        "COALESCE(o.deliveries>0,false) AS delivered "
+                        "FROM emailmonitor.exports e LEFT JOIN emailmonitor.export_outbox o "
+                        "ON o.organization_id=e.organization_id AND o.export_id=e.id "
+                        "AND o.generation=e.generation "
+                        "WHERE e.organization_id=:org AND e.requested_by=:owner "
+                        "ORDER BY e.created_at,e.id LIMIT 3"
+                    ),
+                    {"org": organization, "owner": owner},
+                )
+                .mappings()
+                .all()
+            )
+        if len(rows) > 2:
+            raise ValueError("Unexpected synthetic export count")
+        result = [ExportStateReceipt.model_validate(dict(row)).model_dump() for row in rows]
+        if len({row["format"] for row in result}) != len(result):
+            raise ValueError("Unexpected synthetic export formats")
+        return result
+    finally:
+        engine.dispose()
+
+
+def export_failure_note(
+    admin_url: str,
+    organization: UUID,
+    owner: UUID,
+    publisher: threading.Thread | None,
+    stop: threading.Event,
+    failed: bool,
+    completed_pass: bool,
+) -> str:
+    """Failure-only observations, not an atomic publisher/database snapshot."""
+    try:
+        fields: dict[str, Any] = {
+            "publisher_started": publisher is not None,
+            "publisher_alive": publisher is not None and publisher.is_alive(),
+            "publisher_stop_requested": stop.is_set(),
+            "publisher_failed": failed,
+            "publisher_completed_pass": completed_pass,
+        }
+        try:
+            fields["exports"] = owned_export_states(admin_url, organization, owner)
+        except BaseException:
+            fields["exports"] = "unavailable"
+        return "Installed XML export diagnostic " + json.dumps(fields, sort_keys=True)
+    except BaseException:
+        return "Installed XML export diagnostic unavailable"
 
 
 def worker_failure_note(worker: Any) -> str:
@@ -663,6 +744,18 @@ def test_installed_controlled_xml_operator(
                     assert not publisher_thread.is_alive()
     except BaseException as error:
         primary = error
+        BaseException.add_note(
+            error,
+            export_failure_note(
+                case.admin_url,
+                org,
+                case.identities["owner"],
+                publisher_thread,
+                stop,
+                bool(errors),
+                publication_passes > 0,
+            ),
+        )
         raise
     finally:
         cleanup_resources(

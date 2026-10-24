@@ -230,6 +230,26 @@ InstalledCallbackDelivery = Literal[
 ]
 
 
+class InstalledExportStep(BaseModel):
+    """Only fixed steps of the owned synthetic XML export journey."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+    phase: Literal[
+        "navigate",
+        "format",
+        "preview_activate",
+        "preview_wait",
+        "create",
+        "row_wait",
+        "ready_wait",
+        "refresh",
+        "download_activate",
+        "download_wait",
+        "verify",
+    ]
+    format: Literal["xlsx", "csv"] | None
+
+
 class FocusExhaustion(BaseModel):
     """Value-free state sampled after the unchanged keyboard limit fails."""
 
@@ -299,6 +319,7 @@ class DiagnosticFrame(BaseModel):
     observation_trace: ObservationTrace | Literal["unavailable"] | None = None
     evidence_phase: EvidencePhase | None = None
     installed_callback_delivery: InstalledCallbackDelivery | None = None
+    installed_export_step: InstalledExportStep | None = None
     focus_exhaustion: FocusExhaustion | Literal["unavailable"] | None = None
     installed_login_phase: InstalledLoginPhase | None = None
     api_statuses: list[int] = Field(default_factory=list, max_length=512)
@@ -337,6 +358,10 @@ class DiagnosticFrame(BaseModel):
             self.kind != "failure" or self.stage != "evidence_review"
         ):
             raise ValueError("Evidence phase requires its exact failure stage")
+        if self.installed_export_step is not None and (
+            self.kind != "failure" or self.stage != "export_preview"
+        ):
+            raise ValueError("Export step requires its exact failure stage")
         if self.installed_callback_delivery is not None and (
             self.kind != "failure" or self.installed_login_phase != "callback_document"
         ):

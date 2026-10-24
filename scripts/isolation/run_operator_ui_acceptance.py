@@ -217,6 +217,12 @@ def conversation(
                                         if diagnostic.installed_callback_delivery is not None
                                         else ""
                                     )
+                                    + (
+                                        "; export step="
+                                        + diagnostic.installed_export_step.model_dump_json()
+                                        if diagnostic.installed_export_step is not None
+                                        else ""
+                                    )
                                     + "; actual reply statuses="
                                     + str(diagnostic.api_statuses)
                                 )

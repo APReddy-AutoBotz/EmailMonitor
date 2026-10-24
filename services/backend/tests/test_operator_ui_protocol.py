@@ -1017,3 +1017,27 @@ def test_contact_request_generation_regressions_use_actual_hook_and_held_respons
     assert "}, [request])" in hook and "owned?.request !== request" in hook
     assert "setOwned({ request, resource:" in hook
     assert "setOwned(current => ({ request, resource:" in hook
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"kind": "stage", "error": None},
+        {"stage": "evidence_review"},
+        {"installed_export_step": {"phase": "secret", "format": "xlsx"}},
+        {"installed_export_step": {"phase": "ready_wait", "format": "private"}},
+        {"installed_export_step": {"phase": "ready_wait", "format": "xlsx", "id": "private"}},
+    ],
+)
+def test_export_step_is_closed_and_failure_scoped(changes: dict[str, object]) -> None:
+    from operator_ui_protocol import DiagnosticFrame
+
+    frame = {
+        "kind": "failure",
+        "stage": "export_preview",
+        "error": "TimeoutError",
+        "installed_export_step": {"phase": "ready_wait", "format": "xlsx"},
+    }
+    assert DiagnosticFrame.model_validate(frame).installed_export_step is not None
+    with pytest.raises(ValidationError):
+        DiagnosticFrame.model_validate({**frame, **changes})

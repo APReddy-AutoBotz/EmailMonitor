@@ -102,7 +102,13 @@ def test_installed_xml_browser_refuses_ambiguous_input_before_ui(
     with pytest.raises(ValueError, match="Fixed installed XML input required"):
         asyncio.run(
             browser.xml_journey(
-                None, None, {"direct_article_url": direct}, lambda _: None, login, asyncio.Event()
+                None,
+                None,
+                {"direct_article_url": direct},
+                lambda _: None,
+                login,
+                asyncio.Event(),
+                lambda phase, format_name: None,
             )
         )
 
@@ -596,3 +602,81 @@ def test_expected_failure_requires_completed_milestones_after_raises(
         assert source.index("revocation_committed = True") > source.index("assert revoked ==")
         assert source.index("release_ack = True") > source.index("fixture.receive(deadline) ==")
         assert "nonlocal release_attempted, release_ack" in source
+
+
+def test_export_failure_receipt_keeps_publisher_failure_when_sql_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import threading
+    from uuid import uuid4
+
+    stopped = threading.Event()
+    stopped.set()
+
+    def unavailable(*args: object) -> None:
+        raise RuntimeError("sensitive database message must not escape")
+
+    monkeypatch.setattr(harness, "owned_export_states", unavailable)
+    note = harness.export_failure_note("private-url", uuid4(), uuid4(), None, stopped, True, True)
+    assert '"publisher_failed": true' in note
+    assert '"publisher_stop_requested": true' in note
+    assert '"exports": "unavailable"' in note
+    assert "sensitive" not in note and "private-url" not in note
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"format": "private-content"},
+        {"state": "unknown"},
+        {"attempts": True},
+        {"attempts": 4},
+        {"pending": "false"},
+        {"export_id": "private-id"},
+    ],
+)
+def test_export_receipt_rejects_unbounded_or_coerced_data(change: dict[str, object]) -> None:
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        harness.ExportStateReceipt.model_validate(
+            {
+                "format": "xlsx",
+                "state": "queued",
+                "attempts": 0,
+                "lease_present": False,
+                "lease_active": False,
+                "pending": True,
+                "confirmed": False,
+                "delivered": False,
+                **change,
+            }
+        )
+
+
+def test_export_state_query_is_owned_bounded_read_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    from unittest.mock import MagicMock
+    from uuid import uuid4
+
+    organization, owner = uuid4(), uuid4()
+    engine = MagicMock()
+    connection = engine.begin.return_value.__enter__.return_value
+    connection.execute.return_value.mappings.return_value.all.return_value = []
+    factory = MagicMock(return_value=engine)
+    monkeypatch.setattr(harness, "create_engine", factory)
+    assert harness.owned_export_states("existing-test-admin", organization, owner) == []
+    assert factory.call_args.kwargs["connect_args"] == {"timeout": 0.5}
+    assert factory.call_args.kwargs["hide_parameters"] is True
+    statements = [call.args[0] for call in connection.exec_driver_sql.call_args_list]
+    assert statements == [
+        "SET TRANSACTION READ ONLY",
+        "SET LOCAL statement_timeout='500ms'",
+        "SET LOCAL lock_timeout='100ms'",
+    ]
+    query, parameters = connection.execute.call_args.args
+    assert "e.organization_id=:org AND e.requested_by=:owner" in str(query)
+    assert "o.organization_id=e.organization_id AND o.export_id=e.id" in str(query)
+    assert "o.generation=e.generation" in str(query)
+    assert str(query).endswith("LIMIT 3")
+    assert parameters == {"org": organization, "owner": owner}
+    engine.dispose.assert_called_once_with()

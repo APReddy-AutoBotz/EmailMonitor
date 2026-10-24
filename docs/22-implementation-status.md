@@ -619,3 +619,11 @@ The owned operator fixture also has temporary value-free server-side entitlement
 diagnostics, with exact function restoration and unchanged refusal behavior.
 These observations distinguish ordinary denial from caught lock refusal in the
 actual invocation; complete hosted acceptance remains required.
+
+The owned installed XML harness records fixed export substeps on failure and a
+failure-only publisher/export/outbox receipt scoped to its synthetic organization
+and owner. The separate read-only SQL connection has bounded connect, statement
+and lock waits; unavailable diagnostics preserve the original failure. Closed
+vocabulary and ownership tests are in `test_installed_xml_harness.py` and
+`test_operator_ui_protocol.py`. These observations do not change runtime behavior
+or establish complete hosted acceptance; no migration or grants are required.

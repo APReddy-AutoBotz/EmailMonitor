@@ -1,3 +1,8 @@
+## 2026-10-24 — Owned installed export diagnostics
+
+- Add failure-only fixed export-step and synthetic publisher/export/outbox observations to the installed XML acceptance harness.
+- Preserve runtime behavior, refusals, deadlines, assertions and owned cleanup; no migration or grant changes.
+
 ## 2026-10-23 — Retained article filters candidate
 
 - Add exact retained job/item selection across Contacts, Review, outcomes and export tables.
