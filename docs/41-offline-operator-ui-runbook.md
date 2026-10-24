@@ -63,3 +63,14 @@ Acceptance requires application tests with no service skips, controlled transpor
 
 
 Independent authoritative reconciliation confirmed application1132/no skips/one alias-body warning284.57s, keyboard UI1/64.12s and controlled12/56.92s plus actual browser/parser/docs. The keyboard result includes the unchanged affirmative Chromium sandbox/lo-only/IPv4+IPv6 errno101 controls, native Escape focus restoration, real current-authorized4471-byte export and delayed old-tenant response/replay refusal. [Validation](../reports/em012-validation.md) records exact IDs, review corrections and scope limits. All branches remain Draft/unmerged; EM-WARN-01 cause remains open.
+
+The owned operator fixture can temporarily instrument the exact reviewed
+`network_entitlement_allowed` body with fixed client notices distinguishing
+ordinary denial from caught lock refusal. All predicates, locks and return values
+remain unchanged. Installation verifies the original body, function configuration
+and server notice-logging threshold; teardown verifies restoration of the exact
+definition, ownership and privileges and refuses to overwrite unexpected changes.
+Only the existing opt-in synthetic worker observes these notices. It consumes no
+query results, executes no additional SQL, and emits bounded allowlisted reason
+codes only. Missing, ambiguous, malformed or truncated observations cannot be
+complete diagnostic evidence. No migration or production activation is added.

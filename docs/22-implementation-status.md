@@ -614,3 +614,8 @@ aggregates remain unchanged; exact-source hosted acceptance is still required.
 The owned browser acceptance also has bounded tenant-only admission-timing
 diagnostics. They preserve the HTTP receipt-gap assertion, cleanup and all runtime
 authority/deadline controls; exact-source hosted acceptance remains required.
+
+The owned operator fixture also has temporary value-free server-side entitlement
+diagnostics, with exact function restoration and unchanged refusal behavior.
+These observations distinguish ordinary denial from caught lock refusal in the
+actual invocation; complete hosted acceptance remains required.

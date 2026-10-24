@@ -16,6 +16,7 @@ from emailmonitor.discovery.broker import process as discover_process
 from emailmonitor.discovery.service import Discovery
 from emailmonitor.jobs.callback_wake import FixtureCallbackWake
 from emailmonitor.jobs.diagnostics import TASK, WorkerDiagnostics, emit
+from emailmonitor.jobs.entitlement_diagnostics import EntitlementDiagnostics
 from emailmonitor.jobs.ledger import Ledger, Work
 from emailmonitor.jobs.models import StrictModel
 from emailmonitor.jobs.queues import owned_queues
@@ -106,6 +107,11 @@ def create_worker(
     diagnostic = WorkerDiagnostics(application, config.queue) if config.ui_diagnostics else None
     if diagnostic is not None:
         diagnostic.connect()
+        try:
+            EntitlementDiagnostics().connect(ledger.database.engine)
+        except Exception:
+            # Optional observation cannot change worker construction or authority.
+            pass
 
     def persist(body: dict[str, object]) -> None:
         work = Work.parse(body)
