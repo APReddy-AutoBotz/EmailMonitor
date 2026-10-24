@@ -152,7 +152,8 @@ async def focus(page: Page, target: Locator) -> None:
     # Never emit DOM text, values, identifiers, URLs or arbitrary error messages.
     try:
         focus_exhaustion = FocusExhaustion.model_validate(
-            await target.evaluate("""node => {
+            await asyncio.wait_for(
+                target.evaluate("""node => {
                 const active = document.activeElement;
                 const heading = document.querySelector('section[aria-label="Article outcomes"] h4');
                 return {
@@ -163,7 +164,9 @@ async def focus(page: Page, target: Locator) -> None:
                         : active === document.body ? 'body'
                         : active === heading ? 'outcomes_heading' : 'other'
                 };
-            }""")
+            }"""),
+                timeout=0.1,
+            )
         )
     except Exception:
         focus_exhaustion = "unavailable"

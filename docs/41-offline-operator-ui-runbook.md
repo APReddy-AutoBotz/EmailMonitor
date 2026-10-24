@@ -84,6 +84,6 @@ The held-response organization-switch journey separates Next-page navigation,
 switch-away, switch-back and job-reopen checkpoints. On keyboard traversal
 exhaustion only, a closed diagnostic reports target/document focus, whether a
 dialog is open, and a fixed active-element category. It never emits DOM text,
-values or identifiers. Missing or invalid snapshots report unavailable. The
+values or identifiers. Missing, invalid or over-100ms snapshots report unavailable. The
 original 100-Tab failure, assertions and overall deadline remain unchanged,
 including when the final Tab reaches the target.

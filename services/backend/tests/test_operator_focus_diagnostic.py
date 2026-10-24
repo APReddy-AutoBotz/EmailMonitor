@@ -71,6 +71,39 @@ def test_successful_focus_clears_prior_snapshot_without_extra_read(
     keyboard.press.assert_not_awaited()
 
 
+def test_pending_snapshot_is_cancelled_without_masking_original_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import asyncio
+
+    import operator_ui_acceptance as guest
+
+    reads = 0
+    cancelled = False
+
+    async def evaluate(_: str) -> object:
+        nonlocal reads, cancelled
+        reads += 1
+        if reads <= 100:
+            return False
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cancelled = True
+        return None
+
+    target = SimpleNamespace(wait_for=AsyncMock(), evaluate=evaluate)
+    keyboard = SimpleNamespace(press=AsyncMock())
+    monkeypatch.setattr(guest, "expect", lambda _: SimpleNamespace(to_be_enabled=AsyncMock()))
+    with pytest.raises(RuntimeError, match="^Control not reachable by keyboard$"):
+        asyncio.run(
+            guest.focus(cast(Page, SimpleNamespace(keyboard=keyboard)), cast(Locator, target))
+        )
+    assert cancelled and reads == 101
+    assert keyboard.press.await_count == 100
+    assert guest.focus_exhaustion == "unavailable"
+
+
 @pytest.mark.parametrize(
     "extra",
     [
