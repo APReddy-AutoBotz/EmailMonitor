@@ -8,9 +8,35 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from installed_operator_redirects import InstalledDiagnostics, installed_relay_reason
+from installed_operator_redirects import (
+    CallbackDeliveryTrace,
+    InstalledDiagnostics,
+    installed_relay_reason,
+)
 from operator_ui_protocol import ORIGIN, DiagnosticFrame, InstalledReason
 from pydantic import ValidationError
+
+
+def test_callback_trace_refuses_stale_and_overlapping_request_attribution() -> None:
+    trace = CallbackDeliveryTrace()
+    old_request, current_request, overlapping_request = object(), object(), object()
+    old_generation = trace.reset()
+    trace.observe(old_generation, old_request, "request_received")
+    generation = trace.reset()
+    trace.observe(old_generation, old_request, "fulfilled")
+    assert trace.value == "not_requested"
+    trace.observe(generation, current_request, "asset_verified")
+    assert trace.value == "not_requested"
+    trace.observe(generation, current_request, "request_received")
+    trace.observe(generation, overlapping_request, "request_received")
+    trace.observe(generation, overlapping_request, "fulfilled")
+    assert trace.value == "request_received"
+    trace.observe(generation, current_request, "asset_verified")
+    trace.observe(generation, current_request, "request_received")
+    assert trace.value == "asset_verified"
+    trace.observe(generation, current_request, "fulfilled")
+    trace.observe(generation, current_request, "asset_verified")
+    assert trace.value == "fulfilled"
 
 
 @pytest.mark.parametrize(

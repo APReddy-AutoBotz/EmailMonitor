@@ -16,6 +16,7 @@ from urllib.parse import urlsplit
 
 from browser_acceptance import sandbox_status
 from installed_operator_redirects import (
+    CallbackDeliveryTrace,
     InstalledDiagnostics,
     LoginRedirects,
     installed_relay_reason,
@@ -23,7 +24,6 @@ from installed_operator_redirects import (
 )
 from operator_ui_protocol import (
     ORIGIN,
-    InstalledCallbackDelivery,
     InstalledLoginPhase,
     InstalledReason,
 )
@@ -109,7 +109,8 @@ async def main() -> None:
     stage = "browser_launch"
     diagnostics = InstalledDiagnostics()
     login_phase: InstalledLoginPhase | None = None
-    callback_delivery: InstalledCallbackDelivery = "not_requested"
+    callback_delivery = CallbackDeliveryTrace()
+    callback_target: str | None = None
     login_reason: InstalledReason = "installed_login_failed"
     active_redirects: LoginRedirects | None = None
 
@@ -204,16 +205,24 @@ async def main() -> None:
             page.on("requestfailed", failed_navigation)
 
             async def route_request(route: Route, operation: list[InstalledReason]) -> None:
-                nonlocal callback_index_seen, callback_delivery
+                nonlocal callback_index_seen
                 incoming = route.request
                 parsed = urlsplit(incoming.url)
                 origin = f"{parsed.scheme}://{parsed.netloc}"
                 if origin not in {api, issuer} or parsed.fragment:
                     await route.abort("blockedbyclient")
                     return
-                callback_document = origin == api and parsed.path == "/auth/complete"
-                if callback_document and login_phase == "callback_document":
-                    callback_delivery = "request_received"
+                callback_generation = callback_delivery.generation
+                callback_document = (
+                    origin == api
+                    and parsed.path == "/auth/complete"
+                    and incoming.url == callback_target
+                    and incoming.is_navigation_request()
+                    and incoming.frame == page.main_frame
+                    and login_phase == "callback_document"
+                )
+                if callback_document:
+                    callback_delivery.observe(callback_generation, incoming, "request_received")
                 operation[0] = "installed_route_headers"
                 headers = {
                     key: value
@@ -254,8 +263,8 @@ async def main() -> None:
                             "Actual installed web asset differs from package receipt"
                         )
                     received_assets.add(asset)
-                    if callback_document and login_phase == "callback_document":
-                        callback_delivery = "asset_verified"
+                    if callback_document:
+                        callback_delivery.observe(callback_generation, incoming, "asset_verified")
                     callback_index_seen |= parsed.path == "/auth/complete"
                     response["headers"].pop("content-range", None)
                     response["status"] = 200
@@ -295,8 +304,8 @@ async def main() -> None:
                 await route.fulfill(
                     status=response["status"], headers=response["headers"], body=bytes(output)
                 )
-                if callback_document and login_phase == "callback_document":
-                    callback_delivery = "fulfilled"
+                if callback_document:
+                    callback_delivery.observe(callback_generation, incoming, "fulfilled")
 
             async def safe_route(route: Route) -> None:
                 operation: list[InstalledReason] = ["installed_route_headers"]
@@ -342,8 +351,9 @@ async def main() -> None:
             page.on("download", download)
 
             async def login() -> None:
-                nonlocal login_phase, login_reason, callback_delivery
-                callback_delivery = "not_requested"
+                nonlocal login_phase, login_reason, callback_target
+                callback_delivery.reset()
+                callback_target = None
                 async with asyncio.timeout(10):
                     login_phase = "initial_session"
                     await expect(
@@ -371,6 +381,7 @@ async def main() -> None:
                         login_reason = "installed_expected_navigation_mismatch"
                         raise RuntimeError("Expected isolated redirect failure missing")
                     login_phase = "callback_document"
+                    callback_target = callback
                     await page.goto(callback, wait_until="domcontentloaded")
                     login_phase = "callback_session"
                     await expect(
@@ -650,7 +661,7 @@ async def main() -> None:
                     "stage": stage,
                     **fixed,
                     **(
-                        {"installed_callback_delivery": callback_delivery}
+                        {"installed_callback_delivery": callback_delivery.value}
                         if login_phase == "callback_document"
                         and fixed.get("installed_login_phase") == "callback_document"
                         else {}

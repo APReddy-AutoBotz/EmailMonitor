@@ -6,8 +6,9 @@ identity is created by this change.
 
 Installed callback-navigation failures may include a fixed delivery checkpoint:
 not requested, request received, packaged index asset verified, or fulfilled.
-The diagnostic resets for each login and is emitted only for a matching
-callback-document failure. It contains no callback URL, cookie or state value.
+The diagnostic resets for each login, binds the first exact approved main-frame
+callback request, ignores stale or overlapping requests, and is emitted only for
+a matching callback-document failure. It contains no callback URL, cookie or state value.
 It distinguishes observed delivery progress from navigation readiness without
 changing redirects, authentication checks, network isolation or the login deadline.
 

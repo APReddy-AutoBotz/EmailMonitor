@@ -175,7 +175,12 @@ def test_tooltip_review_navigation_matches_observed_association_and_ui_filter() 
         for index, node in enumerate(branch.body)
         if ast.unparse(node) == "checkpoint('evidence_review')"
     )
-    navigation = branch.body[checkpoint + 1]
+    # Fixed diagnostic labels may precede the unchanged first awaited navigation.
+    navigation = next(
+        node
+        for node in branch.body[checkpoint + 1 :]
+        if isinstance(node, ast.Expr) and isinstance(node.value, ast.Await)
+    )
     selector = next(
         node
         for node in ast.walk(navigation)
