@@ -1,3 +1,8 @@
+## 2026-10-24 — Isolated execution receipt lock candidate
+
+- Add forward migration 0017 for receipt-only shared job locking; retain control fences, authority predicates, outbox transitions and publication ordering.
+- Add actual SQL concurrency, refusal, duplicate and rollback checks. This candidate is not published; source-policy serialization and complete lifecycle interleavings remain explicitly unproven.
+
 ## 2026-10-24 — Owned terminal replay/render synchronization
 
 - Synchronize the no-contact content inspection with the exact job's terminal replay consumption, matching generation/progress, and current request-owned outcome render.

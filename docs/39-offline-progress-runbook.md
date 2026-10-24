@@ -39,3 +39,7 @@ Run scripts/check.sh. Required actual CI must execute all PostgreSQL lifecycle/R
 ## Verified scoped foundation in Draft
 
 Independent source and authoritative evidence review verified head16bb590e/tree58a708d8 against document16 EM-010/document10: application862/no skips/no pytest warning summary,22 new actual SQL/four actual broker cases, controlled12 with actual leased tooltip item/job completion, and browser/parser/docs success. [Evidence and initial failure history](../reports/em010-validation.md). The forward-only migration0007 and all fixture/production refusal boundaries remain unchanged. UI, commercial scheduling/quota controls and generalized/live production acquisition are later tasks. The documentation-only checkpoint still requires its own five exact-head CI gates before bounded offline EM-011.
+
+### Receipt lock migration candidate
+
+Migration 0017 is a forward-only function replacement, with no new roles, grants, tables or data backfill. It retains function ownership and ACLs and advances the schema readiness marker. Receipt locks remain held until commit; broker send precedes durable confirmation. Do not deploy this isolated candidate until its concurrency proof and acceptance gates are complete. A rollback requires an explicit forward repair; no automated downgrade is provided.

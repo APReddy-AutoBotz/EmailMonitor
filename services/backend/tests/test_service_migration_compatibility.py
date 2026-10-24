@@ -25,7 +25,7 @@ from sqlalchemy.exc import DBAPIError
 from test_source_foundation import policy_body
 
 ROOT = Path(__file__).resolve().parents[3]
-HEAD = "0016_retained_article_filters"
+HEAD = "0017_execution_receipt_lock"
 FILTER_PREVIOUS = "0015_service_plan_cache"
 SERVICE_PREVIOUS = "0014_service_authority"
 PREVIOUS = "0013_provider_journey"

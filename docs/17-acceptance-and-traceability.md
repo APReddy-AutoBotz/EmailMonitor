@@ -503,3 +503,7 @@ observations. A separate hosted proof holds actual terminal replay, demonstrates
 premature-dialog invalidation after release, then verifies synchronized inspection.
 Events are forwarded unchanged; production lifecycle and permission rules are not
 modified. Exact-head hosted acceptance remains required.
+
+### Execution receipt lock candidate
+
+`test_execution_receipt_lock_tenant.py` exercises actual claimed-worker authorization while a receipt transaction is held, incompatible control locks, reverse-order refusal/wait behavior, concurrent receipts, duplicate receipts and rollback. Missing SQL remains an explicit skip. These checks do not establish all lifecycle interleavings or installed broker acceptance. Existing extraction jobs have null `jobs.source_id`; the original and candidate receipt fences do not lock source catalog/policy rows through that field. No stronger source serialization guarantee is claimed.

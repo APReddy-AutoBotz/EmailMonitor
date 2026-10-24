@@ -647,3 +647,7 @@ observations. A separate hosted proof holds actual terminal replay, demonstrates
 premature-dialog invalidation after release, then verifies synchronized inspection.
 Events are forwarded unchanged; production lifecycle and permission rules are not
 modified. Exact-head hosted acceptance remains required.
+
+### Isolated receipt concurrency candidate
+
+Forward migration 0017 replaces only `execution_confirmed` with a receipt-specific shared job fence and advances service schema readiness. It preserves existing authority predicates and outbox updates; the generic control fence is unchanged. Publication is pending focused proof review. Export reconciliation remains unchanged. Source-policy and full revocation/deletion interleavings are not declared accepted.
