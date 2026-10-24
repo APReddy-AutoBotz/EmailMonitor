@@ -1,3 +1,8 @@
+## 2026-10-24 — Owned terminal replay/render synchronization
+
+- Synchronize the no-contact content inspection with the exact job's terminal replay consumption, matching generation/progress, and current request-owned outcome render.
+- Add deterministic stale/incomplete-correlation coverage and a separate hosted delayed-replay invalidation proof, preserving the single primary opening, lifecycle assertions and existing deadlines.
+
 ## 2026-10-24 — Owned browser checkpoint timing
 
 - Record bounded host-monotonic arrival-time buckets for existing fixed browser-isolation checkpoints on success and deadline failure.

@@ -491,3 +491,15 @@ absent timing marker alone is not evidence of a guest failure.
 The full timing-enabled host has an exact byte seal. Removing only the sealed
 diagnostic additions must reconstruct the historical host byte digest, preserving
 its original behavior fence alongside all fixture and migration digests.
+
+The owned operator harness now observes the URL job from creation through terminal
+SSE replay. Readiness requires current stream acknowledgment, matching job and
+progress generation/sequence, successful current response delivery, replacement
+of the pre-replay request-owned page, and a connected matching outcome opener.
+The synchronization and original visibility check share the existing ten-second
+budget; the 180-second journey limit and content/focus assertions remain unchanged.
+`test_operator_replay_readiness.py` covers reordered, stale, incomplete and refused
+observations. A separate hosted proof holds actual terminal replay, demonstrates
+premature-dialog invalidation after release, then verifies synchronized inspection.
+Events are forwarded unchanged; production lifecycle and permission rules are not
+modified. Exact-head hosted acceptance remains required.

@@ -635,3 +635,15 @@ markers share their host receipt time. Success and deadline-failure evidence
 retain these observations without changing mediation, browser behavior or limits.
 `test_browser_isolation_configuration.py` covers these diagnostic boundaries;
 complete exact-source hosted acceptance remains required.
+
+The owned operator harness now observes the URL job from creation through terminal
+SSE replay. Readiness requires current stream acknowledgment, matching job and
+progress generation/sequence, successful current response delivery, replacement
+of the pre-replay request-owned page, and a connected matching outcome opener.
+The synchronization and original visibility check share the existing ten-second
+budget; the 180-second journey limit and content/focus assertions remain unchanged.
+`test_operator_replay_readiness.py` covers reordered, stale, incomplete and refused
+observations. A separate hosted proof holds actual terminal replay, demonstrates
+premature-dialog invalidation after release, then verifies synchronized inspection.
+Events are forwarded unchanged; production lifecycle and permission rules are not
+modified. Exact-head hosted acceptance remains required.
