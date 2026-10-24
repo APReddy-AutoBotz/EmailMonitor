@@ -7,11 +7,14 @@ They are not evidence of actual PostgreSQL restore, role isolation or recovery.
 from copy import deepcopy
 from dataclasses import fields, replace
 from itertools import product
+from pathlib import Path
 from typing import Any, cast
 from unittest.mock import MagicMock
 from uuid import UUID
 
 import pytest
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 from restore_exercise import (
     AUTH,
     RUNTIME,
@@ -33,6 +36,50 @@ from service_restore_exercise import (
     validate_service_seal,
 )
 from sqlalchemy import Connection, Engine
+
+
+@pytest.mark.parametrize(
+    "version_case", ["head", "previous", "unknown", "empty", "duplicate", "mixed"]
+)
+def test_capture_service_requires_exact_current_migration(
+    version_case: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import service_restore_exercise as exercise
+
+    root = Path(__file__).resolve().parents[3]
+    config = Config()
+    config.set_main_option("script_location", str(root / "services/backend/migrations"))
+    scripts = ScriptDirectory.from_config(config)
+    head = scripts.get_current_head()
+    assert head is not None
+    revision = scripts.get_revision(head)
+    assert revision is not None
+    versions = {
+        "head": [head],
+        "previous": [revision.down_revision],
+        "unknown": ["unrecognized_schema"],
+        "empty": [],
+        "duplicate": [head, head],
+        "mixed": [head, revision.down_revision],
+    }[version_case]
+    connection = MagicMock()
+    connection.execute.return_value.scalars.return_value.all.return_value = versions
+    engine = MagicMock()
+    engine.connect.return_value.execution_options.return_value.__enter__.return_value = connection
+    monkeypatch.setattr(exercise, "capture_rows", MagicMock())
+    monkeypatch.setattr(exercise, "service_rows", MagicMock(return_value=[]))
+    # Stop immediately after schema admission. This is no claim of SQL/restore acceptance.
+    catalog = MagicMock(side_effect=RuntimeError("schema_admitted"))
+    monkeypatch.setattr(exercise, "bounded_rows", catalog)
+    if version_case == "head":
+        with pytest.raises(RuntimeError, match="^schema_admitted$"):
+            exercise.capture_service(engine, (UUID(int=100), UUID(int=200)))
+        catalog.assert_called_once()
+    else:
+        with pytest.raises(RestoreRefused, match="^restore_service_schema_refused$"):
+            exercise.capture_service(engine, (UUID(int=100), UUID(int=200)))
+        catalog.assert_not_called()
+
 
 EXPORT_TABLES = (
     "export_members",

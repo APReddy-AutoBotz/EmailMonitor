@@ -75,3 +75,9 @@ Universal email coverage, real-time extraction of arbitrary websites, 500 ms tot
 ## Requirement ownership
 
 The product owner approves workflow scope; engineering owns implementation and test evidence; source/data steward approves collection/export configurations; security approves production boundaries; customer/legal review resolves contracts and processing obligations. Traceability maps every FR/NFR to a task and test family in document 17.
+
+FR-023 bounded candidate: [exact retained article selection and outcomes-only
+candidate presence](69-retained-article-filters.md) implements job/item identity,
+not cross-job paper identity or all proposed source/date filters. Presence is
+independent of Contact association/technical status and never creates placeholder
+Contacts. Default accepted-only Contacts and all article outcomes remain.

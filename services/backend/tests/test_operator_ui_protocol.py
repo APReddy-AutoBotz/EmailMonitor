@@ -850,7 +850,7 @@ def test_outcome_investigation_phases_are_closed_failure_only_categories() -> No
         and isinstance(call.args[0].value, str)
         and call.args[0].value.startswith("outcomes_")
     }
-    assert observed == set(OUTCOME_PHASES) and len(observed) == 24
+    assert observed == set(OUTCOME_PHASES) and len(observed) == 37
     old = {"kind": "failure", "stage": "url_worker", "error": "AssertionError"}
     assert DiagnosticFrame.model_validate(old).outcome_phase is None
     for phase in OUTCOME_PHASES:
@@ -939,8 +939,13 @@ def test_scoped_association_select_uses_unique_label_prefix_and_exact_values() -
         and node.func.attr == "to_have_value"
         and "Association state" in ast.unparse(node.func.value)
     ]
-    assert len(checks) == 2
-    assert [ast.literal_eval(check.args[0]) for check in checks] == ["accepted", "needs_review"]
+    assert len(checks) == 4
+    assert [ast.literal_eval(check.args[0]) for check in checks] == [
+        "accepted",
+        "needs_review",
+        "accepted",
+        "needs_review",
+    ]
     for check in checks:
         assert isinstance(check.func, ast.Attribute)
         # No .first/.nth shortcut: Playwright's assertion still requires one match.
@@ -974,3 +979,65 @@ def test_late_organization_hold_follows_ready_first_page_and_targets_next_page()
     code = ast.unparse(helper)
     assert "if hold and offset == 25:" in code
     assert code.count("assert held_offset == 25") == 2
+
+
+def test_contact_request_generation_regressions_use_actual_hook_and_held_responses() -> None:
+    """Wiring check only; the actual browser matrix still requires hosted execution."""
+    import ast
+
+    root = Path(__file__).resolve().parents[3]
+    source = (root / "scripts/isolation/operator_ui_acceptance.py").read_text()
+    module = ast.parse(source)
+    helper = next(
+        node
+        for node in module.body
+        if isinstance(node, ast.AsyncFunctionDef)
+        and node.name == "authored_contact_request_ownership"
+    )
+    code = ast.unparse(helper)
+    for required in (
+        "for seed_error in (False, True):",
+        "for disabled_interval in (False, True):",
+        "phase = 'held'",
+        "changed.wait()",
+        "returned.wait()",
+        "release_returned.wait()",
+        "release_changed.wait()",
+        "assert changed_requests == 0",
+        "assert changed_requests == 1",
+        "expect(empty).not_to_be_visible()",
+        "expect(error).not_to_be_visible()",
+        "expect(loading).to_be_visible()",
+        "await page.unroute(pattern, contacts)",
+    ):
+        assert required in code
+    assert "await authored_contact_request_ownership(page, outcome_checkpoint)" in source
+    hook = (root / "apps/web/src/ui.tsx").read_text()
+    assert "useMemo(() => ({ scope, path, revision }), [scope, path, revision])" in hook
+    assert "}, [request])" in hook and "owned?.request !== request" in hook
+    assert "setOwned({ request, resource:" in hook
+    assert "setOwned(current => ({ request, resource:" in hook
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"kind": "stage", "error": None},
+        {"stage": "evidence_review"},
+        {"installed_export_step": {"phase": "secret", "format": "xlsx"}},
+        {"installed_export_step": {"phase": "ready_wait", "format": "private"}},
+        {"installed_export_step": {"phase": "ready_wait", "format": "xlsx", "id": "private"}},
+    ],
+)
+def test_export_step_is_closed_and_failure_scoped(changes: dict[str, object]) -> None:
+    from operator_ui_protocol import DiagnosticFrame
+
+    frame = {
+        "kind": "failure",
+        "stage": "export_preview",
+        "error": "TimeoutError",
+        "installed_export_step": {"phase": "ready_wait", "format": "xlsx"},
+    }
+    assert DiagnosticFrame.model_validate(frame).installed_export_step is not None
+    with pytest.raises(ValidationError):
+        DiagnosticFrame.model_validate({**frame, **changes})

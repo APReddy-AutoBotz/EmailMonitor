@@ -438,6 +438,33 @@ def test_other_browser_behavior_and_every_success_await_remain_unchanged() -> No
     )
 
 
+def host_without_reviewed_timing_receipt() -> bytes:
+    """Seal the complete increment, then prove all historical host bytes remain."""
+    raw = (ROOT / "scripts/isolation/run_browser_acceptance.py").read_bytes()
+    assert hashlib.sha256(raw).hexdigest() == (
+        "0e8db3fe68049c6ca04355a5538cda5b28566dc4b3f2a22c8373c67a560172e5"
+    )
+    source = raw.decode()
+    start = source.index("class StageTimings:")
+    end = source.index("def timeout_evidence(", start)
+    source = source[:start] + source[end:]
+    replacements = (
+        ("    stage_timings: dict[str, object] | None = None,\n", ""),
+        ('        "stage_timings": stage_timings,\n', ""),
+        ("    timings = StageTimings(deadline - 60)\n", ""),
+        ("                        timings.observe(chunk, time.monotonic())\n", ""),
+        (
+            '        return {**result, "host_stage_timings": timings.snapshot(time.monotonic())}\n',
+            "        return result\n",
+        ),
+        ("                    timings.snapshot(time.monotonic()),\n", ""),
+    )
+    for added, original in replacements:
+        assert source.count(added) == 1
+        source = source.replace(added, original, 1)
+    return source.encode()
+
+
 def test_exact_acquired_fixture_bytes_and_every_historical_digest_fence_are_preserved() -> None:
     from emailmonitor.extraction.fixture import BROWSER_ACQUISITION_DIGEST
 
@@ -448,9 +475,9 @@ def test_exact_acquired_fixture_bytes_and_every_historical_digest_fence_are_pres
     assert hashlib.sha256(BOUNDARY_PAGE).hexdigest() == (
         "c4ff7c9c1a29bfdc82c61a0049c2b1c2f12034081455db8198df481795712782"
     )
-    assert hashlib.sha256(
-        (ROOT / "scripts/isolation/run_browser_acceptance.py").read_bytes()
-    ).hexdigest() == ("8c6e96db13d27be37c443f918a62416185c0f7cd589e9d0aa471aa00809b5fd5")
+    assert hashlib.sha256(host_without_reviewed_timing_receipt()).hexdigest() == (
+        "8c6e96db13d27be37c443f918a62416185c0f7cd589e9d0aa471aa00809b5fd5"
+    )
     for version in (
         "0005_article_observations",
         "0007_progress",

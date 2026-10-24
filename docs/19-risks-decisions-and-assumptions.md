@@ -95,3 +95,19 @@ Broader principal history, new authority or business transactions refuse. The ta
 never opens; SQL role-behavior probes are distinct from login authentication and
 serving recovery. Quiescence is a fixture-owned prerequisite, not something a
 repeatable-read snapshot alone proves.
+
+### 2026-10-23 — Bounded retained article filter decision
+
+Use exact retained `(job_id,item_id)` identity, not URL/DOI equivalence. Candidate
+presence is a three-way retained-observation classification and filters only
+article outcomes. Do not equate empty Contacts, rejected associations or execution
+status with complete negative extraction. Resolve continuation source evidence
+through the original batch and exact inherited chain. Preserve the legacy outcome
+row shape and omitted default keys. Owner-private exact-export revalidation may
+inspect captured source/child authority only behind existing export permission;
+it must never broaden shared service visibility or invent membership. Fixed bounds
+and current privacy/retention remain mandatory; see [document 69](69-retained-article-filters.md).
+
+### Receipt concurrency proof limit
+
+Controlled SQL reproduction established publisher receipt/worker authority self-contention. Candidate 0017 uses a shared job lock for receipts only. Existing extraction jobs leave `jobs.source_id` null, so the unchanged permission fence does not acquire source/policy locks via that field; both original and candidate reproduce this limitation. No source-authority repair is included. Full disabling/revocation/deletion linearization remains a proof gate before publication.

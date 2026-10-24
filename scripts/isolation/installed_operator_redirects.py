@@ -14,7 +14,13 @@ from http.cookies import CookieError, SimpleCookie
 from typing import TYPE_CHECKING, Any, NoReturn, get_args
 from urllib.parse import parse_qsl, urlsplit
 
-from operator_ui_protocol import ERRORS, InstalledLoginPhase, InstalledReason, failure_reason
+from operator_ui_protocol import (
+    ERRORS,
+    InstalledCallbackDelivery,
+    InstalledLoginPhase,
+    InstalledReason,
+    failure_reason,
+)
 
 if TYPE_CHECKING:
     from playwright.async_api import BrowserContext, CDPSession, Frame, Page
@@ -37,6 +43,32 @@ class FixedFailure:
     error: str
     reason: str
     phase: InstalledLoginPhase | None
+
+
+class CallbackDeliveryTrace:
+    """Observe one request per login generation; never authorize or emit a URL."""
+
+    def __init__(self) -> None:
+        self.generation = 0
+        self.request: object | None = None
+        self.value: InstalledCallbackDelivery = "not_requested"
+
+    def reset(self) -> int:
+        self.generation += 1
+        self.request = None
+        self.value = "not_requested"
+        return self.generation
+
+    def observe(self, generation: int, request: object, step: InstalledCallbackDelivery) -> None:
+        steps = get_args(InstalledCallbackDelivery)
+        if generation != self.generation or step not in steps:
+            return
+        if self.request is None:
+            if step != "request_received":
+                return
+            self.request = request
+        if request is self.request and steps.index(step) > steps.index(self.value):
+            self.value = step
 
 
 class InstalledDiagnostics:

@@ -1,10 +1,18 @@
 """Observed correspondence, article outcomes and export eligibility remain distinct."""
 
 from datetime import datetime
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializerFunctionWrapHandler,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 
 from emailmonitor.associations.api import Identifier
 from emailmonitor.associations.models import Evidence
@@ -15,11 +23,37 @@ class Record(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
 
 
-class Filters(Record):
+ArticleOutcomePresence = Literal[
+    "all", "observed_candidate", "completed_without_candidate", "unresolved"
+]
+
+
+class ArticleSelection(BaseModel):
+    """New default keys are omitted so legacy cursor/request identities stay stable."""
+
+    @model_serializer(mode="wrap")
+    def legacy_defaults(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        document: dict[str, Any] = handler(self)
+        if document.get("item_id") is None:
+            document.pop("item_id", None)
+        if document.get("article_outcome_presence") == "all":
+            document.pop("article_outcome_presence", None)
+        return document
+
+
+class Filters(ArticleSelection, Record):
     job_id: UUID | None = None
     states: tuple[Literal["accepted", "needs_review", "unmatched", "rejected"], ...] = ("accepted",)
     author_target: Literal["all", "first", "corresponding"] = "all"
     query: str = Field(default="", max_length=100)
+    item_id: UUID | None = None
+    article_outcome_presence: ArticleOutcomePresence = "all"
+
+    @model_validator(mode="after")
+    def selected_item_requires_job(self) -> "Filters":
+        if self.item_id is not None and self.job_id is None:
+            raise ValueError("Exact article item selection requires its job")
+        return self
 
     @field_validator("states")
     @classmethod
@@ -124,10 +158,12 @@ class OutcomePage(Record):
     synthetic: Literal[True] = True
 
 
-class ExportInput(BaseModel):
+class ExportInput(ArticleSelection):
     # UUID text and arrays are normal HTTP JSON; trusted internals validate Filters.
     model_config = ConfigDict(extra="forbid")
     job_id: Identifier | None = None
+    item_id: Identifier | None = None
+    article_outcome_presence: ArticleOutcomePresence = "all"
     format: Literal["csv", "xlsx"]
     purpose: Literal["academic_contact_research"]
     include_unresolved: bool = Field(default=False, strict=True)
@@ -155,9 +191,17 @@ class ExportInput(BaseModel):
             raise ValueError("Distinct allowlisted optional fields required")
         return value
 
+    @model_validator(mode="after")
+    def selected_item_requires_job(self) -> "ExportInput":
+        if self.item_id is not None and self.job_id is None:
+            raise ValueError("Exact article item selection requires its job")
+        return self
+
     def filters(self) -> Filters:
         return Filters(
             job_id=self.job_id,
+            item_id=self.item_id,
+            article_outcome_presence=self.article_outcome_presence,
             states=("accepted", "needs_review", "unmatched")
             if self.include_unresolved
             else ("accepted",),
@@ -196,6 +240,12 @@ class ExportState(Record):
     production_enabled: Literal[False] = False
 
 
+class ArticleFilterBinding(Record):
+    job_id: UUID
+    item_id: UUID
+    fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
 class ExportSnapshot(Record):
     schema_version: Literal["1.0"] = "1.0"
     organization_id: UUID
@@ -210,6 +260,7 @@ class ExportSnapshot(Record):
         max_length=2,
         json_schema_extra={"uniqueItems": True},
     )
+    article_filter_bindings: tuple[ArticleFilterBinding, ...] = Field(default=(), max_length=2001)
     contacts: tuple[Contact, ...] = Field(max_length=2000)
     article_outcomes: tuple[ArticleOutcome, ...] = Field(max_length=2000)
     created_at: datetime
@@ -217,6 +268,13 @@ class ExportSnapshot(Record):
     synthetic: Literal[True] = True
     technical_checks_performed: Literal[False] = False
     outreach_approved: Literal[False] = False
+
+    @model_serializer(mode="wrap")
+    def legacy_binding_default(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        document: dict[str, Any] = handler(self)
+        if self.filters.item_id is None and self.filters.article_outcome_presence == "all":
+            document.pop("article_filter_bindings", None)
+        return document
 
     @field_validator("optional_contact_fields")
     @classmethod
@@ -256,6 +314,24 @@ class ExportSnapshot(Record):
             for item in self.contacts
         ):
             raise ValueError("Export snapshots cannot contain rejected/unrequested associations")
+        identities = {(item.job_id, item.item_id) for item in self.article_outcomes}
+        expected_bindings = set(identities)
+        if self.filters.item_id is not None:
+            if any(
+                item.job_id != self.filters.job_id or item.item_id != self.filters.item_id
+                for item in self.article_outcomes
+            ):
+                raise ValueError("Outcome records must match the exact selected article")
+            assert self.filters.job_id is not None
+            expected_bindings.add((self.filters.job_id, self.filters.item_id))
+        if self.filters.item_id is not None or self.filters.article_outcome_presence != "all":
+            actual_bindings = {(item.job_id, item.item_id) for item in self.article_filter_bindings}
+            if actual_bindings != expected_bindings or len(actual_bindings) != len(
+                self.article_filter_bindings
+            ):
+                raise ValueError("Filtered snapshots require exact immutable article bindings")
+        elif self.article_filter_bindings:
+            raise ValueError("Legacy snapshots have no article-filter binding records")
         return self
 
 

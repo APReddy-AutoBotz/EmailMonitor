@@ -4,6 +4,14 @@ Status: code-only EM-017 candidate; acceptance in progress. See
 [ADR 0006](adr/0006-durable-service-authority.md). No deployment or live service
 identity is created by this change.
 
+Installed callback-navigation failures may include a fixed delivery checkpoint:
+not requested, request received, packaged index asset verified, or fulfilled.
+The diagnostic resets for each login, binds the first exact approved main-frame
+callback request, ignores stale or overlapping requests, and is emitted only for
+a matching callback-document failure. It contains no callback URL, cookie or state value.
+It distinguishes observed delivery progress from navigation readiness without
+changing redirects, authentication checks, network isolation or the login deadline.
+
 ## Packaged process boundary
 
 The deterministic service artifact contains the full application, built static
@@ -142,3 +150,10 @@ adds a revocation-aware seal without enabling the legacy profile or opening a
 restored service database. Exact existing authority, immutable deadlines, audit,
 roles/schema and export state remain protected. This code/test candidate does not
 authorize serving restored work or production recovery.
+
+Migration 0016's retained-article filter increment advances the exact compatible
+schema sentinel to `0016_retained_article_filters`; 0015 above describes its
+historical plan-cache change. The new private exact-export binding validator
+supports selected inherited children and no-contact outcomes without broadening
+shared job/batch visibility. Existing activation/role restrictions and closed restore
+controls remain. See [document 69](69-retained-article-filters.md).

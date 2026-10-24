@@ -585,3 +585,69 @@ The preceding actual operator proof passed, but two full-backend attempts reache
 the unchanged wrapper bound without final pytest summaries; both verified owned
 cleanup. New exact-tree normal/fresh, independent review and hosted receipts remain
 required. The linked validation record preserves those failed receipts.
+
+### FR-023 retained article filters — candidate (2026-10-23)
+
+A separate dependent increment after accepted PR49 adds exact job/item selection
+and outcomes-only candidate presence. It retains original Contact provenance,
+legacy default request/snapshot/cursor identity and current authority. Forward-only
+migration 0016 keeps existing service visibility private and uses exact-export
+captured binding validation for no-contact and inherited contacts-only work.
+[Scope](69-retained-article-filters.md) and [validation](../reports/retained-article-filters-validation.md)
+separate authored pure/browser cases from required actual SQL/service/operator
+proof. Frozen source review, serial normal/fresh gates and all hosted checks remain
+pending; this entry does not complete general FR-023 source/date/paper-equivalence filters.
+
+PR50 first-head hosted acceptance failed in application and original operator gates;
+six other workflows passed. Independent review identified incorrect service-exception
+and suppression-refusal expectations in the new tests. A test-only correction retains
+the existing runtime refusals, while original receipts and the unresolved operator
+entitlement diagnostic are preserved in the validation report. Corrected-source
+normal/fresh checks, independent review and all exact-head hosted gates remain required.
+
+The retained-filter candidate schedules its 29 exact SQL cases beside the unchanged
+104-outcome traversal in the existing SQL job. A closed 30-node manifest and exact
+backend complement preserve full collection and successful execution proofs at the
+mandatory three-job join. Job counts, roles, deadlines and unfiltered normal/fresh
+aggregates remain unchanged; exact-source hosted acceptance is still required.
+
+The owned browser acceptance also has bounded tenant-only admission-timing
+diagnostics. They preserve the HTTP receipt-gap assertion, cleanup and all runtime
+authority/deadline controls; exact-source hosted acceptance remains required.
+
+The owned operator fixture also has temporary value-free server-side entitlement
+diagnostics, with exact function restoration and unchanged refusal behavior.
+These observations distinguish ordinary denial from caught lock refusal in the
+actual invocation; complete hosted acceptance remains required.
+
+The owned installed XML harness records fixed export substeps on failure and a
+failure-only publisher/export/outbox receipt scoped to its synthetic organization
+and owner. The separate read-only SQL connection has bounded connect, statement
+and lock waits; unavailable diagnostics preserve the original failure. Closed
+vocabulary and ownership tests are in `test_installed_xml_harness.py` and
+`test_operator_ui_protocol.py`. These observations do not change runtime behavior
+or establish complete hosted acceptance; no migration or grants are required.
+
+The owned browser-isolation host records bounded monotonic receipt-time buckets
+for its existing fixed guest checkpoints, including startup and route registration.
+Partial lines are bounded; duplicate and unknown stages are ignored. Batched
+markers share their host receipt time. Success and deadline-failure evidence
+retain these observations without changing mediation, browser behavior or limits.
+`test_browser_isolation_configuration.py` covers these diagnostic boundaries;
+complete exact-source hosted acceptance remains required.
+
+The owned operator harness now observes the URL job from creation through terminal
+SSE replay. Readiness requires current stream acknowledgment, matching job and
+progress generation/sequence, successful current response delivery, replacement
+of the pre-replay request-owned page, and a connected matching outcome opener.
+The synchronization and original visibility check share the existing ten-second
+budget; the 180-second journey limit and content/focus assertions remain unchanged.
+`test_operator_replay_readiness.py` covers reordered, stale, incomplete and refused
+observations. A separate hosted proof holds actual terminal replay, demonstrates
+premature-dialog invalidation after release, then verifies synchronized inspection.
+Events are forwarded unchanged; production lifecycle and permission rules are not
+modified. Exact-head hosted acceptance remains required.
+
+### Isolated receipt concurrency candidate
+
+Forward migration 0017 replaces only `execution_confirmed` with a receipt-specific shared job fence and advances service schema readiness. It preserves existing authority predicates and outbox updates; the generic control fence is unchanged. Publication is pending focused proof review. Export reconciliation remains unchanged. Source-policy and full revocation/deletion interleavings are not declared accepted.

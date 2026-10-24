@@ -1,15 +1,216 @@
 """Synthetic UI diagnostic RPC grammar; never a general network proxy."""
 
 import base64
+import json
 import re
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, get_args
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 ORIGIN = "https://app.example.test"
 MAX_BODY = 32768
+
+
+@dataclass(eq=False)
+class ReplayRequest:
+    kind: str
+    epoch: int
+    eligible: bool
+    offered: bool = False
+    delivered: bool = False
+    loading: bool = False
+    headers_seen: bool = False
+    item: str | None = None
+    render_before: object | None = None
+
+
+class OutcomeReplayReadiness:
+    """Owned test observations only; never authorizes or changes a reply."""
+
+    def __init__(self, organization: str, job: str | None = None) -> None:
+        self.organization = str(UUID(organization))
+        self.root = f"/api/v1/organizations/{self.organization}"
+        self.job = str(UUID(job)) if job is not None else None
+        self.generation: int | None = None
+        self.terminal_job = False
+        self.epoch = 0
+        self.cursor: str | None = None
+        self.sequence = 0
+        self.replay: ReplayRequest | None = None
+        self.ack: ReplayRequest | None = None
+        self.progress: ReplayRequest | None = None
+        self.outcomes: ReplayRequest | None = None
+        self.job_request: ReplayRequest | None = None
+        self.failed = False
+        self.invalidated = False
+        self.latest_events: ReplayRequest | None = None
+
+    def begin(self, url: str, method: str) -> ReplayRequest | None:
+        parsed = urlsplit(url)
+        if parsed.scheme != "https" or parsed.netloc != "app.example.test":
+            return None
+        if parsed.path == self.root + "/jobs" and method == "POST" and self.job is None:
+            return ReplayRequest("create", self.epoch, False)
+        if self.job is None or method != "GET":
+            return None
+        base = self.root + "/jobs/" + self.job
+        kind = {base: "job", base + "/events": "events", base + "/progress": "progress"}.get(
+            parsed.path
+        )
+        if parsed.path == self.root + "/article-outcomes":
+            query = parse_qs(parsed.query)
+            if query.get("job_id") == [self.job] and query.get("limit") == ["25"]:
+                if query.keys() - {"job_id", "limit", "article_outcome_presence"} or query.get(
+                    "article_outcome_presence", ["all"]
+                ) != ["all"]:
+                    self.failed = True
+                kind = "outcomes"
+        if kind is None:
+            return None
+        token = ReplayRequest(kind, self.epoch, self.cursor is not None)
+        if kind == "events":
+            self.latest_events = token
+        elif kind == "job":
+            self.job_request = token
+            self.terminal_job = False
+        elif kind == "progress":
+            self.progress = token
+        elif kind == "outcomes":
+            self.outcomes = token
+        return token
+
+    def headers(self, token: ReplayRequest | None, headers: dict[str, str]) -> None:
+        if token is None or token.kind != "events" or token is not self.latest_events:
+            return
+        token.headers_seen = True
+        cursor = headers.get("last-event-id", "")
+        if not cursor:
+            self.epoch += 1
+            self.invalidated = False
+            token.epoch = self.epoch
+            self.cursor, self.sequence = None, 0
+            self.replay, self.ack, self.progress, self.outcomes = None, None, None, None
+        elif token.epoch == self.epoch and self.cursor is not None:
+            if cursor == self.cursor:
+                if self.ack is None or not self.ack.delivered:
+                    self.ack = token
+            else:
+                self.failed = True
+
+    def current(self, token: ReplayRequest) -> bool:
+        if token.kind in {"create", "job"}:
+            return token.kind == "create" or token is self.job_request
+        return token.epoch == self.epoch and (
+            token.kind == "events" or token is self.progress or token is self.outcomes
+        )
+
+    def offer(self, token: ReplayRequest | None, status: int, body: bytes) -> None:
+        if token is None or not self.current(token):
+            return
+        try:
+            if len(body) > MAX_BODY or status != (201 if token.kind == "create" else 200):
+                raise ValueError
+            if token.kind == "events":
+                last: tuple[str, int, str] | None = None
+                terminal = False
+                for frame in body.decode().split("\n\n"):
+                    data = [line[6:] for line in frame.splitlines() if line.startswith("data: ")]
+                    if not data:
+                        continue
+                    ids = [line[4:] for line in frame.splitlines() if line.startswith("id: ")]
+                    if len(data) != 1 or len(ids) != 1:
+                        raise ValueError
+                    event = json.loads(data[0])
+                    sequence = event.get("sequence")
+                    if (
+                        event.get("organization_id") != self.organization
+                        or event.get("job_id") != self.job
+                        or type(sequence) is not int
+                        or not 1 <= sequence <= 9223372036854775807
+                        or ids[0] != f"{self.organization}/{self.job}:{sequence}"
+                        or last is not None
+                        and sequence <= last[1]
+                    ):
+                        raise ValueError
+                    terminal = terminal or event.get("event_type") == "job.finished"
+                    last = (ids[0], sequence, event.get("event_type", ""))
+                if terminal and last is not None:
+                    self.cursor, self.sequence, self.replay = last[0], last[1], token
+                    self.ack, self.progress, self.outcomes = None, None, None
+                elif last is not None and self.cursor is not None:
+                    # A later event invalidates this content-inspection precondition.
+                    raise ValueError
+            else:
+                data = json.loads(body)
+                if token.kind == "create":
+                    self.job = str(UUID(data["id"]))
+                elif token.kind == "job":
+                    generation = data.get("generation")
+                    if (
+                        data.get("id") != self.job
+                        or type(generation) is not int
+                        or generation < 1
+                        or self.generation not in {None, generation}
+                    ):
+                        raise ValueError
+                    self.generation = generation
+                    self.terminal_job = data.get("state") == "completed"
+                elif token.eligible:
+                    if token.kind == "progress":
+                        if (
+                            data.get("organization_id") != self.organization
+                            or data.get("job_id") != self.job
+                            or data.get("generation") != self.generation
+                            or type(data.get("generation")) is not int
+                            or data.get("state") != "completed"
+                            or type(data.get("last_sequence")) is not int
+                            or data["last_sequence"] < self.sequence
+                        ):
+                            raise ValueError
+                    elif token.kind == "outcomes":
+                        items = data.get("items")
+                        if (
+                            not isinstance(items, list)
+                            or len(items) != 1
+                            or data.get("next_cursor") is not None
+                            or not token.loading
+                        ):
+                            raise ValueError
+                        item = items[0]
+                        if (
+                            item.get("organization_id") != self.organization
+                            or item.get("job_id") != self.job
+                            or item.get("state") != "no_contact"
+                            or item.get("batch_id") is None
+                        ):
+                            raise ValueError
+                        token.item = str(UUID(item["item_id"]))
+            token.offered = True
+        except (ValueError, TypeError, KeyError, AttributeError):
+            self.failed = True
+
+    def finish(self, token: ReplayRequest | None, delivered: bool) -> None:
+        if token is None or not self.current(token):
+            return
+        if not delivered and token.kind == "events":
+            self.invalidated = True
+        token.delivered = delivered
+
+    def ready(self) -> ReplayRequest | None:
+        if self.failed or self.invalidated or not self.terminal_job or self.generation is None:
+            return None
+        if self.latest_events is None or not self.latest_events.headers_seen:
+            return None
+        tokens = (self.job_request, self.replay, self.ack, self.progress, self.outcomes)
+        if any(token is None or not token.offered or not token.delivered for token in tokens):
+            return None
+        if any(token is None or not token.eligible for token in (self.progress, self.outcomes)):
+            return None
+        return self.outcomes if self.outcomes is not None and self.outcomes.item else None
 
 
 class RequestFrame(BaseModel):
@@ -188,14 +389,27 @@ InstalledReason = Literal[
 
 OutcomePhase = Literal[
     "outcomes_actual_escape",
+    "outcomes_actual_replay",
+    "outcomes_replay_delayed",
+    "outcomes_replay_invalidated",
+    "outcomes_replay_rendered",
     "outcomes_actual_modal",
     "outcomes_actual_quality",
+    "outcomes_actual_initial_focus",
     "outcomes_authored_load",
     "outcomes_authored_modal",
     "outcomes_complete_page_set",
     "outcomes_counts_and_states",
     "outcomes_late_job",
+    "outcomes_presence_keyboard",
+    "outcomes_late_filter",
+    "outcomes_exact_article_navigation",
+    "outcomes_actual_filter_preview",
+    "outcomes_request_generation",
     "outcomes_late_organization",
+    "outcomes_organization_switch_away",
+    "outcomes_organization_switch_back",
+    "outcomes_organization_reopen_job",
     "outcomes_modal_tab",
     "outcomes_next_focus",
     "outcomes_next_rows",
@@ -213,6 +427,64 @@ OutcomePhase = Literal[
     "outcomes_stream_invalidation",
 ]
 OUTCOME_PHASES = get_args(OutcomePhase)
+
+EvidencePhase = Literal["contacts", "open", "citation", "reason", "save", "closed", "returned"]
+EVIDENCE_PHASES = get_args(EvidencePhase)
+InstalledCallbackDelivery = Literal[
+    "not_requested", "request_received", "asset_verified", "fulfilled"
+]
+
+
+class InstalledExportStep(BaseModel):
+    """Only fixed steps of the owned synthetic XML export journey."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+    phase: Literal[
+        "navigate",
+        "format",
+        "preview_activate",
+        "preview_wait",
+        "create",
+        "row_wait",
+        "ready_wait",
+        "refresh",
+        "download_activate",
+        "download_wait",
+        "verify",
+    ]
+    format: Literal["xlsx", "csv"] | None
+
+
+class FocusExhaustion(BaseModel):
+    """Value-free state sampled after the unchanged keyboard limit fails."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+    target_focused: bool
+    document_focused: bool
+    modal_open: bool
+    active_kind: Literal["target", "body", "outcomes_heading", "other", "none"]
+    target_kind: Literal["button", "textarea", "select", "input", "other"] | None = None
+    active_control: Literal["button", "textarea", "select", "input", "other"] | None = None
+    target_disabled: bool | None = None
+    target_in_dialog: bool | None = None
+    active_in_target_dialog: bool | None = None
+    target_inert: bool | None = None
+    target_tab_stop: bool | None = None
+
+
+class ObservationState(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    opener_connected: bool
+    region_connected: bool
+    dialog_present: bool
+    dialog_open: bool
+    quality: Literal["missing", "loading", "unavailable", "expected", "other"]
+
+
+class ObservationTrace(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    states: list[ObservationState] = Field(min_length=1, max_length=8)
+    truncated: bool
 
 
 class DiagnosticFrame(BaseModel):
@@ -249,6 +521,11 @@ class DiagnosticFrame(BaseModel):
         | InstalledReason
     ) = "unknown"
     outcome_phase: OutcomePhase | None = None
+    observation_trace: ObservationTrace | Literal["unavailable"] | None = None
+    evidence_phase: EvidencePhase | None = None
+    installed_callback_delivery: InstalledCallbackDelivery | None = None
+    installed_export_step: InstalledExportStep | None = None
+    focus_exhaustion: FocusExhaustion | Literal["unavailable"] | None = None
     installed_login_phase: InstalledLoginPhase | None = None
     api_statuses: list[int] = Field(default_factory=list, max_length=512)
 
@@ -269,6 +546,31 @@ class DiagnosticFrame(BaseModel):
             self.kind != "failure" or self.stage != "url_worker"
         ):
             raise ValueError("Outcome phase requires its exact failure stage")
+        if self.observation_trace is not None and (
+            self.kind != "failure"
+            or self.stage != "url_worker"
+            or self.outcome_phase != "outcomes_actual_quality"
+            or self.error != "AssertionError"
+        ):
+            raise ValueError("Observation trace requires its exact content assertion failure")
+        if self.focus_exhaustion is not None and (
+            self.kind != "failure"
+            or self.reason != "keyboard_focus"
+            or self.error != "RuntimeError"
+        ):
+            raise ValueError("Focus state requires its exact keyboard failure")
+        if self.evidence_phase is not None and (
+            self.kind != "failure" or self.stage != "evidence_review"
+        ):
+            raise ValueError("Evidence phase requires its exact failure stage")
+        if self.installed_export_step is not None and (
+            self.kind != "failure" or self.stage != "export_preview"
+        ):
+            raise ValueError("Export step requires its exact failure stage")
+        if self.installed_callback_delivery is not None and (
+            self.kind != "failure" or self.installed_login_phase != "callback_document"
+        ):
+            raise ValueError("Callback delivery requires its exact navigation failure")
         if self.installed_login_phase is not None and (
             self.kind != "failure" or self.stage not in {"assets_session", "keyword_worker"}
         ):

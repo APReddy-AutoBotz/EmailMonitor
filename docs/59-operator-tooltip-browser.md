@@ -68,3 +68,13 @@ independent exact-tree review and all seven own-head workflows are required.
 See [validation](../reports/operator-tooltip-validation.md). Real publisher
 rights/samples, production identity/hosting/private storage/secrets and deployment
 acceptance remain separate unmet gates.
+
+The owned acceptance can record a bounded admission-timing diagnostic using its
+existing tenant connection. Before gateway release it reads the exact active
+ticket and matching tenant bucket under the fixed five-second policy, deriving
+the SQL admission timestamp from `ready_at`. Only two ordinal observations and
+clock intervals are reported, without ticket or tenant identifiers. The added
+read perturbs timing; host monotonic and SQL epoch values are compared as separate
+intervals. Diagnostic failure preserves ticket cleanup and fails completeness
+after worker shutdown. The existing HTTP receipt-gap assertion, permissions and
+all execution deadlines remain mandatory and unchanged.

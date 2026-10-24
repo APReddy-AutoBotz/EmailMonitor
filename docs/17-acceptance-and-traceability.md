@@ -443,11 +443,67 @@ inherited lineage, current visibility, stale response suppression and keyboard
 focus restoration. This slice does not complete all FR-023 filters.
 [Candidate evidence](../reports/job-outcome-investigation-validation.md).
 
-The long 104-outcome SQL traversal has its own mandatory hosted job while the
-backend complement contains every other collected test. `test_application_test_partition.py`
+The long 104-outcome SQL traversal shares the existing mandatory SQL job with
+29 exact retained-filter SQL cases. The backend complement contains every collected
+test outside the explicit 30-node manifest. `test_application_test_partition.py`
 covers collection multisets, exact execution, zero-skip refusal and cross-job
 source/configuration/manifest equality. `test_application_check_phases.py` covers
 unchanged full local commands, retained infrastructure prerequisites and the
 always-evaluated three-success join. Existing XML wrapper contracts cover the new
 closed mode with unchanged timeouts and owned cleanup. These pure checks do not
 replace actual hosted SQL execution.
+
+### FR-023 exact retained article selector and outcomes-only presence
+
+[Document 69](69-retained-article-filters.md) maps this increment to
+`test_retained_article_filters.py`, `test_retained_article_filters_tenant.py`,
+`test_retained_article_filters_service_tenant.py` and
+`retainedArticleFilters.test.tsx`. Required cases include HTML/XML partial and
+unsupported semantics, independent review/syntax, exact original-batch binding,
+two continuations, corrupt/expired/deleted source authority, cursor mismatches,
+pre-limit paging, legacy snapshots and preview/idempotency. Actual narrow-worker
+completion must prove no-contact and inherited contacts-only exports without
+expanded read authority, with claim/finish/download race denials. Operator acceptance
+adds keyboard selection, paging reset, exact-item navigation and preview invalidation.
+The unchanged 104-outcome traversal, 29 exact retained-filter SQL cases and complete
+backend complement remain mandatory with matched receipts at the existing join.
+[Evidence and pending gates](../reports/retained-article-filters-validation.md).
+
+The owned installed XML harness records fixed export substeps on failure and a
+failure-only publisher/export/outbox receipt scoped to its synthetic organization
+and owner. The separate read-only SQL connection has bounded connect, statement
+and lock waits; unavailable diagnostics preserve the original failure. Closed
+vocabulary and ownership tests are in `test_installed_xml_harness.py` and
+`test_operator_ui_protocol.py`. These observations do not change runtime behavior
+or establish complete hosted acceptance; no migration or grants are required.
+
+The owned browser-isolation host records bounded monotonic receipt-time buckets
+for its existing fixed guest checkpoints, including startup and route registration.
+Partial lines are bounded; duplicate and unknown stages are ignored. Batched
+markers share their host receipt time. Success and deadline-failure evidence
+retain these observations without changing mediation, browser behavior or limits.
+`test_browser_isolation_configuration.py` covers these diagnostic boundaries;
+complete exact-source hosted acceptance remains required.
+
+A successful result can arrive before trailing stderr markers are drained; an
+absent timing marker alone is not evidence of a guest failure.
+
+The full timing-enabled host has an exact byte seal. Removing only the sealed
+diagnostic additions must reconstruct the historical host byte digest, preserving
+its original behavior fence alongside all fixture and migration digests.
+
+The owned operator harness now observes the URL job from creation through terminal
+SSE replay. Readiness requires current stream acknowledgment, matching job and
+progress generation/sequence, successful current response delivery, replacement
+of the pre-replay request-owned page, and a connected matching outcome opener.
+The synchronization and original visibility check share the existing ten-second
+budget; the 180-second journey limit and content/focus assertions remain unchanged.
+`test_operator_replay_readiness.py` covers reordered, stale, incomplete and refused
+observations. A separate hosted proof holds actual terminal replay, demonstrates
+premature-dialog invalidation after release, then verifies synchronized inspection.
+Events are forwarded unchanged; production lifecycle and permission rules are not
+modified. Exact-head hosted acceptance remains required.
+
+### Execution receipt lock candidate
+
+`test_execution_receipt_lock_tenant.py` exercises actual claimed-worker authorization while a receipt transaction is held, incompatible control locks, reverse-order refusal/wait behavior, concurrent receipts, duplicate receipts and rollback. Missing SQL remains an explicit skip. These checks do not establish all lifecycle interleavings or installed broker acceptance. Existing extraction jobs have null `jobs.source_id`; the original and candidate receipt fences do not lock source catalog/policy rows through that field. No stronger source serialization guarantee is claimed.

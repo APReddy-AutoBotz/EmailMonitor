@@ -208,7 +208,7 @@ def test_workflow_requires_complete_backend_and_static_frontend_jobs() -> None:
     assert jobs["static"].count("run: scripts/check.sh frontend\n") == 1
     assert jobs["outcome_sql"] == jobs["backend"].replace(
         "Execute offline scaffold and real tenant SQL/API checks",
-        "Execute the complete 104-outcome actual SQL acceptance",
+        "Execute the complete retained outcome and article-filter SQL acceptance",
     ).replace("application-backend", "application-outcome-sql")
     assert "partition_receipt: ${{ steps.tests.outputs.partition_receipt }}" in jobs["backend"]
     assert "id: tests" in jobs["backend"]

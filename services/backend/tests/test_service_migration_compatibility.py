@@ -25,7 +25,8 @@ from sqlalchemy.exc import DBAPIError
 from test_source_foundation import policy_body
 
 ROOT = Path(__file__).resolve().parents[3]
-HEAD = "0015_service_plan_cache"
+HEAD = "0017_execution_receipt_lock"
+FILTER_PREVIOUS = "0015_service_plan_cache"
 SERVICE_PREVIOUS = "0014_service_authority"
 PREVIOUS = "0013_provider_journey"
 AUTHORITY_TABLES = ("service_principals", "service_delegations", "service_audit")
@@ -117,7 +118,7 @@ class OwnedDatabase:
             raise RuntimeError("Disposable migration database ownership mismatch")
 
     def migrate(self, revision: str) -> None:
-        assert revision in (PREVIOUS, SERVICE_PREVIOUS, HEAD)
+        assert revision in (PREVIOUS, SERVICE_PREVIOUS, FILTER_PREVIOUS, HEAD)
         with self.admin.connect() as c:
             self.verify(c)
         result = subprocess.run(
@@ -369,6 +370,7 @@ def migration_pair() -> Iterator[MigrationPair]:
                         is True
                     )
                     reused.commit()
+                    upgraded.migrate(FILTER_PREVIOUS)
                     upgraded.migrate(HEAD)
                     assert reused.connection.dbapi_connection is raw
                     assert service_function_metadata(reused) == metadata_before
@@ -504,7 +506,15 @@ def test_actual_fresh_and_populated_upgrade_schema_acl_rls_equivalence(
 
 
 @pytest.mark.parametrize(
-    "revisions", [(), (PREVIOUS,), (SERVICE_PREVIOUS,), ("9999_unsupported",), (HEAD, PREVIOUS)]
+    "revisions",
+    [
+        (),
+        (PREVIOUS,),
+        (SERVICE_PREVIOUS,),
+        (FILTER_PREVIOUS,),
+        ("9999_unsupported",),
+        (HEAD, PREVIOUS),
+    ],
 )
 def test_actual_service_schema_guard_refuses_old_missing_or_ambiguous_revision(
     migration_pair: MigrationPair, revisions: tuple[str, ...]

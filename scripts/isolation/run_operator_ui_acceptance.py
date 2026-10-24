@@ -194,6 +194,35 @@ def conversation(
                                         if diagnostic.outcome_phase is not None
                                         else ""
                                     )
+                                    + (
+                                        "; focus exhaustion="
+                                        + json.dumps(diagnostic.model_dump()["focus_exhaustion"])
+                                        if diagnostic.focus_exhaustion is not None
+                                        else ""
+                                    )
+                                    + (
+                                        "; observation trace="
+                                        + json.dumps(diagnostic.model_dump()["observation_trace"])
+                                        if diagnostic.observation_trace is not None
+                                        else ""
+                                    )
+                                    + (
+                                        "; evidence phase=" + diagnostic.evidence_phase
+                                        if diagnostic.evidence_phase is not None
+                                        else ""
+                                    )
+                                    + (
+                                        "; callback delivery="
+                                        + diagnostic.installed_callback_delivery
+                                        if diagnostic.installed_callback_delivery is not None
+                                        else ""
+                                    )
+                                    + (
+                                        "; export step="
+                                        + diagnostic.installed_export_step.model_dump_json()
+                                        if diagnostic.installed_export_step is not None
+                                        else ""
+                                    )
                                     + "; actual reply statuses="
                                     + str(diagnostic.api_statuses)
                                 )

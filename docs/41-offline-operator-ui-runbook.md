@@ -63,3 +63,43 @@ Acceptance requires application tests with no service skips, controlled transpor
 
 
 Independent authoritative reconciliation confirmed application1132/no skips/one alias-body warning284.57s, keyboard UI1/64.12s and controlled12/56.92s plus actual browser/parser/docs. The keyboard result includes the unchanged affirmative Chromium sandbox/lo-only/IPv4+IPv6 errno101 controls, native Escape focus restoration, real current-authorized4471-byte export and delayed old-tenant response/replay refusal. [Validation](../reports/em012-validation.md) records exact IDs, review corrections and scope limits. All branches remain Draft/unmerged; EM-WARN-01 cause remains open.
+
+The owned operator fixture can temporarily instrument the exact reviewed
+`network_entitlement_allowed` body with fixed client notices distinguishing
+ordinary denial from caught lock refusal. All predicates, locks and return values
+remain unchanged. Installation verifies the original body, function configuration
+and server notice-logging threshold; teardown verifies restoration of the exact
+definition, ownership and privileges and refuses to overwrite unexpected changes.
+Only the existing opt-in synthetic worker observes these notices. It consumes no
+query results, executes no additional SQL, and emits bounded allowlisted reason
+codes only. Missing, ambiguous, malformed or truncated observations cannot be
+complete diagnostic evidence. No migration or production activation is added.
+
+The actual observation-dialog content and initial Close-button focus assertions
+have separate fixed outcome checkpoints. Their assertions, selectors and timeouts
+are unchanged; the labels identify which existing condition failed without
+printing dialog contents or identifiers.
+
+The held-response organization-switch journey separates Next-page navigation,
+switch-away, switch-back and job-reopen checkpoints. On keyboard traversal
+exhaustion only, a closed diagnostic reports target/document focus, whether a
+dialog is open, and a fixed active-element category. It never emits DOM text,
+values or identifiers. Missing, invalid or over-100ms snapshots report unavailable. The
+original 100-Tab failure, assertions and overall deadline remain unchanged,
+including when the final Tab reaches the target.
+
+Controlled browser evidence review records fixed action checkpoints for opening
+Contacts, opening evidence, waiting for citation content, entering a reason,
+saving, waiting for closure and returning to Contacts. Failure snapshots also
+report fixed control kinds, disabled/inert/tab-stop flags, and whether the target
+and active control belong to the same open dialog. These observations do not
+change focus or prove the preceding event history; no labels or values are emitted.
+
+The actual observation-content assertion may report a passive DOM trace with at
+most eight fixed states: original opener/region attachment, dialog presence/open
+state and a fixed quality-content category. Mutation batches are observed without
+changing the DOM. Capacity overflow or automatic ten-second disconnect marks the
+trace truncated; unavailable capture never replaces the original assertion.
+Setup and collection use separate 100ms diagnostic bounds. No article text or
+identifiers are emitted, and the original assertion and journey deadline remain.
+The trace distinguishes observed DOM transitions, not the cause of every update.

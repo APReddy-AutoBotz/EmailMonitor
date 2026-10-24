@@ -16,12 +16,18 @@ from urllib.parse import urlsplit
 
 from browser_acceptance import sandbox_status
 from installed_operator_redirects import (
+    CallbackDeliveryTrace,
     InstalledDiagnostics,
     LoginRedirects,
     installed_relay_reason,
     observe_error_documents,
 )
-from operator_ui_protocol import ORIGIN, InstalledLoginPhase, InstalledReason
+from operator_ui_protocol import (
+    ORIGIN,
+    InstalledExportStep,
+    InstalledLoginPhase,
+    InstalledReason,
+)
 from playwright.async_api import Error, Request, Route, async_playwright, expect
 
 if TYPE_CHECKING:
@@ -102,15 +108,23 @@ async def main() -> None:
     callback_index_seen = False
     download_seen = asyncio.Event()
     stage = "browser_launch"
+    export_step: InstalledExportStep | None = None
     diagnostics = InstalledDiagnostics()
     login_phase: InstalledLoginPhase | None = None
+    callback_delivery = CallbackDeliveryTrace()
+    callback_target: str | None = None
     login_reason: InstalledReason = "installed_login_failed"
     active_redirects: LoginRedirects | None = None
 
     def checkpoint(value: str) -> None:
-        nonlocal stage
+        nonlocal stage, export_step
         stage = value
+        export_step = None
         print(json.dumps({"kind": "stage", "stage": value}), flush=True)
+
+    def export_checkpoint(phase: str, format_name: str | None) -> None:
+        nonlocal export_step
+        export_step = InstalledExportStep.model_validate({"phase": phase, "format": format_name})
 
     async def exchange(
         value: dict[str, object], operation: list[InstalledReason]
@@ -205,6 +219,17 @@ async def main() -> None:
                 if origin not in {api, issuer} or parsed.fragment:
                     await route.abort("blockedbyclient")
                     return
+                callback_generation = callback_delivery.generation
+                callback_document = (
+                    origin == api
+                    and parsed.path == "/auth/complete"
+                    and incoming.url == callback_target
+                    and incoming.is_navigation_request()
+                    and incoming.frame == page.main_frame
+                    and login_phase == "callback_document"
+                )
+                if callback_document:
+                    callback_delivery.observe(callback_generation, incoming, "request_received")
                 operation[0] = "installed_route_headers"
                 headers = {
                     key: value
@@ -245,6 +270,8 @@ async def main() -> None:
                             "Actual installed web asset differs from package receipt"
                         )
                     received_assets.add(asset)
+                    if callback_document:
+                        callback_delivery.observe(callback_generation, incoming, "asset_verified")
                     callback_index_seen |= parsed.path == "/auth/complete"
                     response["headers"].pop("content-range", None)
                     response["status"] = 200
@@ -284,6 +311,8 @@ async def main() -> None:
                 await route.fulfill(
                     status=response["status"], headers=response["headers"], body=bytes(output)
                 )
+                if callback_document:
+                    callback_delivery.observe(callback_generation, incoming, "fulfilled")
 
             async def safe_route(route: Route) -> None:
                 operation: list[InstalledReason] = ["installed_route_headers"]
@@ -295,15 +324,21 @@ async def main() -> None:
                         return
                     # Route callback exceptions otherwise surface asynchronously and
                     # can include request URLs. Emit only the fixed diagnostic shape.
+                    fixed = diagnostics.capture(
+                        error, redirects.failure_reason or operation[0], login_phase
+                    )
                     print(
                         json.dumps(
                             {
                                 "kind": "failure",
                                 "stage": stage,
-                                **diagnostics.capture(
-                                    error,
-                                    redirects.failure_reason or operation[0],
-                                    login_phase,
+                                **fixed,
+                                **(
+                                    {"installed_export_step": export_step.model_dump()}
+                                    if stage == "export_preview"
+                                    and export_step is not None
+                                    and fixed.get("installed_login_phase") is None
+                                    else {}
                                 ),
                                 "api_statuses": statuses,
                             }
@@ -329,7 +364,9 @@ async def main() -> None:
             page.on("download", download)
 
             async def login() -> None:
-                nonlocal login_phase, login_reason
+                nonlocal login_phase, login_reason, callback_target
+                callback_delivery.reset()
+                callback_target = None
                 async with asyncio.timeout(10):
                     login_phase = "initial_session"
                     await expect(
@@ -357,6 +394,7 @@ async def main() -> None:
                         login_reason = "installed_expected_navigation_mismatch"
                         raise RuntimeError("Expected isolated redirect failure missing")
                     login_phase = "callback_document"
+                    callback_target = callback
                     await page.goto(callback, wait_until="domcontentloaded")
                     login_phase = "callback_session"
                     await expect(
@@ -394,7 +432,9 @@ async def main() -> None:
             if controlled_xml:
                 from installed_xml_browser import xml_journey
 
-                job = await xml_journey(page, channel, setup, checkpoint, login, download_seen)
+                job = await xml_journey(
+                    page, channel, setup, checkpoint, login, download_seen, export_checkpoint
+                )
             else:
                 checkpoint("source_review")
                 await activate(page, page.get_by_role("button", name="Sources", exact=True))
@@ -635,6 +675,19 @@ async def main() -> None:
                     "kind": "failure",
                     "stage": stage,
                     **fixed,
+                    **(
+                        {"installed_callback_delivery": callback_delivery.value}
+                        if login_phase == "callback_document"
+                        and fixed.get("installed_login_phase") == "callback_document"
+                        else {}
+                    ),
+                    **(
+                        {"installed_export_step": export_step.model_dump()}
+                        if stage == "export_preview"
+                        and export_step is not None
+                        and fixed.get("installed_login_phase") is None
+                        else {}
+                    ),
                     "api_statuses": statuses,
                 }
             ),

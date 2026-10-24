@@ -11,14 +11,19 @@ import socket
 import sys
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, cast
 from urllib.parse import parse_qs, urlsplit
 
 from browser_acceptance import sandbox_status
 from operator_ui_protocol import (
     ERRORS,
+    EVIDENCE_PHASES,
     OUTCOME_PHASES,
     STAGES,
+    FocusExhaustion,
+    ObservationTrace,
+    OutcomeReplayReadiness,
+    ReplayRequest,
     asset_manifest,
     failure_reason,
     route_failure_reason,
@@ -27,6 +32,7 @@ from operator_ui_protocol import (
 )
 from playwright.async_api import (
     Error,
+    JSHandle,
     Locator,
     Page,
     Request,
@@ -36,6 +42,7 @@ from playwright.async_api import (
 )
 
 ORIGIN = "https://app.example.test"
+focus_exhaustion: FocusExhaustion | Literal["unavailable"] | None = None
 HEADERS = {
     "content-type",
     "cookie",
@@ -138,18 +145,250 @@ async def api_headers(incoming: Request, failure: Callable[[str, str], None]) ->
 
 async def focus(page: Page, target: Locator) -> None:
     """Find controls using real Tab navigation; never mutate DOM form values."""
+    global focus_exhaustion
+    focus_exhaustion = None
     await target.wait_for(state="visible", timeout=10000)
     await expect(target).to_be_enabled(timeout=10000)
     for _ in range(100):
         if await target.evaluate("node => node === document.activeElement"):
             return
         await page.keyboard.press("Tab")
+    # Observe only after failure; even a target reached on Tab 100 still fails.
+    # Never emit DOM text, values, identifiers, URLs or arbitrary error messages.
+    try:
+        focus_exhaustion = FocusExhaustion.model_validate(
+            await asyncio.wait_for(
+                target.evaluate("""node => {
+                const active = document.activeElement;
+                const heading = document.querySelector('section[aria-label="Article outcomes"] h4');
+                const controls = ['BUTTON', 'TEXTAREA', 'SELECT', 'INPUT'];
+                const kind = element => controls.includes(element?.tagName)
+                    ? element.tagName.toLowerCase() : 'other';
+                const targetDialog = node.closest('dialog[open]');
+                return {
+                    target_focused: node === active,
+                    document_focused: document.hasFocus(),
+                    modal_open: document.querySelector('dialog[open]') !== null,
+                    active_kind: active === null ? 'none' : active === node ? 'target'
+                        : active === document.body ? 'body'
+                        : active === heading ? 'outcomes_heading' : 'other',
+                    target_kind: kind(node), active_control: kind(active),
+                    target_disabled: node.matches(':disabled'),
+                    target_in_dialog: targetDialog !== null,
+                    active_in_target_dialog: targetDialog !== null && targetDialog.contains(active),
+                    target_inert: node.closest('[inert]') !== null,
+                    target_tab_stop: node.tabIndex >= 0
+                };
+            }"""),
+                timeout=0.1,
+            )
+        )
+    except Exception:
+        focus_exhaustion = "unavailable"
     raise RuntimeError("Control not reachable by keyboard")
 
 
 async def activate(page: Page, target: Locator) -> None:
     await focus(page, target)
     await page.keyboard.press("Enter")
+
+
+async def outcome_loading(page: Page, state: OutcomeReplayReadiness) -> bool:
+    """Read only the exact request-owned loading render, before its reply is offered."""
+    return bool(
+        await page.evaluate(
+            """scope => {
+        const region = document.querySelector('section[aria-label="Article outcomes"]');
+        const organization = document.querySelector('select[aria-label="Active organization"]');
+        const job = [...document.querySelectorAll('h4')].some(
+            node => node.textContent === 'Job ' + scope.job);
+        return organization?.value === scope.organization && job && !!region &&
+            !region.querySelector('table') &&
+            [...region.querySelectorAll('[role="status"]')].some(node =>
+                node.textContent === 'Loading current article outcomes…');
+    }""",
+            {"organization": state.organization, "job": state.job},
+        )
+    )
+
+
+async def require_outcome_render(
+    page: Page, state: OutcomeReplayReadiness, proof: ReplayRequest, opener: JSHandle
+) -> None:
+    if state.ready() is not proof or state.replay is None or state.replay.render_before is None:
+        raise RuntimeError("Current terminal replay/render correlation missing")
+    previous = cast(JSHandle, state.replay.render_before)
+    if not await previous.evaluate("node => !!node && !node.isConnected"):
+        raise RuntimeError("Terminal replay has not replaced its preceding outcome render")
+    valid = await opener.evaluate(
+        """(node, scope) => {
+        const region = node.closest('section[aria-label="Article outcomes"]');
+        const row = node.closest('tr');
+        const organization = document.querySelector('select[aria-label="Active organization"]');
+        const job = [...document.querySelectorAll('h4')].some(
+            value => value.textContent === 'Job ' + scope.job);
+        return node.isConnected && !!region && organization?.value === scope.organization && job &&
+            row?.querySelector('td')?.textContent.includes('Item: ' + scope.item) &&
+            node.textContent === 'Inspect article observation';
+    }""",
+        {"organization": state.organization, "job": state.job, "item": proof.item},
+    )
+    if not valid or state.ready() is not proof:
+        raise RuntimeError("Current terminal replay/render correlation missing")
+
+
+async def wait_outcome_replay(
+    page: Page, state: OutcomeReplayReadiness, changed: asyncio.Event
+) -> tuple[ReplayRequest, JSHandle]:
+    async with asyncio.timeout(10):
+        while True:
+            changed.clear()
+            if state.failed:
+                raise RuntimeError("Current terminal replay/render correlation refused")
+            proof = state.ready()
+            if proof is not None:
+                break
+            await changed.wait()
+        # These remain actual DOM checks; a cursor or HTTP reply alone cannot pass.
+        await page.get_by_text("no contact", exact=True).first.wait_for()
+        region = page.get_by_role("region", name="Article outcomes", exact=True)
+        opener = (
+            region.get_by_role("row")
+            .filter(has_text="Item: " + str(proof.item))
+            .get_by_role("button", name="Inspect article observation", exact=True)
+        )
+        handle = await opener.element_handle()
+        if handle is None:
+            raise RuntimeError("Current terminal replay/render correlation missing")
+        try:
+            await require_outcome_render(page, state, proof, handle)
+        except BaseException:
+            await handle.dispose()
+            raise
+        return proof, handle
+
+
+async def prove_delayed_outcome_replay(
+    page: Page,
+    organization: str,
+    job: str,
+    observe: Callable[
+        [OutcomeReplayReadiness | None, asyncio.Event | None, asyncio.Event | None], None
+    ],
+    changed: asyncio.Event,
+    checkpoint: Callable[[str], None],
+) -> None:
+    """Separate deterministic proof; forward the exact held terminal replay unchanged."""
+    await activate(page, page.get_by_role("button", name="Back to recent jobs", exact=True))
+    state = OutcomeReplayReadiness(organization, job)
+    release, offered = asyncio.Event(), asyncio.Event()
+    observe(state, release, offered)
+    old: JSHandle | None = None
+    current: JSHandle | None = None
+    try:
+        checkpoint("outcomes_replay_delayed")
+        await activate(page, page.get_by_role("button", name="Open job " + job, exact=True))
+        await asyncio.wait_for(offered.wait(), timeout=5)
+        region = page.get_by_role("region", name="Article outcomes", exact=True)
+        opener = region.get_by_role("button", name="Inspect article observation", exact=True)
+        await opener.wait_for()
+        old = await opener.element_handle()
+        assert old is not None and state.ready() is None
+        dialog = page.get_by_role("dialog", name="Article observation details", exact=True)
+        await activate(page, opener)
+        await expect(dialog).to_be_visible()
+        assert state.ready() is None
+        release.set()
+        checkpoint("outcomes_replay_invalidated")
+        await expect(dialog).not_to_be_visible()
+        assert await old.evaluate("node => !node.isConnected")
+        checkpoint("outcomes_replay_rendered")
+        proof, current = await wait_outcome_replay(page, state, changed)
+        await focus(page, opener)
+        await require_outcome_render(page, state, proof, current)
+        await page.keyboard.press("Enter")
+        await expect(dialog).to_contain_text("Retained parser outcome: no contact")
+        await require_outcome_render(page, state, proof, current)
+        await expect(
+            dialog.get_by_role("button", name="Close article observation", exact=True)
+        ).to_be_focused()
+        await page.keyboard.press("Escape")
+        await expect(dialog).not_to_be_visible()
+        await expect(opener).to_be_focused()
+    finally:
+        release.set()
+        observe(None, None, None)
+        for handle in (old, current):
+            if handle is not None:
+                await handle.dispose()
+
+
+async def start_observation_trace(opener: Locator) -> JSHandle | None:
+    """Bounded passive DOM observation; never retain or emit article text/identifiers."""
+    try:
+        return await asyncio.wait_for(
+            opener.evaluate_handle("""node => {
+            const region = node.closest('section');
+            const trace = {states: [], truncated: false};
+            const sample = () => {
+                const dialog = document.querySelector(
+                    'dialog[aria-labelledby="article-observation-title"]');
+                const panel = dialog?.querySelector(
+                    'section[aria-label="Article observation quality"]');
+                const text = panel?.textContent ?? '';
+                const state = {
+                    opener_connected: node.isConnected,
+                    region_connected: region?.isConnected === true,
+                    dialog_present: dialog !== null, dialog_open: dialog?.open === true,
+                    quality: !panel ? 'missing'
+                        : text.includes('Retained parser outcome: no contact') ? 'expected'
+                        : text.includes('Loading current article quality') ? 'loading'
+                        : text.includes('Current article quality is unavailable')
+                            ? 'unavailable' : 'other'
+                };
+                if (JSON.stringify(trace.states.at(-1)) !== JSON.stringify(state)) {
+                    if (trace.states.length < 8) trace.states.push(state);
+                    else { trace.truncated = true; trace.observer.disconnect(); }
+                }
+            };
+            trace.sample = sample;
+            trace.observer = new MutationObserver(sample);
+            trace.observer.observe(document.body, {
+                subtree: true, childList: true, characterData: true,
+                attributes: true, attributeFilter: ['open']});
+            trace.timer = setTimeout(() => {
+                trace.truncated = true; trace.observer.disconnect();
+            }, 10000);
+            sample();
+            return trace;
+        }"""),
+            timeout=0.1,
+        )
+    except Exception:
+        return None
+
+
+async def finish_observation_trace(
+    trace: JSHandle | None,
+) -> ObservationTrace | Literal["unavailable"]:
+    if trace is None:
+        return "unavailable"
+    try:
+        value = await asyncio.wait_for(
+            trace.evaluate("""trace => {
+            clearTimeout(trace.timer); trace.observer.disconnect(); trace.sample();
+            return {states: trace.states, truncated: trace.truncated};
+        }"""),
+            timeout=0.1,
+        )
+        return ObservationTrace.model_validate(value)
+    except Exception:
+        return "unavailable"
+    finally:
+        try:
+            await asyncio.wait_for(trace.dispose(), timeout=0.1)
+        except Exception:
+            pass
 
 
 async def type_text(page: Page, target: Locator, text: str) -> None:
@@ -225,6 +464,32 @@ async def authored_outcome_paging(
         offset = int(query.get("cursor", ["0"])[0])
         assert offset in {0, 25, 50, 75, 100, 125}
         requested_pages.append(offset)
+        presence = query.get("article_outcome_presence", ["all"])[0]
+        assert presence in {
+            "all",
+            "observed_candidate",
+            "completed_without_candidate",
+            "unresolved",
+        }
+        indices = (
+            list(range(127))
+            if presence == "all"
+            else (
+                [0]
+                if presence == "completed_without_candidate"
+                else (
+                    list(range(5, 127, 6))
+                    if presence == "observed_candidate"
+                    else [index for index in range(1, 127) if index % 6 != 5]
+                )
+            )
+        )
+        if query.get("item_id"):
+            indices = [
+                index
+                for index in indices
+                if query["item_id"] == [f"00000000-0000-4000-8000-{index + 1:012d}"]
+            ]
         items = [
             {
                 "organization_id": organization,
@@ -247,9 +512,12 @@ async def authored_outcome_paging(
                 "technical_status": "not_checked",
                 "outreach_eligibility": "not_assessed",
             }
-            for index in range(offset, min(offset + 25, 127))
+            for index in indices[offset : offset + 25]
         ]
-        payload = {"items": items, "next_cursor": str(offset + 25) if offset + 25 < 127 else None}
+        payload = {
+            "items": items,
+            "next_cursor": str(offset + 25) if offset + 25 < len(indices) else None,
+        }
         if hold and offset == 25:
             held_offset = offset
             requested.set()
@@ -302,10 +570,15 @@ async def authored_outcome_paging(
             await expect(region).to_contain_text(f"Page {number + 1}: {count} article outcomes")
             rows = table.locator("tbody tr")
             await expect(rows).to_have_count(count)
-            seen.extend(await rows.locator("td:first-child").all_text_contents())
+            seen.extend(
+                await rows.locator("td:first-child").evaluate_all(
+                    "nodes => nodes.map(node => node.firstChild.textContent)"
+                )
+            )
             if number < 5:
                 await activate(
-                    page, region.get_by_role("button", name="Next article outcome page", exact=True)
+                    page,
+                    region.get_by_role("button", name="Next article outcome page", exact=True),
                 )
                 checkpoint("outcomes_next_focus")
                 await expect(heading).to_be_focused()
@@ -325,7 +598,8 @@ async def authored_outcome_paging(
         for number in range(5, 0, -1):
             checkpoint("outcomes_previous_rows")
             await activate(
-                page, region.get_by_role("button", name="Previous article outcome page", exact=True)
+                page,
+                region.get_by_role("button", name="Previous article outcome page", exact=True),
             )
             await expect(region).to_contain_text(f"Page {number}: 25 article outcomes")
             checkpoint("outcomes_previous_focus")
@@ -366,7 +640,8 @@ async def authored_outcome_paging(
         checkpoint("outcomes_quality_pending")
         quality_hold = True
         await activate(
-            page, dialog.get_by_role("button", name="Refresh article observation", exact=True)
+            page,
+            dialog.get_by_role("button", name="Refresh article observation", exact=True),
         )
         await asyncio.wait_for(quality_requested.wait(), timeout=5)
         await expect(dialog).to_contain_text("Loading current article quality")
@@ -384,7 +659,8 @@ async def authored_outcome_paging(
         checkpoint("outcomes_quality_denied")
         quality_denied = True
         await activate(
-            page, dialog.get_by_role("button", name="Refresh article observation", exact=True)
+            page,
+            dialog.get_by_role("button", name="Refresh article observation", exact=True),
         )
         await expect(dialog).to_contain_text("Current article quality is unavailable")
         await expect(dialog).not_to_contain_text("Retained parser outcome:")
@@ -420,12 +696,61 @@ async def authored_outcome_paging(
         denied = False
         await activate(page, page.get_by_role("button", name="Refresh current view", exact=True))
         await expect(table).to_be_visible()
+        checkpoint("outcomes_presence_keyboard")
+        presence_select = region.get_by_role(
+            "combobox", name="Article-outcome candidate presence", exact=True
+        )
+        await activate(
+            page,
+            region.get_by_role("button", name="Next article outcome page", exact=True),
+        )
+        await expect(region).to_contain_text("Page 2: 25 article outcomes")
+        await select_index(page, presence_select, 2)
+        await expect(region).to_contain_text("Page 1: 1 article outcomes")
+        await expect(region).to_contain_text("authored-outcome-000.html")
+        await expect(
+            region.get_by_role("button", name="Previous article outcome page", exact=True)
+        ).to_be_disabled()
+        await expect(
+            region.get_by_role("button", name="Next article outcome page", exact=True)
+        ).to_be_disabled()
+        await select_index(page, presence_select, 1)
+        await expect(region).to_contain_text("Page 1: 21 article outcomes")
+        await expect(region).not_to_contain_text("authored-outcome-000.html")
+        await select_index(page, presence_select, 3)
+        await expect(region).to_contain_text("Page 1: 25 article outcomes")
+        await expect(region).not_to_contain_text("authored-outcome-005.html")
+        await select_index(page, presence_select, 0)
+        await expect(region).to_contain_text("Page 1: 25 article outcomes")
+        checkpoint("outcomes_late_filter")
+        hold = True
+        requested.clear()
+        release.clear()
+        finished.clear()
+        await activate(
+            page,
+            region.get_by_role("button", name="Next article outcome page", exact=True),
+        )
+        await asyncio.wait_for(requested.wait(), timeout=5)
+        await select_index(page, presence_select, 2)
+        await expect(region).to_contain_text("Page 1: 1 article outcomes")
+        hold = False
+        release.set()
+        await asyncio.wait_for(finished.wait(), timeout=5)
+        await expect(region).not_to_contain_text("authored-outcome-025.html")
+        await expect(page.locator("dialog[open]")).to_have_count(0)
+        await select_index(page, presence_select, 0)
+        await expect(region).to_contain_text("Page 1: 25 article outcomes")
+        requested.clear()
+        release.clear()
+        finished.clear()
         checkpoint("outcomes_late_job")
         # Abandon a held second page, change jobs, then release it. Old rows must not
         # overwrite the newly selected job or its page cursor.
         hold = True
         await activate(
-            page, region.get_by_role("button", name="Next article outcome page", exact=True)
+            page,
+            region.get_by_role("button", name="Next article outcome page", exact=True),
         )
         await asyncio.wait_for(requested.wait(), timeout=5)
         assert held_offset == 25
@@ -443,6 +768,35 @@ async def authored_outcome_paging(
         await activate(page, page.get_by_role("button", name="Back to recent jobs", exact=True))
         await activate(page, page.get_by_role("button", name="Open job " + job, exact=True))
         await expect(region).to_contain_text("Page 1: 25 article outcomes")
+        checkpoint("outcomes_exact_article_navigation")
+        await activate(
+            page,
+            region.get_by_role("button", name="Contacts for this article", exact=True).first,
+        )
+        await expect(page.get_by_label("Job UUID (optional)", exact=True)).to_have_value(job)
+        await expect(
+            page.get_by_label("Article item UUID (optional; requires job)", exact=True)
+        ).to_have_value("00000000-0000-4000-8000-000000000001")
+        await expect(page.get_by_label(re.compile(r"^Association state"))).to_have_value("accepted")
+        await activate(page, page.get_by_role("button", name="Jobs", exact=True))
+        await activate(
+            page,
+            region.get_by_role("button", name="Review queue for this article", exact=True).first,
+        )
+        await expect(
+            page.get_by_label("Article item UUID (optional; requires job)", exact=True)
+        ).to_have_value("00000000-0000-4000-8000-000000000001")
+        await expect(page.get_by_label(re.compile(r"^Association state"))).to_have_value(
+            "needs_review"
+        )
+        await type_text(page, page.get_by_label("Job UUID (optional)", exact=True), "")
+        await expect(
+            page.get_by_label("Article item UUID (optional; requires job)", exact=True)
+        ).to_have_value("")
+        await expect(
+            page.get_by_label("Article item UUID (optional; requires job)", exact=True)
+        ).to_be_disabled()
+        await activate(page, page.get_by_role("button", name="Jobs", exact=True))
         checkpoint("outcomes_scoped_contacts")
         await activate(page, page.get_by_role("button", name="Contacts for this job", exact=True))
         await expect(page.get_by_label("Job UUID (optional)", exact=True)).to_have_value(job)
@@ -453,7 +807,8 @@ async def authored_outcome_paging(
         await activate(page, page.get_by_role("button", name="Jobs", exact=True))
         checkpoint("outcomes_scoped_review")
         await activate(
-            page, page.get_by_role("button", name="Review queue for this job", exact=True)
+            page,
+            page.get_by_role("button", name="Review queue for this job", exact=True),
         )
         await expect(page.get_by_label("Job UUID (optional)", exact=True)).to_have_value(job)
         await expect(page.get_by_label(re.compile(r"^Association state"))).to_have_value(
@@ -471,7 +826,8 @@ async def authored_outcome_paging(
         finished.clear()
         hold = True
         await activate(
-            page, region.get_by_role("button", name="Next article outcome page", exact=True)
+            page,
+            region.get_by_role("button", name="Next article outcome page", exact=True),
         )
         await asyncio.wait_for(requested.wait(), timeout=5)
         assert held_offset == 25
@@ -479,13 +835,16 @@ async def authored_outcome_paging(
         values = await organization_select.locator("option").evaluate_all(
             "nodes => nodes.map(node => node.value)"
         )
+        checkpoint("outcomes_organization_switch_away")
         await select_index(page, organization_select, 1 - values.index(organization))
         hold = False
         release.set()
         await asyncio.wait_for(finished.wait(), timeout=5)
         await expect(page.locator("body")).not_to_contain_text("authored-outcome-")
         await expect(page.locator("dialog[open]")).to_have_count(0)
+        checkpoint("outcomes_organization_switch_back")
         await select_index(page, organization_select, values.index(organization))
+        checkpoint("outcomes_organization_reopen_job")
         await activate(page, page.get_by_role("button", name="Open job " + job, exact=True))
         await expect(region).to_contain_text("Page 1: 25 article outcomes")
         checkpoint("outcomes_read_only")
@@ -498,6 +857,118 @@ async def authored_outcome_paging(
         page.remove_listener("request", observe_request)
         await page.unroute(pattern, outcomes)
         await page.unroute(quality_pattern, quality)
+    await activate(page, page.get_by_role("button", name="Refresh current view", exact=True))
+
+
+async def authored_contact_request_ownership(page: Page, checkpoint: Callable[[str], None]) -> None:
+    """Actual Contacts hook with authored replies; hosted execution remains required."""
+    checkpoint("outcomes_request_generation")
+    pattern = "**/contacts?*"
+    empty = page.get_by_text("No contacts match these server filters.", exact=True)
+    error = page.get_by_text(
+        "Resource unavailable. Permissions or retention may have changed.", exact=False
+    )
+    loading = page.locator("#main > p").filter(
+        has_text=re.compile("^Loading current organization data…$")
+    )
+    search = page.get_by_label("Search loaded scope", exact=True)
+    target = page.get_by_role("combobox", name="Author role", exact=True)
+    await expect(search).to_have_value("")
+    await expect(target).to_have_value("all")
+
+    async def run_case(seed_error: bool, disabled_interval: bool) -> None:
+        phase = "seed"
+        seeded = asyncio.Event()
+        returned = asyncio.Event()
+        changed = asyncio.Event()
+        release_returned = asyncio.Event()
+        release_changed = asyncio.Event()
+        finished_returned = asyncio.Event()
+        finished_changed = asyncio.Event()
+        changed_requests = 0
+
+        async def fulfill(route: Route, failure: bool) -> None:
+            try:
+                await route.fulfill(
+                    status=404 if failure else 200,
+                    content_type="application/json",
+                    body=json.dumps(
+                        {"detail": "Unavailable"} if failure else {"items": [], "next_cursor": None}
+                    ),
+                )
+            except Error:
+                if route.request.failure != "net::ERR_ABORTED":
+                    raise
+
+        async def contacts(route: Route) -> None:
+            nonlocal changed_requests
+            assert route.request.method == "GET"
+            query = parse_qs(urlsplit(route.request.url).query, keep_blank_values=True)
+            is_original = query.get("author_target") == ["all"] and query.get("query") == [""]
+            if phase == "seed":
+                assert is_original
+                await fulfill(route, seed_error)
+                seeded.set()
+            elif is_original:
+                returned.set()
+                await asyncio.wait_for(release_returned.wait(), timeout=8)
+                await fulfill(route, not seed_error)
+                finished_returned.set()
+            else:
+                changed_requests += 1
+                changed.set()
+                await asyncio.wait_for(release_changed.wait(), timeout=8)
+                await fulfill(route, seed_error)
+                finished_changed.set()
+
+        await page.route(pattern, contacts)
+        try:
+            await activate(
+                page, page.get_by_role("button", name="Refresh current view", exact=True)
+            )
+            await asyncio.wait_for(seeded.wait(), timeout=5)
+            await expect(error if seed_error else empty).to_be_visible()
+            phase = "held"
+            if disabled_interval:
+                # Search temporarily disables this same hook with path=null.
+                # Return before debounce settles B, so reopening is null -> A.
+                await focus(page, search)
+                await page.keyboard.type("x")
+                await expect(
+                    page.get_by_text("Applying server search…", exact=True)
+                ).to_be_visible()
+                await page.keyboard.press("Backspace")
+            else:
+                await select_index(page, target, 1)
+                await asyncio.wait_for(changed.wait(), timeout=5)
+                await select_index(page, target, 0)
+            await asyncio.wait_for(returned.wait(), timeout=5)
+            if disabled_interval:
+                assert changed_requests == 0
+            else:
+                assert changed_requests == 1
+            # Request identity, not equality with the old path, owns display.
+            await expect(loading).to_be_visible()
+            await expect(empty).not_to_be_visible()
+            await expect(error).not_to_be_visible()
+            await expect(page.locator("dialog[open]")).to_have_count(0)
+            release_returned.set()
+            await asyncio.wait_for(finished_returned.wait(), timeout=5)
+            await expect(empty if seed_error else error).to_be_visible()
+            if not disabled_interval:
+                release_changed.set()
+                await asyncio.wait_for(finished_changed.wait(), timeout=5)
+                await expect(empty if seed_error else error).to_be_visible()
+                await expect(error if seed_error else empty).not_to_be_visible()
+        finally:
+            release_returned.set()
+            release_changed.set()
+            await page.unroute(pattern, contacts)
+
+    # Both settled success and settled error must lose ownership on either route.
+    for seed_error in (False, True):
+        for disabled_interval in (False, True):
+            await run_case(seed_error, disabled_interval)
     await activate(page, page.get_by_role("button", name="Refresh current view", exact=True))
 
 
@@ -555,15 +1026,32 @@ async def main() -> None:
     accepted = 0
     api_statuses: list[int] = []
     download_seen = asyncio.Event()
+    replay_readiness: OutcomeReplayReadiness | None = None
+    replay_hold: asyncio.Event | None = None
+    replay_offered: asyncio.Event | None = None
+    replay_changed = asyncio.Event()
+
+    def observe_replay(
+        state: OutcomeReplayReadiness | None,
+        hold: asyncio.Event | None = None,
+        offered: asyncio.Event | None = None,
+    ) -> None:
+        nonlocal replay_readiness, replay_hold, replay_offered
+        replay_readiness, replay_hold, replay_offered = state, hold, offered
+        replay_changed.clear()
+
     stage = "browser_launch"
     outcome_phase: str | None = None
+    evidence_phase: str | None = None
+    observation_trace: ObservationTrace | Literal["unavailable"] | None = None
 
     def checkpoint(value: str) -> None:
-        nonlocal stage, outcome_phase
+        nonlocal stage, outcome_phase, evidence_phase
         if value not in STAGES:
             raise RuntimeError("Fixed UI stage required")
         stage = value
         outcome_phase = None
+        evidence_phase = None
         print(json.dumps({"kind": "stage", "stage": value}), flush=True)
 
     def outcome_checkpoint(value: str) -> None:
@@ -572,6 +1060,12 @@ async def main() -> None:
             raise RuntimeError("Fixed outcome diagnostic phase required")
         # Preserve emitted stage identity and its existing 32-frame cap.
         outcome_phase = value
+
+    def evidence_checkpoint(value: str) -> None:
+        nonlocal evidence_phase
+        if stage != "evidence_review" or value not in EVIDENCE_PHASES:
+            raise RuntimeError("Fixed evidence diagnostic phase required")
+        evidence_phase = value
 
     try:
         checkpoint("browser_launch")
@@ -627,7 +1121,19 @@ async def main() -> None:
                     await route.abort("blockedbyclient")
                     return
                 if parsed.path.startswith("/api/v1/"):
+                    observed, hold, offered = replay_readiness, replay_hold, replay_offered
+                    ticket = observed.begin(incoming.url, incoming.method) if observed else None
+                    replay_changed.set()
                     headers = await api_headers(incoming, header_failure)
+                    if observed is not None:
+                        observed.headers(ticket, headers)
+                    if (
+                        observed is not None
+                        and ticket is not None
+                        and ticket.kind == "outcomes"
+                        and ticket.eligible
+                    ):
+                        ticket.loading = await outcome_loading(page, observed)
                     reply = await channel.request(
                         {
                             "kind": "request",
@@ -638,6 +1144,9 @@ async def main() -> None:
                         }
                     )
                     if reply.get("transport_abort") is True:
+                        if observed is not None:
+                            observed.finish(ticket, False)
+                            replay_changed.set()
                         await route.abort("failed")
                         return
                     body = base64.b64decode(reply["body"], validate=True)
@@ -648,11 +1157,40 @@ async def main() -> None:
                     ):
                         raise RuntimeError("Bounded actual API reply required")
                     api_statuses.append(reply["status"])
+                    if observed is not None:
+                        observed.offer(ticket, reply["status"], body)
+                        if ticket is not None and ticket is observed.replay:
+                            # Capture the request-owned page generation BEFORE this exact
+                            # replay is delivered. Filling its initial response cannot
+                            # satisfy the later remount proof.
+                            ticket.render_before = await page.evaluate_handle(
+                                """scope => {
+                                const region = document.querySelector(
+                                    'section[aria-label="Article outcomes"]');
+                                const selected = document.querySelector(
+                                    'select[aria-label="Active organization"]');
+                                const job = [...document.querySelectorAll('h4')].some(
+                                    node => node.textContent === 'Job ' + scope.job);
+                                return selected?.value === scope.organization && job && region
+                                    ? region.querySelector(':scope > div:last-child') : null;
+                            }""",
+                                {"organization": observed.organization, "job": observed.job},
+                            )
+                        replay_changed.set()
+                        if ticket is observed.replay and hold is not None and offered is not None:
+                            offered.set()
+                            await asyncio.wait_for(hold.wait(), timeout=8)
                     try:
                         await route.fulfill(
                             status=reply["status"], headers=reply["headers"], body=body
                         )
+                        if observed is not None:
+                            observed.finish(ticket, True)
+                            replay_changed.set()
                     except Error:
+                        if observed is not None:
+                            observed.finish(ticket, False)
+                            replay_changed.set()
                         if incoming.failure != "net::ERR_ABORTED":
                             # Fail immediately with a fixed category rather than
                             # filling stderr with repeated async callback stacks.
@@ -806,17 +1344,21 @@ async def main() -> None:
                 await page.get_by_text("completed", exact=True).first.wait_for(timeout=75000)
                 checkpoint("evidence_review")
                 # Explicit tooltip correspondence is already accepted; still save a human review.
+                evidence_checkpoint("contacts")
                 await activate(page, page.get_by_role("button", name="Contacts", exact=True))
                 for address in browser_expected_addresses:
                     row = page.get_by_role("row").filter(has_text=address)
                     await expect(row).to_have_count(1)
+                    evidence_checkpoint("open")
                     await activate(
                         page,
                         row.get_by_role("button", name="Evidence and review", exact=True),
                     )
+                    evidence_checkpoint("citation")
                     await page.get_by_role(
                         "heading", name="Actual retained citation", exact=True
                     ).wait_for()
+                    evidence_checkpoint("reason")
                     await type_text(
                         page,
                         page.get_by_label("Reason", exact=True),
@@ -826,8 +1368,11 @@ async def main() -> None:
                             else "Inspected controlled tooltip citation through keyboard UI"
                         ),
                     )
+                    evidence_checkpoint("save")
                     await activate(page, page.get_by_role("button", name="Save review", exact=True))
+                    evidence_checkpoint("closed")
                     await page.get_by_role("dialog").wait_for(state="hidden")
+                evidence_checkpoint("returned")
                 await activate(page, page.get_by_role("button", name="Contacts", exact=True))
                 for address in browser_expected_addresses:
                     await expect(page.get_by_role("row").filter(has_text=address)).to_have_count(1)
@@ -1287,6 +1832,20 @@ async def main() -> None:
             await activate(
                 page, page.get_by_role("button", name="Evidence and review", exact=True).first
             )
+            await activate(
+                page,
+                page.get_by_role("button", name="Refresh association and evidence", exact=True),
+            )
+            await expect(quality).to_contain_text("Retained parser outcome:")
+            await activate(page, page.get_by_role("button", name="Close evidence", exact=True))
+            await page.get_by_role("dialog").wait_for(state="hidden")
+            if not await page.get_by_role(
+                "button", name="Evidence and review", exact=True
+            ).first.evaluate("node => node === document.activeElement"):
+                raise RuntimeError("Evidence dialog did not restore keyboard focus")
+            await activate(
+                page, page.get_by_role("button", name="Evidence and review", exact=True).first
+            )
             await page.get_by_role(
                 "heading", name="Actual retained citation", exact=True
             ).wait_for()
@@ -1347,6 +1906,8 @@ async def main() -> None:
             await page.get_by_role("dialog").wait_for(state="hidden")
             await page.get_by_text("Keyboard authored workspace", exact=True).wait_for()
             checkpoint("url_plan")
+            replay_readiness = OutcomeReplayReadiness(setup["initial_organization"])
+            observe_replay(replay_readiness)
             # A separate article URL takes the same real create/plan/worker path.
             await activate(page, page.get_by_role("button", name="New extraction", exact=True))
             await activate(page, page.get_by_role("button", name="URL", exact=True))
@@ -1366,18 +1927,38 @@ async def main() -> None:
                 page, page.get_by_role("button", name="Refresh current view", exact=True)
             )
             checkpoint("url_worker")
-            await page.get_by_text("no contact", exact=True).first.wait_for()
+            outcome_checkpoint("outcomes_actual_replay")
+            # Share the original ten-second visibility budget with replay/render readiness.
+            proof, rendered_opener = await wait_outcome_replay(
+                page, replay_readiness, replay_changed
+            )
             outcome_checkpoint("outcomes_actual_modal")
             outcome_region = page.get_by_role("region", name="Article outcomes", exact=True)
             opener = outcome_region.get_by_role(
                 "button", name="Inspect article observation", exact=True
             )
-            await activate(page, opener)
+            trace = await start_observation_trace(opener)
             observation_dialog = page.get_by_role(
                 "dialog", name="Article observation details", exact=True
             )
-            outcome_checkpoint("outcomes_actual_quality")
-            await expect(observation_dialog).to_contain_text("Retained parser outcome: no contact")
+            quality_failed = False
+            try:
+                await focus(page, opener)
+                await require_outcome_render(page, replay_readiness, proof, rendered_opener)
+                await page.keyboard.press("Enter")
+                outcome_checkpoint("outcomes_actual_quality")
+                await expect(observation_dialog).to_contain_text(
+                    "Retained parser outcome: no contact"
+                )
+                await require_outcome_render(page, replay_readiness, proof, rendered_opener)
+            except AssertionError:
+                quality_failed = outcome_phase == "outcomes_actual_quality"
+                raise
+            finally:
+                captured = await finish_observation_trace(trace)
+                if quality_failed:
+                    observation_trace = captured
+            outcome_checkpoint("outcomes_actual_initial_focus")
             await expect(
                 observation_dialog.get_by_role(
                     "button", name="Close article observation", exact=True
@@ -1387,10 +1968,104 @@ async def main() -> None:
             await page.keyboard.press("Escape")
             await expect(observation_dialog).not_to_be_visible()
             await expect(opener).to_be_focused()
+            await rendered_opener.dispose()
+            observe_replay(None)
+            outcome_checkpoint("outcomes_actual_filter_preview")
+            actual_job = (
+                await page.get_by_role(
+                    "heading", name=re.compile(r"^Job [0-9a-f-]{36}$")
+                ).inner_text()
+            ).removeprefix("Job ")
+            actual_cell = outcome_region.get_by_role(
+                "table", name="Current-authorized article outcomes"
+            ).locator("tbody tr td:first-child")
+            actual_item = re.search(r"Item: ([0-9a-f-]{36})", await actual_cell.inner_text())
+            assert actual_item is not None
+            presence_select = outcome_region.get_by_role(
+                "combobox", name="Article-outcome candidate presence", exact=True
+            )
+            await select_index(page, presence_select, 1)
+            await expect(outcome_region).to_contain_text("Page 1: 0 article outcomes")
+            await select_index(page, presence_select, 2)
+            await expect(outcome_region).to_contain_text("Page 1: 1 article outcomes")
+            await activate(
+                page,
+                outcome_region.get_by_role("button", name="Contacts for this article", exact=True),
+            )
+            await expect(
+                page.get_by_label("Article item UUID (optional; requires job)", exact=True)
+            ).to_have_value(actual_item.group(1))
+            await expect(
+                page.get_by_text("No contacts match these server filters.", exact=True)
+            ).to_be_visible()
+            await activate(page, page.get_by_role("button", name="Exports", exact=True))
+            await type_text(
+                page,
+                page.get_by_label("Job UUID (blank selects authorized matching jobs)", exact=True),
+                actual_job,
+            )
+            await type_text(
+                page,
+                page.get_by_label("Article item UUID (optional; requires job)", exact=True),
+                actual_item.group(1),
+            )
+            export_presence = page.get_by_role(
+                "combobox", name="Article-outcome candidate presence", exact=True
+            )
+            await select_index(page, export_presence, 2)
+            await activate(
+                page,
+                page.get_by_role("button", name="Preview eligible export counts", exact=True),
+            )
+            filtered_preview = page.get_by_role("region", name="Current export preview")
+            await expect(filtered_preview).to_contain_text(
+                "0 contacts; 1 separate article outcomes"
+            )
+            await expect(filtered_preview).to_contain_text(
+                actual_job + " / " + actual_item.group(1)
+            )
+            await expect(filtered_preview).to_contain_text(
+                "This predicate does not filter Contacts."
+            )
+            await select_index(page, export_presence, 3)
+            await expect(filtered_preview).not_to_be_visible()
+            await activate(
+                page,
+                page.get_by_role("button", name="Preview eligible export counts", exact=True),
+            )
+            await expect(filtered_preview).to_contain_text(
+                "0 contacts; 0 separate article outcomes"
+            )
+            await type_text(
+                page,
+                page.get_by_label("Job UUID (blank selects authorized matching jobs)", exact=True),
+                "",
+            )
+            await expect(
+                page.get_by_label("Article item UUID (optional; requires job)", exact=True)
+            ).to_have_value("")
+            await expect(filtered_preview).not_to_be_visible()
+            await activate(page, page.get_by_role("button", name="Jobs", exact=True))
+            await select_index(
+                page,
+                outcome_region.get_by_role(
+                    "combobox", name="Article-outcome candidate presence", exact=True
+                ),
+                0,
+            )
             await authored_outcome_paging(
                 page, str(setup["initial_organization"]), outcome_checkpoint
             )
+            await prove_delayed_outcome_replay(
+                page,
+                str(setup["initial_organization"]),
+                actual_job,
+                observe_replay,
+                replay_changed,
+                outcome_checkpoint,
+            )
             await activate(page, page.get_by_role("button", name="Contacts", exact=True))
+            await authored_contact_request_ownership(page, outcome_checkpoint)
             await type_text(
                 page,
                 page.get_by_label("Search loaded scope", exact=True),
@@ -1471,6 +2146,8 @@ async def main() -> None:
                         "keyword_partial": True,
                         "url_no_contact": True,
                         "actual_zero_contact_quality_dialog": True,
+                        "actual_terminal_replay_render_ready": True,
+                        "delayed_terminal_replay_render_proof": True,
                         "authored_127_outcome_paging": True,
                         "review": True,
                         "pause_resume_cancel_dismiss": True,
@@ -1502,6 +2179,25 @@ async def main() -> None:
                     "error": name if name in ERRORS else "UnexpectedError",
                     "reason": failure_reason(error),
                     **({"outcome_phase": outcome_phase} if outcome_phase is not None else {}),
+                    **(
+                        {
+                            "observation_trace": observation_trace.model_dump()
+                            if isinstance(observation_trace, ObservationTrace)
+                            else observation_trace
+                        }
+                        if observation_trace is not None
+                        else {}
+                    ),
+                    **({"evidence_phase": evidence_phase} if evidence_phase is not None else {}),
+                    **(
+                        {
+                            "focus_exhaustion": focus_exhaustion.model_dump()
+                            if isinstance(focus_exhaustion, FocusExhaustion)
+                            else focus_exhaustion
+                        }
+                        if failure_reason(error) == "keyboard_focus"
+                        else {}
+                    ),
                     "api_statuses": api_statuses,
                 }
             ),

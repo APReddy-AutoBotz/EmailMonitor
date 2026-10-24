@@ -67,3 +67,5 @@ Versioning: documents use Git history; public API uses `/api/v1`; event/schema r
 - [67 — Closed synthetic service-authority restore seal](67-closed-service-authority-restore.md)
 
 - [68 — Retained job outcome investigation](68-retained-job-outcome-investigation.md)
+
+- [69 — Exact retained article selection and candidate presence](69-retained-article-filters.md)

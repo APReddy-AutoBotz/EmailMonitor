@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
-import type { Outcome, Page } from './models'
+import { ArticlePresenceFilter, ArticlePresenceHelp, articleSelectionParams } from './retainedArticleFilters'
+import type { ArticleOutcomePresence, Outcome, Page } from './models'
 import { CurrentObservationQuality } from './observationQuality'
 import { Empty, Status, Time, useResource, type Context } from './ui'
 
@@ -8,12 +9,15 @@ import { Empty, Status, Time, useResource, type Context } from './ui'
 export function JobArticleOutcomes({ context: c, job, pulse = 0 }: { context: Context; job: string; pulse?: number }) {
   const [cursor, setCursor] = useState<string | null>(null)
   const [previous, setPrevious] = useState<(string | null)[]>([])
+  const [presence, setPresence] = useState<ArticleOutcomePresence>('all')
   const heading = useRef<HTMLHeadingElement>(null)
-  const path = '/article-outcomes?' + new URLSearchParams({ job_id: job, ...(cursor ? { cursor } : {}), limit: '25' })
+  const path = '/article-outcomes?' + new URLSearchParams({ ...articleSelectionParams(job, undefined, presence), ...(cursor ? { cursor } : {}), limit: '25' })
   return <section aria-label="Article outcomes">
     <h4 ref={heading} tabIndex={-1}>Article outcomes</h4>
     <p>Retained article results for this job, including no-contact, blocked and unsupported work. Each page contains at most 25 outcomes. Page counts are not whole-job totals.</p>
-    <ArticleOutcomePage key={`${c.scope.organization}:${job}:${c.revision}:${pulse}:${cursor ?? ''}`} context={c} job={job} path={path} page={previous.length + 1} heading={heading}
+    <ArticlePresenceFilter value={presence} change={value => { setPresence(value); setCursor(null); setPrevious([]) }} />
+    <ArticlePresenceHelp />
+    <ArticleOutcomePage key={`${c.scope.organization}:${job}:${c.revision}:${pulse}:${presence}:${cursor ?? ''}`} context={c} job={job} path={path} page={previous.length + 1} heading={heading}
       hasPrevious={previous.length > 0}
       back={() => { heading.current?.focus(); setCursor(previous[previous.length - 1]); setPrevious(previous.slice(0, -1)) }}
       next={next => { heading.current?.focus(); setPrevious([...previous, cursor]); setCursor(next) }} />
@@ -44,7 +48,7 @@ function ArticleOutcomePage({ context: c, job, path, page, heading, hasPrevious,
         <caption>Current-authorized article outcomes</caption>
         <thead><tr><th>Source article</th><th>Outcome</th><th>Reason</th><th>Completed</th><th>Observation</th><th>Lineage</th></tr></thead>
         <tbody>{data.items.map(item => <tr key={item.item_id}>
-          <td>{item.source_url}</td>
+          <td>{item.source_url}<br />Item: {item.item_id}{c.openJobContacts && <div className="actions"><button onClick={() => c.openJobContacts?.(job, false, item.item_id)}>Contacts for this article</button><button onClick={() => c.openJobContacts?.(job, true, item.item_id)}>Review queue for this article</button></div>}</td>
           <td><Status value={item.state} /></td>
           <td>{item.reason.replaceAll('_', ' ')}</td>
           <td>{item.completed_at ? <Time value={item.completed_at} zone={c.zone} /> : 'Completion time not recorded'}</td>

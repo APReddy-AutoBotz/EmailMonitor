@@ -5,15 +5,17 @@ import io
 import json
 import os
 import threading
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from pathlib import Path
 from uuid import UUID
 from zipfile import ZipFile
 
+import pytest
 from api_client import APIClient
 from emailmonitor.administration.service import Administration
 from emailmonitor.api import create_app
 from emailmonitor.jobs.broker import create_worker
+from emailmonitor.jobs.entitlement_diagnostics import snapshot as entitlement_snapshot
 from emailmonitor.jobs.ledger import Ledger
 from emailmonitor.jobs.queues import owned_queues
 from emailmonitor.organizations.roles import Capability
@@ -21,6 +23,7 @@ from emailmonitor.progress.broker import publish as publish_execution
 from emailmonitor.progress.service import Progress
 from emailmonitor.results.broker import publish as publish_exports
 from emailmonitor.results.service import Results
+from entitlement_sql_diagnostic import entitlement_diagnostic
 from operator_queue_probe import observe as observe_parse_queue
 from operator_ui_protocol import (
     RequestFrame,
@@ -31,7 +34,7 @@ from operator_ui_protocol import (
     completion_worker_snapshot,
 )
 from run_operator_ui_acceptance import run
-from sqlalchemy import text
+from sqlalchemy import create_engine, text
 from test_durable_jobs import SETTINGS
 from test_real_broker_jobs import config, wait_for, worker
 from test_tenant_foundation import ORIGIN, Scenario
@@ -40,7 +43,24 @@ from test_tenant_foundation import scenario as scenario
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_required_actual_keyboard_operator_ui(scenario: Scenario, tmp_path: Path) -> None:
+@pytest.fixture
+def entitlement_trace(scenario: Scenario) -> Iterator[None]:
+    if (
+        os.environ.get("GITHUB_ACTIONS") != "true"
+        or os.environ.get("EM_REQUIRE_OPERATOR_UI") != "true"
+    ):
+        raise RuntimeError("Required reviewed disposable UI CI only")
+    engine = create_engine(scenario.admin_url, hide_parameters=True)
+    try:
+        with entitlement_diagnostic(engine):
+            yield
+    finally:
+        engine.dispose()
+
+
+def test_required_actual_keyboard_operator_ui(
+    scenario: Scenario, tmp_path: Path, entitlement_trace: None
+) -> None:
     if (
         os.environ.get("GITHUB_ACTIONS") != "true"
         or os.environ.get("EM_REQUIRE_OPERATOR_UI") != "true"
@@ -243,6 +263,9 @@ WHERE i.organization_id=:org AND j.kind='extraction' LIMIT 33
                             "units": units,
                             "matched_worker_failure_classes": failure_classes,
                             "worker_stages": worker_snapshot,
+                            "entitlement_invocations": entitlement_snapshot(
+                                tail, truncated=truncated
+                            ),
                         },
                         sort_keys=True,
                     ),
@@ -303,6 +326,8 @@ WHERE i.organization_id=:org AND j.kind='extraction' LIMIT 33
                     "keyword_partial",
                     "url_no_contact",
                     "actual_zero_contact_quality_dialog",
+                    "actual_terminal_replay_render_ready",
+                    "delayed_terminal_replay_render_proof",
                     "authored_127_outcome_paging",
                     "review",
                     "pause_resume_cancel_dismiss",
@@ -416,3 +441,22 @@ WHERE i.organization_id=:org AND j.kind='extraction' LIMIT 33
             finally:
                 channel.close()
         broker.close()
+        observed = entitlement_snapshot(b"")
+        try:
+            logs = list(tmp_path.glob(cfg.queue + "-*.log"))
+            if (
+                len(logs) != 1
+                or logs[0].is_symlink()
+                or logs[0].resolve().parent != tmp_path.resolve()
+            ):
+                raise RuntimeError("Exact owned worker log required")
+            with logs[0].open("rb") as stream:
+                stream.seek(0, 2)
+                truncated = stream.tell() > 65536
+                stream.seek(max(0, stream.tell() - 65536))
+                observed = entitlement_snapshot(stream.read(65536), truncated=truncated)
+        except Exception:
+            # Preserve the original worker failure; successful runs require completeness below.
+            pass
+        print("operator-entitlement-invocations " + json.dumps(observed), flush=True)
+    assert observed["complete"] is True

@@ -21,6 +21,125 @@ OUTCOME = (
     "services/backend/tests/test_job_outcome_investigation_tenant.py::"
     "test_actual_more_than_100_outcomes_have_no_omissions_or_duplicates"
 )
+RESERVED_SQL = (
+    OUTCOME,
+    (
+        "services/backend/tests/test_retained_article_filters_tenant.py::"
+        "test_actual_presence_pages_partition_before_limit_and_item_is_exact"
+    ),
+    (
+        "services/backend/tests/test_retained_article_filters_tenant.py::"
+        "test_actual_item_api_foreign_missing_nonarticle_and_legacy_sql_acl"
+    ),
+    (
+        "services/backend/tests/test_retained_article_filters_tenant.py::"
+        "test_actual_review_rejection_does_not_remove_observed_candidate"
+    ),
+    (
+        "services/backend/tests/test_retained_article_filters_tenant.py::"
+        "test_actual_export_preview_membership_filter_idempotency_and_legacy_defaults"
+    ),
+    (
+        "services/backend/tests/test_retained_article_filters_tenant.py::"
+        "test_actual_second_continuation_uses_original_batch_and_child_authority"
+    ),
+    (
+        "services/backend/tests/test_retained_article_filters_tenant.py::"
+        "test_actual_filter_export_current_authority_races[deletion-preview_create]"
+    ),
+    (
+        "services/backend/tests/test_retained_article_filters_tenant.py::"
+        "test_actual_filter_export_current_authority_races[deletion-claim_finish]"
+    ),
+    (
+        "services/backend/tests/test_retained_article_filters_tenant.py::"
+        "test_actual_filter_export_current_authority_races[deletion-ready_download]"
+    ),
+    (
+        "services/backend/tests/test_retained_article_filters_tenant.py::"
+        "test_actual_filter_export_current_authority_races[retention-preview_create]"
+    ),
+    (
+        "services/backend/tests/test_retained_article_filters_tenant.py::"
+        "test_actual_filter_export_current_authority_races[retention-claim_finish]"
+    ),
+    (
+        "services/backend/tests/test_retained_article_filters_tenant.py::"
+        "test_actual_filter_export_current_authority_races[retention-ready_download]"
+    ),
+    (
+        "services/backend/tests/test_retained_article_filters_tenant.py::"
+        "test_actual_filter_export_current_authority_races[suppression-preview_create]"
+    ),
+    (
+        "services/backend/tests/test_retained_article_filters_tenant.py::"
+        "test_actual_filter_export_current_authority_races[suppression-claim_finish]"
+    ),
+    (
+        "services/backend/tests/test_retained_article_filters_tenant.py::"
+        "test_actual_filter_export_current_authority_races[suppression-ready_download]"
+    ),
+    (
+        "services/backend/tests/test_retained_article_filters_tenant.py::"
+        "test_actual_missing_unsealed_expired_and_mismatched_binding_is_unresolved"
+    ),
+    (
+        "services/backend/tests/test_retained_article_filters_tenant.py::"
+        "test_actual_bound_xml_presence_independent_of_execution[observed-True-observed_candidate]"
+    ),
+    (
+        "services/backend/tests/test_retained_article_filters_tenant.py::"
+        "test_actual_bound_xml_presence_independent_of_execution[partial-True-observed_candidate]"
+    ),
+    (
+        "services/backend/tests/test_retained_article_filters_tenant.py::"
+        "test_actual_bound_xml_presence_independent_of_execution[partial-False-unresolved]"
+    ),
+    (
+        "services/backend/tests/test_retained_article_filters_tenant.py::"
+        "test_actual_bound_xml_presence_independent_of_execution[unsupported-False-unresolved]"
+    ),
+    (
+        "services/backend/tests/test_retained_article_filters_tenant.py::"
+        "test_actual_bound_xml_presence_independent_of_execution[no_contact-False-completed_without_candidate]"
+    ),
+    (
+        "services/backend/tests/test_retained_article_filters_tenant.py::"
+        "test_actual_sql_presence_null_and_inconsistent_profiles_fail_closed"
+    ),
+    (
+        "services/backend/tests/test_retained_article_filters_tenant.py::"
+        "test_actual_ready_artifact_loses_its_source_classification[observed_candidate]"
+    ),
+    (
+        "services/backend/tests/test_retained_article_filters_tenant.py::"
+        "test_actual_ready_artifact_loses_its_source_classification[completed_without_candidate]"
+    ),
+    (
+        "services/backend/tests/test_retained_article_filters_service_tenant.py::"
+        "test_actual_worker_filtered_no_contact_and_inherited_contacts_only[False]"
+    ),
+    (
+        "services/backend/tests/test_retained_article_filters_service_tenant.py::"
+        "test_actual_worker_filtered_no_contact_and_inherited_contacts_only[True]"
+    ),
+    (
+        "services/backend/tests/test_retained_article_filters_service_tenant.py::"
+        "test_actual_worker_filtered_authority_changes_between_claim_and_finish[selected_deletion]"
+    ),
+    (
+        "services/backend/tests/test_retained_article_filters_service_tenant.py::"
+        "test_actual_worker_filtered_authority_changes_between_claim_and_finish[source_deletion]"
+    ),
+    (
+        "services/backend/tests/test_retained_article_filters_service_tenant.py::"
+        "test_actual_worker_filtered_authority_changes_between_claim_and_finish[retention]"
+    ),
+    (
+        "services/backend/tests/test_retained_article_filters_service_tenant.py::"
+        "test_actual_worker_filtered_authority_changes_between_claim_and_finish[revocation]"
+    ),
+)
 PROFILES = ("backend", "outcome_sql")
 ARGUMENTS = (
     "-c",
@@ -56,7 +175,7 @@ def partitions(nodes: Sequence[str]) -> dict[str, list[str]]:
     if (
         not full
         or any(count != 1 for count in full.values())
-        or full[OUTCOME] != 1
+        or any(full[node] != 1 for node in RESERVED_SQL)
         or any(
             not node.startswith(("services/backend/tests/", "tests/")) or "::" not in node
             for node in full
@@ -64,8 +183,8 @@ def partitions(nodes: Sequence[str]) -> dict[str, list[str]]:
     ):
         raise PartitionRefused("application_collection_refused")
     result = {
-        "backend": [node for node in nodes if node != OUTCOME],
-        "outcome_sql": [node for node in nodes if node == OUTCOME],
+        "backend": [node for node in nodes if node not in RESERVED_SQL],
+        "outcome_sql": [node for node in nodes if node in RESERVED_SQL],
     }
     backend, outcome = (Counter(result[key]) for key in PROFILES)
     if not backend or backend & outcome or backend + outcome != full:
@@ -236,8 +355,8 @@ def decode_receipt(raw: str, profile: str) -> dict[str, Any]:
             raise PartitionRefused("application_receipt_refused")
     other = "outcome_sql" if profile == "backend" else "backend"
     if (
-        value["outcome_sql"] != manifest([OUTCOME])
-        or value["full"]["count"] != value["backend"]["count"] + 1
+        value["outcome_sql"] != manifest(RESERVED_SQL)
+        or value["full"]["count"] != value["backend"]["count"] + value["outcome_sql"]["count"]
         or value["executed"] != value[profile]
         or value["deselected"] != value[other]
     ):

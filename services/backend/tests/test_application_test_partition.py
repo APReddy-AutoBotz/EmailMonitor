@@ -13,7 +13,7 @@ import application_test_partition as partition
 import pytest
 
 OTHER = "tests/test_other.py::test_other"
-FULL = [partition.OUTCOME, OTHER]
+FULL = [*partition.RESERVED_SQL, OTHER]
 TREE = "a" * 40
 CONFIG = "b" * 64
 
@@ -61,11 +61,25 @@ def test_missing_renamed_duplicate_or_unclassified_collection_fails(nodes: list[
         partition.partitions(nodes)
 
 
+@pytest.mark.parametrize("node", partition.RESERVED_SQL)
+@pytest.mark.parametrize("mutation", ["missing", "renamed", "duplicate"])
+def test_each_reserved_sql_node_is_required_exactly_once(node: str, mutation: str) -> None:
+    nodes = FULL.copy()
+    if mutation == "missing":
+        nodes.remove(node)
+    elif mutation == "renamed":
+        nodes[nodes.index(node)] = node + "[renamed]"
+    else:
+        nodes.append(node)
+    with pytest.raises(partition.PartitionRefused):
+        partition.partitions(nodes)
+
+
 def test_new_tests_are_never_omitted_from_exact_disjoint_multiset_union() -> None:
     nodes = [*FULL, "services/backend/tests/test_new.py::test_new[variant]"]
     result = partition.partitions(nodes)
-    assert result["outcome_sql"] == [partition.OUTCOME]
-    assert result["backend"] == nodes[1:]
+    assert result["outcome_sql"] == list(partition.RESERVED_SQL)
+    assert result["backend"] == [OTHER, nodes[-1]]
     assert not Counter(result["backend"]) & Counter(result["outcome_sql"])
     assert Counter(result["backend"]) + Counter(result["outcome_sql"]) == Counter(nodes)
     assert partition.manifest(nodes) == partition.manifest(list(reversed(nodes)))
@@ -214,6 +228,16 @@ def test_join_rejects_incomplete_mismatched_or_malformed_receipts(
         partition.join(environment)
 
 
+@pytest.mark.parametrize("node", partition.RESERVED_SQL)
+def test_receipt_cannot_replace_any_reserved_node_with_same_count(node: str) -> None:
+    value = completed("outcome_sql").receipt(0, TREE, CONFIG)
+    changed = list(partition.RESERVED_SQL)
+    changed[changed.index(node)] = OTHER
+    value["outcome_sql"] = value["executed"] = partition.manifest(changed)
+    with pytest.raises(partition.PartitionRefused, match="application_receipt_refused"):
+        partition.decode_receipt(json.dumps(value), "outcome_sql")
+
+
 @pytest.mark.parametrize("changed", ["source_tree", "configuration"])
 def test_join_also_binds_receipts_to_its_own_checkout(
     monkeypatch: pytest.MonkeyPatch, changed: str
@@ -245,15 +269,26 @@ def test_actual_pytest_lifecycle_enforces_assigned_nodes_and_zero_skips(
     directory.mkdir(parents=True)
     (tmp_path / "tests").mkdir()
     (directory.parent / "pyproject.toml").write_text("[tool.pytest.ini_options]\n")
-    function = partition.OUTCOME.split("::", 1)[1]
     body = {
         "skip": "pytest.skip('fixture')",
         "xfail": "pytest.xfail('fixture')",
         "fail": "assert False",
     }.get(mutation, "assert True")
-    (directory / "test_job_outcome_investigation_tenant.py").write_text(
-        f"import pytest\ndef {function}():\n    {body}\n"
-    )
+    functions: dict[str, dict[str, list[str]]] = {}
+    for node in partition.RESERVED_SQL:
+        filename, function = node.split("::", 1)
+        name, _, variant = function.partition("[")
+        functions.setdefault(filename, {}).setdefault(name, [])
+        if variant:
+            functions[filename][name].append(variant[:-1])
+    for filename, cases in functions.items():
+        source = "import pytest\n"
+        for name, variants in cases.items():
+            if variants:
+                source += f"@pytest.mark.parametrize('case', {variants!r}, ids={variants!r})\n"
+            argument = "case" if variants else ""
+            source += f"def {name}({argument}):\n    {body}\n"
+        (tmp_path / filename).write_text(source)
     # Exercise the same explicit AnyIO plugin used by the full backend.
     (tmp_path / "tests/test_other.py").write_text(
         "import pytest\n@pytest.fixture\ndef anyio_backend(): return 'asyncio'\n"
@@ -289,7 +324,8 @@ except p.PartitionRefused:
     if mutation == "none":
         assert result.returncode == 0, result.stdout + result.stderr
         value: dict[str, Any] = json.loads(result.stdout.split("RECEIPT=", 1)[1])
-        assert value["executed"]["count"] == 1 and value["skipped"] == 0
+        assert value["executed"] == partition.manifest(partition.partitions(FULL)[profile])
+        assert value["skipped"] == 0
     else:
         assert result.returncode != 0 and "RECEIPT=" not in result.stdout
 
