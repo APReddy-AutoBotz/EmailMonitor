@@ -443,8 +443,9 @@ inherited lineage, current visibility, stale response suppression and keyboard
 focus restoration. This slice does not complete all FR-023 filters.
 [Candidate evidence](../reports/job-outcome-investigation-validation.md).
 
-The long 104-outcome SQL traversal has its own mandatory hosted job while the
-backend complement contains every other collected test. `test_application_test_partition.py`
+The long 104-outcome SQL traversal shares the existing mandatory SQL job with
+29 exact retained-filter SQL cases. The backend complement contains every collected
+test outside the explicit 30-node manifest. `test_application_test_partition.py`
 covers collection multisets, exact execution, zero-skip refusal and cross-job
 source/configuration/manifest equality. `test_application_check_phases.py` covers
 unchanged full local commands, retained infrastructure prerequisites and the
@@ -464,5 +465,6 @@ pre-limit paging, legacy snapshots and preview/idempotency. Actual narrow-worker
 completion must prove no-contact and inherited contacts-only exports without
 expanded read authority, with claim/finish/download race denials. Operator acceptance
 adds keyboard selection, paging reset, exact-item navigation and preview invalidation.
-The unchanged 104-outcome partition and complete backend complement remain mandatory.
+The unchanged 104-outcome traversal, 29 exact retained-filter SQL cases and complete
+backend complement remain mandatory with matched receipts at the existing join.
 [Evidence and pending gates](../reports/retained-article-filters-validation.md).

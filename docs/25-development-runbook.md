@@ -35,11 +35,13 @@ scripts/check.sh
 
 The default aggregate and explicit `backend` phase still run the full, unfiltered
 suite. Normal/fresh local checks use that unchanged path. Hosted CI additionally
-has only two closed test phases: `ci-backend` runs every test except the exact
-104-outcome SQL traversal; `ci-outcome-sql` runs that single unchanged traversal.
+has only two closed test phases: `ci-outcome-sql` runs the explicit 30-node
+`RESERVED_SQL` manifest: the unchanged 104-outcome SQL traversal, 23 retained-filter
+tenant cases and six retained-filter service cases. `ci-backend` runs the exact
+complement. No test body, SQL authority, deadline or job count changes.
 Both collect the complete `services/backend/tests tests` roots under the same
 explicit configuration and root directory. New tests enter the backend complement;
-a missing/renamed dedicated case, duplicate or unclassified node refuses the gate.
+a missing/renamed reserved case, duplicate or unclassified node refuses the gate.
 
 The partition runner verifies duplicate-free, disjoint collection multisets whose
 union equals the full collection, the final selected/deselected lists and exactly

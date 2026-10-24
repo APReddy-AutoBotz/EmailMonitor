@@ -111,7 +111,8 @@ merge, deployment, live source access, activation or credential configuration.
 
 Required evidence includes pure/model/schema/cursor compatibility, actual SQL/API
 and exact worker scenarios, plus actual keyboard operator acceptance. The unchanged
-dedicated 104-outcome test, full backend complement and mandatory fail-closed join
+104-outcome test and 29 exact retained-filter SQL cases share the existing SQL
+job. The explicit 30-node manifest, full backend complement and mandatory fail-closed join
 remain required at the exact reviewed source. Serial normal and fresh aggregate
 checks must run after source freezes. Infrastructure skips are not SQL or browser
 proof. General FR-023 source/date filtering, cross-job paper identity and production

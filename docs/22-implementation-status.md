@@ -604,3 +604,9 @@ and suppression-refusal expectations in the new tests. A test-only correction re
 the existing runtime refusals, while original receipts and the unresolved operator
 entitlement diagnostic are preserved in the validation report. Corrected-source
 normal/fresh checks, independent review and all exact-head hosted gates remain required.
+
+The retained-filter candidate schedules its 29 exact SQL cases beside the unchanged
+104-outcome traversal in the existing SQL job. A closed 30-node manifest and exact
+backend complement preserve full collection and successful execution proofs at the
+mandatory three-job join. Job counts, roles, deadlines and unfiltered normal/fresh
+aggregates remain unchanged; exact-source hosted acceptance is still required.

@@ -4,6 +4,7 @@
 - Add outcomes-only candidate-presence filtering with current retained binding and unchanged defaults.
 - Restore evidence-dialog focus to the current authorized opener after refresh, preserving stale-response guards.
 - Capture immutable filtered-export authority without widening worker job/batch reads; preserve legacy requests and snapshots.
+- Schedule the 29 exact retained-filter SQL cases beside the unchanged outcome traversal in the existing SQL job, preserving complete collection/execution proofs and budgets.
 - Add forward-only migration 0016, SQL/service/operator acceptance and [scope](docs/69-retained-article-filters.md); hosted evidence remains pending.
 
 ## 2026-10-22 — Retained job outcome investigation candidate

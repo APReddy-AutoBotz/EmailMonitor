@@ -88,7 +88,9 @@ Route-intercepted rows are not SQL-backed extraction proof.
 
 Frozen complete-source review, serial normal/fresh aggregates, and the full inherited
 hosted suite remain required. The dedicated 104-outcome SQL test is unchanged;
-the backend complement must collect and execute every other test, with the existing
+it shares the existing SQL job with the 29 exact retained-filter SQL cases. The
+backend complement must collect and execute every test outside that explicit
+30-node manifest, with the existing
 mandatory exact-source fail-closed three-job join. All wrapper/job/statement/cleanup
 deadlines remain unchanged. Record exact commit/tree and receipts before claiming
 acceptance. No local infrastructure skip substitutes for any hosted gate.

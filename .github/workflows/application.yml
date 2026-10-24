@@ -132,7 +132,7 @@ jobs:
           uv sync --project services/backend --locked
           EM_MIGRATION_DATABASE_URL="$EM_TEST_ADMIN_DATABASE_URL" uv run --project services/backend alembic -c services/backend/alembic.ini upgrade head
           uv run --project services/backend python scripts/create_ci_runtime.py
-      - name: Execute the complete 104-outcome actual SQL acceptance
+      - name: Execute the complete retained outcome and article-filter SQL acceptance
         id: tests
         env:
           EM_TEST_BROKER_CONTAINER: ${{ job.services.rabbitmq.id }}

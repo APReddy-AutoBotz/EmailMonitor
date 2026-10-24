@@ -54,8 +54,9 @@ real SQL pagination over more than 100 rows therefore uses multiple authored job
 with separate job-scoped/cursor and current-authority tests. These are distinct
 proofs: route-intercepted browser data is not SQL-backed extraction evidence.
 
-The unchanged 104-outcome SQL test is a separate mandatory hosted application job.
-Its backend complement must execute every other test. A closed collection/execution
+The unchanged 104-outcome SQL test remains in the mandatory hosted SQL job,
+alongside the 29 exact retained article-filter SQL cases. Its backend complement
+must execute every collected test outside that explicit 30-node manifest. A closed collection/execution
 proof and matching source/configuration/manifests at the required three-job join
 prevent omitted or duplicate coverage; skips and incomplete execution fail. The
 [development runbook](25-development-runbook.md) records the fixed profiles and
