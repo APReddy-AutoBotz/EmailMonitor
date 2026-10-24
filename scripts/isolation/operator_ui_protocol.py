@@ -223,6 +223,12 @@ OutcomePhase = Literal[
 ]
 OUTCOME_PHASES = get_args(OutcomePhase)
 
+EvidencePhase = Literal["contacts", "open", "citation", "reason", "save", "closed", "returned"]
+EVIDENCE_PHASES = get_args(EvidencePhase)
+InstalledCallbackDelivery = Literal[
+    "not_requested", "request_received", "asset_verified", "fulfilled"
+]
+
 
 class FocusExhaustion(BaseModel):
     """Value-free state sampled after the unchanged keyboard limit fails."""
@@ -232,6 +238,13 @@ class FocusExhaustion(BaseModel):
     document_focused: bool
     modal_open: bool
     active_kind: Literal["target", "body", "outcomes_heading", "other", "none"]
+    target_kind: Literal["button", "textarea", "select", "input", "other"] | None = None
+    active_control: Literal["button", "textarea", "select", "input", "other"] | None = None
+    target_disabled: bool | None = None
+    target_in_dialog: bool | None = None
+    active_in_target_dialog: bool | None = None
+    target_inert: bool | None = None
+    target_tab_stop: bool | None = None
 
 
 class DiagnosticFrame(BaseModel):
@@ -268,6 +281,8 @@ class DiagnosticFrame(BaseModel):
         | InstalledReason
     ) = "unknown"
     outcome_phase: OutcomePhase | None = None
+    evidence_phase: EvidencePhase | None = None
+    installed_callback_delivery: InstalledCallbackDelivery | None = None
     focus_exhaustion: FocusExhaustion | Literal["unavailable"] | None = None
     installed_login_phase: InstalledLoginPhase | None = None
     api_statuses: list[int] = Field(default_factory=list, max_length=512)
@@ -295,6 +310,14 @@ class DiagnosticFrame(BaseModel):
             or self.error != "RuntimeError"
         ):
             raise ValueError("Focus state requires its exact keyboard failure")
+        if self.evidence_phase is not None and (
+            self.kind != "failure" or self.stage != "evidence_review"
+        ):
+            raise ValueError("Evidence phase requires its exact failure stage")
+        if self.installed_callback_delivery is not None and (
+            self.kind != "failure" or self.installed_login_phase != "callback_document"
+        ):
+            raise ValueError("Callback delivery requires its exact navigation failure")
         if self.installed_login_phase is not None and (
             self.kind != "failure" or self.stage not in {"assets_session", "keyword_worker"}
         ):

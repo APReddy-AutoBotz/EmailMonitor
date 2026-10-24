@@ -200,6 +200,17 @@ def conversation(
                                         if diagnostic.focus_exhaustion is not None
                                         else ""
                                     )
+                                    + (
+                                        "; evidence phase=" + diagnostic.evidence_phase
+                                        if diagnostic.evidence_phase is not None
+                                        else ""
+                                    )
+                                    + (
+                                        "; callback delivery="
+                                        + diagnostic.installed_callback_delivery
+                                        if diagnostic.installed_callback_delivery is not None
+                                        else ""
+                                    )
                                     + "; actual reply statuses="
                                     + str(diagnostic.api_statuses)
                                 )

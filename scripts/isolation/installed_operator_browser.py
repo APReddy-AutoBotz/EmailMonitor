@@ -21,7 +21,12 @@ from installed_operator_redirects import (
     installed_relay_reason,
     observe_error_documents,
 )
-from operator_ui_protocol import ORIGIN, InstalledLoginPhase, InstalledReason
+from operator_ui_protocol import (
+    ORIGIN,
+    InstalledCallbackDelivery,
+    InstalledLoginPhase,
+    InstalledReason,
+)
 from playwright.async_api import Error, Request, Route, async_playwright, expect
 
 if TYPE_CHECKING:
@@ -104,6 +109,7 @@ async def main() -> None:
     stage = "browser_launch"
     diagnostics = InstalledDiagnostics()
     login_phase: InstalledLoginPhase | None = None
+    callback_delivery: InstalledCallbackDelivery = "not_requested"
     login_reason: InstalledReason = "installed_login_failed"
     active_redirects: LoginRedirects | None = None
 
@@ -198,13 +204,16 @@ async def main() -> None:
             page.on("requestfailed", failed_navigation)
 
             async def route_request(route: Route, operation: list[InstalledReason]) -> None:
-                nonlocal callback_index_seen
+                nonlocal callback_index_seen, callback_delivery
                 incoming = route.request
                 parsed = urlsplit(incoming.url)
                 origin = f"{parsed.scheme}://{parsed.netloc}"
                 if origin not in {api, issuer} or parsed.fragment:
                     await route.abort("blockedbyclient")
                     return
+                callback_document = origin == api and parsed.path == "/auth/complete"
+                if callback_document and login_phase == "callback_document":
+                    callback_delivery = "request_received"
                 operation[0] = "installed_route_headers"
                 headers = {
                     key: value
@@ -245,6 +254,8 @@ async def main() -> None:
                             "Actual installed web asset differs from package receipt"
                         )
                     received_assets.add(asset)
+                    if callback_document and login_phase == "callback_document":
+                        callback_delivery = "asset_verified"
                     callback_index_seen |= parsed.path == "/auth/complete"
                     response["headers"].pop("content-range", None)
                     response["status"] = 200
@@ -284,6 +295,8 @@ async def main() -> None:
                 await route.fulfill(
                     status=response["status"], headers=response["headers"], body=bytes(output)
                 )
+                if callback_document and login_phase == "callback_document":
+                    callback_delivery = "fulfilled"
 
             async def safe_route(route: Route) -> None:
                 operation: list[InstalledReason] = ["installed_route_headers"]
@@ -329,7 +342,8 @@ async def main() -> None:
             page.on("download", download)
 
             async def login() -> None:
-                nonlocal login_phase, login_reason
+                nonlocal login_phase, login_reason, callback_delivery
+                callback_delivery = "not_requested"
                 async with asyncio.timeout(10):
                     login_phase = "initial_session"
                     await expect(
@@ -635,6 +649,12 @@ async def main() -> None:
                     "kind": "failure",
                     "stage": stage,
                     **fixed,
+                    **(
+                        {"installed_callback_delivery": callback_delivery}
+                        if login_phase == "callback_document"
+                        and fixed.get("installed_login_phase") == "callback_document"
+                        else {}
+                    ),
                     "api_statuses": statuses,
                 }
             ),

@@ -17,6 +17,7 @@ from urllib.parse import parse_qs, urlsplit
 from browser_acceptance import sandbox_status
 from operator_ui_protocol import (
     ERRORS,
+    EVIDENCE_PHASES,
     OUTCOME_PHASES,
     STAGES,
     FocusExhaustion,
@@ -156,13 +157,23 @@ async def focus(page: Page, target: Locator) -> None:
                 target.evaluate("""node => {
                 const active = document.activeElement;
                 const heading = document.querySelector('section[aria-label="Article outcomes"] h4');
+                const controls = ['BUTTON', 'TEXTAREA', 'SELECT', 'INPUT'];
+                const kind = element => controls.includes(element?.tagName)
+                    ? element.tagName.toLowerCase() : 'other';
+                const targetDialog = node.closest('dialog[open]');
                 return {
                     target_focused: node === active,
                     document_focused: document.hasFocus(),
                     modal_open: document.querySelector('dialog[open]') !== null,
                     active_kind: active === null ? 'none' : active === node ? 'target'
                         : active === document.body ? 'body'
-                        : active === heading ? 'outcomes_heading' : 'other'
+                        : active === heading ? 'outcomes_heading' : 'other',
+                    target_kind: kind(node), active_control: kind(active),
+                    target_disabled: node.matches(':disabled'),
+                    target_in_dialog: targetDialog !== null,
+                    active_in_target_dialog: targetDialog !== null && targetDialog.contains(active),
+                    target_inert: node.closest('[inert]') !== null,
+                    target_tab_stop: node.tabIndex >= 0
                 };
             }"""),
                 timeout=0.1,
@@ -815,13 +826,15 @@ async def main() -> None:
     download_seen = asyncio.Event()
     stage = "browser_launch"
     outcome_phase: str | None = None
+    evidence_phase: str | None = None
 
     def checkpoint(value: str) -> None:
-        nonlocal stage, outcome_phase
+        nonlocal stage, outcome_phase, evidence_phase
         if value not in STAGES:
             raise RuntimeError("Fixed UI stage required")
         stage = value
         outcome_phase = None
+        evidence_phase = None
         print(json.dumps({"kind": "stage", "stage": value}), flush=True)
 
     def outcome_checkpoint(value: str) -> None:
@@ -830,6 +843,12 @@ async def main() -> None:
             raise RuntimeError("Fixed outcome diagnostic phase required")
         # Preserve emitted stage identity and its existing 32-frame cap.
         outcome_phase = value
+
+    def evidence_checkpoint(value: str) -> None:
+        nonlocal evidence_phase
+        if stage != "evidence_review" or value not in EVIDENCE_PHASES:
+            raise RuntimeError("Fixed evidence diagnostic phase required")
+        evidence_phase = value
 
     try:
         checkpoint("browser_launch")
@@ -1064,17 +1083,21 @@ async def main() -> None:
                 await page.get_by_text("completed", exact=True).first.wait_for(timeout=75000)
                 checkpoint("evidence_review")
                 # Explicit tooltip correspondence is already accepted; still save a human review.
+                evidence_checkpoint("contacts")
                 await activate(page, page.get_by_role("button", name="Contacts", exact=True))
                 for address in browser_expected_addresses:
                     row = page.get_by_role("row").filter(has_text=address)
                     await expect(row).to_have_count(1)
+                    evidence_checkpoint("open")
                     await activate(
                         page,
                         row.get_by_role("button", name="Evidence and review", exact=True),
                     )
+                    evidence_checkpoint("citation")
                     await page.get_by_role(
                         "heading", name="Actual retained citation", exact=True
                     ).wait_for()
+                    evidence_checkpoint("reason")
                     await type_text(
                         page,
                         page.get_by_label("Reason", exact=True),
@@ -1084,8 +1107,11 @@ async def main() -> None:
                             else "Inspected controlled tooltip citation through keyboard UI"
                         ),
                     )
+                    evidence_checkpoint("save")
                     await activate(page, page.get_by_role("button", name="Save review", exact=True))
+                    evidence_checkpoint("closed")
                     await page.get_by_role("dialog").wait_for(state="hidden")
+                evidence_checkpoint("returned")
                 await activate(page, page.get_by_role("button", name="Contacts", exact=True))
                 for address in browser_expected_addresses:
                     await expect(page.get_by_role("row").filter(has_text=address)).to_have_count(1)
@@ -1859,6 +1885,7 @@ async def main() -> None:
                     "error": name if name in ERRORS else "UnexpectedError",
                     "reason": failure_reason(error),
                     **({"outcome_phase": outcome_phase} if outcome_phase is not None else {}),
+                    **({"evidence_phase": evidence_phase} if evidence_phase is not None else {}),
                     **(
                         {
                             "focus_exhaustion": focus_exhaustion.model_dump()

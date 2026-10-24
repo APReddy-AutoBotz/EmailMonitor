@@ -4,6 +4,13 @@ Status: code-only EM-017 candidate; acceptance in progress. See
 [ADR 0006](adr/0006-durable-service-authority.md). No deployment or live service
 identity is created by this change.
 
+Installed callback-navigation failures may include a fixed delivery checkpoint:
+not requested, request received, packaged index asset verified, or fulfilled.
+The diagnostic resets for each login and is emitted only for a matching
+callback-document failure. It contains no callback URL, cookie or state value.
+It distinguishes observed delivery progress from navigation readiness without
+changing redirects, authentication checks, network isolation or the login deadline.
+
 ## Packaged process boundary
 
 The deterministic service artifact contains the full application, built static

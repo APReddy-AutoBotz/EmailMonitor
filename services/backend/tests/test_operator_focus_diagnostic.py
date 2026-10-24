@@ -49,7 +49,7 @@ def test_focus_exhaustion_preserves_original_failure(
     assert all(call.args == ("Tab",) for call in keyboard.press.await_args_list)
     if isinstance(snapshot, dict) and "active_kind" in snapshot:
         assert isinstance(guest.focus_exhaustion, FocusExhaustion)
-        assert guest.focus_exhaustion.model_dump() == snapshot
+        assert guest.focus_exhaustion.model_dump(exclude_none=True) == snapshot
     else:
         assert guest.focus_exhaustion == "unavailable"
 
@@ -148,3 +148,72 @@ def test_focus_snapshot_is_closed_and_failure_only(extra: dict[str, object]) -> 
     assert DiagnosticFrame.model_validate(frame).focus_exhaustion == "unavailable"
     with pytest.raises(ValidationError):
         DiagnosticFrame.model_validate({**frame, **extra})
+
+
+@pytest.mark.parametrize(
+    "phase", ["contacts", "open", "citation", "reason", "save", "closed", "returned"]
+)
+def test_evidence_action_is_fixed_and_failure_only(phase: str) -> None:
+    frame = {
+        "kind": "failure",
+        "stage": "evidence_review",
+        "error": "RuntimeError",
+        "reason": "keyboard_focus",
+        "evidence_phase": phase,
+    }
+    assert DiagnosticFrame.model_validate(frame).evidence_phase == phase
+    for patch in (
+        {"stage": "url_worker"},
+        {"kind": "stage", "error": None, "reason": "unknown"},
+        {"evidence_phase": phase + ":private-value"},
+    ):
+        with pytest.raises(ValidationError):
+            DiagnosticFrame.model_validate({**frame, **patch})
+
+
+@pytest.mark.parametrize(
+    "delivery", ["not_requested", "request_received", "asset_verified", "fulfilled"]
+)
+def test_callback_delivery_is_fixed_and_exact_phase_only(delivery: str) -> None:
+    frame = {
+        "kind": "failure",
+        "stage": "keyword_worker",
+        "error": "TimeoutError",
+        "reason": "installed_login_deadline",
+        "installed_login_phase": "callback_document",
+        "installed_callback_delivery": delivery,
+    }
+    assert DiagnosticFrame.model_validate(frame).installed_callback_delivery == delivery
+    for patch in (
+        {"installed_login_phase": "callback_complete"},
+        {"stage": "evidence_review"},
+        {"installed_callback_delivery": delivery + ":private-url"},
+    ):
+        with pytest.raises(ValidationError):
+            DiagnosticFrame.model_validate({**frame, **patch})
+
+
+def test_focus_target_metadata_never_accepts_dom_values() -> None:
+    snapshot = {
+        "target_focused": False,
+        "document_focused": True,
+        "modal_open": True,
+        "active_kind": "other",
+        "target_kind": "textarea",
+        "active_control": "button",
+        "target_disabled": False,
+        "target_in_dialog": True,
+        "active_in_target_dialog": True,
+        "target_inert": False,
+        "target_tab_stop": True,
+    }
+    assert FocusExhaustion.model_validate(snapshot).model_dump() == snapshot
+    for patch in (
+        {"target_kind": "private-label"},
+        {"active_control": "private-value"},
+        {"target_disabled": "false"},
+        {"target_in_dialog": 1},
+        {"text": "private"},
+    ):
+        with pytest.raises(ValidationError):
+            FocusExhaustion.model_validate({**snapshot, **patch})

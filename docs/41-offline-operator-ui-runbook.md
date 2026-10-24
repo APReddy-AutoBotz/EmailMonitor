@@ -87,3 +87,10 @@ dialog is open, and a fixed active-element category. It never emits DOM text,
 values or identifiers. Missing, invalid or over-100ms snapshots report unavailable. The
 original 100-Tab failure, assertions and overall deadline remain unchanged,
 including when the final Tab reaches the target.
+
+Controlled browser evidence review records fixed action checkpoints for opening
+Contacts, opening evidence, waiting for citation content, entering a reason,
+saving, waiting for closure and returning to Contacts. Failure snapshots also
+report fixed control kinds, disabled/inert/tab-stop flags, and whether the target
+and active control belong to the same open dialog. These observations do not
+change focus or prove the preceding event history; no labels or values are emitted.
