@@ -476,3 +476,14 @@ and lock waits; unavailable diagnostics preserve the original failure. Closed
 vocabulary and ownership tests are in `test_installed_xml_harness.py` and
 `test_operator_ui_protocol.py`. These observations do not change runtime behavior
 or establish complete hosted acceptance; no migration or grants are required.
+
+The owned browser-isolation host records bounded monotonic receipt-time buckets
+for its existing fixed guest checkpoints, including startup and route registration.
+Partial lines are bounded; duplicate and unknown stages are ignored. Batched
+markers share their host receipt time. Success and deadline-failure evidence
+retain these observations without changing mediation, browser behavior or limits.
+`test_browser_isolation_configuration.py` covers these diagnostic boundaries;
+complete exact-source hosted acceptance remains required.
+
+A successful result can arrive before trailing stderr markers are drained; an
+absent timing marker alone is not evidence of a guest failure.

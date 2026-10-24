@@ -593,3 +593,46 @@ def test_route_registration_stages_preserve_order_and_stop_at_failed_await(
     if not failure:
         expected += ["websocket_registration_completed", "routes_registered", "navigate"]
     assert events == expected
+
+
+def test_stage_receipts_distinguish_late_startup_from_registration_wait() -> None:
+    from run_browser_acceptance import StageTimings
+
+    early, late = StageTimings(100), StageTimings(100)
+    marker = b"synthetic-browser-stage:route_registration_started\n"
+    early.observe(marker, 105)
+    late.observe(marker, 158)
+    assert early.snapshot(160)["since_last"] == "55to60s"
+    assert late.snapshot(160)["since_last"] == "1to5s"
+    assert early.records[0]["elapsed"] == "5to10s"
+    assert late.records[0]["elapsed"] == "55to60s"
+    assert early.snapshot(160)["elapsed"] == late.snapshot(160)["elapsed"] == "ge60s"
+
+
+def test_stage_receipts_handle_partial_batched_duplicate_and_untrusted_lines() -> None:
+    from run_browser_acceptance import StageTimings
+
+    timings = StageTimings(0)
+    timings.observe(b"synthetic-browser-stage:os_", 1)
+    timings.observe(b"verified\nsynthetic-browser-stage:browser_launched\n", 6)
+    assert [row["stage"] for row in timings.records] == ["os_verified", "browser_launched"]
+    assert [row["elapsed"] for row in timings.records] == ["5to10s", "5to10s"]
+    assert timings.records[1]["since_previous"] == "lt1s"
+    timings.observe(b"synthetic-browser-stage:os_verified\nprivate-content\n", 8)
+    timings.observe(b"x" * 10000 + b"synthetic-browser-stage:sandbox_verified\n", 9)
+    assert len(timings.records) == 2 and not timings.pending
+    timings.observe(b"synthetic-browser-stage:sandbox_verified\n", 10)
+    assert timings.records[-1]["stage"] == "sandbox_verified"
+    assert "private" not in json.dumps(timings.snapshot(11))
+
+
+def test_stage_receipt_cardinality_is_fixed_and_timeout_includes_it() -> None:
+    from run_browser_acceptance import StageTimings, timeout_evidence
+
+    timings = StageTimings(0)
+    for stage in sorted(StageTimings.stages):
+        timings.observe(("synthetic-browser-stage:" + stage + "\n").encode() * 3, 2)
+    assert len(timings.records) == len(StageTimings.stages) == 17
+    result = timeout_evidence(0, 0, 0, {}, b"", timings.snapshot(60))
+    assert len(result) < 16384
+    assert json.loads(result.split(": ", 1)[1])["stage_timings"] == timings.snapshot(60)

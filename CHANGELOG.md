@@ -1,3 +1,8 @@
+## 2026-10-24 — Owned browser checkpoint timing
+
+- Record bounded host-monotonic arrival-time buckets for existing fixed browser-isolation checkpoints on success and deadline failure.
+- Preserve browser actions, mediation, budgets, assertions and cleanup; arrival times do not imply exact guest execution timing.
+
 ## 2026-10-24 — Owned installed export diagnostics
 
 - Add failure-only fixed export-step and synthetic publisher/export/outbox observations to the installed XML acceptance harness.

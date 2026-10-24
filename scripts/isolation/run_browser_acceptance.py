@@ -109,15 +109,107 @@ def authorize(url: SafeURL, operation: Operation) -> None:
         raise FetchDenied("source_policy_denied")
 
 
+class StageTimings:
+    """Host receipt times, not guest execution times; batched lines share a time."""
+
+    stages = frozenset(
+        {
+            "os_verified",
+            "browser_launched",
+            "sandbox_verified",
+            "direct_network_rejected",
+            "route_registration_started",
+            "route_registration_completed",
+            "websocket_registration_started",
+            "websocket_registration_completed",
+            "routes_registered",
+            "fixture_loaded",
+            "click_start",
+            "click_complete",
+            "boundary_wait_start",
+            "boundary_wait_failed",
+            "boundary_ready",
+            "checks_complete",
+            "browser_closed",
+        }
+    )
+
+    def __init__(self, started: float) -> None:
+        self.started = started
+        self.last = started
+        self.pending = bytearray()
+        self.discarding = False
+        self.seen: set[str] = set()
+        self.records: list[dict[str, str]] = []
+
+    @staticmethod
+    def bucket(seconds: float) -> str:
+        for limit, label in (
+            (1, "lt1s"),
+            (5, "1to5s"),
+            (10, "5to10s"),
+            (20, "10to20s"),
+            (30, "20to30s"),
+            (45, "30to45s"),
+            (55, "45to55s"),
+            (60, "55to60s"),
+        ):
+            if seconds < limit:
+                return label
+        return "ge60s"
+
+    def observe(self, chunk: bytes, received: float) -> None:
+        # Existing stderr/output limits still apply independently. Ignore unknown,
+        # oversized or duplicate lines; never retain arbitrary guest strings.
+        for byte in chunk:
+            if byte != 10:
+                if not self.discarding:
+                    if len(self.pending) == 128:
+                        self.pending.clear()
+                        self.discarding = True
+                    else:
+                        self.pending.append(byte)
+                continue
+            if not self.discarding:
+                line = bytes(self.pending)
+                for stage in self.stages:
+                    if (
+                        line == b"synthetic-browser-stage:" + stage.encode()
+                        and stage not in self.seen
+                    ):
+                        self.seen.add(stage)
+                        self.records.append(
+                            {
+                                "stage": stage,
+                                "elapsed": self.bucket(received - self.started),
+                                "since_previous": self.bucket(received - self.last),
+                            }
+                        )
+                        self.last = received
+                        break
+            self.pending.clear()
+            self.discarding = False
+
+    def snapshot(self, captured: float) -> dict[str, object]:
+        return {
+            "clock": "host_monotonic_receipt",
+            "elapsed": self.bucket(captured - self.started),
+            "since_last": self.bucket(captured - self.last),
+            "stages": list(self.records),
+        }
+
+
 def timeout_evidence(
     requests: int,
     accepted: int,
     denied: int,
     last_request: dict[str, str],
     stderr: bytes,
+    stage_timings: dict[str, object] | None = None,
 ) -> str:
     """Bounded failure context only; never weakens the deadline or pass gates."""
     summary = {
+        "stage_timings": stage_timings,
         "requests": requests,
         "accepted": accepted,
         "denied": denied,
@@ -149,6 +241,7 @@ def conversation(identifier: str, mediator: BrowserMediator) -> dict[str, object
     assert process.stdin is not None and process.stdout is not None and process.stderr is not None
     result: dict[str, object] | None = None
     deadline = time.monotonic() + 60
+    timings = StageTimings(deadline - 60)
     buffer = bytearray()
     errors = bytearray()
     total = 0
@@ -180,6 +273,7 @@ def conversation(identifier: str, mediator: BrowserMediator) -> dict[str, object
                         errors.extend(chunk)
                         if len(errors) > 16384:
                             raise RuntimeError("Guest error output limit exceeded")
+                        timings.observe(chunk, time.monotonic())
                         continue
                     buffer.extend(chunk)
                     while b"\n" in buffer:
@@ -220,7 +314,7 @@ def conversation(identifier: str, mediator: BrowserMediator) -> dict[str, object
             raise RuntimeError("Gateway/guest counters disagree")
         if mediator.accepted < 2 or mediator.denied < 7:
             raise RuntimeError("Expected real gateway acceptance/denial absent")
-        return result
+        return {**result, "host_stage_timings": timings.snapshot(time.monotonic())}
     except RuntimeError as failure:
         if str(failure) == "Browser diagnostic deadline exceeded":
             raise RuntimeError(
@@ -230,6 +324,7 @@ def conversation(identifier: str, mediator: BrowserMediator) -> dict[str, object
                     mediator.denied,
                     last_request,
                     bytes(errors),
+                    timings.snapshot(time.monotonic()),
                 )
             ) from failure
         raise
