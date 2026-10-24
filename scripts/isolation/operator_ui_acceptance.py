@@ -1621,6 +1621,7 @@ async def main() -> None:
             )
             outcome_checkpoint("outcomes_actual_quality")
             await expect(observation_dialog).to_contain_text("Retained parser outcome: no contact")
+            outcome_checkpoint("outcomes_actual_initial_focus")
             await expect(
                 observation_dialog.get_by_role(
                     "button", name="Close article observation", exact=True

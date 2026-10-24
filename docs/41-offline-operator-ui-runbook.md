@@ -74,3 +74,8 @@ Only the existing opt-in synthetic worker observes these notices. It consumes no
 query results, executes no additional SQL, and emits bounded allowlisted reason
 codes only. Missing, ambiguous, malformed or truncated observations cannot be
 complete diagnostic evidence. No migration or production activation is added.
+
+The actual observation-dialog content and initial Close-button focus assertions
+have separate fixed outcome checkpoints. Their assertions, selectors and timeouts
+are unchanged; the labels identify which existing condition failed without
+printing dialog contents or identifiers.

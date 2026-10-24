@@ -190,6 +190,7 @@ OutcomePhase = Literal[
     "outcomes_actual_escape",
     "outcomes_actual_modal",
     "outcomes_actual_quality",
+    "outcomes_actual_initial_focus",
     "outcomes_authored_load",
     "outcomes_authored_modal",
     "outcomes_complete_page_set",
