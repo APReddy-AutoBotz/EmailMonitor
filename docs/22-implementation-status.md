@@ -597,3 +597,10 @@ captured binding validation for no-contact and inherited contacts-only work.
 separate authored pure/browser cases from required actual SQL/service/operator
 proof. Frozen source review, serial normal/fresh gates and all hosted checks remain
 pending; this entry does not complete general FR-023 source/date/paper-equivalence filters.
+
+PR50 first-head hosted acceptance failed in application and original operator gates;
+six other workflows passed. Independent review identified incorrect service-exception
+and suppression-refusal expectations in the new tests. A test-only correction retains
+the existing runtime refusals, while original receipts and the unresolved operator
+entitlement diagnostic are preserved in the validation report. Corrected-source
+normal/fresh checks, independent review and all exact-head hosted gates remain required.

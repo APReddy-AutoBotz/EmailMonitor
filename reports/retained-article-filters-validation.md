@@ -92,3 +92,38 @@ the backend complement must collect and execute every other test, with the exist
 mandatory exact-source fail-closed three-job join. All wrapper/job/statement/cleanup
 deadlines remain unchanged. Record exact commit/tree and receipts before claiming
 acceptance. No local infrastructure skip substitutes for any hosted gate.
+
+## PR50 first hosted attempt and refusal-expectation correction (2026-10-24)
+
+Draft PR50 first head `376b2c5bcbe2e34bbe2dc7f9333ea6aa9b7b4f7d`, tree
+`254ba6d045b29f388c9176d8554a80c2099b9ac7`, was published against unchanged PR49.
+All protected first-attempt runs were allowed to reach terminal state before edits.
+
+- [Application run 40052379222](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/40052379222)
+  failed. Its dedicated outcome SQL test passed with zero skips and matching tree,
+  and static/97 React/build passed. Backend progress records two service test failures
+  and one suppression test failure before the unchanged 1,200-second wrapper bound;
+  owned cleanup passed, but no final backend summary or partition receipt exists.
+  The mandatory join correctly failed. This is not a completed backend pass.
+- [Operator run 40052379312](https://github.com/APReddy-AutoBotz/EmailMonitor/actions/runs/40052379312)
+  failed during existing keyword-worker completion before the new filter assertions.
+  Its retained diagnostic reports `FetchDenied` / `source_entitlement_denied`;
+  the responsible authority predicate or lock refusal is not established. No UI
+  defect, infrastructure flake, or historical root-cause fix is inferred.
+- Documentation, browser, parser, metadata packaging, controlled transport and
+  service runtime workflows passed. Both live Elsevier workflows remained skipped.
+  Installed service proof does not replace the failed original operator gate.
+
+Independent source/evidence review identified two incorrect test expectations.
+The service boundary deliberately converts database errors to `AuthorizationDenied`,
+so the private-helper refusal probe must expect that public exception. Contact
+suppression permanently fences the selected job, so exact preview and creation
+must both refuse rather than return an empty preview. The original suppression
+case was reproduced against disposable local PostgreSQL 17.11 and failed with
+`AuthorizationDenied` at the empty-preview assertion. These test-only corrections
+preserve the denial probes; SQL, runtime authority, deadlines and partition gates
+are unchanged. The service-only CI guard is not impersonated locally.
+
+Corrected-source normal/fresh checks, independent final review and new exact-head
+hosted acceptance remain required. The original three failures, wrapper-bound
+failure and operator diagnostic remain historical evidence, not erased by a later pass.

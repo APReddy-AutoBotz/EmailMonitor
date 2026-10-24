@@ -314,11 +314,11 @@ def test_actual_filter_export_current_authority_races(
         )
     if stage == "preview_create":
         if change == "suppression":
-            assert results.preview(org, request).contacts == 0
-            assert results.preview(org, request).article_outcomes == 0
-        else:
+            # Suppression fences the selected job, rather than exposing an empty preview.
             with pytest.raises(AuthorizationDenied):
-                results.create(org, request, str(uuid4()))
+                results.preview(org, request)
+        with pytest.raises(AuthorizationDenied):
+            results.create(org, request, str(uuid4()))
     elif stage == "claim_finish":
         assert claimed is not None
         assert not results.process(claimed)

@@ -11,7 +11,6 @@ from emailmonitor.results.models import ExportInput
 from emailmonitor.results.service import Results
 from emailmonitor.runtime.authority import ServiceWork
 from sqlalchemy import text
-from sqlalchemy.exc import DBAPIError
 from test_durable_jobs import SETTINGS
 from test_progress_tenant import drain
 from test_results_tenant import options
@@ -127,7 +126,7 @@ def test_actual_worker_filtered_no_contact_and_inherited_contacts_only(
                 ).scalar_one()
                 is False
             )
-    with pytest.raises(DBAPIError):
+    with pytest.raises(AuthorizationDenied):
         with case.database.tenant(worker.token, org, Capability.EXPORT_RESULTS) as (c, _):
             c.execute(
                 text("SELECT emailmonitor.retained_export_article_valid(:org,:export)"),
