@@ -7,6 +7,7 @@
 - Schedule the 29 exact retained-filter SQL cases beside the unchanged outcome traversal in the existing SQL job, preserving complete collection/execution proofs and budgets.
 - Add bounded synthetic browser admission-timing diagnostics while preserving the existing HTTP receipt-gap assertion and cleanup.
 - Add temporary fixed-code entitlement diagnostics to the owned operator fixture, preserving refusals and restoring the original SQL function; distinguish observation content from initial-focus failures with fixed checkpoints.
+- Distinguish organization-switch keyboard steps and capture value-free focus state only after the unchanged traversal limit fails.
 - Add forward-only migration 0016, SQL/service/operator acceptance and [scope](docs/69-retained-article-filters.md); hosted evidence remains pending.
 
 ## 2026-10-22 — Retained job outcome investigation candidate

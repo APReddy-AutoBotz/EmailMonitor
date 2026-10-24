@@ -850,7 +850,7 @@ def test_outcome_investigation_phases_are_closed_failure_only_categories() -> No
         and isinstance(call.args[0].value, str)
         and call.args[0].value.startswith("outcomes_")
     }
-    assert observed == set(OUTCOME_PHASES) and len(observed) == 30
+    assert observed == set(OUTCOME_PHASES) and len(observed) == 33
     old = {"kind": "failure", "stage": "url_worker", "error": "AssertionError"}
     assert DiagnosticFrame.model_validate(old).outcome_phase is None
     for phase in OUTCOME_PHASES:

@@ -194,6 +194,12 @@ def conversation(
                                         if diagnostic.outcome_phase is not None
                                         else ""
                                     )
+                                    + (
+                                        "; focus exhaustion="
+                                        + json.dumps(diagnostic.model_dump()["focus_exhaustion"])
+                                        if diagnostic.focus_exhaustion is not None
+                                        else ""
+                                    )
                                     + "; actual reply statuses="
                                     + str(diagnostic.api_statuses)
                                 )

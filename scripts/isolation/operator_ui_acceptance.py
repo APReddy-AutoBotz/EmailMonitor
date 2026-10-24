@@ -11,7 +11,7 @@ import socket
 import sys
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import parse_qs, urlsplit
 
 from browser_acceptance import sandbox_status
@@ -19,6 +19,7 @@ from operator_ui_protocol import (
     ERRORS,
     OUTCOME_PHASES,
     STAGES,
+    FocusExhaustion,
     asset_manifest,
     failure_reason,
     route_failure_reason,
@@ -36,6 +37,7 @@ from playwright.async_api import (
 )
 
 ORIGIN = "https://app.example.test"
+focus_exhaustion: FocusExhaustion | Literal["unavailable"] | None = None
 HEADERS = {
     "content-type",
     "cookie",
@@ -138,12 +140,33 @@ async def api_headers(incoming: Request, failure: Callable[[str, str], None]) ->
 
 async def focus(page: Page, target: Locator) -> None:
     """Find controls using real Tab navigation; never mutate DOM form values."""
+    global focus_exhaustion
+    focus_exhaustion = None
     await target.wait_for(state="visible", timeout=10000)
     await expect(target).to_be_enabled(timeout=10000)
     for _ in range(100):
         if await target.evaluate("node => node === document.activeElement"):
             return
         await page.keyboard.press("Tab")
+    # Observe only after failure; even a target reached on Tab 100 still fails.
+    # Never emit DOM text, values, identifiers, URLs or arbitrary error messages.
+    try:
+        focus_exhaustion = FocusExhaustion.model_validate(
+            await target.evaluate("""node => {
+                const active = document.activeElement;
+                const heading = document.querySelector('section[aria-label="Article outcomes"] h4');
+                return {
+                    target_focused: node === active,
+                    document_focused: document.hasFocus(),
+                    modal_open: document.querySelector('dialog[open]') !== null,
+                    active_kind: active === null ? 'none' : active === node ? 'target'
+                        : active === document.body ? 'body'
+                        : active === heading ? 'outcomes_heading' : 'other'
+                };
+            }""")
+        )
+    except Exception:
+        focus_exhaustion = "unavailable"
     raise RuntimeError("Control not reachable by keyboard")
 
 
@@ -596,13 +619,16 @@ async def authored_outcome_paging(
         values = await organization_select.locator("option").evaluate_all(
             "nodes => nodes.map(node => node.value)"
         )
+        checkpoint("outcomes_organization_switch_away")
         await select_index(page, organization_select, 1 - values.index(organization))
         hold = False
         release.set()
         await asyncio.wait_for(finished.wait(), timeout=5)
         await expect(page.locator("body")).not_to_contain_text("authored-outcome-")
         await expect(page.locator("dialog[open]")).to_have_count(0)
+        checkpoint("outcomes_organization_switch_back")
         await select_index(page, organization_select, values.index(organization))
+        checkpoint("outcomes_organization_reopen_job")
         await activate(page, page.get_by_role("button", name="Open job " + job, exact=True))
         await expect(region).to_contain_text("Page 1: 25 article outcomes")
         checkpoint("outcomes_read_only")
@@ -1830,6 +1856,15 @@ async def main() -> None:
                     "error": name if name in ERRORS else "UnexpectedError",
                     "reason": failure_reason(error),
                     **({"outcome_phase": outcome_phase} if outcome_phase is not None else {}),
+                    **(
+                        {
+                            "focus_exhaustion": focus_exhaustion.model_dump()
+                            if isinstance(focus_exhaustion, FocusExhaustion)
+                            else focus_exhaustion
+                        }
+                        if failure_reason(error) == "keyboard_focus"
+                        else {}
+                    ),
                     "api_statuses": api_statuses,
                 }
             ),

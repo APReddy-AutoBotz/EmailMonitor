@@ -202,6 +202,9 @@ OutcomePhase = Literal[
     "outcomes_actual_filter_preview",
     "outcomes_request_generation",
     "outcomes_late_organization",
+    "outcomes_organization_switch_away",
+    "outcomes_organization_switch_back",
+    "outcomes_organization_reopen_job",
     "outcomes_modal_tab",
     "outcomes_next_focus",
     "outcomes_next_rows",
@@ -219,6 +222,16 @@ OutcomePhase = Literal[
     "outcomes_stream_invalidation",
 ]
 OUTCOME_PHASES = get_args(OutcomePhase)
+
+
+class FocusExhaustion(BaseModel):
+    """Value-free state sampled after the unchanged keyboard limit fails."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+    target_focused: bool
+    document_focused: bool
+    modal_open: bool
+    active_kind: Literal["target", "body", "outcomes_heading", "other", "none"]
 
 
 class DiagnosticFrame(BaseModel):
@@ -255,6 +268,7 @@ class DiagnosticFrame(BaseModel):
         | InstalledReason
     ) = "unknown"
     outcome_phase: OutcomePhase | None = None
+    focus_exhaustion: FocusExhaustion | Literal["unavailable"] | None = None
     installed_login_phase: InstalledLoginPhase | None = None
     api_statuses: list[int] = Field(default_factory=list, max_length=512)
 
@@ -275,6 +289,12 @@ class DiagnosticFrame(BaseModel):
             self.kind != "failure" or self.stage != "url_worker"
         ):
             raise ValueError("Outcome phase requires its exact failure stage")
+        if self.focus_exhaustion is not None and (
+            self.kind != "failure"
+            or self.reason != "keyboard_focus"
+            or self.error != "RuntimeError"
+        ):
+            raise ValueError("Focus state requires its exact keyboard failure")
         if self.installed_login_phase is not None and (
             self.kind != "failure" or self.stage not in {"assets_session", "keyword_worker"}
         ):
