@@ -29,6 +29,7 @@ from emailmonitor.runtime.assembly import RuntimeBundle, owned_test_runtime
 from emailmonitor.runtime.assembly import TestRuntimeConfig as RuntimeConfig
 from emailmonitor.runtime.publisher import TestPublisherConfig as PublisherConfig
 from emailmonitor.runtime.publisher import publish_once
+from operator_browser_timing import BrowserTiming
 from operator_browser_worker import browser_worker
 from operator_ui_protocol import RequestFrame, asset_manifest
 from run_operator_ui_acceptance import run
@@ -92,6 +93,7 @@ def _browser_operator_journey(
     journey = "controlled_keyword_browser" if keyword else "controlled_browser"
     configure(topology)
     browser_evidence: list[dict[str, Any]] = []
+    timing = BrowserTiming()
     app = runtime.app
     org, other = scenario.organizations
     with APIClient(app, ORIGIN) as owner, scenario.client() as other_owner:
@@ -171,6 +173,7 @@ def _browser_operator_journey(
         topology.processes["gateway"],
         topology.browser_identifier,
         evidence=browser_evidence,
+        timing=timing,
     ) as broker:
 
         def publisher() -> None:
@@ -233,6 +236,9 @@ def _browser_operator_journey(
     receipts = snapshot(topology)
     calls = receipts["calls"]
     assert len(calls) == 2 and len(receipts["queries"]) == 4
+    timing_receipt = timing.receipt(calls)
+    print(json.dumps({"synthetic_browser_timing": timing_receipt}), flush=True)
+    assert timing_receipt["complete"] is True
     assert calls[1]["received_monotonic"] - calls[0]["received_monotonic"] >= 4.9
     assert all(
         c["method"] == "GET"

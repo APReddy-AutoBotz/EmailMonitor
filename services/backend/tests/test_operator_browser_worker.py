@@ -58,7 +58,7 @@ def owned(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
 
     def proxy(process: object, scope: object, authorize: object, *, resources: object) -> object:
         assert process is pipe and resources is not None
-        value = SimpleNamespace(scope=scope, authorize=authorize)
+        value = SimpleNamespace(scope=scope, authorize=authorize, resources=resources)
         proxies.append(value)
         return value
 
@@ -290,3 +290,79 @@ def test_shared_worker_bounded_teardown(failure: str, monkeypatch: pytest.Monkey
     else:
         assert state.should_terminate == "previous"
         assert calls[-2:] == ["app closed", "database disposed"]
+
+
+@pytest.mark.parametrize("missing", [False, True])
+def test_optional_timing_read_is_exact_tenant_and_never_loses_ticket(
+    owned: SimpleNamespace, monkeypatch: pytest.MonkeyPatch, missing: bool
+) -> None:
+    import time
+    from contextlib import contextmanager
+
+    from emailmonitor.administration.source import SourceLease
+    from emailmonitor.organizations.roles import Capability
+    from operator_browser_timing import BrowserTiming
+    from sqlalchemy.exc import NoResultFound
+
+    org, job = owned.work.lease.organization, owned.work.lease.job
+    ticket = SourceLease(uuid4(), uuid4(), org)
+    finished: list[object] = []
+    queries: list[tuple[str, dict[str, object]]] = []
+
+    class Connection:
+        def execute(self, query: object, parameters: dict[str, object]) -> Any:
+            queries.append((str(query), parameters))
+            return self
+
+        def mappings(self) -> Any:
+            return self
+
+        def one(self) -> dict[str, object]:
+            if missing:
+                raise NoResultFound("Missing/expired/mismatched authorized observation")
+            return {"attempts": 1, "admitted": 100.0}
+
+    @contextmanager
+    def tenant(authority: object, organization: object, capability: object) -> Any:
+        assert (authority, organization, capability) == (
+            "synthetic",
+            org,
+            Capability.ACQUIRE_SOURCE,
+        )
+        yield Connection(), None
+
+    owned.progress.database = SimpleNamespace(tenant=tenant)
+    owned.browser.timing = BrowserTiming()
+
+    class Authorization:
+        def __init__(self, *args: object) -> None:
+            self.resources = SimpleNamespace(
+                acquire=lambda *args: ticket,
+                finish=lambda value, status, retry: finished.append(value),
+            )
+
+        def __call__(self, *args: object) -> None:
+            pass
+
+    monkeypatch.setattr(module, "TenantFixtureAuthorization", Authorization)
+    original = module.__dict__["conversation"]
+
+    def conversation(identifier: str, mediator: Any) -> dict[str, object]:
+        result = original(identifier, mediator)
+        resources = mediator.target.resources
+        actual = resources.acquire(
+            classify_url(module.URL, HOSTS), Operation.BROWSER, time.monotonic() + 10
+        )
+        assert actual is ticket
+        resources.finish(actual, 200, "")
+        return cast(dict[str, object], result)
+
+    monkeypatch.setattr(module, "conversation", conversation)
+    assert acquire(owned) is owned.article
+    assert finished == [ticket]
+    assert queries[1][1] == {"org": org, "ticket": ticket.identifier, "job": job, "version": 7}
+    assert "nonce" not in queries[1][0] and "r.path" not in queries[1][0]
+    assert "source_resource_buckets" not in queries[1][0]
+    assert 0 < int(str(queries[0][1]["milliseconds"])) <= 5000
+    assert owned.browser.timing.failed is missing
+    assert len(owned.browser.timing.records) == (0 if missing else 1)

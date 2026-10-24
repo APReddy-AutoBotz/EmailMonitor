@@ -610,3 +610,7 @@ The retained-filter candidate schedules its 29 exact SQL cases beside the unchan
 backend complement preserve full collection and successful execution proofs at the
 mandatory three-job join. Job counts, roles, deadlines and unfiltered normal/fresh
 aggregates remain unchanged; exact-source hosted acceptance is still required.
+
+The owned browser acceptance also has bounded tenant-only admission-timing
+diagnostics. They preserve the HTTP receipt-gap assertion, cleanup and all runtime
+authority/deadline controls; exact-source hosted acceptance remains required.

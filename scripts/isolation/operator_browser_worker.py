@@ -19,6 +19,7 @@ from emailmonitor.jobs.broker import FixtureWorkerConfig
 from emailmonitor.progress.execution import ExecutionDispatcher
 from emailmonitor.progress.service import Progress, Work
 from emailmonitor.sources.policy import Operation
+from operator_browser_timing import BrowserTiming, read_admission_timing
 from operator_provider_worker import PipeOwner, controlled_worker
 from run_browser_acceptance import conversation
 from transport_rpc import BrowserProxyMediator, GatewayProxy, OwnedProcess
@@ -28,11 +29,14 @@ URL = "https://synthetic.publisher.example/tooltip.html"
 
 
 class TooltipBrowser:
-    def __init__(self, identifier: str, evidence: list[dict[str, Any]]) -> None:
+    def __init__(
+        self, identifier: str, evidence: list[dict[str, Any]], timing: BrowserTiming | None = None
+    ) -> None:
         if len(identifier) != 64 or any(c not in "0123456789abcdef" for c in identifier):
             raise ValueError("Owned browser identifier required")
         self.identifier, self.evidence = identifier, evidence
         self.attempted = False
+        self.timing = timing
 
     def state(self) -> dict[str, Any]:
         values = json.loads(docker("inspect", self.identifier, timeout=5).stdout)
@@ -102,7 +106,17 @@ class TooltipBrowser:
             allow(url, bound.operation)
             pipe.check()
 
-        target = GatewayProxy(cast(OwnedProcess, pipe), scope, authorize, resources=allow.resources)
+        resources = allow.resources
+        if self.timing is not None:
+
+            def read_timing(ticket: object, deadline: float) -> dict[str, Any]:
+                pipe.check()
+                row = read_admission_timing(progress, organization, job, version, ticket, deadline)
+                pipe.check()
+                return dict(row)
+
+            resources = self.timing.resources(resources, read_timing)
+        target = GatewayProxy(cast(OwnedProcess, pipe), scope, authorize, resources=resources)
         mediator = BrowserProxyMediator(target)
         # Revocation covers the entire conversation, including SQL callbacks and
         # time between frames. The I/O lock itself never spans SQL or guest work.
@@ -152,8 +166,9 @@ def browser_worker(
     browser_identifier: str,
     *,
     evidence: list[dict[str, Any]] | None = None,
+    timing: BrowserTiming | None = None,
 ) -> Iterator[Any]:
-    browser = TooltipBrowser(browser_identifier, evidence if evidence is not None else [])
+    browser = TooltipBrowser(browser_identifier, evidence if evidence is not None else [], timing)
     with controlled_worker(
         config,
         gateway,
