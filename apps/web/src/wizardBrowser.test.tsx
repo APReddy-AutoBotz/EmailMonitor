@@ -21,9 +21,9 @@ vi.mock('react', async importOriginal => ({
 }))
 vi.mock('./ui', async importOriginal => ({
   ...await importOriginal<typeof import('./ui')>(),
-  useResource: () => ({ loading: false, data: [{ state: 'approved', valid_until: '2099-01-01T00:00:00Z', version: 1 }] }),
+  useResource: (_: unknown, path: string) => ({ loading: false, data: path === '/sources' ? [{ source_id: 'synthetic-publisher', enabled: true, execution_mode: 'fixture' }] : [{ state: 'approved', valid_until: '2099-01-01T00:00:00Z', version: 1 }] }),
 }))
-type Props = { children?: ReactNode; type?: string; checked?: boolean; disabled?: boolean; onClick?: () => void; 'aria-label'?: string; onChange?: (event: { target: { checked: boolean } }) => void }
+type Props = { children?: ReactNode; type?: string; checked?: boolean; disabled?: boolean; onClick?: () => void; 'aria-label'?: string; onChange?: (event: { target: { checked: boolean; value?: string } }) => void }
 function elements(node: ReactNode): ReactElement<Props>[] {
   if (Array.isArray(node)) return node.flatMap(elements)
   if (!isValidElement<Props>(node)) return []
@@ -44,7 +44,10 @@ function setup(canAcquire = true, option = 'allow_browser') {
   const submit = () => { render().props.onSubmit({ preventDefault: vi.fn() }); return pending }
   const hasPlan = () => elements(render()).some(element => element.props['aria-label'] === 'Server source plan')
   const launch = () => { elements(render()).find(element => element.type === 'button' && element.props.children === 'Launch extraction')!.props.onClick!(); return pending }
-  return { checkbox, toggle, submit, hasPlan, launch, write, context }
+  const chooseSource = (value: string) => {
+    elements(render()).find(element => element.type === 'select')!.props.onChange!({ target: { checked: false, value } }); render()
+  }
+  return { checkbox, toggle, submit, hasPlan, launch, write, context, chooseSource }
 }
 beforeEach(() => { hooks.values = []; hooks.index = 0; vi.restoreAllMocks() })
 
@@ -98,4 +101,50 @@ describe.each(['allow_browser', 'allow_pdf'])('explicit synthetic %s job opt-in'
     expect(form.checkbox().props.checked).toBe(false)
     expect(form.write).not.toHaveBeenCalled()
   })
+})
+
+describe('registered source plan ownership', () => {
+  it('sends selected identity, refuses cleared input and invalidates its plan', async () => {
+    const form = setup()
+    await form.submit()
+    expect(form.write.mock.calls[0][1]).toMatchObject({ input: { source_id: 'synthetic-publisher' } })
+    expect(form.hasPlan()).toBe(true)
+    form.chooseSource('')
+    expect(form.hasPlan()).toBe(false)
+    await expect(form.submit()).rejects.toThrow('Select the existing available fixture source')
+    form.chooseSource('elsevier_sciencedirect_v2')
+    await expect(form.submit()).rejects.toThrow('Select the existing available fixture source')
+    expect(form.write.mock.calls.filter(([path]) => path === '/jobs')).toHaveLength(1)
+  })
+  it('refuses late source A response after clear and return to A', async () => {
+    const form = setup()
+    let release!: (value: { classification: string }) => void
+    form.write.mockImplementation(async path => path === '/jobs' ? { id: '00000000-0000-0000-0000-000000000002' } : new Promise(resolve => { release = resolve }))
+    const pending = form.submit()
+    await vi.waitFor(() => expect(release).toBeTypeOf('function'))
+    form.chooseSource(''); form.chooseSource('synthetic-publisher')
+    release({ classification: 'article' }); await pending
+    expect(form.hasPlan()).toBe(false)
+    expect(form.context.openJob).not.toHaveBeenCalled()
+  })
+  it('cannot launch when source changes during the revision read', async () => {
+    const form = setup(); await form.submit()
+    let release!: (value: { row_version: number }) => void
+    vi.mocked(form.context.scope.request).mockImplementationOnce(() => new Promise(resolve => { release = resolve }))
+    const pending = form.launch()
+    form.chooseSource(''); form.chooseSource('synthetic-publisher')
+    release({ row_version: 2 }); await pending
+    expect(form.write.mock.calls.some(([path]) => path.endsWith('/start'))).toBe(false)
+  })
+})
+
+it('does not navigate from a completed launch response after source or session invalidation', async () => {
+  const form = setup(); await form.submit()
+  let release!: () => void
+  form.write.mockImplementationOnce(() => new Promise(resolve => { release = () => resolve({}) }))
+  const pending = form.launch()
+  await vi.waitFor(() => expect(release).toBeTypeOf('function'))
+  form.chooseSource(''); form.context.scope.close()
+  release(); await pending
+  expect(form.context.openJob).not.toHaveBeenCalled()
 })

@@ -115,6 +115,13 @@
         "type": "string",
         "pattern": "(^|/)\\.{1,2}(/|$)|\\s"
       }
+    },
+    "source_id": {
+      "enum": [
+        "synthetic-publisher",
+        null
+      ],
+      "description": "Exact existing registered provenance identity; omitted or null preserves the legacy unfiltered selection."
     }
   },
   "required": [

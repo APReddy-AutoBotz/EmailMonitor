@@ -93,3 +93,10 @@ Update docs/22-implementation-status.md with status, commit/PR, commands/results
 ### EM-011/012 accepted-results handoff candidate
 
 [Local handoff implementation](72-accepted-selection-handoff.md) connects Review, accepted Contacts and explicit export preview/create. No schema or authority changes; hosted keyboard acceptance and final review remain pending.
+
+### EM-003/006/011/012 retained source-selection local candidate
+
+FR-003/004/023/024/025: [existing registered source workflow](73-retained-source-selection.md).
+Catalog-backed keyword choice and current retained-source selection connect planning,
+Review, accepted Contacts and immutable exports. Single synthetic source only;
+actual hosted acceptance and publication remain pending, with no new acquisition authority.

@@ -5,7 +5,7 @@ import json
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import NoReturn
+from typing import Literal, NoReturn
 from uuid import UUID, uuid4
 
 from sqlalchemy import Connection, text
@@ -130,6 +130,7 @@ class Results:
         *,
         item_id: UUID | None = None,
         paper_doi: str | None = None,
+        source_id: Literal["synthetic-publisher"] | None = None,
         article_outcome_presence: ArticleOutcomePresence = "all",
     ) -> OutcomePage:
         if not 1 <= limit <= 200:
@@ -138,6 +139,7 @@ class Results:
             job_id=job,
             item_id=item_id,
             paper_doi=paper_doi,
+            source_id=source_id,
             article_outcome_presence=article_outcome_presence,
         )
         after = decode(org, "outcomes", filters, cursor)

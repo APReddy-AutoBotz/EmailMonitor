@@ -51,6 +51,7 @@ def result_router(
         job_id: UUID | None = None,
         item_id: UUID | None = None,
         paper_doi: str | None = Query(default=None, max_length=256),
+        source_id: Literal["synthetic-publisher"] | None = None,
         state: Annotated[
             list[Literal["accepted", "needs_review", "unmatched", "rejected"]] | None, Query()
         ] = None,
@@ -64,6 +65,7 @@ def result_router(
                 job_id=job_id,
                 item_id=item_id,
                 paper_doi=paper_doi,
+                source_id=source_id,
                 states=tuple(state) if state is not None else ("accepted",),
                 author_target=author_target,
                 query=query,
@@ -85,6 +87,7 @@ def result_router(
         job_id: UUID | None = None,
         item_id: UUID | None = None,
         paper_doi: str | None = Query(default=None, max_length=256),
+        source_id: Literal["synthetic-publisher"] | None = None,
         article_outcome_presence: ArticleOutcomePresence = "all",
         cursor: str | None = Query(default=None, max_length=2048),
         limit: int = Query(default=50, ge=1, le=200),
@@ -97,6 +100,7 @@ def result_router(
                 limit,
                 item_id=item_id,
                 paper_doi=paper_doi,
+                source_id=source_id,
                 article_outcome_presence=article_outcome_presence,
             )
         except ValueError as error:

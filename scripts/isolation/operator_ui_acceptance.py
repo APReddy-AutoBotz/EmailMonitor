@@ -23,6 +23,7 @@ from operator_ui_protocol import (
     EvidenceFocusTrace,
     FocusExhaustion,
     HandoffTrace,
+    KeyboardAttemptTrace,
     ObservationTrace,
     OutcomeReplayReadiness,
     ReplayRequest,
@@ -45,6 +46,44 @@ from playwright.async_api import (
 )
 
 ORIGIN = "https://app.example.test"
+
+# Passive, value-free observations of one owned keyboard attempt. No focus calls,
+# event cancellation, DOM writes, retries, timer changes or payload collection.
+KEYBOARD_ATTEMPT_OBSERVER = """node => {
+    let target = node;
+    const region = node.closest('section[aria-label="Article outcomes"]');
+    const heading = region?.querySelector('h4');
+    const trace = {tabs: 0, truncated: false, events: []};
+    const record = kind => {
+        if (trace.events.length === 32) { trace.truncated = true; return; }
+        trace.events.push({kind, tab: trace.tabs, target_connected: target.isConnected});
+    };
+    const key = event => {
+        if (event.key === 'Tab') trace.tabs = Math.min(100, trace.tabs + 1);
+    };
+    const focus = event => { if (event.target === heading) record('heading_focus'); };
+    let detached = false;
+    const changed = () => {
+        if (!target.isConnected && !detached) { record('target_detached'); detached = true; }
+        const replacement = region?.querySelector(
+            ':scope > div:last-child > .actions > button:last-child');
+        if (replacement && replacement !== target) {
+            target = replacement; detached = false; record('target_replaced');
+        }
+    };
+    const observer = new MutationObserver(changed);
+    observer.observe(region, {childList: true, subtree: true});
+    document.addEventListener('keydown', key, true);
+    document.addEventListener('focusin', focus, true);
+    record('start');
+    return {finish: () => {
+        changed(); record('finish'); observer.disconnect();
+        document.removeEventListener('keydown', key, true);
+        document.removeEventListener('focusin', focus, true);
+        return trace;
+    }};
+}"""
+
 
 HANDOFF_OBSERVER = """(() => {
     const trace = {key_events: 0, click_events: 0, trusted_click: false,
@@ -264,6 +303,34 @@ async def focus(page: Page, target: Locator) -> None:
 async def activate(page: Page, target: Locator) -> None:
     await focus(page, target)
     await page.keyboard.press("Enter")
+
+
+async def traced_activate(page: Page, target: Locator) -> None:
+    """Observe the same activate call; diagnostics cannot change its outcome."""
+    global focus_exhaustion
+    handle: JSHandle | None = None
+    try:
+        handle = await asyncio.wait_for(target.evaluate_handle(KEYBOARD_ATTEMPT_OBSERVER), 0.1)
+    except Exception:
+        pass
+    try:
+        await activate(page, target)
+    finally:
+        trace: KeyboardAttemptTrace | Literal["unavailable"] = "unavailable"
+        if handle is not None:
+            try:
+                trace = KeyboardAttemptTrace.model_validate(
+                    await asyncio.wait_for(handle.evaluate("state => state.finish()"), 0.1)
+                )
+            except Exception:
+                pass
+            finally:
+                try:
+                    await asyncio.wait_for(handle.dispose(), 0.1)
+                except Exception:
+                    pass
+        if isinstance(focus_exhaustion, FocusExhaustion):
+            focus_exhaustion = focus_exhaustion.model_copy(update={"attempt_trace": trace})
 
 
 async def outcome_loading(page: Page, state: OutcomeReplayReadiness) -> bool:
@@ -983,7 +1050,7 @@ async def authored_outcome_paging(
         release.clear()
         finished.clear()
         hold = True
-        await activate(
+        await traced_activate(
             page,
             region.get_by_role("button", name="Next article outcome page", exact=True),
         )
@@ -1879,6 +1946,13 @@ async def main() -> None:
             await page.get_by_text("Current synthetic policy", exact=True).wait_for()
             checkpoint("keyword_plan")
             await activate(page, page.get_by_role("button", name="New extraction", exact=True))
+            source_select = page.get_by_label(re.compile(r"^SourceSelect an existing source"))
+            await select_index(page, source_select, 0)
+            await expect(
+                page.get_by_role("button", name="Create and validate plan", exact=True)
+            ).to_be_disabled()
+            await select_index(page, source_select, 1)
+            await expect(source_select).to_have_value("synthetic-publisher")
             await type_text(page, page.get_by_label("Keyword", exact=True), "Myocardial Infarction")
             await activate(
                 page, page.get_by_role("button", name="Create and validate plan", exact=True)
@@ -2046,6 +2120,9 @@ async def main() -> None:
             # Explicit Review → accepted Contacts → Export; no cursor or preview travels.
             await activate(page, page.get_by_role("button", name="Review queue", exact=True))
             await type_text(page, paper_input, "10.9999/synthetic.article-a")
+            retained_source = page.get_by_label(re.compile(r"^Retained source"))
+            await select_index(page, retained_source, 1)
+            await expect(retained_source).to_have_value("synthetic-publisher")
             await activate(
                 page,
                 page.get_by_role(
@@ -2053,11 +2130,16 @@ async def main() -> None:
                 ),
             )
             await assert_accepted_handoff(page)
+            await expect(retained_source).to_have_value("synthetic-publisher")
             await expect(paper_table.locator("tbody tr")).to_have_count(1)
             await activate(
                 page, page.get_by_role("button", name="Export this selection", exact=True)
             )
             await expect(paper_input).to_have_value("10.9999/synthetic.article-a")
+            await expect(retained_source).to_have_value("synthetic-publisher")
+            await expect(page.get_by_role("region", name="Selection handoff")).to_contain_text(
+                "source: synthetic-publisher"
+            )
             await expect(page.get_by_role("region", name="Selection handoff")).to_contain_text(
                 "Accepted contacts"
             )
