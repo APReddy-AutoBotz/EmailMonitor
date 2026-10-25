@@ -547,6 +547,7 @@ class DiagnosticFrame(BaseModel):
         ]
         | InstalledReason
     ) = "unknown"
+    export_assertion_line: int | None = Field(default=None, ge=1, le=10000)
     outcome_phase: OutcomePhase | None = None
     observation_trace: ObservationTrace | Literal["unavailable"] | None = None
     evidence_phase: EvidencePhase | None = None
@@ -570,6 +571,12 @@ class DiagnosticFrame(BaseModel):
             and (self.error is not None or self.api_statuses or self.reason != "unknown")
         ):
             raise ValueError("Explicit failure or fixed stage required")
+        if self.export_assertion_line is not None and (
+            self.kind != "failure"
+            or self.stage != "export_preview"
+            or self.error != "AssertionError"
+        ):
+            raise ValueError("Export assertion location requires its exact failure stage")
         if self.outcome_phase is not None and (
             self.kind != "failure" or self.stage != "url_worker"
         ):
@@ -608,7 +615,8 @@ class DiagnosticFrame(BaseModel):
         ):
             raise ValueError("Callback delivery requires its exact navigation failure")
         if self.installed_login_phase is not None and (
-            self.kind != "failure" or self.stage not in {"assets_session", "keyword_worker"}
+            self.kind != "failure"
+            or self.stage not in {"assets_session", "keyword_worker", "url_worker"}
         ):
             raise ValueError("Installed login phase requires its exact failure stage")
         return self
@@ -648,6 +656,22 @@ def stderr_summary(raw: bytes) -> dict[str, object]:
         "classes": errors[:8],
         "frames": [{"file": name, "line": int(line)} for name, line in frames[-8:]],
     }
+
+
+def export_assertion_line(error: BaseException) -> int | None:
+    """Only a fixed harness source coordinate; no exception message or local values."""
+    if type(error) is not AssertionError:
+        return None
+    frame = error.__traceback__
+    line = None
+    while frame is not None:
+        if (
+            Path(frame.tb_frame.f_code.co_filename).name == "operator_ui_acceptance.py"
+            and 1 <= frame.tb_lineno <= 10000
+        ):
+            line = frame.tb_lineno
+        frame = frame.tb_next
+    return line
 
 
 def failure_reason(error: BaseException) -> str:

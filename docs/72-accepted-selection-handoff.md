@@ -40,3 +40,14 @@ certification or add unavailable source/date filters. Formal final review remain
 pending. There are no migrations, runtime grants, source-policy changes, acquisition
 changes or changes to export recovery. Rollback is a frontend/test code revert;
 existing export snapshots and server revalidation remain unchanged.
+
+## Hosted diagnostic follow-up
+
+The first hosted operator run failed an assertion in export preview without an
+individual assertion location. A bounded source-line diagnostic now identifies
+only the fixed harness file and assertion line, never exception text or locals.
+The installed direct-PDF journey also exposed a diagnostic grammar mismatch:
+reauthentication occurs during `url_worker`, just as keyword reauthentication
+occurs during `keyword_worker`. Both real failure stages now preserve the existing
+login diagnostic. This corrects failure reporting only; it does not establish or
+repair the underlying assertion/login cause, change deadlines or accept a refusal.

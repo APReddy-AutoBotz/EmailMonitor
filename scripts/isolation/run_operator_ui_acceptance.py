@@ -231,6 +231,12 @@ def conversation(
                                         if diagnostic.evidence_focus_trace is not None
                                         else ""
                                     )
+                                    + (
+                                        "; export assertion source line="
+                                        + str(diagnostic.export_assertion_line)
+                                        if diagnostic.export_assertion_line is not None
+                                        else ""
+                                    )
                                     + "; actual reply statuses="
                                     + str(diagnostic.api_statuses)
                                 )

@@ -26,6 +26,7 @@ from operator_ui_protocol import (
     OutcomeReplayReadiness,
     ReplayRequest,
     asset_manifest,
+    export_assertion_line,
     failure_reason,
     route_failure_reason,
     route_headers_reason,
@@ -2331,6 +2332,11 @@ async def main() -> None:
                     "stage": stage,
                     "error": name if name in ERRORS else "UnexpectedError",
                     "reason": failure_reason(error),
+                    **(
+                        {"export_assertion_line": export_assertion_line(error)}
+                        if stage == "export_preview" and type(error) is AssertionError
+                        else {}
+                    ),
                     **({"outcome_phase": outcome_phase} if outcome_phase is not None else {}),
                     **(
                         {
