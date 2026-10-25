@@ -2,15 +2,27 @@
 
 import json
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, cast, get_args
 from uuid import UUID
 
 from pydantic import Field, model_validator
 
 from emailmonitor.associations.models import Bundle, Record
 from emailmonitor.extraction.html import ArticleObservation
+from emailmonitor.extraction.pdf_retained import RetainedPdf
 from emailmonitor.extraction.sciencedirect import Reason
 from emailmonitor.extraction.xml_retained import RetainedXml
+
+type PdfQualityReason = Literal[
+    "page_cap",
+    "encrypted",
+    "corrupt",
+    "image_only_or_no_extractable_text",
+    "unsupported_geometry",
+    "unsupported_font_or_structure",
+    "resource_limit",
+    "deadline",
+]
 
 
 class ObservationQuality(Record):
@@ -18,13 +30,28 @@ class ObservationQuality(Record):
     organization_id: UUID
     batch_id: UUID
     scope: Literal["article"] = "article"
-    parser_version: Literal["elsevier-xml-head-v1", "synthetic-html-v1"]
-    observation_route: Literal["article_xml", "html", "browser_dom"]
+    parser_version: Literal[
+        "elsevier-xml-head-v1", "synthetic-html-v1", "pypdf-6.20.1-synthetic-v1"
+    ]
+    observation_route: Literal["article_xml", "html", "browser_dom", "pdf"]
     observation_status: Literal[
         "observed", "no_contact", "requires_browser", "partial", "unsupported"
     ]
     reason_availability: Literal["recorded", "not_recorded"]
-    reasons: tuple[Reason, ...] = Field(max_length=20)
+    reasons: tuple[
+        Reason
+        | Literal[
+            "page_cap",
+            "encrypted",
+            "corrupt",
+            "image_only_or_no_extractable_text",
+            "unsupported_geometry",
+            "unsupported_font_or_structure",
+            "resource_limit",
+            "deadline",
+        ],
+        ...,
+    ] = Field(max_length=20)
     review_scope: Literal["author_email_association"] = "author_email_association"
 
     @model_validator(mode="after")
@@ -32,11 +59,23 @@ class ObservationQuality(Record):
         if self.observation_route == "article_xml":
             if (
                 self.parser_version != "elsevier-xml-head-v1"
+                or any(reason not in get_args(Reason) for reason in self.reasons)
                 or self.reason_availability != "recorded"
                 or self.observation_status == "requires_browser"
                 or bool(self.reasons) != (self.observation_status in {"partial", "unsupported"})
             ):
                 raise ValueError("Recorded XML quality must retain its original outcome")
+        elif self.observation_route == "pdf":
+            if (
+                self.parser_version != "pypdf-6.20.1-synthetic-v1"
+                or any(
+                    reason not in get_args(PdfQualityReason.__value__) for reason in self.reasons
+                )
+                or self.reason_availability != "recorded"
+                or self.observation_status == "requires_browser"
+                or bool(self.reasons) != (self.observation_status in {"partial", "unsupported"})
+            ):
+                raise ValueError("Recorded PDF quality must preserve the parsed outcome")
         elif (
             self.parser_version != "synthetic-html-v1"
             or self.reason_availability != "not_recorded"
@@ -62,9 +101,13 @@ def project_quality(
     bundle = Bundle.model_validate_json(bundle.model_dump_json())
     if bundle.organization_id != org or not isinstance(document, dict):
         raise ValueError("Same-organization retained observation required")
-    observation: RetainedXml | ArticleObservation
-    if document.get("route") == "article_xml":
-        observation = RetainedXml.model_validate_json(json.dumps(document))
+    observation: RetainedXml | ArticleObservation | RetainedPdf
+    if document.get("route") in {"article_xml", "pdf"}:
+        observation = (
+            RetainedPdf.model_validate_json(json.dumps(document))
+            if document.get("route") == "pdf"
+            else RetainedXml.model_validate_json(json.dumps(document))
+        )
         if (
             observation.binding.organization != org
             or observation.binding.job != source.job
@@ -91,6 +134,15 @@ def project_quality(
         parser_version=observation.parser_version,
         observation_route=observation.route,
         observation_status=observation.status,
-        reason_availability="recorded" if isinstance(observation, RetainedXml) else "not_recorded",
-        reasons=tuple(observation.reasons) if isinstance(observation, RetainedXml) else (),
+        reason_availability="recorded"
+        if isinstance(observation, (RetainedXml, RetainedPdf))
+        else "not_recorded",
+        reasons=tuple(observation.reasons)
+        if isinstance(observation, RetainedXml)
+        else (
+            (cast(PdfQualityReason, observation.reason),)
+            if isinstance(observation, RetainedPdf)
+            and observation.reason not in {"complete", "byte_cap", "pdf_disabled"}
+            else ()
+        ),
     )

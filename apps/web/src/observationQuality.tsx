@@ -3,6 +3,15 @@ import { useResource, uid, type Resource } from './ui'
 import type { ApiScope } from './client'
 
 const descriptions: Record<string, string> = {
+  page_cap: 'The PDF page limit was reached. Uninspected pages remain unresolved.',
+  encrypted: 'The PDF is encrypted; no contact facts were retained.',
+  corrupt: 'The PDF could not be parsed safely.',
+  image_only_or_no_extractable_text: 'No supported machine-readable PDF text was available. OCR was not attempted.',
+  unsupported_geometry: 'The PDF page geometry is unsupported.',
+  unsupported_font_or_structure: 'The PDF font or document structure is unsupported.',
+  resource_limit: 'The PDF parser resource limit was reached.',
+  deadline: 'The PDF parser deadline was reached.',
+
   unsupported_affiliation: 'The parser recorded unsupported affiliation structure or mapping for this article. Some affiliations may be missing; this does not identify which author.',
   unsupported_email: 'Some email material could not be interpreted by this parser.',
   unstructured_contact: 'Unstructured contact material remains unresolved.',

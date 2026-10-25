@@ -430,3 +430,9 @@ Add a trusted Python-only executor factory to the normal claimed Celery path, re
   warm-cache revocation and installed XML performance acceptance remain required.
 - Keep minimal rejected service configuration validation independent of worker
   execution imports, with the existing configuration class re-export preserved.
+
+- Implement an opt-in durable journey for nine digest-pinned authored PDF fixtures, retained evidence/review/export, bounded isolated protocol and forward migration 0018. Default/external PDF acquisition stays disabled. Local SQL proof is separate from blocked actual container acceptance; unpublished candidate remains incomplete.
+
+- Use the parser-only temporary Docker client configuration for authored PDF execution, preserving the verified local endpoint, environment guard and all isolation limits. Standard image build/installed acceptance remains incomplete.
+
+- Compose the controlled worker PDF byte-parser with the supervisor-selected immutable parser image, retaining fixture identity/digest checks and all SQL fences. Add actual RPC/SQL proof and failure-only controller timing diagnostics; installed/broker/CI acceptance remains pending.

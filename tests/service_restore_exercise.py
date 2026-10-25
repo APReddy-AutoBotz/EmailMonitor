@@ -396,7 +396,7 @@ def capture_service(engine: Engine, organizations: tuple[UUID, UUID]) -> Service
         base = capture_rows(c, organizations)
         authority = [service_rows(c, table) for table in SERVICE_TABLES]
         if c.execute(text("SELECT version_num FROM public.alembic_version")).scalars().all() != [
-            "0017_execution_receipt_lock"
+            "0018_authored_pdf"
         ]:
             raise RestoreRefused("restore_service_schema_refused")
         # Cluster roles are not in pg_dump. Capture public attributes and membership

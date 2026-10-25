@@ -93,6 +93,15 @@ def collect_service(
         "html/search-page-1.html",
         "html/search-page-2.html",
         "html/tooltip.html",
+        "pdf/ambiguous.pdf",
+        "pdf/article-a.pdf",
+        "pdf/article-b.pdf",
+        "pdf/corrupt.pdf",
+        "pdf/encrypted.pdf",
+        "pdf/no-contact.pdf",
+        "pdf/page-cap.pdf",
+        "pdf/scanned.pdf",
+        "pdf/wrapped.pdf",
         "README.md",
     )
     for name in fixtures:

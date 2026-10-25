@@ -20,7 +20,15 @@ describe('closed synthetic policy proposals', () => {
   it('preserves the exact original HTML default and bounded expiry', () => {
     expect(defaultSyntheticPolicyProfile).toBe('html')
     expect(syntheticPolicy(undefined, now)).toEqual(html)
-    expect(syntheticPolicyProfiles.map(p => p.id)).toEqual(['html', 'xml', 'html_browser'])
+    expect(syntheticPolicyProfiles.map(p => p.id)).toEqual(['html', 'xml', 'html_browser', 'pdf'])
+  })
+  it('requires explicit authored PDF selection without download rights', () => {
+    expect(syntheticPolicy('pdf', now)).toEqual({ ...html,
+      allowed_operations: ['search', 'parse_fixture_pdf', 'extract_contacts', 'retain_excerpt', 'export_contacts'],
+      retention: { raw_hours: 0, excerpt_days: 30, contact_days: 90 },
+    })
+    expect(syntheticPolicy(undefined, now).allowed_operations).not.toContain('parse_fixture_pdf')
+    expect(syntheticPolicy('pdf', now).allowed_operations).not.toContain('fetch_pdf')
   })
   it('uses the exact explicit XML profile without unioning HTML rights', () => {
     expect(syntheticPolicy('xml', now)).toEqual({ ...html,

@@ -9,6 +9,7 @@ registering a factory does not enable live sources or grant a source permission.
 from collections.abc import Callable
 from typing import Protocol
 
+from emailmonitor.extraction.pdf_service import PdfParser
 from emailmonitor.extraction.provider_xml import XmlParser
 from emailmonitor.progress.provider import ProviderDispatch, ProviderJourney
 from emailmonitor.progress.service import Progress, Work
@@ -33,8 +34,10 @@ class ExecutionDispatcher:
         *,
         tooltip: TooltipDispatch | None = None,
         parser: XmlParser | None = None,
+        pdf_parser: PdfParser | None = None,
     ) -> None:
         self.progress = progress
+        self.pdf_parser = pdf_parser
         self.tooltip = TooltipJourney(progress, tooltip) if tooltip is not None else None
         if parser is not None and provider is None:
             raise ValueError("Parser capability requires controlled provider")
@@ -57,4 +60,8 @@ class ExecutionDispatcher:
             return self.tooltip.process(work, after_observation=after_observation)
         # Default is unchanged, including explicit refusal of provider URLs.
         # Provider exceptions deliberately cannot fall back to authored fixture bytes.
+        if self.pdf_parser is not None:
+            return self.progress.process_fixture(
+                work, after_observation, pdf_parser=self.pdf_parser
+            )
         return self.progress.process_fixture(work, after_observation)

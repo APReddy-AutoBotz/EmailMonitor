@@ -428,7 +428,8 @@ async def main() -> None:
             await login()
             if not callback_index_seen or 303 not in statuses:
                 raise RuntimeError("Actual callback navigation missing")
-            controlled_xml = setup.get("journey") == "installed-controlled-xml"
+            controlled_pdf = setup.get("journey") == "installed-authored-pdf"
+            controlled_xml = setup.get("journey") == "installed-controlled-xml" or controlled_pdf
             if controlled_xml:
                 from installed_xml_browser import xml_journey
 
@@ -586,7 +587,12 @@ async def main() -> None:
             if controlled_xml:
                 tenant_body = await page.locator("body").inner_text()
                 if any(
-                    address in tenant_body for address in ("Second@example.org", "beta@example.org")
+                    address in tenant_body
+                    for address in (
+                        "Second@example.org",
+                        "beta@example.org",
+                        "alex.chen@example.org",
+                    )
                 ):
                     raise RuntimeError("Installed XML contacts survived tenant switch")
             # Read-only adversarial browser probe complements the keyboard switch:
@@ -629,7 +635,9 @@ async def main() -> None:
                         "kind": "result",
                         "diagnostic": "synthetic-operator-ui",
                         "journey": (
-                            "installed-controlled-xml"
+                            "installed-authored-pdf"
+                            if controlled_pdf
+                            else "installed-controlled-xml"
                             if controlled_xml
                             else "installed-authored-service"
                         ),

@@ -72,8 +72,12 @@ class Discovery:
             {"org": org, "job": job, "version": version},
         )
         policy = current_policy(c, org, "synthetic-publisher")
+        from emailmonitor.extraction.pdf_fixture import DIGESTS
+
         operation = (
-            Operation.XML
+            Operation.PDF_FIXTURE
+            if url in {"https://synthetic.publisher.example/" + name for name in DIGESTS}
+            else Operation.XML
             if safe.path == "/article-xml.xml" or url in provider.ARTICLE_URLS
             else Operation.HTML
         )

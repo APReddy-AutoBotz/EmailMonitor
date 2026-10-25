@@ -23,6 +23,8 @@ from zipfile import ZipFile
 
 import httpx
 import pytest
+from emailmonitor.extraction.pdf_fixture import DIGESTS
+from emailmonitor.extraction.pdf_retained import RetainedPdf
 from emailmonitor.extraction.xml_retained import RetainedXml
 from emailmonitor.runtime.api_entrypoint import ReferenceAPI, ReferenceIdentity
 from emailmonitor.runtime.authority import ServiceProcess
@@ -284,12 +286,17 @@ def installed_topology(installed_xml_scenario: Scenario) -> Iterator[Topology]:
         value.inspect()
 
 
-@pytest.mark.parametrize("direct_url", [False, True], ids=["keyword", "direct-url"])
+@pytest.mark.parametrize(
+    "direct_url,pdf",
+    [(False, False), (True, False), (True, True)],
+    ids=["keyword", "direct-url", "authored-pdf"],
+)
 def test_installed_controlled_xml_operator(
     installed_xml_scenario: Scenario,
     tmp_path: Path,
     request: pytest.FixtureRequest,
     direct_url: bool,
+    pdf: bool,
     installed_bundle: tuple[Path, dict[str, str], str, str],
 ) -> None:
     case = installed_xml_scenario
@@ -305,7 +312,8 @@ def test_installed_controlled_xml_operator(
         raise RuntimeError("Curated parser image missing")
     require_packaged_image({"Image": image["Id"], "Config": image["Config"]})
     expected_articles = 1 if direct_url else 2
-    expected_calls = 1 if direct_url else 3
+    expected_calls = 0 if pdf else 1 if direct_url else 3
+    journey = "installed-authored-pdf" if pdf else "installed-controlled-xml"
     org, other = case.organizations
     admin = create_engine(case.admin_url, hide_parameters=True)
     principals = {kind: uuid4() for kind in ("worker", "publisher")}
@@ -543,7 +551,7 @@ def test_installed_controlled_xml_operator(
                     publisher_thread.start()
                     setup: dict[str, object] = {
                         "kind": "bootstrap",
-                        "journey": "installed-controlled-xml",
+                        "journey": journey,
                         "direct_article_url": direct_url,
                         "origin": "https://app.example.test",
                         "api": origin,
@@ -603,7 +611,7 @@ def test_installed_controlled_xml_operator(
                         == 1
                     )
                     assert running.parser_calls == expected_articles
-                    assert evidence["journey"] == "installed-controlled-xml"
+                    assert evidence["journey"] == journey
                     assert evidence["direct_article_url"] is direct_url
                     assert (
                         scalar(
@@ -638,19 +646,31 @@ def test_installed_controlled_xml_operator(
                             .scalars()
                             .all()
                         )
-                        retained = [
-                            RetainedXml.model_validate_json(json.dumps(row)) for row in observed
-                        ]
-                        assert {row.url for row in retained} == (
-                            {catalog.DOI_URL} if direct_url else catalog.ARTICLE_URLS
-                        )
-                        assert {row.requested_identifier.kind for row in retained} == (
-                            {"doi"} if direct_url else {"doi", "pii"}
-                        )
-                        assert all(
-                            row.provider is not None and row.provider.requested_view == "FULL"
-                            for row in retained
-                        )
+                        if pdf:
+                            pdf_rows = [
+                                RetainedPdf.model_validate_json(json.dumps(row)) for row in observed
+                            ]
+                            assert len(pdf_rows) == 1
+                            assert (
+                                pdf_rows[0].url
+                                == "https://synthetic.publisher.example/article-a.pdf"
+                            )
+                            assert pdf_rows[0].content_digest == DIGESTS["article-a.pdf"]
+                            assert pdf_rows[0].complete_scan and pdf_rows[0].pages_inspected == 2
+                        else:
+                            retained = [
+                                RetainedXml.model_validate_json(json.dumps(row)) for row in observed
+                            ]
+                            assert {row.url for row in retained} == (
+                                {catalog.DOI_URL} if direct_url else catalog.ARTICLE_URLS
+                            )
+                            assert {row.requested_identifier.kind for row in retained} == (
+                                {"doi"} if direct_url else {"doi", "pii"}
+                            )
+                            assert all(
+                                row.provider is not None and row.provider.requested_view == "FULL"
+                                for row in retained
+                            )
                         reviewed = connection.execute(
                             text(
                                 "SELECT version,row_version,created_by,reviewed_by "
@@ -674,7 +694,16 @@ def test_installed_controlled_xml_operator(
                             .all()
                         )
                         assert len(rows) == 1
-                        assert rows[0]["input"] == expected_job_input(direct_url)
+                        assert rows[0]["input"] == (
+                            {
+                                "type": "url",
+                                "url": "https://synthetic.publisher.example/article-a.pdf",
+                            }
+                            if pdf
+                            else expected_job_input(direct_url)
+                        )
+                        if pdf:
+                            assert rows[0]["options"]["allow_pdf"] is True
                         policy: Any = connection.execute(
                             text(
                                 "SELECT policy FROM emailmonitor.source_policies WHERE "
@@ -682,12 +711,18 @@ def test_installed_controlled_xml_operator(
                             ),
                             {"org": org},
                         ).scalar_one()
-                        assert "fetch_xml" in policy["allowed_operations"]
+                        assert ("parse_fixture_pdf" if pdf else "fetch_xml") in policy[
+                            "allowed_operations"
+                        ]
+                        if pdf:
+                            assert "fetch_pdf" not in policy["allowed_operations"]
                         assert policy["execution_mode"] == "fixture"
                         assert policy["credential_reference"] is None
                     calls = snapshot(topology)["calls"]
                     assert len(calls) == expected_calls
-                    if direct_url:
+                    if pdf:
+                        assert calls == []
+                    elif direct_url:
                         assert calls[0]["method"] == "GET"
                     else:
                         assert calls[0]["method"] == "PUT"
@@ -696,16 +731,22 @@ def test_installed_controlled_xml_operator(
                     assert all(
                         c["method"] == "GET" and c["path"].endswith("?view=FULL") for c in articles
                     )
-                    assert len({c["path"] for c in articles}) == expected_articles
+                    assert len({c["path"] for c in articles}) == (0 if pdf else expected_articles)
                     assert len(downloads) == 2 and downloads[0] != downloads[1]
                     for body in downloads:
                         with ZipFile(io.BytesIO(body)) as archive_file:
                             joined = b"\n".join(
                                 archive_file.read(n) for n in archive_file.namelist()
                             )
-                            assert b"Second@example.org" in joined
+                            assert (
+                                b"alex.chen@example.org" if pdf else b"Second@example.org"
+                            ) in joined
                             assert (b"beta@example.org" in joined) is not direct_url
-                            assert catalog.DOI_URL.encode() in joined
+                            assert (
+                                b"https://synthetic.publisher.example/article-a.pdf"
+                                if pdf
+                                else catalog.DOI_URL.encode()
+                            ) in joined
                             assert b"not_checked" in joined and b"not_assessed" in joined
                     print(
                         json.dumps(
@@ -717,14 +758,18 @@ def test_installed_controlled_xml_operator(
                                 "independent_installed_worker": True,
                                 "independent_installed_publisher": True,
                                 "proof": (
-                                    "INSTALLED_CONTROLLED_XML_DIRECT_URL_REVIEW_EXPORT"
+                                    "INSTALLED_AUTHORED_PDF_DIRECT_URL_REVIEW_EXPORT"
+                                    if pdf
+                                    else "INSTALLED_CONTROLLED_XML_DIRECT_URL_REVIEW_EXPORT"
                                     if direct_url
                                     else "INSTALLED_CONTROLLED_XML_KEYWORD_REVIEW_EXPORT"
                                 ),
                                 "parser_image_id": image_id,
                                 "launcher_matches_installed_archive": True,
                                 "actual_provider_calls": expected_calls,
-                                "retained_xml_observations": expected_articles,
+                                "retained_pdf_observations"
+                                if pdf
+                                else "retained_xml_observations": expected_articles,
                                 "session_expiry": (
                                     "shortened_future_deadline_elapsed_without_revocation"
                                 ),
@@ -765,13 +810,16 @@ def test_installed_controlled_xml_operator(
 
 @contextmanager
 def service_xml_case(
-    case: Scenario, directory: Path
+    case: Scenario, directory: Path, *, pdf: bool = False
 ) -> Iterator[tuple[Any, Any, dict[str, Path], dict[str, str], Any, Any]]:
     """Synthetic job setup only; every execution uses the real installed worker."""
     from emailmonitor.organizations.roles import Capability
+    from test_pdf_pipeline_tenant import planned_pdf
     from test_provider_journey_tenant import planned_provider
 
-    progress, job = planned_provider(case, url=catalog.DOI_URL)
+    progress, job = (
+        planned_pdf(case, "article-a.pdf") if pdf else planned_provider(case, url=catalog.DOI_URL)
+    )
     org = case.organizations[0]
     progress.start(org, job, progress.snapshot(org, job).revision)
     admin = create_engine(case.admin_url, hide_parameters=True)
@@ -829,12 +877,14 @@ def service_xml_case(
         )
 
 
+@pytest.mark.parametrize("pdf", [False, True], ids=["xml", "authored-pdf"])
 def test_installed_controlled_xml_post_observation_crash_recovery(
     installed_xml_scenario: Scenario,
     tmp_path: Path,
+    pdf: bool,
     installed_bundle: tuple[Path, dict[str, str], str, str],
 ) -> None:
-    """A real SIGKILL after XML commit; recovery must not reacquire or reparse."""
+    """A real SIGKILL after retained commit; recovery must not reacquire or reparse."""
     case = installed_xml_scenario
     installed, _, package_sha, service_image_id = installed_bundle
     verify_installed_launcher(installed)
@@ -843,7 +893,7 @@ def test_installed_controlled_xml_post_observation_crash_recovery(
     assert image is not None
     require_packaged_image({"Image": image["Id"], "Config": image["Config"]})
     org = case.organizations[0]
-    with service_xml_case(case, tmp_path) as (progress, job, configs, names, admin, app):
+    with service_xml_case(case, tmp_path, pdf=pdf) as (progress, job, configs, names, admin, app):
         params = {"org": org, "job": job}
 
         def count(table: str) -> int:
@@ -906,7 +956,7 @@ def test_installed_controlled_xml_post_observation_crash_recovery(
                                     )
 
                             wait_for(committed_and_blocked, seconds=45)
-                            assert len(snapshot(first)["calls"]) == 1
+                            assert len(snapshot(first)["calls"]) == (0 if pdf else 1)
                             assert worker.parser_calls == 1
                             worker.kill()
                             assert worker.wait(timeout=5) == 137
@@ -916,6 +966,17 @@ def test_installed_controlled_xml_post_observation_crash_recovery(
                 finally:
                     transaction.rollback()
             assert count("article_observations") == 1
+            if pdf:
+                with admin.connect() as c:
+                    stored = c.execute(
+                        text(
+                            "SELECT observation FROM emailmonitor.article_observations "
+                            "WHERE organization_id=:org AND job_id=:job"
+                        ),
+                        params,
+                    ).scalar_one()
+                    retained_pdf = RetainedPdf.model_validate_json(json.dumps(stored))
+                    assert retained_pdf.content_digest == DIGESTS["article-a.pdf"]
             assert count("association_batches") == count("execution_effects") == 0
         # A failed capability is never reopened. Fresh owned topology, same
         # committed observation and broker delivery, fresh installed process.
@@ -938,21 +999,22 @@ def test_installed_controlled_xml_post_observation_crash_recovery(
                 assert snapshot(fresh)["calls"] == []
                 assert recovered.parser_calls == 0
                 with admin.connect() as c:
-                    assert (
-                        c.execute(
-                            text(
-                                "SELECT count(*) FROM emailmonitor.source_resource_requests "
-                                "WHERE organization_id=:org AND job_id=:job"
-                            ),
-                            params,
-                        ).scalar_one()
-                        == 1
-                    )
+                    assert c.execute(
+                        text(
+                            "SELECT count(*) FROM emailmonitor.source_resource_requests "
+                            "WHERE organization_id=:org AND job_id=:job"
+                        ),
+                        params,
+                    ).scalar_one() == (0 if pdf else 1)
                 fresh.inspect()
         print(
             json.dumps(
                 {
-                    "proof": "INSTALLED_CONTROLLED_XML_POST_OBSERVATION_CRASH_RECOVERY",
+                    "proof": (
+                        "INSTALLED_AUTHORED_PDF_POST_OBSERVATION_CRASH_RECOVERY"
+                        if pdf
+                        else "INSTALLED_CONTROLLED_XML_POST_OBSERVATION_CRASH_RECOVERY"
+                    ),
                     "package_sha256": package_sha,
                     "service_image_id": service_image_id,
                     "parser_image_id": image_id,

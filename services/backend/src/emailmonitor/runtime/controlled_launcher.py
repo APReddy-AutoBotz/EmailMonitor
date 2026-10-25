@@ -18,6 +18,8 @@ from emailmonitor.config import Settings
 from emailmonitor.fetching.provider_proxy import GatewayPipe, ProviderProxy
 from emailmonitor.fetching.safety import SafeURL
 from emailmonitor.fetching.sciencedirect import ProviderBinding, ProviderBoundary, ProviderRequest
+from emailmonitor.parsing.pdf_channel import parse_isolated as parse_pdf_pinned
+from emailmonitor.parsing.pdf_protocol import PdfExpectation
 from emailmonitor.parsing.xml_channel import exchange
 from emailmonitor.parsing.xml_protocol import XmlExpectation
 from emailmonitor.runtime.control_exposure import require_local_control_only
@@ -214,6 +216,32 @@ def serve_request(
                     "kind": "parsed",
                     "id": identifier,
                     "observation": observed.model_dump(mode="json"),
+                },
+                time.monotonic() + 20,
+            )
+        elif frame.get("kind") == "parse_pdf":
+            if set(frame) != {"kind", "id", "expected", "body"} or type(frame["body"]) is not str:
+                raise ValueError
+            pdf_expected = PdfExpectation.model_validate_json(json.dumps(frame["expected"]))
+            if frame["expected"] != pdf_expected.model_dump(mode="json"):
+                raise ValueError
+            data = base64.b64decode(frame["body"], validate=True)
+            pdf_expected.check_bytes(data)
+            diagnostics.phase(Phase.PARSE)
+            parser_started()
+            pdf_observed = parse_pdf_pinned(
+                Settings(environment="test", fixture_mode=True),
+                data,
+                expected=pdf_expected,
+                image_id=parser_image_id,
+            )
+            pdf_expected.check_observation(pdf_observed)
+            diagnostics.phase(Phase.RESULT_WRITE)
+            pipe.send(
+                {
+                    "kind": "pdf_parsed",
+                    "id": identifier,
+                    "observation": pdf_observed.model_dump(mode="json"),
                 },
                 time.monotonic() + 20,
             )

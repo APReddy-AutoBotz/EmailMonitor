@@ -8,9 +8,9 @@ from typing import TYPE_CHECKING, Any
 from playwright.async_api import expect
 
 if TYPE_CHECKING:
-    from operator_ui_acceptance import activate, select_index, type_text
+    from operator_ui_acceptance import activate, focus, select_index, type_text
 else:
-    from operator_ui_helpers import activate, select_index, type_text
+    from operator_ui_helpers import activate, focus, select_index, type_text
 
 
 async def xml_journey(
@@ -22,16 +22,25 @@ async def xml_journey(
     download_seen: asyncio.Event,
     export_checkpoint: Callable[[str, str | None], None],
 ) -> str:
+    pdf = setup.get("journey") == "installed-authored-pdf"
     direct = setup.get("direct_article_url")
     if type(direct) is not bool:
         raise ValueError("Fixed installed XML input required")
-    addresses = ("Second@example.org",) if direct else ("Second@example.org", "beta@example.org")
+    if pdf and direct is not True:
+        raise ValueError("Authored PDF requires the fixed direct input")
+    addresses = (
+        ("alex.chen@example.org",)
+        if pdf
+        else ("Second@example.org",)
+        if direct
+        else ("Second@example.org", "beta@example.org")
+    )
     checkpoint("source_review")
     await activate(page, page.get_by_role("button", name="Sources", exact=True))
     profile = page.get_by_role("combobox", name="Synthetic policy profile", exact=True)
     await expect(profile).to_have_value("html")
-    await select_index(page, profile, 1)
-    await expect(profile).to_have_value("xml")
+    await select_index(page, profile, 3 if pdf else 1)
+    await expect(profile).to_have_value("pdf" if pdf else "xml")
     await activate(
         page,
         page.get_by_role("button", name="Request synthetic source review", exact=True),
@@ -41,7 +50,7 @@ async def xml_journey(
     await select_index(page, profile, 0)
     await activate(page, page.get_by_role("button", name="Approve synthetic policy", exact=True))
     dialog = page.get_by_role("dialog")
-    await expect(dialog).to_contain_text("fetch_xml")
+    await expect(dialog).to_contain_text("parse_fixture_pdf" if pdf else "fetch_xml")
     await expect(dialog).to_contain_text('"raw_hours":0,"excerpt_days":30,"contact_days":90')
     await activate(
         page,
@@ -55,7 +64,9 @@ async def xml_journey(
         await type_text(
             page,
             page.get_by_label("Search-results or article URL", exact=True),
-            "https://synthetic.publisher.example/provider-doi.xml",
+            "https://synthetic.publisher.example/article-a.pdf"
+            if pdf
+            else "https://synthetic.publisher.example/provider-doi.xml",
         )
     else:
         await type_text(
@@ -63,6 +74,14 @@ async def xml_journey(
             page.get_by_label("Keyword", exact=True),
             "Controlled provider journey",
         )
+    if pdf:
+        toggle = page.get_by_role(
+            "checkbox", name="Allow authored local PDF fixtures (no downloads)", exact=True
+        )
+        await expect(toggle).not_to_be_checked()
+        await focus(page, toggle)
+        await page.keyboard.press("Space")
+        await expect(toggle).to_be_checked()
     await activate(page, page.get_by_role("button", name="Create and validate plan", exact=True))
     await page.get_by_role("region", name="Server source plan").wait_for()
     await activate(page, page.get_by_role("button", name="Launch extraction", exact=True))
@@ -91,10 +110,16 @@ async def xml_journey(
         await expect(quality).to_contain_text("Retained parser outcome:")
         await expect(quality).to_contain_text("does not resolve affiliation uncertainty")
         await expect(quality).not_to_contain_text("reasons are not recorded for this route")
+        if pdf:
+            await expect(page.get_by_role("dialog")).to_contain_text("PDF page 2")
+            await expect(page.get_by_role("dialog")).to_contain_text("full_cropbox_not_glyph_bbox")
+            await expect(page.get_by_role("dialog")).to_contain_text("pdf_text")
         await type_text(
             page,
             page.get_by_label("Reason", exact=True),
-            "Installed controlled XML evidence review",
+            "Installed authored PDF evidence review"
+            if pdf
+            else "Installed controlled XML evidence review",
         )
         await activate(page, page.get_by_role("button", name="Save review", exact=True))
         await page.get_by_role("dialog").wait_for(state="hidden")

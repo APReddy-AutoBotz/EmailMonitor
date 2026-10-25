@@ -507,3 +507,26 @@ modified. Exact-head hosted acceptance remains required.
 ### Execution receipt lock candidate
 
 `test_execution_receipt_lock_tenant.py` exercises actual claimed-worker authorization while a receipt transaction is held, incompatible control locks, reverse-order refusal/wait behavior, concurrent receipts, duplicate receipts and rollback. Missing SQL remains an explicit skip. These checks do not establish all lifecycle interleavings or installed broker acceptance. Existing extraction jobs have null `jobs.source_id`; the original and candidate receipt fences do not lock source catalog/policy rows through that field. No stronger source serialization guarantee is claimed.
+
+
+### Durable authored PDF candidate — acceptance incomplete
+
+The explicit opt-in fixture-only implementation and acceptance inventory are in
+[design70](70-durable-fixture-pdf-design.md). Pure retained/protocol checks and actual
+SQL journeys are distinct from isolated parser acceptance. The parser-only client configuration prevents automatic proxy injection
+without changing the environment guard. Standard packaging and complete installed
+acceptance remain pending; see the current design for validation limits.
+Published PR50 stays unchanged. No live fetching, grants or deployment are enabled.
+
+The controlled PDF candidate now composes the worker's bounded byte-parser capability
+with the supervisor-selected immutable image. Nine actual isolated RPC cases and
+two actual tenant SQL cases cover fixture-only transport, replay/review/export and
+cancellation-before-commit. This is not installed artifact/broker certification.
+The controller timeout now has failure-only phase/stack diagnostics with its original
+20-second deadline; the historical timeout is not claimed repaired.
+
+Authored PDF installed acceptance: `test_installed_controlled_xml_operator[authored-pdf]`
+requires keyboard policy/job opt-in, page evidence, review, exports and tenant switch.
+`test_installed_controlled_xml_post_observation_crash_recovery[authored-pdf]` requires
+actual installed service-principal broker recovery after SIGKILL with one retained
+observation/effect and no reparse. Both remain pending genuine CI execution.

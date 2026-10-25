@@ -185,3 +185,22 @@ def test_committed_quality_schema_and_example_match_runtime() -> None:
         ObservationQuality.model_validate_json(json.dumps(example)).model_dump(mode="json")
         == example
     )
+
+
+@pytest.mark.parametrize(
+    "route,parser,reason",
+    [
+        ("article_xml", "elsevier-xml-head-v1", "page_cap"),
+        ("pdf", "pypdf-6.20.1-synthetic-v1", "unsupported_affiliation"),
+    ],
+)
+def test_quality_refuses_reasons_from_another_parser_profile(
+    route: str, parser: str, reason: str
+) -> None:
+    value, bundle = fixture()
+    payload = project_quality(ORG, BATCH, bundle, value.model_dump(mode="json"), SOURCE).model_dump(
+        mode="json"
+    )
+    payload.update(observation_route=route, parser_version=parser, reasons=[reason])
+    with pytest.raises(ValidationError):
+        ObservationQuality.model_validate_json(json.dumps(payload))

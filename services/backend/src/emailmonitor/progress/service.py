@@ -15,6 +15,7 @@ from emailmonitor.config import Settings
 from emailmonitor.discovery.fixture import step_fixture
 from emailmonitor.discovery.service import Discovery
 from emailmonitor.discovery.state import DiscoveryState
+from emailmonitor.extraction.pdf_service import PdfParser
 from emailmonitor.extraction.service import Extraction
 from emailmonitor.fetching.fixture import require_fixture
 from emailmonitor.organizations.database import AuthorizationDenied, RevisionConflict
@@ -323,7 +324,11 @@ SELECT emailmonitor.execution_finish(:org, :job, :item, :token, :batch, :failure
             )
 
     def process_fixture(
-        self, work: Work, after_observation: Callable[[], None] | None = None
+        self,
+        work: Work,
+        after_observation: Callable[[], None] | None = None,
+        *,
+        pdf_parser: PdfParser | None = None,
     ) -> str:
         from emailmonitor.fetching.safety import IsolationUnavailable
         from emailmonitor.sources.provider_documents import URLS
@@ -349,7 +354,15 @@ SELECT emailmonitor.execution_finish(:org, :job, :item, :token, :batch, :failure
                 None,
             )
             if existing is None:
-                if work.url == "https://synthetic.publisher.example/article-xml.xml":
+                if work.url.endswith(".pdf"):
+                    from emailmonitor.extraction.pdf_service import PdfExtraction
+
+                    existing = PdfExtraction(
+                        self.database, self.token, self.settings, parser=pdf_parser
+                    ).isolated_fixture(
+                        scope.organization, scope.job, work.url, int(str(current["revision"]))
+                    )
+                elif work.url == "https://synthetic.publisher.example/article-xml.xml":
                     from emailmonitor.extraction.xml_service import XmlExtraction
 
                     existing = XmlExtraction(
