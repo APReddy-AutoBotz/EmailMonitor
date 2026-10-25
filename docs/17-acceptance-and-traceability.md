@@ -535,3 +535,7 @@ Retained paper identity candidate: AT-08/19/23/24/25/29 cover tenant-local obser
 DOI grouping, unchanged observation/review relationships, filtered cursors and
 immutable exports with current authority. See [bounded plan](71-retained-paper-identity.md).
 Execution evidence is pending; this does not close general FR-019 observation reuse.
+
+### Accepted-results selection handoff
+
+FR-023/024/025, EM-011/012, NFR-011, UX03: [bounded handoff](72-accepted-selection-handoff.md). Frontend selector/generation cases and actual SQL CSV/XLSX membership tests accompany the authored installed keyboard journey. Hosted execution remains pending.

@@ -89,3 +89,7 @@ No extension is part of the first Codex prompt. Exact task dates are intentional
 ## Task completion discipline
 
 Update docs/22-implementation-status.md with status, commit/PR, commands/results and gaps. Map delivered requirements to test evidence in document 17. A task is Done only when its acceptance boundary is met; skipped tests, missing external approval and mock-only demonstrations remain explicit. Architectural deviations require an ADR, not silent stack expansion.
+
+### EM-011/012 accepted-results handoff candidate
+
+[Local handoff implementation](72-accepted-selection-handoff.md) connects Review, accepted Contacts and explicit export preview/create. No schema or authority changes; hosted keyboard acceptance and final review remain pending.
