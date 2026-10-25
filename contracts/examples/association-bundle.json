@@ -3,7 +3,7 @@
   "organization_id": "a0000000-0000-4000-8000-000000000001",
   "article_id": "f5ea0915-e82d-5760-b35d-b3c83ead693c",
   "source_url": "https://synthetic.publisher.example/article-a.html",
-  "content_digest": "33c3bddb62834da34acb300b7c0bd7bb4c8728fb57e5ece43b8fc4e81920c3f0",
+  "content_digest": "a776106710399f4aa596f42430b5a5283b0d0ea8efafd55460ef2c83782884df",
   "parser_version": "synthetic-html-v1",
   "observation_route": "html",
   "observation_status": "observed",
@@ -11,7 +11,7 @@
     "title": "Synthetic myocardial infarction study A",
     "journal": "Example Research Journal",
     "publication_date": "2026-01-15",
-    "doi": null
+    "doi": "10.9999/synthetic.article-a"
   },
   "authors": [
     {

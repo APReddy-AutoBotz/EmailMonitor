@@ -1,5 +1,6 @@
 """Observed correspondence, article outcomes and export eligibility remain distinct."""
 
+import re
 from datetime import datetime
 from typing import Annotated, Any, Literal
 from uuid import UUID
@@ -31,9 +32,24 @@ ArticleOutcomePresence = Literal[
 class ArticleSelection(BaseModel):
     """New default keys are omitted so legacy cursor/request identities stay stable."""
 
+    paper_doi: str | None = Field(default=None, max_length=256, strict=True)
+
+    @field_validator("paper_doi")
+    @classmethod
+    def validated_paper_doi(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if re.fullmatch(r"10\.[0-9]{4,9}/[A-Za-z0-9._;()/:-]+", value) is None or any(
+            segment in ("", ".", "..") for segment in value.split("/")
+        ):
+            raise ValueError("Supported bare observed DOI required")
+        return value.lower()
+
     @model_serializer(mode="wrap")
     def legacy_defaults(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
         document: dict[str, Any] = handler(self)
+        if document.get("paper_doi") is None:
+            document.pop("paper_doi", None)
         if document.get("item_id") is None:
             document.pop("item_id", None)
         if document.get("article_outcome_presence") == "all":
@@ -200,6 +216,7 @@ class ExportInput(ArticleSelection):
     def filters(self) -> Filters:
         return Filters(
             job_id=self.job_id,
+            paper_doi=self.paper_doi,
             item_id=self.item_id,
             article_outcome_presence=self.article_outcome_presence,
             states=("accepted", "needs_review", "unmatched")
@@ -272,7 +289,11 @@ class ExportSnapshot(Record):
     @model_serializer(mode="wrap")
     def legacy_binding_default(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
         document: dict[str, Any] = handler(self)
-        if self.filters.item_id is None and self.filters.article_outcome_presence == "all":
+        if (
+            self.filters.paper_doi is None
+            and self.filters.item_id is None
+            and self.filters.article_outcome_presence == "all"
+        ):
             document.pop("article_filter_bindings", None)
         return document
 
@@ -324,7 +345,11 @@ class ExportSnapshot(Record):
                 raise ValueError("Outcome records must match the exact selected article")
             assert self.filters.job_id is not None
             expected_bindings.add((self.filters.job_id, self.filters.item_id))
-        if self.filters.item_id is not None or self.filters.article_outcome_presence != "all":
+        if (
+            self.filters.paper_doi is not None
+            or self.filters.item_id is not None
+            or self.filters.article_outcome_presence != "all"
+        ):
             actual_bindings = {(item.job_id, item.item_id) for item in self.article_filter_bindings}
             if actual_bindings != expected_bindings or len(actual_bindings) != len(
                 self.article_filter_bindings

@@ -457,3 +457,10 @@ Add a trusted Python-only executor factory to the normal claimed Celery path, re
 - Compose the controlled worker PDF byte-parser with the supervisor-selected immutable parser image, retaining fixture identity/digest checks and all SQL fences. Add actual RPC/SQL proof and failure-only controller timing diagnostics; installed/broker/CI acceptance remains pending.
 
 - Recognize the nine registered authored PDF routes in the composed fixture service binding; preserve default HTML refusal and normal SQL authorization. Add route/refusal and atomic rollback regressions.
+
+## Unpublished retained paper identity candidate
+
+- Add conservative tenant-local observed-DOI selection across retained jobs,
+  preserving separate evidence, authors and reviews; no live acquisition.
+- Forward-only migration 0019 adds a derived identity index and filtered export
+  checks. Validation is in progress; no deployment or public release is claimed.

@@ -675,3 +675,12 @@ because composed service bindings omitted registered PDF routes. A bounded routi
 correction adds only those nine authored fixtures to the composed profile; default
 HTML and unknown-route refusal remain. Installed browser acceptance remains pending
 new exact-head execution.
+
+### Tenant-local retained paper identity — local candidate
+
+FR-008/019 and paper-selection FR-023 are being implemented as a conservative
+observed-DOI grouping over distinct retained observations. Existing job/evidence,
+author/review and policy relationships remain independent. See
+[design and acceptance boundary](71-retained-paper-identity.md). The local normal aggregate and focused actual SQL cases pass; an independent
+fresh check and genuine hosted gates are tracked in the candidate report. No
+public publication or whole-product completion is claimed. The accepted authored-PDF Draft head remains unchanged.

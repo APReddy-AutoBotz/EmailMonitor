@@ -102,6 +102,19 @@
       "default": "all",
       "title": "Article Outcome Presence",
       "description": "Filters only separate article outcomes; does not prune Contacts."
+    },
+    "paper_doi": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 256,
+      "pattern": "^10\\.[0-9]{4,9}/[A-Za-z0-9._;():-]+(?:/[A-Za-z0-9._;():-]+)*$",
+      "description": "Optional observed bare DOI; canonicalized to lowercase. Unsupported or conflicting source facts never establish identity.",
+      "not": {
+        "type": "string",
+        "pattern": "(^|/)\\.{1,2}(/|$)|\\s"
+      }
     }
   },
   "required": [

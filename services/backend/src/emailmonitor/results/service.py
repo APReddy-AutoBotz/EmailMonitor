@@ -129,12 +129,16 @@ class Results:
         limit: int = 50,
         *,
         item_id: UUID | None = None,
+        paper_doi: str | None = None,
         article_outcome_presence: ArticleOutcomePresence = "all",
     ) -> OutcomePage:
         if not 1 <= limit <= 200:
             raise ValueError("Bounded page required")
         filters = Filters(
-            job_id=job, item_id=item_id, article_outcome_presence=article_outcome_presence
+            job_id=job,
+            item_id=item_id,
+            paper_doi=paper_doi,
+            article_outcome_presence=article_outcome_presence,
         )
         after = decode(org, "outcomes", filters, cursor)
         with self._tenant(org) as c:
