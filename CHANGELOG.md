@@ -1,3 +1,8 @@
+## 2026-10-25 — Evidence selection survives close-event loss
+
+- Clear evidence selection once during an explicit close or successful review, before action refresh can unmount the queued native close event.
+- Preserve native Escape handling, refused-review behavior and current-authorized opener/fallback focus checks; add deterministic lost-event and duplicate-event regressions.
+
 ## 2026-10-25 — Evidence close-event synchronization
 
 - Wait for the exact evidence dialog's React removal before the unchanged opener-focus assertion; native hidden precedes focus restoration in the observed browser trace.
