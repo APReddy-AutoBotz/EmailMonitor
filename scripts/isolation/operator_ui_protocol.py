@@ -428,7 +428,17 @@ OutcomePhase = Literal[
 ]
 OUTCOME_PHASES = get_args(OutcomePhase)
 
-EvidencePhase = Literal["contacts", "open", "citation", "reason", "save", "closed", "returned"]
+EvidencePhase = Literal[
+    "contacts",
+    "open",
+    "citation",
+    "reason",
+    "save",
+    "closed",
+    "returned",
+    "escape_close",
+    "button_close",
+]
 EVIDENCE_PHASES = get_args(EvidencePhase)
 InstalledCallbackDelivery = Literal[
     "not_requested", "request_received", "asset_verified", "fulfilled"
@@ -487,6 +497,23 @@ class ObservationTrace(BaseModel):
     truncated: bool
 
 
+class EvidenceFocusState(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    event: Literal["start", "close", "focus", "mutation", "assertion"]
+    dialog_connected: bool
+    dialog_open: bool
+    close_seen: bool
+    opener_connected: bool
+    contacts_present: bool
+    active_kind: Literal["opener", "dialog", "fallback", "body", "other"]
+
+
+class EvidenceFocusTrace(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    states: list[EvidenceFocusState] = Field(min_length=1, max_length=8)
+    truncated: bool
+
+
 class DiagnosticFrame(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     kind: Literal["stage", "failure"]
@@ -523,6 +550,7 @@ class DiagnosticFrame(BaseModel):
     outcome_phase: OutcomePhase | None = None
     observation_trace: ObservationTrace | Literal["unavailable"] | None = None
     evidence_phase: EvidencePhase | None = None
+    evidence_focus_trace: EvidenceFocusTrace | Literal["unavailable"] | None = None
     installed_callback_delivery: InstalledCallbackDelivery | None = None
     installed_export_step: InstalledExportStep | None = None
     focus_exhaustion: FocusExhaustion | Literal["unavailable"] | None = None
@@ -559,6 +587,14 @@ class DiagnosticFrame(BaseModel):
             or self.error != "RuntimeError"
         ):
             raise ValueError("Focus state requires its exact keyboard failure")
+        if self.evidence_focus_trace is not None and (
+            self.kind != "failure"
+            or self.stage != "evidence_review"
+            or self.reason != "dialog_focus_restore"
+            or self.error != "RuntimeError"
+            or self.evidence_phase not in {"escape_close", "button_close"}
+        ):
+            raise ValueError("Evidence focus trace requires its exact close failure")
         if self.evidence_phase is not None and (
             self.kind != "failure" or self.stage != "evidence_review"
         ):

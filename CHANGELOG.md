@@ -1,3 +1,8 @@
+## 2026-10-25 — Hosted workload balance and focus evidence
+
+- Move 78 measured SQL/broker cases to the existing SQL partition without changing suite coverage or deadlines.
+- Add bounded, fixed-category evidence-dialog close/focus diagnostics while preserving keyboard actions and focus assertions.
+
 ## 2026-10-25 — Authored PDF acceptance scheduling
 
 - Balance 70 exact PDF cases into the existing SQL partition, preserving the complete disjoint suite, mandatory receipts and all deadlines.
