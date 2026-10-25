@@ -2,11 +2,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { scheduleSearch, SEARCH_SETTLE_MS } from './search'
 afterEach(() => vi.useRealTimers())
 describe('bounded current-scope keyboard search', () => {
-  it('applies only the final unchanged query after a rapid keyboard burst', () => {
+  it.each(['no-such-observed-person', '10.9999/synthetic.article-a'])('applies only the final unchanged selector after a rapid keyboard burst: %s', text => {
     vi.useFakeTimers()
     const controller = new AbortController(), apply = vi.fn()
     let cancel = () => {}
-    const text = 'no-such-observed-person'
     for (let index = 1; index <= text.length; index++) { cancel(); cancel = scheduleSearch(text.slice(0, index), controller.signal, apply); vi.advanceTimersByTime(5) }
     expect(apply).not.toHaveBeenCalled()
     vi.advanceTimersByTime(SEARCH_SETTLE_MS)

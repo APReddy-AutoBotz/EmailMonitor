@@ -61,3 +61,27 @@ No public push/PR, merge, deployment, live acquisition, account grant, trust/pro
 change or held export reconciliation is included. Formal final review and
 integration remain deferred. A new dependent public Draft requires its specific
 publication approval; the earlier authored-PDF approval is not reused.
+
+## Initial hosted correction
+
+The initial Draft candidate executed 6438 backend tests successfully, with two
+new service deletion cases failing because they expected `False` where the
+existing service authority correctly raised `AuthorizationDenied`. Another 178
+outcome-SQL tests passed. The test correction requires that exact refusal and
+checks unchanged export/outbox rows, no artifact/effect, and denied replay and
+download. Runtime authority and failure handling are unchanged.
+
+The isolated keyboard journey failed during evidence review with six HTTP 422
+replies and `route_headers_unclassified`. Inspection and six red frontend
+regressions proved that DOI typing immediately dispatched incomplete selectors
+to both datasets. Contacts/Review now uses the existing 250 ms settling mechanism
+and bounded syntax guidance; both requests and stale results remain disabled
+while the DOI is unsettled or invalid. Server validation stays authoritative.
+The six regressions pass after this correction; the precise header error remains
+unclassified pending the unchanged actual keyboard gate. No assertion, route
+mediation rule, request cap or acceptance deadline was relaxed.
+
+Application's initial mandatory join correctly failed. Initial Service, Transport,
+Parser, Browser, Packaging and Documentation workflows passed. Corrected-source
+normal/fresh and hosted results must be reconciled separately; these initial
+results do not predeclare acceptance of the correction.

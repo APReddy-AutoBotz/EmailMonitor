@@ -62,7 +62,46 @@ def test_paper_export_worker_rechecks_exact_members_without_read_expansion(
         Lifecycle(human.database, human.token, SETTINGS).stage(
             org, DeletionRequest(job_id=second, reason="privacy_request")
         )
-        assert not worker.process(work)
+        # Deletion revokes service authority, including authority to record failure.
+        # Preserve that refusal rather than requiring a worker-side False result.
+        with case.admin.connect() as c:
+            before = c.execute(
+                text("SELECT to_jsonb(e) FROM emailmonitor.exports e WHERE id=:id"),
+                {"id": export},
+            ).scalar_one()
+            outbox = c.execute(
+                text("SELECT to_jsonb(e) FROM emailmonitor.export_outbox e WHERE export_id=:id"),
+                {"id": export},
+            ).scalar_one()
+        with pytest.raises(AuthorizationDenied):
+            worker.process(work)
+        with pytest.raises(AuthorizationDenied):
+            worker.claim(org, export, UUID(str(message["event_id"])), 1)
+        with case.admin.connect() as c:
+            assert (
+                c.execute(
+                    text("SELECT to_jsonb(e) FROM emailmonitor.exports e WHERE id=:id"),
+                    {"id": export},
+                ).scalar_one()
+                == before
+            )
+            assert (
+                c.execute(
+                    text(
+                        "SELECT to_jsonb(e) FROM emailmonitor.export_outbox e WHERE export_id=:id"
+                    ),
+                    {"id": export},
+                ).scalar_one()
+                == outbox
+            )
+            for table in ("export_artifacts", "export_effects"):
+                assert (
+                    c.execute(
+                        text(f"SELECT count(*) FROM emailmonitor.{table} WHERE export_id=:id"),
+                        {"id": export},
+                    ).scalar_one()
+                    == 0
+                )
         with pytest.raises(AuthorizationDenied):
             human.download(org, export)
     else:

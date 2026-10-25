@@ -47,7 +47,10 @@ New observations do not enlarge a previously captured export.
 
 Contacts/Review and Exports expose the optional DOI selector. Changes clear page
 cursors and selected evidence; export payload changes invalidate the preview.
-Existing request-ownership guards discard stale responses. No publication-date
+DOI typing uses the existing search-settling interval. Incomplete or unsupported
+selectors disable both requests and hide prior results; the server remains
+authoritative for identity and access. Existing request-ownership guards discard
+stale responses. No publication-date
 interpretation or new source selector is introduced.
 
 ## Migration and acceptance plan

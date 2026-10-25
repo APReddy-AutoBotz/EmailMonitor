@@ -1,5 +1,11 @@
 import type { ArticleOutcomePresence } from './models'
 
+/** Input guidance only; the server remains authoritative for identity and access. */
+export function isSupportedPaperDoi(value: string): boolean {
+  const match = /^10\.[0-9]{4,9}\/[A-Za-z0-9._;()/:-]+$/.exec(value)
+  return value.length <= 256 && match?.[0] === value && value.split('/').every(part => part !== '' && part !== '.' && part !== '..')
+}
+
 export function articleSelectionParams(job?: string | null, item?: string, presence: ArticleOutcomePresence = 'all', paper?: string) {
   return { ...(paper ? { paper_doi: paper } : {}), ...(job ? { job_id: job } : {}), ...(job && item ? { item_id: item } : {}), ...(presence !== 'all' ? { article_outcome_presence: presence } : {}) }
 }
