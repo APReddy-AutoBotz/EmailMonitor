@@ -250,7 +250,7 @@ def test_metadata_precedence_keeps_conflicts_and_missing_fields_null() -> None:
     )
     result = parse("article-a.html", data)
     assert result.preferred_metadata.title == "Synthetic myocardial infarction study A"
-    assert result.preferred_metadata.doi is None
+    assert result.preferred_metadata.doi == "10.9999/synthetic.article-a"
     assert [fact.value for fact in result.metadata if fact.field == "title"] == [
         "Synthetic myocardial infarction study A",
         "Different observed DOM title",

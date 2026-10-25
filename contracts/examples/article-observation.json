@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
   "url": "https://synthetic.publisher.example/article-a.html",
-  "content_digest": "33c3bddb62834da34acb300b7c0bd7bb4c8728fb57e5ece43b8fc4e81920c3f0",
-  "acquisition_digest": "33c3bddb62834da34acb300b7c0bd7bb4c8728fb57e5ece43b8fc4e81920c3f0",
+  "content_digest": "a776106710399f4aa596f42430b5a5283b0d0ea8efafd55460ef2c83782884df",
+  "acquisition_digest": "a776106710399f4aa596f42430b5a5283b0d0ea8efafd55460ef2c83782884df",
   "parser_version": "synthetic-html-v1",
   "route": "html",
   "status": "observed",
@@ -14,6 +14,16 @@
       "evidence": {
         "locator": "root/html[1]/head[1]/meta[2]",
         "excerpt": "Synthetic myocardial infarction study A",
+        "kind": "structured_metadata"
+      }
+    },
+    {
+      "field": "doi",
+      "value": "10.9999/synthetic.article-a",
+      "date_type": "unspecified",
+      "evidence": {
+        "locator": "root/html[1]/head[1]/meta[3]",
+        "excerpt": "10.9999/synthetic.article-a",
         "kind": "structured_metadata"
       }
     },
@@ -52,7 +62,7 @@
     "title": "Synthetic myocardial infarction study A",
     "journal": "Example Research Journal",
     "publication_date": "2026-01-15",
-    "doi": null
+    "doi": "10.9999/synthetic.article-a"
   },
   "authors": [
     {

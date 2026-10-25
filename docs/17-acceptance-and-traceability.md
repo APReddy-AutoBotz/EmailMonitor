@@ -530,3 +530,8 @@ requires keyboard policy/job opt-in, page evidence, review, exports and tenant s
 `test_installed_controlled_xml_post_observation_crash_recovery[authored-pdf]` requires
 actual installed service-principal broker recovery after SIGKILL with one retained
 observation/effect and no reparse. Both remain pending genuine CI execution.
+
+Retained paper identity candidate: AT-08/19/23/24/25/29 cover tenant-local observed
+DOI grouping, unchanged observation/review relationships, filtered cursors and
+immutable exports with current authority. See [bounded plan](71-retained-paper-identity.md).
+Execution evidence is pending; this does not close general FR-019 observation reuse.

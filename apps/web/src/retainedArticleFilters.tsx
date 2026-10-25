@@ -1,7 +1,7 @@
 import type { ArticleOutcomePresence } from './models'
 
-export function articleSelectionParams(job?: string | null, item?: string, presence: ArticleOutcomePresence = 'all') {
-  return { ...(job ? { job_id: job } : {}), ...(job && item ? { item_id: item } : {}), ...(presence !== 'all' ? { article_outcome_presence: presence } : {}) }
+export function articleSelectionParams(job?: string | null, item?: string, presence: ArticleOutcomePresence = 'all', paper?: string) {
+  return { ...(paper ? { paper_doi: paper } : {}), ...(job ? { job_id: job } : {}), ...(job && item ? { item_id: item } : {}), ...(presence !== 'all' ? { article_outcome_presence: presence } : {}) }
 }
 
 export function ArticlePresenceFilter({ value, change, disabled = false }: { value: ArticleOutcomePresence; change: (value: ArticleOutcomePresence) => void; disabled?: boolean }) {

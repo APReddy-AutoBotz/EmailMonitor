@@ -1955,8 +1955,32 @@ async def main() -> None:
             )
             await activate(page, page.get_by_role("button", name="Save review", exact=True))
             await page.get_by_role("dialog").wait_for(state="hidden")
+            # Real retained DOI filtering, using only the authored article-a metadata.
+            paper_input = page.get_by_label(
+                "Paper DOI (optional; across authorized jobs)", exact=True
+            )
+            await type_text(page, paper_input, "10.9999/synthetic.article-a")
+            paper_table = page.get_by_role("table", name="Current-authorized observed contacts")
+            await expect(paper_table.locator("tbody tr")).to_have_count(1)
+            await expect(paper_table).to_contain_text("alex.chen@example.org")
+            await type_text(page, paper_input, "10.9999/absent-paper")
+            await expect(
+                page.get_by_text("No contacts match these server filters.", exact=True)
+            ).to_be_visible()
+            await type_text(page, paper_input, "")
+            await expect(paper_table.locator("tbody tr")).to_have_count(3)
             checkpoint("export_preview")
             await activate(page, page.get_by_role("button", name="Exports", exact=True))
+            await type_text(page, paper_input, "10.9999/synthetic.article-a")
+            await activate(
+                page,
+                page.get_by_role("button", name="Preview eligible export counts", exact=True),
+            )
+            paper_preview = page.get_by_role("region", name="Current export preview")
+            await expect(paper_preview).to_contain_text("1 contacts; 1 separate article outcomes")
+            await expect(paper_preview).to_contain_text("Paper DOI: 10.9999/synthetic.article-a")
+            await type_text(page, paper_input, "")
+            await expect(paper_preview).not_to_be_visible()
             await activate(
                 page, page.get_by_role("button", name="Preview eligible export counts", exact=True)
             )

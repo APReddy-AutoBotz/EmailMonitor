@@ -6,7 +6,7 @@ from pathlib import Path
 from emailmonitor.fetching.safety import FetchDenied
 
 DIGESTS: dict[str, str] = {
-    "article-a.html": "33c3bddb62834da34acb300b7c0bd7bb4c8728fb57e5ece43b8fc4e81920c3f0",
+    "article-a.html": "a776106710399f4aa596f42430b5a5283b0d0ea8efafd55460ef2c83782884df",
     "article-b.html": "87cd02138f7cc3dfa921ccdf9b2a1613e21529c1c89c3f36fcf36fd0ba8530b1",
     "tooltip.html": "f5ef425b50becc43b78b5a94c120c698d2c11d3d394325112d02355a0c27a893",
     "no-contact.html": "e743113b240ab1e931df471a9a3d8bd0137fc89157d69803a9238de3c8985b01",
