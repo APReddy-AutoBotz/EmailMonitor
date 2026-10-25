@@ -29,7 +29,7 @@ function elements(node: ReactNode): ReactElement<Props>[] {
   if (!isValidElement<Props>(node)) return []
   return [node, ...elements(node.props.children)]
 }
-function setup(canAcquire = true) {
+function setup(canAcquire = true, option = 'allow_browser') {
   const scope = new ApiScope('00000000-0000-0000-0000-000000000001', 'test-only')
   const job = { id: '00000000-0000-0000-0000-000000000002', state: 'draft', row_version: 1 }
   const write = vi.spyOn(scope, 'write').mockImplementation(async path => path === '/jobs' ? job : { classification: 'article' })
@@ -39,7 +39,7 @@ function setup(canAcquire = true) {
     act: vi.fn((_label, work) => { pending = work(); return pending.then(() => undefined) }),
   }
   const render = () => { hooks.index = 0; return Wizard({ context }) }
-  const checkbox = () => elements(render()).find(element => element.type === 'input' && element.props.type === 'checkbox' && element.props.onChange && element.props.checked !== undefined)!
+  const checkbox = () => elements(render()).filter(element => element.type === 'input' && element.props.type === 'checkbox' && element.props.onChange && element.props.checked !== undefined)[option === 'allow_browser' ? 0 : 1]!
   const toggle = (checked: boolean) => { checkbox().props.onChange!({ target: { checked } }); render() }
   const submit = () => { render().props.onSubmit({ preventDefault: vi.fn() }); return pending }
   const hasPlan = () => elements(render()).some(element => element.props['aria-label'] === 'Server source plan')
@@ -48,9 +48,9 @@ function setup(canAcquire = true) {
 }
 beforeEach(() => { hooks.values = []; hooks.index = 0; vi.restoreAllMocks() })
 
-describe('explicit synthetic browser job opt-in', () => {
+describe.each(['allow_browser', 'allow_pdf'])('explicit synthetic %s job opt-in', option => {
   it('starts unchecked and sends false by default, then true only after opt-in', async () => {
-    const form = setup()
+    const form = setup(true, option)
     expect(form.checkbox().props.checked).toBe(false)
     await form.submit()
     expect(form.write.mock.calls[0][1]).toMatchObject({ options: { allow_browser: false, allow_pdf: false, allow_ocr: false, allow_wider_web: false } })
@@ -58,18 +58,18 @@ describe('explicit synthetic browser job opt-in', () => {
     form.toggle(true)
     await form.submit()
     const creates = form.write.mock.calls.filter(([path]) => path === '/jobs')
-    expect(creates[1][1]).toMatchObject({ options: { allow_browser: true } })
+    expect(creates[1][1]).toMatchObject({ options: { [option]: true, [option === 'allow_pdf' ? 'allow_browser' : 'allow_pdf']: false } })
     expect(creates[1][3]).not.toBe(firstKey)
   })
   it('clears an existing launch plan when toggled on or off', async () => {
-    const form = setup()
+    const form = setup(true, option)
     await form.submit(); expect(form.hasPlan()).toBe(true)
     form.toggle(true); expect(form.hasPlan()).toBe(false)
     await form.submit(); expect(form.hasPlan()).toBe(true)
     form.toggle(false); expect(form.hasPlan()).toBe(false)
   })
   it('rejects a late plan response for the previous opt-in value', async () => {
-    const form = setup()
+    const form = setup(true, option)
     let release!: (value: { classification: string }) => void
     form.write.mockImplementation(async path => path === '/jobs' ? { id: '00000000-0000-0000-0000-000000000002' } : new Promise(resolve => { release = resolve }))
     const submitted = form.submit()
@@ -81,7 +81,7 @@ describe('explicit synthetic browser job opt-in', () => {
     expect(form.context.openJob).not.toHaveBeenCalled()
   })
   it('does not launch the previous plan if opt-in changes during the launch revision read', async () => {
-    const form = setup()
+    const form = setup(true, option)
     await form.submit()
     let release!: (value: { row_version: number }) => void
     vi.mocked(form.context.scope.request).mockImplementationOnce(() => new Promise(resolve => { release = resolve }))
@@ -93,7 +93,7 @@ describe('explicit synthetic browser job opt-in', () => {
     expect(form.context.openJob).not.toHaveBeenCalled()
   })
   it('keeps the opt-in disabled for roles without acquisition authority', () => {
-    const form = setup(false)
+    const form = setup(false, option)
     expect(form.checkbox().props.disabled).toBe(true)
     expect(form.checkbox().props.checked).toBe(false)
     expect(form.write).not.toHaveBeenCalled()

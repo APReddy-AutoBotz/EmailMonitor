@@ -229,7 +229,9 @@ class ServiceWorker:
     def executor(self, progress: Progress) -> ExecutionDispatcher:
         if self.channel is None:
             return ExecutionDispatcher(progress)
-        return ExecutionDispatcher(progress, self.channel, parser=self.channel.parse)
+        return ExecutionDispatcher(
+            progress, self.channel, parser=self.channel.parse, pdf_parser=self.channel.parse_pdf
+        )
 
     def export(self, body: dict[str, object]) -> bool:
         if self.closed:

@@ -26,7 +26,8 @@
     "parser_version": {
       "enum": [
         "elsevier-xml-head-v1",
-        "synthetic-html-v1"
+        "synthetic-html-v1",
+        "pypdf-6.20.1-synthetic-v1"
       ],
       "title": "Parser Version",
       "type": "string"
@@ -35,7 +36,8 @@
       "enum": [
         "article_xml",
         "html",
-        "browser_dom"
+        "browser_dom",
+        "pdf"
       ],
       "title": "Observation Route",
       "type": "string"
@@ -61,18 +63,35 @@
     },
     "reasons": {
       "items": {
-        "enum": [
-          "missing_full_text",
-          "unsupported_structure",
-          "missing_article_identity",
-          "missing_authors",
-          "unsupported_author",
-          "ambiguous_reference",
-          "unsupported_affiliation",
-          "unsupported_email",
-          "unstructured_contact"
-        ],
-        "type": "string"
+        "anyOf": [
+          {
+            "enum": [
+              "missing_full_text",
+              "unsupported_structure",
+              "missing_article_identity",
+              "missing_authors",
+              "unsupported_author",
+              "ambiguous_reference",
+              "unsupported_affiliation",
+              "unsupported_email",
+              "unstructured_contact"
+            ],
+            "type": "string"
+          },
+          {
+            "enum": [
+              "page_cap",
+              "encrypted",
+              "corrupt",
+              "image_only_or_no_extractable_text",
+              "unsupported_geometry",
+              "unsupported_font_or_structure",
+              "resource_limit",
+              "deadline"
+            ],
+            "type": "string"
+          }
+        ]
       },
       "maxItems": 20,
       "title": "Reasons",

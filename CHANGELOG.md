@@ -1,3 +1,22 @@
+## 2026-10-25 — Evidence selection survives close-event loss
+
+- Clear evidence selection once during an explicit close or successful review, before action refresh can unmount the queued native close event.
+- Preserve native Escape handling, refused-review behavior and current-authorized opener/fallback focus checks; add deterministic lost-event and duplicate-event regressions.
+
+## 2026-10-25 — Evidence close-event synchronization
+
+- Wait for the exact evidence dialog's React removal before the unchanged opener-focus assertion; native hidden precedes focus restoration in the observed browser trace.
+- Preserve installed evidence-action phases and the existing fixed keyboard-limit snapshot on failure, without sensitive payload capture or changed keyboard limits.
+
+## 2026-10-25 — Hosted workload balance and focus evidence
+
+- Move 78 measured SQL/broker cases to the existing SQL partition without changing suite coverage or deadlines.
+- Add bounded, fixed-category evidence-dialog close/focus diagnostics while preserving keyboard actions and focus assertions.
+
+## 2026-10-25 — Authored PDF acceptance scheduling
+
+- Balance 70 exact PDF cases into the existing SQL partition, preserving the complete disjoint suite, mandatory receipts and all deadlines.
+
 ## 2026-10-24 — Isolated execution receipt lock candidate
 
 - Add forward migration 0017 for receipt-only shared job locking; retain control fences, authority predicates, outbox transitions and publication ordering.
@@ -430,3 +449,11 @@ Add a trusted Python-only executor factory to the normal claimed Celery path, re
   warm-cache revocation and installed XML performance acceptance remain required.
 - Keep minimal rejected service configuration validation independent of worker
   execution imports, with the existing configuration class re-export preserved.
+
+- Implement an opt-in durable journey for nine digest-pinned authored PDF fixtures, retained evidence/review/export, bounded isolated protocol and forward migration 0018. Default/external PDF acquisition stays disabled. Local SQL proof is separate from blocked actual container acceptance; unpublished candidate remains incomplete.
+
+- Use the parser-only temporary Docker client configuration for authored PDF execution, preserving the verified local endpoint, environment guard and all isolation limits. Standard image build/installed acceptance remains incomplete.
+
+- Compose the controlled worker PDF byte-parser with the supervisor-selected immutable parser image, retaining fixture identity/digest checks and all SQL fences. Add actual RPC/SQL proof and failure-only controller timing diagnostics; installed/broker/CI acceptance remains pending.
+
+- Recognize the nine registered authored PDF routes in the composed fixture service binding; preserve default HTML refusal and normal SQL authorization. Add route/refusal and atomic rollback regressions.

@@ -4,12 +4,13 @@ export const syntheticPolicyProfiles = Object.freeze([
   Object.freeze({ id: 'html', label: 'Static HTML fixtures' }),
   Object.freeze({ id: 'xml', label: 'Controlled provider XML' }),
   Object.freeze({ id: 'html_browser', label: 'HTML + synthetic tooltip browser' }),
+  Object.freeze({ id: 'pdf', label: 'Authored local PDF fixtures (no downloads)' }),
 ] as const)
 export type SyntheticPolicyProfile = typeof syntheticPolicyProfiles[number]['id']
 export const defaultSyntheticPolicyProfile: SyntheticPolicyProfile = 'html'
 
 export function parseSyntheticPolicyProfile(value: unknown): SyntheticPolicyProfile {
-  if (value === 'html' || value === 'xml' || value === 'html_browser') return value
+  if (value === 'html' || value === 'xml' || value === 'html_browser' || value === 'pdf') return value
   throw new Error('Unknown synthetic policy profile')
 }
 
@@ -19,11 +20,11 @@ export function syntheticPolicy(profile: SyntheticPolicyProfile = defaultSynthet
   return Object.freeze({
     execution_mode: 'fixture', purpose: 'academic_contact_research',
     allowed_hosts: Object.freeze(['synthetic.publisher.example']),
-    allowed_operations: Object.freeze(['search', selected === 'xml' ? 'fetch_xml' : 'fetch_html', 'extract_contacts', 'retain_excerpt', 'export_contacts', ...(selected === 'html_browser' ? ['browser'] : [])]),
+    allowed_operations: Object.freeze(['search', selected === 'pdf' ? 'parse_fixture_pdf' : selected === 'xml' ? 'fetch_xml' : 'fetch_html', 'extract_contacts', 'retain_excerpt', 'export_contacts', ...(selected === 'html_browser' ? ['browser'] : [])]),
     permission_reference: 'synthetic-fixtures-only', credential_reference: null,
     allowed_regions: Object.freeze(['test-only']), robots_handling: 'fixture_no_network',
     limits: Object.freeze({ max_concurrent_requests: 1, min_request_interval_seconds: 5, max_articles_per_job: 500 }),
-    retention: Object.freeze({ raw_hours: selected === 'xml' ? 0 : 24, excerpt_days: 30, contact_days: 90 }),
+    retention: Object.freeze({ raw_hours: selected === 'xml' || selected === 'pdf' ? 0 : 24, excerpt_days: 30, contact_days: 90 }),
     export_contacts_allowed: true, valid_until: new Date(now + 86400000).toISOString(),
   })
 }

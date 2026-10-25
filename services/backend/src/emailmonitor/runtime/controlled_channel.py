@@ -15,12 +15,14 @@ if TYPE_CHECKING:
 from uuid import uuid4
 
 from emailmonitor.config import Settings
+from emailmonitor.extraction.pdf import PdfObservation
 from emailmonitor.extraction.sciencedirect import MAX_BYTES, XmlObservation
 from emailmonitor.fetching.fixture import require_fixture
 from emailmonitor.fetching.provider_proxy import exact_binding
 from emailmonitor.fetching.resources import HopResources
 from emailmonitor.fetching.safety import FetchDenied, classify_url
 from emailmonitor.fetching.sciencedirect import AcquiredResponse, ProviderBoundary, ProviderRequest
+from emailmonitor.parsing.pdf_protocol import PdfExpectation
 from emailmonitor.parsing.xml_protocol import XmlExpectation
 from emailmonitor.runtime.controlled_diagnostics import bucket_elapsed
 from emailmonitor.sources.provider_documents import QUERY
@@ -322,6 +324,40 @@ class ControlledChannel:
             ):
                 raise ValueError
             observed = XmlObservation.model_validate(frame["observation"])
+            expected.check_observation(observed)
+            return observed
+        except Exception:
+            self.pipe.poisoned = True
+            raise FetchDenied("controlled_channel_failed") from None
+        finally:
+            self._lock.release()
+
+    def parse_pdf(
+        self, settings: Settings, data: bytes, *, expected: PdfExpectation
+    ) -> PdfObservation:
+        require_fixture(settings)
+        expected = PdfExpectation.model_validate(expected.model_dump())
+        expected.check_bytes(data)
+        identifier = self._start()
+        deadline = time.monotonic() + 120
+        try:
+            self.pipe.send(
+                {
+                    "kind": "parse_pdf",
+                    "id": identifier,
+                    "expected": expected.model_dump(mode="json"),
+                    "body": base64.b64encode(data).decode("ascii"),
+                },
+                deadline,
+            )
+            frame = self.pipe.receive(deadline)
+            if (
+                set(frame) != {"kind", "id", "observation"}
+                or frame["kind"] != "pdf_parsed"
+                or frame["id"] != identifier
+            ):
+                raise ValueError
+            observed = PdfObservation.model_validate_json(json.dumps(frame["observation"]))
             expected.check_observation(observed)
             return observed
         except Exception:

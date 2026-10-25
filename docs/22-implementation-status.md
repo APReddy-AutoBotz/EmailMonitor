@@ -651,3 +651,27 @@ modified. Exact-head hosted acceptance remains required.
 ### Isolated receipt concurrency candidate
 
 Forward migration 0017 replaces only `execution_confirmed` with a receipt-specific shared job fence and advances service schema readiness. It preserves existing authority predicates and outbox updates; the generic control fence is unchanged. Publication is pending focused proof review. Export reconciliation remains unchanged. Source-policy and full revocation/deletion interleavings are not declared accepted.
+
+
+### Durable authored PDF candidate — acceptance incomplete
+
+The explicit opt-in fixture-only implementation and acceptance inventory are in
+[design70](70-durable-fixture-pdf-design.md). Pure retained/protocol checks and actual
+SQL journeys are distinct from isolated parser acceptance. The parser-only client configuration prevents automatic proxy injection
+without changing the environment guard. Standard packaging and complete installed
+acceptance remain pending; see the current design for validation limits.
+Published PR50 stays unchanged. No live fetching, grants or deployment are enabled.
+
+The controlled PDF candidate now composes the worker's bounded byte-parser capability
+with the supervisor-selected immutable image. Nine actual isolated RPC cases and
+two actual tenant SQL cases cover fixture-only transport, replay/review/export and
+cancellation-before-commit. This is not installed artifact/broker certification.
+The controller timeout now has failure-only phase/stack diagnostics with its original
+20-second deadline; the historical timeout is not claimed repaired.
+
+The first PDF hosted candidate passed seven ordinary workflows and the actual
+PDF post-observation crash/recovery case. Its installed browser case refused launch
+because composed service bindings omitted registered PDF routes. A bounded routing
+correction adds only those nine authored fixtures to the composed profile; default
+HTML and unknown-route refusal remain. Installed browser acceptance remains pending
+new exact-head execution.

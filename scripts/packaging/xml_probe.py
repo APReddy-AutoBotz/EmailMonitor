@@ -25,6 +25,8 @@ XML_FILES = (
     "discovery/planning.py",
     "extraction/__init__.py",
     "extraction/html.py",
+    "extraction/pdf.py",
+    "extraction/pdf_fixture.py",
     "extraction/sciencedirect.py",
     "extraction/xml_retained.py",
     "fetching/__init__.py",
@@ -43,6 +45,8 @@ XML_FILES = (
     "parsing/__init__.py",
     "parsing/affiliation_diagnostic.py",
     "parsing/affiliation_diagnostic_worker.py",
+    "parsing/pdf_protocol.py",
+    "parsing/pdf_worker.py",
     "parsing/xml_protocol.py",
     "parsing/xml_worker.py",
     "progress/__init__.py",
@@ -217,7 +221,7 @@ def main() -> None:
     if [name for _, name in socket.if_nameindex()] != ["lo"]:
         raise RuntimeError("xml_image_network_refused")
     distributions = verify_layout()
-    from emailmonitor.parsing import affiliation_diagnostic_worker, xml_worker  # noqa: F401
+    from emailmonitor.parsing import affiliation_diagnostic_worker, pdf_worker, xml_worker  # noqa: F401
 
     loaded = {
         Path(module.__file__).relative_to(ROOT / "src/emailmonitor").as_posix()

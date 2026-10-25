@@ -124,6 +124,8 @@ class Item(BaseModel):
         "requires_review",
         "browser_not_completed",
         "xml_partial",
+        "pdf_partial",
+        "pdf_unsupported",
         "xml_unsupported",
         "source_policy_changed",
         "worker_failure",

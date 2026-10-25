@@ -223,6 +223,14 @@ def conversation(
                                         if diagnostic.installed_export_step is not None
                                         else ""
                                     )
+                                    + (
+                                        "; evidence focus trace="
+                                        + json.dumps(
+                                            diagnostic.model_dump()["evidence_focus_trace"]
+                                        )
+                                        if diagnostic.evidence_focus_trace is not None
+                                        else ""
+                                    )
                                     + "; actual reply statuses="
                                     + str(diagnostic.api_statuses)
                                 )

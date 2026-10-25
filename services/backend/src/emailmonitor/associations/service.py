@@ -20,6 +20,7 @@ from emailmonitor.associations.review import apply_review
 from emailmonitor.config import Settings
 from emailmonitor.discovery.service import Discovery
 from emailmonitor.extraction.html import ArticleObservation
+from emailmonitor.extraction.pdf_retained import RetainedPdf
 from emailmonitor.extraction.service import Extraction
 from emailmonitor.extraction.xml_retained import RetainedXml
 from emailmonitor.organizations.database import AuthorizationDenied, RevisionConflict
@@ -134,7 +135,9 @@ article_url=:url FOR SHARE
             ) or source["deletion_generation"] != row["deletion_generation"]:
                 raise AuthorizationDenied()
             observed = (
-                RetainedXml.model_validate_json(json.dumps(source["observation"]))
+                RetainedPdf.model_validate_json(json.dumps(source["observation"]))
+                if source["observation"].get("route") == "pdf"
+                else RetainedXml.model_validate_json(json.dumps(source["observation"]))
                 if source["observation"].get("route") == "article_xml"
                 else ArticleObservation.model_validate(source["observation"])
             )

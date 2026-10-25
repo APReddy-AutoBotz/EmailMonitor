@@ -20,6 +20,7 @@ from operator_ui_protocol import (
     EVIDENCE_PHASES,
     OUTCOME_PHASES,
     STAGES,
+    EvidenceFocusTrace,
     FocusExhaustion,
     ObservationTrace,
     OutcomeReplayReadiness,
@@ -321,6 +322,91 @@ async def prove_delayed_outcome_replay(
         for handle in (old, current):
             if handle is not None:
                 await handle.dispose()
+
+
+async def start_evidence_focus_trace(page: Page) -> JSHandle | None:
+    """Passive fixed-category observation; never changes focus or captures content."""
+    try:
+        return await asyncio.wait_for(
+            page.evaluate_handle("""() => {
+            const dialog = document.querySelector('dialog[aria-labelledby="evidence-title"]');
+            const trace = {states: [], truncated: false, close_seen: false};
+            const current = () => document.querySelector(
+                '[aria-label="Scrollable contact results"] tbody button');
+            const sample = event => {
+                const active = document.activeElement, opener = current();
+                const state = {event, dialog_connected: dialog?.isConnected === true,
+                    dialog_open: dialog?.open === true, close_seen: trace.close_seen,
+                    opener_connected: opener?.isConnected === true,
+                    contacts_present: document.querySelector(
+                        '[aria-label="Scrollable contact results"]') !== null,
+                    active_kind: active === opener && opener ? 'opener'
+                        : dialog?.contains(active) ? 'dialog'
+                        : active?.matches('p[tabindex="-1"]') ? 'fallback'
+                        : active === document.body ? 'body' : 'other'};
+                if (trace.states.length < 8) trace.states.push(state);
+                else { trace.truncated = true; trace.states[7] = state; }
+            };
+            const close = () => { trace.close_seen = true; sample('close'); };
+            const focus = () => sample('focus');
+            const observer = new MutationObserver(() => sample('mutation'));
+            dialog?.addEventListener('close', close);
+            document.addEventListener('focusin', focus);
+            observer.observe(document.body, {childList: true, subtree: true,
+                attributes: true, attributeFilter: ['open']});
+            let timer;
+            trace.stop = () => { clearTimeout(timer); observer.disconnect();
+                dialog?.removeEventListener('close', close);
+                document.removeEventListener('focusin', focus); };
+            trace.finish = () => { sample('assertion'); trace.stop();
+                return {states: trace.states, truncated: trace.truncated}; };
+            timer = setTimeout(trace.stop, 10000);
+            sample('start'); return trace;
+        }"""),
+            timeout=0.1,
+        )
+    except Exception:
+        return None
+
+
+async def wait_evidence_closed(page: Page) -> None:
+    """Native hidden precedes React close handling; require the exact dialog's removal."""
+    # CSS deliberately includes the hidden element. A default role locator excludes it.
+    # Inherit the unchanged page timeout; do not add a retry or move focus here.
+    await page.locator('dialog[aria-labelledby="evidence-title"]').wait_for(state="detached")
+
+
+async def check_evidence_focus(
+    page: Page,
+    trace: JSHandle | None,
+) -> tuple[bool, EvidenceFocusTrace | Literal["unavailable"]]:
+    """Preserve the original immediate current-opener assertion, with passive evidence."""
+    try:
+        value = await page.get_by_role(
+            "button", name="Evidence and review", exact=True
+        ).first.evaluate(
+            """(node, trace) => ({
+            restored: node === document.activeElement,
+            trace: trace ? trace.finish() : null
+        })""",
+            trace,
+        )
+        restored = value["restored"]
+        if type(restored) is not bool:
+            raise RuntimeError("Invalid focus assertion result")
+        try:
+            snapshot: EvidenceFocusTrace | Literal["unavailable"] = (
+                EvidenceFocusTrace.model_validate(value["trace"])
+            )
+        except Exception:
+            snapshot = "unavailable"
+        return restored, snapshot
+    finally:
+        if trace is not None:
+            try:
+                await asyncio.wait_for(trace.dispose(), timeout=0.1)
+            except Exception:
+                pass
 
 
 async def start_observation_trace(opener: Locator) -> JSHandle | None:
@@ -1044,6 +1130,8 @@ async def main() -> None:
     outcome_phase: str | None = None
     evidence_phase: str | None = None
     observation_trace: ObservationTrace | Literal["unavailable"] | None = None
+    evidence_focus_trace: EvidenceFocusTrace | Literal["unavailable"] | None = None
+    evidence_focus_observations: dict[str, object] = {}
 
     def checkpoint(value: str) -> None:
         nonlocal stage, outcome_phase, evidence_phase
@@ -1823,12 +1911,18 @@ async def main() -> None:
                 page.get_by_role("button", name="Refresh association and evidence", exact=True),
             )
             await expect(quality).to_contain_text("Retained parser outcome:")
+            evidence_checkpoint("escape_close")
+            focus_trace = await start_evidence_focus_trace(page)
             await page.keyboard.press("Escape")
-            await page.get_by_role("dialog").wait_for(state="hidden")
-            if not await page.get_by_role(
-                "button", name="Evidence and review", exact=True
-            ).first.evaluate("node => node === document.activeElement"):
+            await wait_evidence_closed(page)
+            restored, evidence_focus_trace = await check_evidence_focus(page, focus_trace)
+            if not restored:
                 raise RuntimeError("Evidence dialog did not restore keyboard focus")
+            evidence_focus_observations["escape_close"] = (
+                evidence_focus_trace.model_dump()
+                if isinstance(evidence_focus_trace, EvidenceFocusTrace)
+                else "unavailable"
+            )
             await activate(
                 page, page.get_by_role("button", name="Evidence and review", exact=True).first
             )
@@ -1837,12 +1931,19 @@ async def main() -> None:
                 page.get_by_role("button", name="Refresh association and evidence", exact=True),
             )
             await expect(quality).to_contain_text("Retained parser outcome:")
+            evidence_checkpoint("button_close")
+            focus_trace = await start_evidence_focus_trace(page)
             await activate(page, page.get_by_role("button", name="Close evidence", exact=True))
-            await page.get_by_role("dialog").wait_for(state="hidden")
-            if not await page.get_by_role(
-                "button", name="Evidence and review", exact=True
-            ).first.evaluate("node => node === document.activeElement"):
+            await wait_evidence_closed(page)
+            restored, evidence_focus_trace = await check_evidence_focus(page, focus_trace)
+            if not restored:
                 raise RuntimeError("Evidence dialog did not restore keyboard focus")
+            evidence_focus_observations["button_close"] = (
+                evidence_focus_trace.model_dump()
+                if isinstance(evidence_focus_trace, EvidenceFocusTrace)
+                else "unavailable"
+            )
+            evidence_focus_trace = None
             await activate(
                 page, page.get_by_role("button", name="Evidence and review", exact=True).first
             )
@@ -2152,6 +2253,7 @@ async def main() -> None:
                         "review": True,
                         "pause_resume_cancel_dismiss": True,
                         "dialog_focus_restore": True,
+                        "evidence_focus_observations": evidence_focus_observations,
                         "configuration_keyboard": True,
                         "branding_scope_clear": True,
                         "optional_field_preview": True,
@@ -2186,6 +2288,15 @@ async def main() -> None:
                             else observation_trace
                         }
                         if observation_trace is not None
+                        else {}
+                    ),
+                    **(
+                        {
+                            "evidence_focus_trace": evidence_focus_trace.model_dump()
+                            if isinstance(evidence_focus_trace, EvidenceFocusTrace)
+                            else evidence_focus_trace
+                        }
+                        if failure_reason(error) == "dialog_focus_restore"
                         else {}
                     ),
                     **({"evidence_phase": evidence_phase} if evidence_phase is not None else {}),

@@ -748,13 +748,18 @@ def test_service_real_excess_login_privilege_refuses_new_and_existing_pool(
             pytest.fail("A pre-existing pool must not retain excess login authority")
 
 
+@pytest.mark.parametrize("route", ["provider", "pdf"])
 def test_reference_service_unsupported_provider_start_rolls_back_atomically(
     scenario: Scenario,
+    route: str,
 ) -> None:
     from emailmonitor.runtime.delegation import ServiceBinding, ServiceBindings
+    from test_pdf_pipeline_tenant import planned_pdf
     from test_provider_journey_tenant import planned_provider
 
-    progress, job = planned_provider(scenario)
+    progress, job = (
+        planned_pdf(scenario, "article-a.pdf") if route == "pdf" else planned_provider(scenario)
+    )
     org = scenario.organizations[0]
     before = progress.snapshot(org, job)
     bound = Progress(

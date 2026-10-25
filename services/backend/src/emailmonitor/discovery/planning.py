@@ -82,6 +82,12 @@ def plan_input(request: JobRequest) -> InputPlan:
         return InputPlan("search_results", "supported_fixture", url.normalized)
     if url.path in ARTICLE_PATHS or url.path == "/article-xml.xml":
         return InputPlan("article", "supported_fixture", url.normalized)
+    from emailmonitor.extraction.pdf_fixture import DIGESTS
+
+    if url.normalized in {ORIGIN + "/" + name for name in DIGESTS}:
+        if not request.options.allow_pdf:
+            return InputPlan("unsupported", "pdf_disabled")
+        return InputPlan("article", "authored_local_pdf", url.normalized)
     if url.path.lower().endswith(".pdf"):
         return InputPlan("unsupported", "fixture_pdf_unavailable")
     return InputPlan("unsupported", "fixture_route_unavailable")

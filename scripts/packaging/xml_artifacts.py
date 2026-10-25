@@ -19,7 +19,7 @@ from artifacts import (
     read,
 )
 
-# Audited import-only closure of the ordinary and explicit diagnostic guests, including
+# Declared import-only closure of the ordinary and explicit diagnostic guests, including
 # package initializers. Shared models currently import fixture helper CODE. No
 # fixture/sample ASSETS, tests, credentials or unrelated source enter the context.
 XML_FILES = (
@@ -31,6 +31,8 @@ XML_FILES = (
     "discovery/planning.py",
     "extraction/__init__.py",
     "extraction/html.py",
+    "extraction/pdf.py",
+    "extraction/pdf_fixture.py",
     "extraction/sciencedirect.py",
     "extraction/xml_retained.py",
     "fetching/__init__.py",
@@ -49,6 +51,8 @@ XML_FILES = (
     "parsing/__init__.py",
     "parsing/affiliation_diagnostic.py",
     "parsing/affiliation_diagnostic_worker.py",
+    "parsing/pdf_protocol.py",
+    "parsing/pdf_worker.py",
     "parsing/xml_protocol.py",
     "parsing/xml_worker.py",
     "progress/__init__.py",

@@ -10,3 +10,6 @@ grep -F 'INSTALLED_CONTROLLED_XML_DIRECT_URL_REVIEW_EXPORT' "$RUNNER_TEMP/instal
 ! grep -Eq '[0-9]+ skipped|[0-9]+ warnings?' "$RUNNER_TEMP/installed-xml-acceptance.log"
 grep -F 'INSTALLED_CONTROLLED_XML_POST_OBSERVATION_CRASH_RECOVERY' "$RUNNER_TEMP/installed-xml-acceptance.log"
 grep -F 'INSTALLED_CONTROLLED_XML_DELEGATION_REVOKED_DURING_RESPONSE' "$RUNNER_TEMP/installed-xml-acceptance.log"
+
+grep -F 'INSTALLED_AUTHORED_PDF_DIRECT_URL_REVIEW_EXPORT' "$RUNNER_TEMP/installed-xml-acceptance.log"
+grep -F 'INSTALLED_AUTHORED_PDF_POST_OBSERVATION_CRASH_RECOVERY' "$RUNNER_TEMP/installed-xml-acceptance.log"

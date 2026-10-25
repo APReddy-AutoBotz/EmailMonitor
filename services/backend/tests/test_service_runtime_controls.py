@@ -703,12 +703,20 @@ def test_cli_actual_celery_controller_keeps_fixed_failure_streams(tmp_path: Path
     path = tmp_path / "synthetic-worker.json"
     path.write_text(configuration().model_dump_json())
     source = """
-import socket, sys
+import socket, sys, faulthandler, time
+trace = open(sys.argv[3], "w")
+faulthandler.dump_traceback_later(15, file=trace)
+started = time.monotonic()
+def phase(name):
+    trace.write(name + " " + str(round(time.monotonic()-started, 3)) + chr(10))
+    trace.flush()
+phase("imports_started")
 sys.path.insert(0,sys.argv[2])
 from types import SimpleNamespace
 from emailmonitor.runtime import entrypoint
 from emailmonitor.runtime.worker import broker_application
 from emailmonitor.runtime import worker as worker_module
+phase("imports_done")
 config = entrypoint.load_config(__import__('pathlib').Path(sys.argv[1]))
 app = broker_application(config)
 original = app.Worker
@@ -718,8 +726,11 @@ def forbidden(*args, **kwargs):
 socket.socket.connect = forbidden
 socket.create_connection = forbidden
 def controller(**options):
+    phase("controller_started")
     value = original(**options)
+    phase("controller_constructed")
     value.on_start()
+    phase("on_start_done")
     assert (sys.stdout, sys.stderr) == streams
     assert value.quiet and not value.redirect_stdouts
     def fail(*args, **kwargs):
@@ -731,21 +742,33 @@ worker_module.ServiceWorker = lambda supplied: SimpleNamespace(application=app,c
 sys.argv = ['service','worker','--config',sys.argv[1]]
 assert entrypoint.main() == 1
 assert (sys.stdout, sys.stderr) == streams
+phase("completed")
+faulthandler.cancel_dump_traceback_later()
+trace.close()
 """
-    result = subprocess.run(
-        [
-            sys.executable,
-            "-B",
-            "-c",
-            source,
-            str(path),
-            str(Path(worker_module.__file__).resolve().parents[2]),
-        ],
-        capture_output=True,
-        text=True,
-        timeout=20,
-        check=False,
-    )
+    try:
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-B",
+                "-c",
+                source,
+                str(path),
+                str(Path(worker_module.__file__).resolve().parents[2]),
+                str(tmp_path / "controller-phases.txt"),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as error:
+        try:
+            with (tmp_path / "controller-phases.txt").open() as diagnostic:
+                error.add_note(diagnostic.read(8192))
+        except OSError:
+            error.add_note("controller_diagnostic_unavailable")
+        raise
     assert result.returncode == 0, result.stderr
     assert result.stdout == ""
     assert result.stderr.endswith("service_runtime_failed\n")

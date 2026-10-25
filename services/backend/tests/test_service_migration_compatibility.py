@@ -13,6 +13,7 @@ from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
@@ -25,7 +26,7 @@ from sqlalchemy.exc import DBAPIError
 from test_source_foundation import policy_body
 
 ROOT = Path(__file__).resolve().parents[3]
-HEAD = "0017_execution_receipt_lock"
+HEAD = "0018_authored_pdf"
 FILTER_PREVIOUS = "0015_service_plan_cache"
 SERVICE_PREVIOUS = "0014_service_authority"
 PREVIOUS = "0013_provider_journey"
@@ -207,6 +208,71 @@ def history(c: Connection) -> dict[str, list[tuple[object, ...]]]:
         )
         for table in HISTORY_TABLES
     }
+
+
+# Independent expected 0018 catalog delta. Do not derive this from migration SQL.
+PDF_MIGRATION_DIGESTS = {
+    "ambiguous.pdf": "7ff5d5fe802aa77b1ce845f9ebb2fcfbe98e556f96836716045e949ee7645306",
+    "article-a.pdf": "a216f8bde348256ee912f592956dfc66ea83b106e2f4c05b3c6a28f5e6cfd9cc",
+    "article-b.pdf": "e24a7228b39e04c6f56203317ef90300c6a8b622b16f3672c8cc83784d0d0b8a",
+    "corrupt.pdf": "bfdd8c6384be76b5ab1ed6f2aa9a2a3fdcb49c8f62ffda3bdcb85091bc14b111",
+    "encrypted.pdf": "4e253514d7bb1007937cc7456821c9b5393a275e748658847208590029e4b18e",
+    "no-contact.pdf": "3db38695a632f805b3b56571f12c133bbd80c56d4cddcbc812a025876e8e1d59",
+    "page-cap.pdf": "8e64ad429519fe6f45c17902e032e57f4d0568f3809475bb350f6f532878cb59",
+    "scanned.pdf": "a1c762aad46bd8f0eda32a51dee4d8026ac7800c38b4e1f04578d5d9ee98d089",
+    "wrapped.pdf": "ee5449815873cca0eca7e919b340d0598b1863f4bf439a9b4eef14fae6b893fb",
+}
+
+
+def assert_pdf_upgrade_history(
+    before: dict[str, list[tuple[object, ...]]],
+    after: dict[str, list[tuple[object, ...]]],
+) -> None:
+    """Only the exact authored fixture catalog extension may alter history."""
+    assert before.keys() == after.keys()
+    assert "source_catalog" in before
+    for table in before.keys() - {"source_catalog"}:
+        assert after[table] == before[table], table
+
+    def catalog(values: list[tuple[object, ...]]) -> list[dict[str, Any]]:
+        result: list[dict[str, Any]] = []
+        for row in values:
+            assert len(row) == 1 and isinstance(row[0], str)
+            value = json.loads(row[0])
+            assert isinstance(value, dict)
+            result.append(value)
+        assert len({row["source_id"] for row in result}) == len(result)
+        return result
+
+    expected = catalog(before["source_catalog"])
+    actual = catalog(after["source_catalog"])
+    targets = [row for row in expected if row["source_id"] == "synthetic-publisher"]
+    assert len(targets) == 1
+    target = targets[0]
+    assert target["execution_mode"] == "fixture"
+    operations = target["allowed_operations"]
+    support = target["support"]
+    assert isinstance(operations, list) and "parse_fixture_pdf" not in operations
+    assert isinstance(support, dict)
+    assert "authored_pdf_digests" not in support and "pdf_fixture_opt_in" not in support
+    routes = support["routes_by_operation"]
+    assert isinstance(routes, dict) and "parse_fixture_pdf" not in routes
+    paths = ["/" + name for name in PDF_MIGRATION_DIGESTS]
+    operations.append("parse_fixture_pdf")
+    support["authored_pdf_digests"] = {
+        "https://synthetic.publisher.example/" + name: digest
+        for name, digest in PDF_MIGRATION_DIGESTS.items()
+    }
+    support["pdf_fixture_opt_in"] = True
+    routes["parse_fixture_pdf"] = paths.copy()
+    for operation in ("extract_contacts", "retain_excerpt", "export_contacts"):
+        assert isinstance(routes[operation], list)
+        assert not any(path in routes[operation] for path in paths)
+        routes[operation] = routes[operation] + paths
+    # JSON object order is immaterial; all values, fields and array order remain exact.
+    assert sorted(json.dumps(row, sort_keys=True) for row in actual) == sorted(
+        json.dumps(row, sort_keys=True) for row in expected
+    )
 
 
 @dataclass(frozen=True)
@@ -489,7 +555,7 @@ def test_actual_fresh_and_populated_upgrade_schema_acl_rls_equivalence(
                     )
                 ).scalar_one()
                 if target is migration_pair.upgraded:
-                    assert history(c) == migration_pair.before
+                    assert_pdf_upgrade_history(migration_pair.before, history(c))
                     for table in ("admission_requests", "source_resource_requests"):
                         assert (
                             c.execute(

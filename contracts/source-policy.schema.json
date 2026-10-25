@@ -81,10 +81,11 @@
           "extract_contacts",
           "retain_excerpt",
           "export_contacts",
-          "fetch_xml"
+          "fetch_xml",
+          "parse_fixture_pdf"
         ]
       },
-      "maxItems": 7
+      "maxItems": 8
     },
     "permission_reference": {
       "type": [

@@ -84,6 +84,8 @@ class Extraction:
             ),
         )
         options = JobRequest.model_validate(parent["request"]).options
+        if url.endswith(".pdf") and not options.allow_pdf:
+            raise AuthorizationDenied()
         if browser and (
             url != "https://synthetic.publisher.example/tooltip.html"
             or not options.allow_browser

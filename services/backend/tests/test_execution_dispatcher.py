@@ -43,7 +43,8 @@ def worker_config(**changes: object) -> FixtureWorkerConfig:
 
 
 @pytest.mark.parametrize(
-    "field", ["executor_factory", "provider", "transport", "import_path", "credentials"]
+    "field",
+    ["executor_factory", "provider", "transport", "import_path", "credentials", "pdf_parser"],
 )
 def test_configuration_and_queue_cannot_select_execution(field: str) -> None:
     with pytest.raises(ValidationError):
