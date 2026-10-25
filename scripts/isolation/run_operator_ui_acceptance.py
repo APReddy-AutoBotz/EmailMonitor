@@ -237,6 +237,18 @@ def conversation(
                                         if diagnostic.export_assertion_line is not None
                                         else ""
                                     )
+                                    + (
+                                        "; handoff trace="
+                                        + json.dumps(diagnostic.model_dump()["handoff_trace"])
+                                        if diagnostic.handoff_trace is not None
+                                        else ""
+                                    )
+                                    + (
+                                        "; login timing="
+                                        + diagnostic.installed_login_timing.model_dump_json()
+                                        if diagnostic.installed_login_timing is not None
+                                        else ""
+                                    )
                                     + "; actual reply statuses="
                                     + str(diagnostic.api_statuses)
                                 )

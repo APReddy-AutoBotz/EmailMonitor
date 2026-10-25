@@ -22,6 +22,7 @@ from operator_ui_protocol import (
     STAGES,
     EvidenceFocusTrace,
     FocusExhaustion,
+    HandoffTrace,
     ObservationTrace,
     OutcomeReplayReadiness,
     ReplayRequest,
@@ -44,6 +45,61 @@ from playwright.async_api import (
 )
 
 ORIGIN = "https://app.example.test"
+
+HANDOFF_OBSERVER = """(() => {
+    const trace = {key_events: 0, click_events: 0, trusted_click: false,
+        disabled_on_enter: null, focused_on_enter: null, last_enter_target: 'none',
+        error_count: 0, error_kind: 'none'};
+    window.__emHandoffTrace = trace;
+    const target = node => node?.tagName === 'BUTTON'
+        && node.textContent === 'View accepted results for this selection';
+    document.addEventListener('keydown', event => {
+        if (event.key !== 'Enter') return;
+        trace.last_enter_target = target(event.target) ? 'handoff' : 'other';
+        if (target(event.target)) {
+            trace.key_events = Math.min(2, trace.key_events + 1);
+            trace.disabled_on_enter = event.target.disabled;
+            trace.focused_on_enter = event.target === document.activeElement;
+        }
+    }, true);
+    document.addEventListener('click', event => {
+        if (target(event.target)) {
+            trace.click_events = Math.min(2, trace.click_events + 1);
+            trace.trusted_click = event.isTrusted;
+        }
+    }, true);
+    const error = value => {
+        trace.error_count = Math.min(2, trace.error_count + 1);
+        trace.error_kind = value?.name === 'TypeError' ? 'type'
+            : value?.name === 'ReferenceError' ? 'reference' : 'other';
+    };
+    window.addEventListener('error', event => error(event.error));
+    window.addEventListener('unhandledrejection', event => error(event.reason));
+})()"""
+
+
+async def handoff_snapshot(page: Page) -> HandoffTrace | Literal["unavailable"]:
+    try:
+        value = await asyncio.wait_for(
+            page.evaluate("""() => {
+            const trace = window.__emHandoffTrace;
+            const screen = document.querySelector('h3')?.textContent;
+            const label = Array.from(document.querySelectorAll('label')).find(
+                node => node.firstChild?.textContent === 'Association state');
+            const value = label?.querySelector('select')?.value;
+            return {...trace, screen: screen === 'Contacts' ? 'contacts'
+                : screen === 'Review queue' ? 'review' : 'other',
+                association: value === undefined ? 'missing'
+                : ['accepted','needs_review','unmatched','rejected'].includes(value)
+                    ? value : 'other'};
+        }"""),
+            timeout=0.1,
+        )
+        return HandoffTrace.model_validate(value)
+    except Exception:
+        return "unavailable"
+
+
 focus_exhaustion: FocusExhaustion | Literal["unavailable"] | None = None
 HEADERS = {
     "content-type",
@@ -1170,6 +1226,7 @@ async def main() -> None:
             context = await browser.new_context(service_workers="block", accept_downloads=False)
             await context.add_cookies(setup["cookies"])
             page = await context.new_page()
+            await page.add_init_script(HANDOFF_OBSERVER)
             page.set_default_timeout(10000)
             checkpoint("sandbox")
             await page.goto("chrome://sandbox", wait_until="domcontentloaded")
@@ -2324,6 +2381,7 @@ async def main() -> None:
             await browser.close()
     except Exception as error:
         name = type(error).__name__
+        handoff = await handoff_snapshot(page) if stage == "export_preview" else None
         # Report before cancelling the owned stdin reader: its executor shutdown awaits host EOF.
         print(
             json.dumps(
@@ -2332,6 +2390,15 @@ async def main() -> None:
                     "stage": stage,
                     "error": name if name in ERRORS else "UnexpectedError",
                     "reason": failure_reason(error),
+                    **(
+                        {
+                            "handoff_trace": handoff.model_dump()
+                            if isinstance(handoff, HandoffTrace)
+                            else handoff
+                        }
+                        if handoff is not None
+                        else {}
+                    ),
                     **(
                         {"export_assertion_line": export_assertion_line(error)}
                         if stage == "export_preview" and type(error) is AssertionError

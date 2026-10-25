@@ -51,3 +51,9 @@ reauthentication occurs during `url_worker`, just as keyword reauthentication
 occurs during `keyword_worker`. Both real failure stages now preserve the existing
 login diagnostic. This corrects failure reporting only; it does not establish or
 repair the underlying assertion/login cause, change deadlines or accept a refusal.
+
+A subsequent measurement records only fixed keyboard/click categories and the
+accepted/review screen state on handoff failure. Existing login checkpoints also
+record capped monotonic elapsed milliseconds, including callback fulfillment.
+Observers never prevent events, move focus, retry actions or change deadlines.
+No exception message, input text, URL, cookie, identity or contact data is emitted.

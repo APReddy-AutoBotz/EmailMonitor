@@ -29,6 +29,7 @@ from operator_ui_protocol import (
     InstalledExportStep,
     InstalledLoginPhase,
     InstalledReason,
+    LoginTiming,
     failure_reason,
 )
 from playwright.async_api import Error, Request, Route, async_playwright, expect
@@ -117,6 +118,7 @@ async def main() -> None:
     evidence_phase: str | None = None
     diagnostics = InstalledDiagnostics()
     login_phase: InstalledLoginPhase | None = None
+    login_timing = LoginTiming()
     callback_delivery = CallbackDeliveryTrace()
     callback_target: str | None = None
     login_reason: InstalledReason = "installed_login_failed"
@@ -325,7 +327,10 @@ async def main() -> None:
                     status=response["status"], headers=response["headers"], body=bytes(output)
                 )
                 if callback_document:
+                    previous_delivery = callback_delivery.value
                     callback_delivery.observe(callback_generation, incoming, "fulfilled")
+                    if previous_delivery != "fulfilled" and callback_delivery.value == "fulfilled":
+                        login_timing.fulfilled()
 
             async def safe_route(route: Route) -> None:
                 operation: list[InstalledReason] = ["installed_route_headers"]
@@ -380,12 +385,15 @@ async def main() -> None:
                 nonlocal login_phase, login_reason, callback_target
                 callback_delivery.reset()
                 callback_target = None
+                login_timing.begin()
                 async with asyncio.timeout(10):
                     login_phase = "initial_session"
+                    login_timing.phase()
                     await expect(
                         page.get_by_role("button", name="Retry connection", exact=True)
                     ).to_be_enabled()
                     login_phase = "start_activation"
+                    login_timing.phase()
                     redirects.begin()
                     await activate(
                         page,
@@ -394,26 +402,32 @@ async def main() -> None:
                         ),
                     )
                     login_phase = "authorize_failure"
+                    login_timing.phase()
                     authorization = await observer.next_target()
                     login_phase = "authorize_navigation"
+                    login_timing.phase()
                     try:
                         await page.goto(authorization, wait_until="domcontentloaded")
                     except Error:
                         # Only the separately observed exact failed child of the
                         # real issuer 303 can release its one-use callback target.
                         login_phase = "callback_failure"
+                        login_timing.phase()
                         callback = await observer.next_target()
                     else:
                         login_reason = "installed_expected_navigation_mismatch"
                         raise RuntimeError("Expected isolated redirect failure missing")
                     login_phase = "callback_document"
+                    login_timing.phase()
                     callback_target = callback
                     await page.goto(callback, wait_until="domcontentloaded")
                     login_phase = "callback_session"
+                    login_timing.phase()
                     await expect(
                         page.get_by_role("button", name="Retry connection", exact=True)
                     ).to_be_enabled()
                     login_phase = "callback_complete"
+                    login_timing.phase()
                     await activate(
                         page, page.get_by_role("button", name="Complete sign-in", exact=True)
                     )
@@ -421,6 +435,7 @@ async def main() -> None:
                         "combobox", name="Active organization", exact=True
                     ).wait_for()
                     login_phase = "organization"
+                    login_timing.phase()
                     organization = page.get_by_role(
                         "combobox", name="Active organization", exact=True
                     )
@@ -705,6 +720,11 @@ async def main() -> None:
                     "kind": "failure",
                     "stage": stage,
                     **fixed,
+                    **(
+                        {"installed_login_timing": login_timing.snapshot().model_dump()}
+                        if login_phase is not None
+                        else {}
+                    ),
                     **(
                         {"evidence_phase": evidence_phase}
                         if stage == "evidence_review" and evidence_phase is not None
