@@ -3,8 +3,10 @@
 import base64
 import json
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from time import monotonic
 from typing import Literal, get_args
 from urllib.parse import parse_qs, urlsplit
 from uuid import UUID
@@ -514,6 +516,63 @@ class EvidenceFocusTrace(BaseModel):
     truncated: bool
 
 
+class HandoffTrace(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    key_events: int = Field(ge=0, le=2)
+    click_events: int = Field(ge=0, le=2)
+    trusted_click: bool
+    disabled_on_enter: bool | None
+    focused_on_enter: bool | None
+    last_enter_target: Literal["handoff", "other", "none"]
+    screen: Literal["contacts", "review", "other"]
+    association: Literal["accepted", "needs_review", "unmatched", "rejected", "missing", "other"]
+    error_count: int = Field(ge=0, le=2)
+    error_kind: Literal["none", "type", "reference", "other"]
+
+
+class LoginTimingTrace(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    total_ms: int = Field(ge=0, le=60000)
+    phase_ms: int = Field(ge=0, le=60000)
+    callback_fulfilled_ms: int | None = Field(default=None, ge=0, le=60000)
+
+
+@dataclass
+class LoginTiming:
+    clock: Callable[[], float] = monotonic
+    started: float | None = None
+    phase_started: float | None = None
+    callback_fulfilled: float | None = None
+
+    def begin(self) -> None:
+        self.started = self.clock()
+        self.phase_started = self.started
+        self.callback_fulfilled = None
+
+    def phase(self) -> None:
+        self.phase_started = self.clock()
+
+    def fulfilled(self) -> None:
+        if self.callback_fulfilled is None:
+            self.callback_fulfilled = self.clock()
+
+    def snapshot(self) -> LoginTimingTrace:
+        now = self.clock()
+        if self.started is None or self.phase_started is None:
+            raise ValueError("Owned login measurement must be started")
+
+        def milliseconds(end: float, start: float) -> int:
+            return min(60000, max(0, int((end - start) * 1000)))
+
+        return LoginTimingTrace(
+            total_ms=milliseconds(now, self.started),
+            phase_ms=milliseconds(now, self.phase_started),
+            callback_fulfilled_ms=milliseconds(self.callback_fulfilled, self.started)
+            if self.callback_fulfilled is not None
+            else None,
+        )
+
+
 class DiagnosticFrame(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     kind: Literal["stage", "failure"]
@@ -547,6 +606,9 @@ class DiagnosticFrame(BaseModel):
         ]
         | InstalledReason
     ) = "unknown"
+    handoff_trace: HandoffTrace | Literal["unavailable"] | None = None
+    installed_login_timing: LoginTimingTrace | None = None
+    export_assertion_line: int | None = Field(default=None, ge=1, le=10000)
     outcome_phase: OutcomePhase | None = None
     observation_trace: ObservationTrace | Literal["unavailable"] | None = None
     evidence_phase: EvidencePhase | None = None
@@ -570,6 +632,20 @@ class DiagnosticFrame(BaseModel):
             and (self.error is not None or self.api_statuses or self.reason != "unknown")
         ):
             raise ValueError("Explicit failure or fixed stage required")
+        if self.handoff_trace is not None and (
+            self.kind != "failure" or self.stage != "export_preview"
+        ):
+            raise ValueError("Handoff trace requires its exact failure stage")
+        if self.installed_login_timing is not None and (
+            self.kind != "failure" or self.installed_login_phase is None
+        ):
+            raise ValueError("Login timing requires its owned login failure")
+        if self.export_assertion_line is not None and (
+            self.kind != "failure"
+            or self.stage != "export_preview"
+            or self.error != "AssertionError"
+        ):
+            raise ValueError("Export assertion location requires its exact failure stage")
         if self.outcome_phase is not None and (
             self.kind != "failure" or self.stage != "url_worker"
         ):
@@ -608,7 +684,8 @@ class DiagnosticFrame(BaseModel):
         ):
             raise ValueError("Callback delivery requires its exact navigation failure")
         if self.installed_login_phase is not None and (
-            self.kind != "failure" or self.stage not in {"assets_session", "keyword_worker"}
+            self.kind != "failure"
+            or self.stage not in {"assets_session", "keyword_worker", "url_worker"}
         ):
             raise ValueError("Installed login phase requires its exact failure stage")
         return self
@@ -648,6 +725,22 @@ def stderr_summary(raw: bytes) -> dict[str, object]:
         "classes": errors[:8],
         "frames": [{"file": name, "line": int(line)} for name, line in frames[-8:]],
     }
+
+
+def export_assertion_line(error: BaseException) -> int | None:
+    """Only a fixed harness source coordinate; no exception message or local values."""
+    if type(error) is not AssertionError:
+        return None
+    frame = error.__traceback__
+    line = None
+    while frame is not None:
+        if (
+            Path(frame.tb_frame.f_code.co_filename).name == "operator_ui_acceptance.py"
+            and 1 <= frame.tb_lineno <= 10000
+        ):
+            line = frame.tb_lineno
+        frame = frame.tb_next
+    return line
 
 
 def failure_reason(error: BaseException) -> str:

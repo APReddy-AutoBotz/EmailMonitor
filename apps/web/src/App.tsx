@@ -1,3 +1,4 @@
+import { acceptedSelection, selectionExport } from './selectionHandoff'
 import { useEffect, useRef, useState } from 'react'
 import { ApiError, ApiScope, errorMessage, sessionRequest } from './client'
 import { currentBrand } from './branding'
@@ -47,7 +48,7 @@ export default function App() {
           try { const response = await fetch('/api/v1/auth/logout', { method: 'POST', credentials: 'same-origin', redirect: 'error', headers: { 'X-CSRF-Token': session.csrf_token } }); if (!response.ok) throw new ApiError(response.status, 'Sign-out could not be completed. Retry.'); expired() } catch (failure) { setError(errorMessage(failure)) }
         }}>Sign out</button></div>{error && <p role="alert">{error}</p>}
         <RuntimeProfileNotice profile={runtimeProfile} />
-        {selected ? <OrganizationArea runtimeProfile={runtimeProfile} key={selected} membership={session.memberships.find(m => m.organization_id === selected)!} session={session} expired={expired} /> : <main id="main"><h2>No authorized organizations</h2><p>Ask the organization owner for membership. No tenant data is available.</p></main>}</>}
+        {selected ? <OrganizationArea runtimeProfile={runtimeProfile} key={selected + session.identity_id + session.csrf_token} membership={session.memberships.find(m => m.organization_id === selected)!} session={session} expired={expired} /> : <main id="main"><h2>No authorized organizations</h2><p>Ask the organization owner for membership. No tenant data is available.</p></main>}</>}
     <footer>First author, corresponding author, observed email, article-local identity, accepted association, technical checks and outreach eligibility remain separate.</footer></>
 }
 function OrganizationArea({ membership, session, expired, runtimeProfile }: { runtimeProfile?: RuntimeProfile; membership: Membership; session: Session; expired: () => void }) {
@@ -70,6 +71,7 @@ function OrganizationArea({ membership, session, expired, runtimeProfile }: { ru
 }
 type WorkspaceProps = { runtimeProfile?: RuntimeProfile; scope: ApiScope; membership: Membership; identity: string; screen: Screen; setScreen: (screen: Screen) => void; job?: string; setJob: (id?: string) => void; revision: number; refresh: () => void; notice: string; setNotice: (value: string) => void; busy: string; setBusy: (value: string) => void; confirm: (value: { title: string; detail: string; work: () => Promise<unknown> }) => void; children: React.ReactNode }
 function Workspace(props: WorkspaceProps) {
+  const [exportSelection, setExportSelection] = useState<ContactFilters>()
   const [filters, setFilters] = useState<Record<string, ContactFilters>>({
     contacts: { query: '', state: 'accepted', target: 'all', job: '' },
     review: { query: '', state: 'needs_review', target: 'all', job: '' },
@@ -79,6 +81,8 @@ function Workspace(props: WorkspaceProps) {
   const brand = currentBrand(configuration.data, props.scope.organization)
   // Organization detail is the base resource; scoped paths intentionally require a trailing slash.
   const context: Context = { runtimeProfile: props.runtimeProfile, scope: props.scope, revision: props.revision, refresh: props.refresh, identity: props.identity, zone: organization.data?.timezone ?? 'UTC', can: capability => props.membership.capabilities.includes(capability), openJob: id => { props.setJob(id); props.setScreen('Jobs') },
+    openAcceptedSelection: value => { const selection = acceptedSelection(value); if (!selection || props.scope.closed) return; setFilters(previous => ({ ...previous, contacts: selection })); props.setScreen('Contacts'); props.setNotice('Accepted contacts for these selectors; review-only and rejected rows are not carried.') },
+    openExportSelection: value => { if (!props.membership.capabilities.includes('results.export') || props.scope.closed || !selectionExport(value)) return; setExportSelection(acceptedSelection(value)); props.setScreen('Exports'); props.setNotice('') },
     openJobContacts: (id, review, item) => { setFilters(previous => ({ ...previous, [review ? 'review' : 'contacts']: { query: '', state: review ? 'needs_review' : 'accepted', target: 'all', job: id, item } })); props.setScreen(review ? 'Review queue' : 'Contacts'); props.setNotice('') },
     confirm: (title, detail, work) => props.confirm({ title, detail, work }), act: async (label, work, success = 'Saved. Current organization data refreshed.') => {
       if (props.busy || props.scope.closed) return
@@ -87,13 +91,13 @@ function Workspace(props: WorkspaceProps) {
       catch (failure) { if (!props.scope.closed) props.setNotice(errorMessage(failure)) }
       finally { if (!props.scope.closed) props.setBusy('') }
     } }
-  return <div className="shell"><nav aria-label="Workspace">{screens.map(item => <button key={item} aria-current={item === props.screen ? 'page' : undefined} onClick={() => { props.setScreen(item); props.setNotice('') }}>{item}</button>)}</nav><main id="main" className="workspace" aria-busy={!!props.busy} style={{ borderTop: '3px solid ' + brand.accent }}><div className="workspace-heading"><div><p className="eyebrow">{props.membership.role.replaceAll('_', ' ')} · {props.scope.organization}</p><Load resource={organization}>{org => <h2>{org.display_name}</h2>}</Load><h3>{props.screen}</h3>{brand.label && <p className="tenant-brand">{brand.label}</p>}</div><button onClick={props.refresh}>Refresh current view</button></div>
+  return <div className="shell"><nav aria-label="Workspace">{screens.map(item => <button key={item} aria-current={item === props.screen ? 'page' : undefined} onClick={() => { setExportSelection(undefined); props.setScreen(item); props.setNotice('') }}>{item}</button>)}</nav><main id="main" className="workspace" aria-busy={!!props.busy} style={{ borderTop: '3px solid ' + brand.accent }}><div className="workspace-heading"><div><p className="eyebrow">{props.membership.role.replaceAll('_', ' ')} · {props.scope.organization}</p><Load resource={organization}>{org => <h2>{org.display_name}</h2>}</Load><h3>{props.screen}</h3>{brand.label && <p className="tenant-brand">{brand.label}</p>}</div><button onClick={props.refresh}>Refresh current view</button></div>
     {props.busy && <p role="status">{props.busy}…</p>}{props.notice && <p role="status" className="notice">{props.notice}</p>}
     {props.screen === 'Dashboard' && <Dashboard context={context} navigate={props.setScreen} />}
     {props.screen === 'New extraction' && <Wizard context={context} />}
     {props.screen === 'Jobs' && <Jobs context={context} selected={props.job} select={props.setJob} />}
     {(props.screen === 'Contacts' || props.screen === 'Review queue') && <Contacts key={props.screen} context={context} review={props.screen === 'Review queue'} filters={filters[props.screen === 'Review queue' ? 'review' : 'contacts']} setFilters={value => setFilters(previous => ({ ...previous, [props.screen === 'Review queue' ? 'review' : 'contacts']: value }))} />}
-    {props.screen === 'Exports' && <Exports context={context} />}
+    {props.screen === 'Exports' && <Exports key={JSON.stringify(exportSelection)} context={context} selection={exportSelection} />}
     {props.screen === 'Sources' && <Sources context={context} />}
     {props.screen === 'Usage' && <UsageView context={context} />}
     {props.screen === 'Audit' && <AuditView context={context} />}

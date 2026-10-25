@@ -22,10 +22,12 @@ from operator_ui_protocol import (
     STAGES,
     EvidenceFocusTrace,
     FocusExhaustion,
+    HandoffTrace,
     ObservationTrace,
     OutcomeReplayReadiness,
     ReplayRequest,
     asset_manifest,
+    export_assertion_line,
     failure_reason,
     route_failure_reason,
     route_headers_reason,
@@ -43,6 +45,76 @@ from playwright.async_api import (
 )
 
 ORIGIN = "https://app.example.test"
+
+HANDOFF_OBSERVER = """(() => {
+    const trace = {key_events: 0, click_events: 0, trusted_click: false,
+        disabled_on_enter: null, focused_on_enter: null, last_enter_target: 'none',
+        error_count: 0, error_kind: 'none'};
+    window.__emHandoffTrace = trace;
+    const target = node => node?.tagName === 'BUTTON'
+        && node.textContent === 'View accepted results for this selection';
+    document.addEventListener('keydown', event => {
+        if (event.key !== 'Enter') return;
+        trace.last_enter_target = target(event.target) ? 'handoff' : 'other';
+        if (target(event.target)) {
+            trace.key_events = Math.min(2, trace.key_events + 1);
+            trace.disabled_on_enter = event.target.disabled;
+            trace.focused_on_enter = event.target === document.activeElement;
+        }
+    }, true);
+    document.addEventListener('click', event => {
+        if (target(event.target)) {
+            trace.click_events = Math.min(2, trace.click_events + 1);
+            trace.trusted_click = event.isTrusted;
+        }
+    }, true);
+    const error = value => {
+        trace.error_count = Math.min(2, trace.error_count + 1);
+        trace.error_kind = value?.name === 'TypeError' ? 'type'
+            : value?.name === 'ReferenceError' ? 'reference' : 'other';
+    };
+    window.addEventListener('error', event => error(event.error));
+    window.addEventListener('unhandledrejection', event => error(event.reason));
+})()"""
+
+
+async def handoff_snapshot(page: Page) -> HandoffTrace | Literal["unavailable"]:
+    try:
+        value = await asyncio.wait_for(
+            page.evaluate("""() => {
+            const trace = window.__emHandoffTrace;
+            const screen = document.querySelector('h3')?.textContent;
+            const label = Array.from(document.querySelectorAll('label')).find(
+                node => node.firstChild?.textContent === 'Association state');
+            const value = label?.querySelector('select')?.value;
+            return {...trace, screen: screen === 'Contacts' ? 'contacts'
+                : screen === 'Review queue' ? 'review' : 'other',
+                association: value === undefined ? 'missing'
+                : ['accepted','needs_review','unmatched','rejected'].includes(value)
+                    ? value : 'other'};
+        }"""),
+            timeout=0.1,
+        )
+        return HandoffTrace.model_validate(value)
+    except Exception:
+        return "unavailable"
+
+
+handoff_trace: HandoffTrace | Literal["unavailable"] | None = None
+
+
+async def assert_accepted_handoff(page: Page) -> None:
+    global handoff_trace
+    handoff_trace = None
+    try:
+        # The wrapping label also contains the select's option text.
+        await expect(page.get_by_label(re.compile(r"^Association state"))).to_have_value("accepted")
+    except AssertionError:
+        # Capture while Playwright is still live; never replace the original failure.
+        handoff_trace = await handoff_snapshot(page)
+        raise
+
+
 focus_exhaustion: FocusExhaustion | Literal["unavailable"] | None = None
 HEADERS = {
     "content-type",
@@ -1169,6 +1241,7 @@ async def main() -> None:
             context = await browser.new_context(service_workers="block", accept_downloads=False)
             await context.add_cookies(setup["cookies"])
             page = await context.new_page()
+            await page.add_init_script(HANDOFF_OBSERVER)
             page.set_default_timeout(10000)
             checkpoint("sandbox")
             await page.goto("chrome://sandbox", wait_until="domcontentloaded")
@@ -1970,8 +2043,34 @@ async def main() -> None:
             await type_text(page, paper_input, "")
             await expect(paper_table.locator("tbody tr")).to_have_count(3)
             checkpoint("export_preview")
-            await activate(page, page.get_by_role("button", name="Exports", exact=True))
+            # Explicit Review → accepted Contacts → Export; no cursor or preview travels.
+            await activate(page, page.get_by_role("button", name="Review queue", exact=True))
             await type_text(page, paper_input, "10.9999/synthetic.article-a")
+            await activate(
+                page,
+                page.get_by_role(
+                    "button", name="View accepted results for this selection", exact=True
+                ),
+            )
+            await assert_accepted_handoff(page)
+            await expect(paper_table.locator("tbody tr")).to_have_count(1)
+            await activate(
+                page, page.get_by_role("button", name="Export this selection", exact=True)
+            )
+            await expect(paper_input).to_have_value("10.9999/synthetic.article-a")
+            await expect(page.get_by_role("region", name="Selection handoff")).to_contain_text(
+                "Accepted contacts"
+            )
+            await expect(
+                page.get_by_role("button", name="Create asynchronous export", exact=True)
+            ).to_have_count(0)
+            await expect(
+                page.get_by_role(
+                    "checkbox",
+                    name="Explicitly include unresolved observations, labeled as unaccepted",
+                    exact=True,
+                )
+            ).not_to_be_checked()
             await activate(
                 page,
                 page.get_by_role("button", name="Preview eligible export counts", exact=True),
@@ -2123,17 +2222,16 @@ async def main() -> None:
             await expect(
                 page.get_by_text("No contacts match these server filters.", exact=True)
             ).to_be_visible()
-            await activate(page, page.get_by_role("button", name="Exports", exact=True))
-            await type_text(
-                page,
-                page.get_by_label("Job UUID (blank selects authorized matching jobs)", exact=True),
-                actual_job,
+            # Empty accepted Contacts still carries the exact selector, not an unfiltered fallback.
+            await activate(
+                page, page.get_by_role("button", name="Export this selection", exact=True)
             )
-            await type_text(
-                page,
-                page.get_by_label("Article item UUID (optional; requires job)", exact=True),
-                actual_item.group(1),
-            )
+            await expect(
+                page.get_by_label("Job UUID (blank selects authorized matching jobs)", exact=True)
+            ).to_have_value(actual_job)
+            await expect(
+                page.get_by_label("Article item UUID (optional; requires job)", exact=True)
+            ).to_have_value(actual_item.group(1))
             export_presence = page.get_by_role(
                 "combobox", name="Article-outcome candidate presence", exact=True
             )
@@ -2296,6 +2394,7 @@ async def main() -> None:
             await browser.close()
     except Exception as error:
         name = type(error).__name__
+        handoff = handoff_trace if stage == "export_preview" else None
         # Report before cancelling the owned stdin reader: its executor shutdown awaits host EOF.
         print(
             json.dumps(
@@ -2304,6 +2403,20 @@ async def main() -> None:
                     "stage": stage,
                     "error": name if name in ERRORS else "UnexpectedError",
                     "reason": failure_reason(error),
+                    **(
+                        {
+                            "handoff_trace": handoff.model_dump()
+                            if isinstance(handoff, HandoffTrace)
+                            else handoff
+                        }
+                        if handoff is not None
+                        else {}
+                    ),
+                    **(
+                        {"export_assertion_line": export_assertion_line(error)}
+                        if stage == "export_preview" and type(error) is AssertionError
+                        else {}
+                    ),
                     **({"outcome_phase": outcome_phase} if outcome_phase is not None else {}),
                     **(
                         {

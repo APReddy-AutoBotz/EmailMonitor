@@ -1,3 +1,9 @@
+## Accepted-results selection handoff
+
+- Connect Review to accepted Contacts and explicitly seeded export preview/create.
+- Preserve supported selectors, reject incomplete or nonaccepted handoffs, and fence late previews.
+- Add SQL artifact membership and authored installed keyboard acceptance; no migration or authority changes.
+
 ## 2026-10-25 — Evidence selection survives close-event loss
 
 - Clear evidence selection once during an explicit close or successful review, before action refresh can unmount the queued native close event.
