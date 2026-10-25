@@ -26,6 +26,7 @@ async def xml_journey(
     login: Callable[[], Awaitable[None]],
     download_seen: asyncio.Event,
     export_checkpoint: Callable[[str, str | None], None],
+    evidence_checkpoint: Callable[[str], None],
 ) -> str:
     pdf = setup.get("journey") == "installed-authored-pdf"
     direct = setup.get("direct_article_url")
@@ -105,11 +106,14 @@ async def xml_journey(
         await page.get_by_text("completed", exact=True).wait_for(state="visible", timeout=75000)
     await channel.request({"kind": "control", "action": "wait_jobs"})
     checkpoint("evidence_review")
+    evidence_checkpoint("contacts")
     await activate(page, page.get_by_role("button", name=evidence_destination(pdf), exact=True))
     for address in addresses:
         row = page.get_by_role("row").filter(has_text=address)
         await expect(row).to_have_count(1)
+        evidence_checkpoint("open")
         await activate(page, row.get_by_role("button", name="Evidence and review", exact=True))
+        evidence_checkpoint("citation")
         await page.get_by_role("heading", name="Actual retained citation", exact=True).wait_for()
         quality = page.get_by_role("region", name="Article observation quality", exact=True)
         await expect(quality).to_contain_text("Retained parser outcome:")
@@ -119,6 +123,7 @@ async def xml_journey(
             await expect(page.get_by_role("dialog")).to_contain_text("PDF page 2")
             await expect(page.get_by_role("dialog")).to_contain_text("full_cropbox_not_glyph_bbox")
             await expect(page.get_by_role("dialog")).to_contain_text("pdf_text")
+        evidence_checkpoint("reason")
         await type_text(
             page,
             page.get_by_label("Reason", exact=True),
@@ -126,8 +131,11 @@ async def xml_journey(
             if pdf
             else "Installed controlled XML evidence review",
         )
+        evidence_checkpoint("save")
         await activate(page, page.get_by_role("button", name="Save review", exact=True))
+        evidence_checkpoint("closed")
         await page.get_by_role("dialog").wait_for(state="hidden")
+    evidence_checkpoint("returned")
     await activate(page, page.get_by_role("button", name="Contacts", exact=True))
     for address in addresses:
         await expect(page.get_by_role("row").filter(has_text=address)).to_have_count(1)

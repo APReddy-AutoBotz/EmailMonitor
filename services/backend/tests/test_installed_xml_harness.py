@@ -109,6 +109,7 @@ def test_installed_xml_browser_refuses_ambiguous_input_before_ui(
                 login,
                 asyncio.Event(),
                 lambda phase, format_name: None,
+                lambda phase: None,
             )
         )
 

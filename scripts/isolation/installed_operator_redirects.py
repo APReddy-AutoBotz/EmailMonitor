@@ -80,7 +80,7 @@ class InstalledDiagnostics:
     def capture(
         self, error: BaseException, reason: str, phase: InstalledLoginPhase | None
     ) -> dict[str, str]:
-        if reason not in {"unknown", *get_args(InstalledReason)} or (
+        if reason not in {"unknown", "keyboard_focus", *get_args(InstalledReason)} or (
             phase is not None and phase not in get_args(InstalledLoginPhase)
         ):
             raise ValueError("Closed installed diagnostic required")

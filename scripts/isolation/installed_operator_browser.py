@@ -23,16 +23,21 @@ from installed_operator_redirects import (
     observe_error_documents,
 )
 from operator_ui_protocol import (
+    EVIDENCE_PHASES,
     ORIGIN,
+    FocusExhaustion,
     InstalledExportStep,
     InstalledLoginPhase,
     InstalledReason,
+    failure_reason,
 )
 from playwright.async_api import Error, Request, Route, async_playwright, expect
 
 if TYPE_CHECKING:
+    import operator_ui_acceptance as keyboard_helpers
     from operator_ui_acceptance import Channel, activate, focus, select_index, type_text
 else:
+    import operator_ui_helpers as keyboard_helpers
     from operator_ui_helpers import Channel, activate, focus, select_index, type_text
 
 
@@ -109,6 +114,7 @@ async def main() -> None:
     download_seen = asyncio.Event()
     stage = "browser_launch"
     export_step: InstalledExportStep | None = None
+    evidence_phase: str | None = None
     diagnostics = InstalledDiagnostics()
     login_phase: InstalledLoginPhase | None = None
     callback_delivery = CallbackDeliveryTrace()
@@ -117,10 +123,17 @@ async def main() -> None:
     active_redirects: LoginRedirects | None = None
 
     def checkpoint(value: str) -> None:
-        nonlocal stage, export_step
+        nonlocal stage, export_step, evidence_phase
         stage = value
         export_step = None
+        evidence_phase = None
         print(json.dumps({"kind": "stage", "stage": value}), flush=True)
+
+    def evidence_checkpoint(value: str) -> None:
+        nonlocal evidence_phase
+        if stage != "evidence_review" or value not in EVIDENCE_PHASES:
+            raise RuntimeError("Fixed evidence diagnostic phase required")
+        evidence_phase = value
 
     def export_checkpoint(phase: str, format_name: str | None) -> None:
         nonlocal export_step
@@ -434,7 +447,14 @@ async def main() -> None:
                 from installed_xml_browser import xml_journey
 
                 job = await xml_journey(
-                    page, channel, setup, checkpoint, login, download_seen, export_checkpoint
+                    page,
+                    channel,
+                    setup,
+                    checkpoint,
+                    login,
+                    download_seen,
+                    export_checkpoint,
+                    evidence_checkpoint,
                 )
             else:
                 checkpoint("source_review")
@@ -674,6 +694,8 @@ async def main() -> None:
             if login_phase is not None and type(error) is TimeoutError
             else login_reason
             if login_phase is not None
+            else "keyboard_focus"
+            if failure_reason(error) == "keyboard_focus"
             else "unknown"
         )
         fixed = diagnostics.capture(error, reason, login_phase)
@@ -683,6 +705,20 @@ async def main() -> None:
                     "kind": "failure",
                     "stage": stage,
                     **fixed,
+                    **(
+                        {"evidence_phase": evidence_phase}
+                        if stage == "evidence_review" and evidence_phase is not None
+                        else {}
+                    ),
+                    **(
+                        {
+                            "focus_exhaustion": keyboard_helpers.focus_exhaustion.model_dump()
+                            if isinstance(keyboard_helpers.focus_exhaustion, FocusExhaustion)
+                            else "unavailable"
+                        }
+                        if fixed.get("reason") == "keyboard_focus"
+                        else {}
+                    ),
                     **(
                         {"installed_callback_delivery": callback_delivery.value}
                         if login_phase == "callback_document"

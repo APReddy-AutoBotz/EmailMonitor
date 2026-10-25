@@ -369,6 +369,13 @@ async def start_evidence_focus_trace(page: Page) -> JSHandle | None:
         return None
 
 
+async def wait_evidence_closed(page: Page) -> None:
+    """Native hidden precedes React close handling; require the exact dialog's removal."""
+    # CSS deliberately includes the hidden element. A default role locator excludes it.
+    # Inherit the unchanged page timeout; do not add a retry or move focus here.
+    await page.locator('dialog[aria-labelledby="evidence-title"]').wait_for(state="detached")
+
+
 async def check_evidence_focus(
     page: Page,
     trace: JSHandle | None,
@@ -1907,7 +1914,7 @@ async def main() -> None:
             evidence_checkpoint("escape_close")
             focus_trace = await start_evidence_focus_trace(page)
             await page.keyboard.press("Escape")
-            await page.get_by_role("dialog").wait_for(state="hidden")
+            await wait_evidence_closed(page)
             restored, evidence_focus_trace = await check_evidence_focus(page, focus_trace)
             if not restored:
                 raise RuntimeError("Evidence dialog did not restore keyboard focus")
@@ -1927,7 +1934,7 @@ async def main() -> None:
             evidence_checkpoint("button_close")
             focus_trace = await start_evidence_focus_trace(page)
             await activate(page, page.get_by_role("button", name="Close evidence", exact=True))
-            await page.get_by_role("dialog").wait_for(state="hidden")
+            await wait_evidence_closed(page)
             restored, evidence_focus_trace = await check_evidence_focus(page, focus_trace)
             if not restored:
                 raise RuntimeError("Evidence dialog did not restore keyboard focus")

@@ -1,3 +1,8 @@
+## 2026-10-25 — Evidence close-event synchronization
+
+- Wait for the exact evidence dialog's React removal before the unchanged opener-focus assertion; native hidden precedes focus restoration in the observed browser trace.
+- Preserve installed evidence-action phases and the existing fixed keyboard-limit snapshot on failure, without sensitive payload capture or changed keyboard limits.
+
 ## 2026-10-25 — Hosted workload balance and focus evidence
 
 - Move 78 measured SQL/broker cases to the existing SQL partition without changing suite coverage or deadlines.
