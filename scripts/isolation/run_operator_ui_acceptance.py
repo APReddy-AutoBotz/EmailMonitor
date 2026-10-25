@@ -79,6 +79,8 @@ def request_reply(
                     "hold_events",
                     "release_contacts",
                     "wait_held",
+                    "hold_lifecycle_reply",
+                    "release_lifecycle_reply",
                 }
             ):
                 raise ValueError("Fixed UI control grammar required")

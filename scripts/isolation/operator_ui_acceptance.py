@@ -1197,6 +1197,124 @@ async def authored_contact_request_ownership(page: Page, checkpoint: Callable[[s
     await activate(page, page.get_by_role("button", name="Refresh current view", exact=True))
 
 
+async def settle_lifecycle_requests(channel: Channel) -> None:
+    """Await owned replies, including admitted requests waiting for capacity."""
+
+    async def drained() -> None:
+        while channel.pending or channel.admitted:
+            await asyncio.sleep(0.05)
+
+    await asyncio.wait_for(drained(), timeout=10)
+
+
+async def lifecycle_journey(
+    page: Page, channel: Channel, setup: dict[str, Any], checkpoint: Callable[[str], None]
+) -> None:
+    """Existing fixture controls only; every mutation goes through the real UI/API."""
+
+    async def open_job(identifier: str) -> None:
+        await activate(page, page.get_by_role("button", name="Jobs", exact=True))
+        back = page.get_by_role("button", name="Back to recent jobs", exact=True)
+        if await back.count():
+            await activate(page, back)
+        await activate(page, page.get_by_role("button", name="Open job " + identifier, exact=True))
+        await expect(
+            page.get_by_role("heading", name="Job " + identifier, exact=True)
+        ).to_be_visible()
+
+    cancel_job, retry_job = str(setup["cancel_job"]), str(setup["retry_job"])
+    checkpoint("lifecycle_cancel")
+    await open_job(cancel_job)
+    checkpoint("lifecycle_pause")
+    await activate(page, page.get_by_role("button", name="Pause", exact=True))
+    checkpoint("lifecycle_resume")
+    await activate(page, page.get_by_role("button", name="Resume", exact=True))
+    # Cancel is also available while paused. Observe the resumed render first,
+    # otherwise the dialog can retain the revision from before Resume commits.
+    await expect(page.get_by_role("button", name="Pause", exact=True)).to_be_visible()
+    checkpoint("lifecycle_confirm_cancel")
+    await activate(page, page.get_by_role("button", name="Cancel job", exact=True))
+    dialog = page.get_by_role("dialog", name="Cancel job", exact=True)
+    await expect(dialog).to_contain_text("Retained partial results stay available")
+    await activate(page, dialog.get_by_role("button", name="Confirm cancel job", exact=True))
+    await expect(dialog).not_to_be_visible()
+    await expect(page.get_by_text("cancelled", exact=True).first).to_be_visible()
+    checkpoint("lifecycle_cancel_retry")
+    await activate(
+        page, page.get_by_role("button", name="Retry failed work as continuation", exact=True)
+    )
+    await expect(
+        page.get_by_text(
+            "Resource unavailable. Permissions or retention may have changed.", exact=True
+        )
+    ).to_be_visible()
+    await expect(page.get_by_role("heading", name="Job " + cancel_job, exact=True)).to_be_visible()
+    checkpoint("lifecycle_retained_review")
+    await activate(page, page.get_by_role("button", name="Contacts for this job", exact=True))
+    table = page.get_by_role("table", name="Current-authorized observed contacts", exact=True)
+    await expect(table.locator("tbody tr")).to_have_count(1)
+    await activate(page, page.get_by_role("button", name="Evidence and review", exact=True).first)
+    await expect(
+        page.get_by_role("heading", name="Actual retained citation", exact=True)
+    ).to_be_visible()
+    await type_text(
+        page, page.get_by_label("Reason", exact=True), "Synthetic cancelled-job retained evidence"
+    )
+    await activate(page, page.get_by_role("button", name="Save review", exact=True))
+    await expect(page.get_by_role("dialog")).not_to_be_visible()
+    checkpoint("lifecycle_export")
+    await activate(page, page.get_by_role("button", name="Export this selection", exact=True))
+    await expect(
+        page.get_by_label("Job UUID (blank selects authorized matching jobs)", exact=True)
+    ).to_have_value(cancel_job)
+    await activate(
+        page, page.get_by_role("button", name="Preview eligible export counts", exact=True)
+    )
+    await expect(page.get_by_role("region", name="Current export preview")).to_contain_text(
+        "1 contacts;"
+    )
+    await activate(page, page.get_by_role("button", name="Create asynchronous export", exact=True))
+    await expect(
+        page.get_by_text("Private export queued. Wait for actual worker completion.", exact=True)
+    ).to_be_visible()
+    await channel.request({"kind": "control", "action": "wait_exports"})
+    await activate(page, page.get_by_role("button", name="Refresh current view", exact=True))
+    await expect(page.get_by_role("button", name="Download", exact=True)).to_be_enabled()
+
+    checkpoint("lifecycle_retry")
+    await open_job(retry_job)
+    await channel.request({"kind": "control", "action": "hold_lifecycle_reply"})
+    await activate(
+        page, page.get_by_role("button", name="Retry failed work as continuation", exact=True)
+    )
+    await channel.request({"kind": "control", "action": "wait_held"})
+    checkpoint("lifecycle_switch")
+    organization = page.get_by_role("combobox", name="Active organization", exact=True)
+    values = await organization.locator("option").evaluate_all(
+        "nodes => nodes.map(node => node.value)"
+    )
+    await select_index(page, organization, values.index(setup["other_organization"]))
+    await channel.request({"kind": "control", "action": "release_lifecycle_reply"})
+    await expect(page.get_by_role("heading", name="Synthetic tenant 1", exact=True)).to_be_visible()
+    await expect(page.get_by_role("button", name="Pause", exact=True)).to_have_count(0)
+    await expect(
+        page.get_by_role("heading", name=re.compile(r"^Job [0-9a-f-]{36}$"))
+    ).to_have_count(0)
+    await select_index(page, organization, values.index(setup["initial_organization"]))
+    await open_job(retry_job)
+    await activate(
+        page, page.get_by_role("button", name="Retry failed work as continuation", exact=True)
+    )
+    await expect(page.get_by_role("heading", name="Job " + retry_job, exact=True)).to_have_count(0)
+    await expect(page.get_by_role("button", name="Pause", exact=True)).to_be_visible()
+    await channel.request({"kind": "control", "action": "publish"})
+    await channel.request({"kind": "control", "action": "wait_jobs"})
+    await activate(page, page.get_by_role("button", name="Refresh current view", exact=True))
+    await expect(page.get_by_text("completed", exact=True).first).to_be_visible()
+    await open_job(retry_job)
+    await expect(page.get_by_text("completed partial", exact=True).first).to_be_visible()
+
+
 async def main() -> None:
     if os.environ.get("EM_ISOLATION_DIAGNOSTIC") != "synthetic-operator-ui" or os.geteuid() == 0:
         raise RuntimeError("Explicit nonroot UI diagnostic required")
@@ -1481,6 +1599,36 @@ async def main() -> None:
                 ).index(setup["initial_organization"]),
             )
             await page.get_by_role("heading", name="Synthetic tenant 0", exact=True).wait_for()
+            if setup.get("journey") == "controlled_lifecycle":
+                checkpoint("pause_resume")
+                await lifecycle_journey(page, channel, setup, checkpoint)
+                # Leave the live job subscription through the ordinary keyboard UI.
+                await activate(
+                    page, page.get_by_role("button", name="Back to recent jobs", exact=True)
+                )
+                await expect(
+                    page.get_by_role("table", name="Recent authorized jobs", exact=True)
+                ).to_be_visible()
+                await settle_lifecycle_requests(channel)
+                checkpoint("final_cleanup")
+                print(
+                    json.dumps(
+                        {
+                            "kind": "result",
+                            "journey": "controlled_lifecycle",
+                            "diagnostic": "synthetic-operator-ui",
+                            "keyboard": True,
+                            "confirmed_cancel": True,
+                            "retained_review_export": True,
+                            "continuation": True,
+                            "late_mutation_scope": True,
+                            "network_errno": network,
+                            "interfaces": interfaces,
+                        }
+                    ),
+                    flush=True,
+                )
+                return
             if setup.get("journey") in ("controlled_browser", "controlled_keyword_browser"):
                 keyword_browser = setup["journey"] == "controlled_keyword_browser"
                 browser_expected_addresses = (

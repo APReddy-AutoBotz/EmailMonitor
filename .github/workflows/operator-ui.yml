@@ -78,4 +78,4 @@ jobs:
       - name: Actual isolated keyboard UI and durable worker acceptance
         env:
           PYTHONPATH: services/backend/src:services/backend/tests:tests:scripts/isolation
-        run: uv run --project services/backend pytest scripts/isolation/test_operator_ui_acceptance.py -v -s
+        run: uv run --project services/backend pytest scripts/isolation/test_operator_ui_acceptance.py scripts/isolation/test_operator_lifecycle_acceptance.py -v -s

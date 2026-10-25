@@ -229,11 +229,24 @@ def test_workflow_has_no_extra_trigger_credentials_cache_or_data_sink(forbidden:
     assert forbidden not in WORKFLOW.read_text()
 
 
+def lifecycle_operator_baseline(content: bytes) -> bytes:
+    """Allow only the added mandatory lifecycle test argument; pin all other bytes."""
+    original = b"pytest scripts/isolation/test_operator_ui_acceptance.py -v -s\n"
+    expanded = (
+        b"pytest scripts/isolation/test_operator_ui_acceptance.py "
+        b"scripts/isolation/test_operator_lifecycle_acceptance.py -v -s\n"
+    )
+    assert content.count(expanded) == 1 and content.count(original) == 0
+    return content.replace(expanded, original)
+
+
 @pytest.mark.parametrize("relative,expected", PRESERVED_BOUNDARIES.items())
 def test_new_composer_preserves_original_one_shot_guest_parser_and_gates(
     relative: str, expected: str
 ) -> None:
     content = (ROOT / relative).read_bytes()
+    if relative == ".github/workflows/operator-ui.yml":
+        content = lifecycle_operator_baseline(content)
     if relative == ".github/workflows/application.yml":
         # Preserve the original backend bytes, normalizing only its fixed receipt
         # wiring. Additional mandatory jobs/join have executable contract tests.

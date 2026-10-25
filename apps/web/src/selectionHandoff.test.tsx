@@ -1,3 +1,5 @@
+/// <reference types="vite/client" />
+import guest from '../../../scripts/isolation/operator_ui_acceptance.py?raw'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 import { acceptedSelection, selectionExport, selectionSummary, PreviewGeneration, type ContactFilters } from './selectionHandoff'
@@ -9,6 +11,17 @@ const job = '00000000-0000-4000-8000-000000000001', item = '00000000-0000-4000-8
 const selection: ContactFilters = { job, item, paper: '10.9999/synthetic.article-a', query: 'literal %_', target: 'corresponding', presence: 'observed_candidate', state: 'needs_review' }
 const context = (allowed = true): Context => ({ scope: new ApiScope(job, 'fixture-only'), revision: 0, refresh: vi.fn(), act: vi.fn(), confirm: vi.fn(), can: () => allowed, identity: 'fixture-only', zone: 'UTC', openJob: vi.fn(), openAcceptedSelection: vi.fn(), openExportSelection: vi.fn() })
 describe('accepted selection handoff', () => {
+  it('uses the actual export job label and carried job in the hosted lifecycle journey', () => {
+    const section = guest.split('checkpoint("lifecycle_export")')[1].split('checkpoint("lifecycle_retry")')[0]
+    const selector = section.match(/get_by_label\("([^"]+)", exact=True\)/)!
+    expect(selector).not.toBeNull()
+    const html = renderToStaticMarkup(<Exports context={context()} selection={acceptedSelection(selection)} />)
+    const label = html.match(/<label>([^<]*Job UUID[^<]*)<input([^>]*)>/)!
+    expect(label).not.toBeNull()
+    expect(selector[1]).toBe(label[1])
+    expect(label[2]).toContain(`value="${job}"`)
+    expect(section).toContain('to_have_value(cancel_job)')
+  })
   it('explicitly changes review state, preserves selectors, and discards page/authorization extras', () => {
     const result = acceptedSelection({ ...selection, cursor: 'old-page', preview: { contacts: 99 }, include_unresolved: true } as ContactFilters)
     expect(result).toEqual({ ...selection, state: 'accepted' })
