@@ -207,7 +207,10 @@ def test_focus_target_metadata_never_accepts_dom_values() -> None:
         "target_inert": False,
         "target_tab_stop": True,
     }
-    assert FocusExhaustion.model_validate(snapshot).model_dump() == snapshot
+    assert FocusExhaustion.model_validate(snapshot).model_dump() == {
+        **snapshot,
+        "attempt_trace": None,
+    }
     for patch in (
         {"target_kind": "private-label"},
         {"active_control": "private-value"},

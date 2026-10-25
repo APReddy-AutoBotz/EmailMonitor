@@ -467,6 +467,20 @@ class InstalledExportStep(BaseModel):
     format: Literal["xlsx", "csv"] | None
 
 
+class KeyboardTransition(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    kind: Literal["start", "heading_focus", "target_detached", "target_replaced", "finish"]
+    tab: int = Field(ge=0, le=100)
+    target_connected: bool
+
+
+class KeyboardAttemptTrace(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    tabs: int = Field(ge=0, le=100)
+    truncated: bool
+    events: list[KeyboardTransition] = Field(max_length=32)
+
+
 class FocusExhaustion(BaseModel):
     """Value-free state sampled after the unchanged keyboard limit fails."""
 
@@ -482,6 +496,7 @@ class FocusExhaustion(BaseModel):
     active_in_target_dialog: bool | None = None
     target_inert: bool | None = None
     target_tab_stop: bool | None = None
+    attempt_trace: KeyboardAttemptTrace | Literal["unavailable"] | None = None
 
 
 class ObservationState(BaseModel):

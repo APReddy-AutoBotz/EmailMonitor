@@ -75,3 +75,14 @@ cannot establish positive isolation between multiple publishers. Historical
 parser/keyboard/PDF callback intermittency remains unresolved; formal final review
 is deferred. Export reconciliation, live acquisition, dates and reuse freshness
 are outside this increment.
+
+## Keyboard diagnostic follow-up
+
+The hosted late-organization outcome exercise exhausted its existing 100-Tab limit
+with an enabled, tabbable target. The cause remains unresolved. A passive observer
+now records up to 32 fixed-category target-detachment/replacement and heading-focus
+transitions, indexed by the real Tab count, during that same attempt. It records no
+text, values, identifiers or URLs. The original keyboard helper, limits and
+assertions remain unchanged; diagnostic failure cannot replace its result. Observer
+ordering and bounded output have deterministic synthetic tests, which are not a
+substitute for hosted browser evidence or a claim that the intermittency is fixed.
