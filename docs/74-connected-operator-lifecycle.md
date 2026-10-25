@@ -57,3 +57,12 @@ Export label without changing its exact-match or carried-job assertion. A local
 regression reads that guest selector and compares it with the actual rendered
 Export field and selected job value; it fails on the old label and passes on the
 correct one. This does not change export runtime behavior or reconciliation.
+
+The corrected export journey subsequently completed its UI assertions, but the
+host refused its result while requests remained pending. The lifecycle branch
+now leaves the live job workspace using ordinary keyboard navigation, verifies
+the recent-jobs table, and drains pending and admitted requests within the same
+ten-second bound used by existing journeys before emitting its result. The host
+still rejects premature completion. Deterministic regressions cover empty,
+in-flight, admitted-but-not-yet-pending and non-settling channels; this cleanup
+does not cancel or ignore outstanding work or change runtime behavior.

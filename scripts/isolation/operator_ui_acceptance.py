@@ -1197,6 +1197,16 @@ async def authored_contact_request_ownership(page: Page, checkpoint: Callable[[s
     await activate(page, page.get_by_role("button", name="Refresh current view", exact=True))
 
 
+async def settle_lifecycle_requests(channel: Channel) -> None:
+    """Await owned replies, including admitted requests waiting for capacity."""
+
+    async def drained() -> None:
+        while channel.pending or channel.admitted:
+            await asyncio.sleep(0.05)
+
+    await asyncio.wait_for(drained(), timeout=10)
+
+
 async def lifecycle_journey(
     page: Page, channel: Channel, setup: dict[str, Any], checkpoint: Callable[[str], None]
 ) -> None:
@@ -1592,6 +1602,14 @@ async def main() -> None:
             if setup.get("journey") == "controlled_lifecycle":
                 checkpoint("pause_resume")
                 await lifecycle_journey(page, channel, setup, checkpoint)
+                # Leave the live job subscription through the ordinary keyboard UI.
+                await activate(
+                    page, page.get_by_role("button", name="Back to recent jobs", exact=True)
+                )
+                await expect(
+                    page.get_by_role("table", name="Recent authorized jobs", exact=True)
+                ).to_be_visible()
+                await settle_lifecycle_requests(channel)
                 checkpoint("final_cleanup")
                 print(
                     json.dumps(

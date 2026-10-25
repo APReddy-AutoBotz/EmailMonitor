@@ -186,3 +186,70 @@ def test_cancel_waits_for_resume_render_before_capturing_revision(mode: str) -> 
         asyncio.run(namespace["exercise"]())
         assert calls == ["Resume", "await resumed render", "Cancel job", "Confirm cancel job"]
         assert state["cancelled"]
+
+
+@pytest.mark.parametrize("mode", ["empty", "pending", "admitted", "never"])
+def test_lifecycle_result_requires_bounded_request_drain(mode: str) -> None:
+    import ast
+    import asyncio
+    from pathlib import Path
+    from types import SimpleNamespace
+    from typing import Any
+
+    module = ast.parse(
+        (
+            Path(__file__).resolve().parents[3] / "scripts/isolation/operator_ui_acceptance.py"
+        ).read_text()
+    )
+    function = next(
+        node
+        for node in module.body
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "settle_lifecycle_requests"
+    )
+    channel = SimpleNamespace(
+        pending={1: object()} if mode in {"pending", "never"} else {},
+        admitted=0 if mode == "empty" else 1,
+    )
+    observations: list[tuple[bool, int]] = []
+
+    async def sleep(delay: float) -> None:
+        assert delay == 0.05
+        observations.append((bool(channel.pending), channel.admitted))
+        if mode == "never":
+            raise TimeoutError("Owned replies did not settle")
+        if len(observations) == 1:
+            channel.pending.clear()
+        else:
+            channel.admitted = 0
+
+    async def wait_for(work: Any, *, timeout: int) -> None:
+        assert timeout == 10  # Same bounded drain as the existing hosted journeys.
+        await work
+
+    namespace: dict[str, Any] = {
+        "Channel": object,
+        "asyncio": SimpleNamespace(sleep=sleep, wait_for=wait_for),
+    }
+    exec(
+        compile(ast.Module(body=[function], type_ignores=[]), "<lifecycle-drain>", "exec"),
+        namespace,
+    )
+    if mode == "never":
+        with pytest.raises(TimeoutError, match="Owned replies did not settle"):
+            asyncio.run(namespace["settle_lifecycle_requests"](channel))
+        assert channel.pending and channel.admitted == 1
+    else:
+        asyncio.run(namespace["settle_lifecycle_requests"](channel))
+        assert not channel.pending and channel.admitted == 0
+        assert len(observations) == (0 if mode == "empty" else 2)
+
+    branch = next(
+        node
+        for node in ast.walk(module)
+        if isinstance(node, ast.If)
+        and ast.unparse(node.test) == "setup.get('journey') == 'controlled_lifecycle'"
+    )
+    code = ast.unparse(branch)
+    assert code.index("await lifecycle_journey") < code.index("Back to recent jobs")
+    assert code.index("Recent authorized jobs") < code.index("await settle_lifecycle_requests")
+    assert code.index("await settle_lifecycle_requests") < code.index("'kind': 'result'")
