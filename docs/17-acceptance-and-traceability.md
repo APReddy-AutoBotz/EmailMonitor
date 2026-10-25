@@ -547,3 +547,7 @@ FR-003/004/023/024/025 → [source selection](73-retained-source-selection.md),
 source presentation/workflow and wizard handler tests, and the authored operator
 keyboard journey. Migration0020 preserves omitted-default identities and all
 current fences. Positive multi-publisher isolation is not claimed; hosted proof pending.
+
+Connected FR-021/022/025/026 lifecycle acceptance candidate:
+[confirmed cancellation, continuation and retained exports](74-connected-operator-lifecycle.md).
+Actual SQL/broker receipts and genuine hosted keyboard results remain distinct.

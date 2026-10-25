@@ -100,3 +100,9 @@ FR-003/004/023/024/025: [existing registered source workflow](73-retained-source
 Catalog-backed keyword choice and current retained-source selection connect planning,
 Review, accepted Contacts and immutable exports. Single synthetic source only;
 actual hosted acceptance and publication remain pending, with no new acquisition authority.
+
+### EM-005/010/012 connected operator lifecycle acceptance candidate
+
+[Fixture-only lifecycle journey](74-connected-operator-lifecycle.md) connects
+existing controls to retained review/export and continuation recovery. No new
+runtime policy or migration; hosted acceptance remains pending until executed.

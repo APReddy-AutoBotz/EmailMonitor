@@ -316,6 +316,10 @@ def asset_manifest(root: Path) -> dict[str, str]:
 
 
 STAGES = (
+    "lifecycle_cancel",
+    "lifecycle_export",
+    "lifecycle_retry",
+    "lifecycle_switch",
     "browser_launch",
     "sandbox",
     "assets_session",
@@ -1081,13 +1085,35 @@ def completion_worker_snapshot(raw: bytes, *, truncated: bool = False) -> dict[s
 def validate_journey(setup: dict[str, object]) -> None:
     """Closed built-in journeys only; no caller-supplied browser destinations."""
     journey = setup.get("journey")
+    if journey != "controlled_lifecycle" and ({"cancel_job", "retry_job"} & setup.keys()):
+        raise ValueError("Lifecycle identifiers require their exact journey")
     if journey not in (
         None,
         "controlled_provider",
+        "controlled_lifecycle",
         "controlled_browser",
         "controlled_keyword_browser",
     ):
         raise ValueError("Fixed controlled operator journey required")
+    if journey == "controlled_lifecycle":
+        if set(setup) != {
+            "kind",
+            "origin",
+            "journey",
+            "cookies",
+            "assets",
+            "initial_organization",
+            "other_organization",
+            "cancel_job",
+            "retry_job",
+        }:
+            raise ValueError("Fixed lifecycle bootstrap required")
+        for key in ("initial_organization", "other_organization", "cancel_job", "retry_job"):
+            identifier = setup[key]
+            if not isinstance(identifier, str) or str(UUID(identifier)) != identifier:
+                raise ValueError("Exact lifecycle identifiers required")
+        if setup["cancel_job"] == setup["retry_job"]:
+            raise ValueError("Separate lifecycle fixtures required")
     if journey in ("controlled_browser", "controlled_keyword_browser") and set(setup) != {
         "kind",
         "origin",

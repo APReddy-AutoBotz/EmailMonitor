@@ -1,3 +1,7 @@
+## Connected operator lifecycle acceptance candidate
+
+- Add fixture-only confirmed cancellation, retained review/export, continuation and original-message worker-redelivery acceptance; no runtime authority or migration change. See [scope](docs/74-connected-operator-lifecycle.md).
+
 ## Accepted-results selection handoff
 
 - Local candidate: existing registered source selection from keyword planning through retained results and explicit export; no new source authority. See [scope and compatibility](docs/73-retained-source-selection.md).
