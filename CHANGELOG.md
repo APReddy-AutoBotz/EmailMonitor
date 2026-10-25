@@ -1,5 +1,7 @@
 ## Accepted-results selection handoff
 
+- Local candidate: existing registered source selection from keyword planning through retained results and explicit export; no new source authority. See [scope and compatibility](docs/73-retained-source-selection.md).
+
 - Connect Review to accepted Contacts and explicitly seeded export preview/create.
 - Preserve supported selectors, reject incomplete or nonaccepted handoffs, and fence late previews.
 - Add SQL artifact membership and authored installed keyboard acceptance; no migration or authority changes.

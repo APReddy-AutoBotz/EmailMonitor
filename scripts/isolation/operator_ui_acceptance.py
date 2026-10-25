@@ -1879,6 +1879,13 @@ async def main() -> None:
             await page.get_by_text("Current synthetic policy", exact=True).wait_for()
             checkpoint("keyword_plan")
             await activate(page, page.get_by_role("button", name="New extraction", exact=True))
+            source_select = page.get_by_label(re.compile(r"^SourceSelect an existing source"))
+            await select_index(page, source_select, 0)
+            await expect(
+                page.get_by_role("button", name="Create and validate plan", exact=True)
+            ).to_be_disabled()
+            await select_index(page, source_select, 1)
+            await expect(source_select).to_have_value("synthetic-publisher")
             await type_text(page, page.get_by_label("Keyword", exact=True), "Myocardial Infarction")
             await activate(
                 page, page.get_by_role("button", name="Create and validate plan", exact=True)
@@ -2046,6 +2053,9 @@ async def main() -> None:
             # Explicit Review → accepted Contacts → Export; no cursor or preview travels.
             await activate(page, page.get_by_role("button", name="Review queue", exact=True))
             await type_text(page, paper_input, "10.9999/synthetic.article-a")
+            retained_source = page.get_by_label(re.compile(r"^Retained source"))
+            await select_index(page, retained_source, 1)
+            await expect(retained_source).to_have_value("synthetic-publisher")
             await activate(
                 page,
                 page.get_by_role(
@@ -2053,11 +2063,16 @@ async def main() -> None:
                 ),
             )
             await assert_accepted_handoff(page)
+            await expect(retained_source).to_have_value("synthetic-publisher")
             await expect(paper_table.locator("tbody tr")).to_have_count(1)
             await activate(
                 page, page.get_by_role("button", name="Export this selection", exact=True)
             )
             await expect(paper_input).to_have_value("10.9999/synthetic.article-a")
+            await expect(retained_source).to_have_value("synthetic-publisher")
+            await expect(page.get_by_role("region", name="Selection handoff")).to_contain_text(
+                "source: synthetic-publisher"
+            )
             await expect(page.get_by_role("region", name="Selection handoff")).to_contain_text(
                 "Accepted contacts"
             )

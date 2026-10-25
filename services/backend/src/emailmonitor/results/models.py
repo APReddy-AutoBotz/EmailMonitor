@@ -32,6 +32,7 @@ ArticleOutcomePresence = Literal[
 class ArticleSelection(BaseModel):
     """New default keys are omitted so legacy cursor/request identities stay stable."""
 
+    source_id: Literal["synthetic-publisher"] | None = None
     paper_doi: str | None = Field(default=None, max_length=256, strict=True)
 
     @field_validator("paper_doi")
@@ -48,6 +49,8 @@ class ArticleSelection(BaseModel):
     @model_serializer(mode="wrap")
     def legacy_defaults(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
         document: dict[str, Any] = handler(self)
+        if document.get("source_id") is None:
+            document.pop("source_id", None)
         if document.get("paper_doi") is None:
             document.pop("paper_doi", None)
         if document.get("item_id") is None:
@@ -217,6 +220,7 @@ class ExportInput(ArticleSelection):
         return Filters(
             job_id=self.job_id,
             paper_doi=self.paper_doi,
+            source_id=self.source_id,
             item_id=self.item_id,
             article_outcome_presence=self.article_outcome_presence,
             states=("accepted", "needs_review", "unmatched")

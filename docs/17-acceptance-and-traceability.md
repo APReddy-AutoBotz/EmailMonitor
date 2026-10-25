@@ -539,3 +539,11 @@ Execution evidence is pending; this does not close general FR-019 observation re
 ### Accepted-results selection handoff
 
 FR-023/024/025, EM-011/012, NFR-011, UX03: [bounded handoff](72-accepted-selection-handoff.md). Frontend selector/generation cases and actual SQL CSV/XLSX membership tests accompany the authored installed keyboard journey. Hosted execution remains pending.
+
+### Existing source selection
+
+FR-003/004/023/024/025 → [source selection](73-retained-source-selection.md),
+`test_retained_source_selection.py`, `test_retained_source_selection_tenant.py`,
+source presentation/workflow and wizard handler tests, and the authored operator
+keyboard journey. Migration0020 preserves omitted-default identities and all
+current fences. Positive multi-publisher isolation is not claimed; hosted proof pending.
