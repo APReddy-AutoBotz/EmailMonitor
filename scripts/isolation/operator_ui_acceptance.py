@@ -1254,7 +1254,9 @@ async def lifecycle_journey(
     await expect(page.get_by_role("dialog")).not_to_be_visible()
     checkpoint("lifecycle_export")
     await activate(page, page.get_by_role("button", name="Export this selection", exact=True))
-    await expect(page.get_by_label("Job UUID (optional)", exact=True)).to_have_value(cancel_job)
+    await expect(
+        page.get_by_label("Job UUID (blank selects authorized matching jobs)", exact=True)
+    ).to_have_value(cancel_job)
     await activate(
         page, page.get_by_role("button", name="Preview eligible export counts", exact=True)
     )

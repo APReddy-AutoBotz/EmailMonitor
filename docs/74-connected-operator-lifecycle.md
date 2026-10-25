@@ -49,3 +49,11 @@ conflict, verifies the resumed-render wait, and refuses incomplete transitions.
 The journey now observes that same resumed state before opening cancellation;
 fixed phase labels distinguish pause, resume, confirmation, retry refusal and
 retained review. Runtime behavior, revision checks and deadlines are unchanged.
+
+The next hosted lifecycle run passed cancellation, retry refusal and retained
+review, then exposed an exact-label mismatch at the export handoff: the guest
+used the Contacts job label on the Export screen. The guest now uses the existing
+Export label without changing its exact-match or carried-job assertion. A local
+regression reads that guest selector and compares it with the actual rendered
+Export field and selected job value; it fails on the old label and passes on the
+correct one. This does not change export runtime behavior or reconciliation.
