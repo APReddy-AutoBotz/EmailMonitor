@@ -76,9 +76,17 @@ class ServiceBindings(BaseModel):
                 )
             }
             if self.profile == "controlled-xml-service-reference":
+                from emailmonitor.extraction.pdf_fixture import DIGESTS
                 from emailmonitor.sources.provider_documents import URLS
 
-                allowed = allowed | URLS
+                # This composed profile owns the isolated PDF byte capability.
+                # Only registered local fixtures join its route inventory; normal
+                # start/delegation SQL still enforces job and source authority.
+                allowed = (
+                    allowed
+                    | URLS
+                    | {"https://synthetic.publisher.example/" + name for name in DIGESTS}
+                )
             if start not in allowed:
                 raise AuthorizationDenied()
         for principal in (binding.worker, binding.publisher):

@@ -176,3 +176,19 @@ without a second parser invocation or any provider request. Both cases use the
 standard verified service archive and curated parser image; original deadlines and
 CI guards remain unchanged. These are implemented tests, not passed installed
 acceptance until their genuine hosted execution succeeds.
+
+The first hosted installed run passed the PDF post-observation SIGKILL/recovery
+case but refused PDF launch from the browser. The composed service binding's
+route inventory still contained only HTML/XML. The correction recognizes the nine
+registered authored PDF URLs only in the composed isolated-parser profile. The
+default HTML profile still refuses every PDF, and arbitrary/modified URLs remain
+refused. Normal job/source authorization and the existing SQL delegation calls
+remain unchanged; there is no new role, privilege, credential or external route.
+Closed-route unit tests and a real-SQL default-profile rollback regression cover
+this correction; a new exact-head installed run remains required.
+
+The PDF browser case opens Contacts for the fixed article-a fixture's already
+accepted association, then inspects its retained evidence and saves explicit review.
+It does not search the needs-review-only XML view or change association semantics.
+A local regression maps the actual authored PDF and checks the selected view against
+that association state. Page evidence and saved-review assertions remain mandatory.

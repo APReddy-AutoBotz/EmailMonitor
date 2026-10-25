@@ -142,6 +142,28 @@ def test_installed_html_steps_remain_identical_under_separate_branch() -> None:
     assert '"cookies" in setup' in source and "add_cookies" not in source
 
 
+def test_installed_pdf_evidence_view_matches_actual_authored_association(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import operator_ui_acceptance
+    from test_associations import pdf
+
+    monkeypatch.setitem(sys.modules, "operator_ui_helpers", operator_ui_acceptance)
+    browser = importlib.import_module("installed_xml_browser")
+    actual = pdf("article-a.pdf")
+    assert len(actual.associations) == 1
+    state = actual.associations[0].state
+    assert state == "accepted"
+    assert (
+        browser.evidence_destination(True)
+        == {
+            "accepted": "Contacts",
+            "needs_review": "Review queue",
+        }[state]
+    )
+    assert browser.evidence_destination(False) == "Review queue"
+
+
 def test_installed_xml_declares_actual_worker_policy_review_export_and_cleanup() -> None:
     source = (ROOT / "scripts/isolation/test_installed_xml_acceptance.py").read_text()
     browser = (ROOT / "scripts/isolation/installed_xml_browser.py").read_text()

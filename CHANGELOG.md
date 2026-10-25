@@ -436,3 +436,5 @@ Add a trusted Python-only executor factory to the normal claimed Celery path, re
 - Use the parser-only temporary Docker client configuration for authored PDF execution, preserving the verified local endpoint, environment guard and all isolation limits. Standard image build/installed acceptance remains incomplete.
 
 - Compose the controlled worker PDF byte-parser with the supervisor-selected immutable parser image, retaining fixture identity/digest checks and all SQL fences. Add actual RPC/SQL proof and failure-only controller timing diagnostics; installed/broker/CI acceptance remains pending.
+
+- Recognize the nine registered authored PDF routes in the composed fixture service binding; preserve default HTML refusal and normal SQL authorization. Add route/refusal and atomic rollback regressions.

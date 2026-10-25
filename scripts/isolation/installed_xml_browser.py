@@ -13,6 +13,11 @@ else:
     from operator_ui_helpers import activate, focus, select_index, type_text
 
 
+def evidence_destination(pdf: bool) -> str:
+    """The fixed PDF fixture is accepted already; XML awaits explicit review."""
+    return "Contacts" if pdf else "Review queue"
+
+
 async def xml_journey(
     page: Any,
     channel: Any,
@@ -100,7 +105,7 @@ async def xml_journey(
         await page.get_by_text("completed", exact=True).wait_for(state="visible", timeout=75000)
     await channel.request({"kind": "control", "action": "wait_jobs"})
     checkpoint("evidence_review")
-    await activate(page, page.get_by_role("button", name="Review queue", exact=True))
+    await activate(page, page.get_by_role("button", name=evidence_destination(pdf), exact=True))
     for address in addresses:
         row = page.get_by_role("row").filter(has_text=address)
         await expect(row).to_have_count(1)

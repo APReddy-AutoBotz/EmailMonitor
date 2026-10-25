@@ -668,3 +668,10 @@ two actual tenant SQL cases cover fixture-only transport, replay/review/export a
 cancellation-before-commit. This is not installed artifact/broker certification.
 The controller timeout now has failure-only phase/stack diagnostics with its original
 20-second deadline; the historical timeout is not claimed repaired.
+
+The first PDF hosted candidate passed seven ordinary workflows and the actual
+PDF post-observation crash/recovery case. Its installed browser case refused launch
+because composed service bindings omitted registered PDF routes. A bounded routing
+correction adds only those nine authored fixtures to the composed profile; default
+HTML and unknown-route refusal remain. Installed browser acceptance remains pending
+new exact-head execution.
