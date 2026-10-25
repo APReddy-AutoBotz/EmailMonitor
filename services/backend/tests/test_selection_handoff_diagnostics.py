@@ -152,3 +152,94 @@ def test_login_timing_requires_the_existing_failure_and_owned_phase(stage: str) 
     assert DiagnosticFrame.model_validate(value).installed_login_timing is not None
     with pytest.raises(ValidationError):
         DiagnosticFrame.model_validate({**value, "installed_login_phase": None})
+
+
+@pytest.mark.parametrize("snapshot_kind", ["valid", "invalid", "unavailable"])
+def test_handoff_failure_is_captured_before_browser_teardown_and_reraised(
+    monkeypatch: pytest.MonkeyPatch, snapshot_kind: str
+) -> None:
+    import asyncio
+    import re
+    from collections.abc import AsyncIterator
+    from contextlib import asynccontextmanager
+    from types import SimpleNamespace
+    from typing import cast
+    from unittest.mock import AsyncMock
+
+    import operator_ui_acceptance as guest
+    from operator_ui_protocol import HandoffTrace
+    from playwright.async_api import Page
+
+    closed = False
+    original = AssertionError("untrusted failure text")
+    assertion = AsyncMock(side_effect=original)
+    snapshot = {
+        "key_events": 1,
+        "click_events": 1,
+        "trusted_click": True,
+        "disabled_on_enter": False,
+        "focused_on_enter": True,
+        "last_enter_target": "handoff",
+        "screen": "review",
+        "association": "needs_review",
+        "error_count": 0,
+        "error_kind": "none",
+    }
+
+    def label(pattern: re.Pattern[str]) -> object:
+        # Playwright's internal label matcher includes descendant option text.
+        assert pattern.search("Association stateAcceptedNeeds reviewUnmatchedRejected")
+        assert not pattern.search("Author roleAllFirst authorCorresponding author")
+        return object()
+
+    async def evaluate(_: str) -> object:
+        assert not closed, "snapshot must precede Playwright context teardown"
+        if snapshot_kind == "unavailable":
+            raise RuntimeError("private transport failure")
+        return snapshot if snapshot_kind == "valid" else {"private": "not a trace"}
+
+    page = cast(Page, SimpleNamespace(get_by_label=label, evaluate=evaluate))
+    monkeypatch.setattr(guest, "expect", lambda _: SimpleNamespace(to_have_value=assertion))
+
+    @asynccontextmanager
+    async def browser_context() -> AsyncIterator[None]:
+        nonlocal closed
+        try:
+            yield
+        finally:
+            closed = True
+
+    async def run() -> None:
+        async with browser_context():
+            await guest.assert_accepted_handoff(page)
+
+    with pytest.raises(AssertionError) as caught:
+        asyncio.run(run())
+    assert caught.value is original and closed
+    assertion.assert_awaited_once_with("accepted")
+    if snapshot_kind == "valid":
+        assert isinstance(guest.handoff_trace, HandoffTrace)
+        assert guest.handoff_trace.model_dump() == snapshot
+    else:
+        assert guest.handoff_trace == "unavailable"
+
+
+def test_successful_handoff_clears_old_trace_without_extra_browser_read(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import asyncio
+    from types import SimpleNamespace
+    from typing import cast
+    from unittest.mock import AsyncMock, Mock
+
+    import operator_ui_acceptance as guest
+    from playwright.async_api import Page
+
+    guest.handoff_trace = "unavailable"
+    assertion, evaluate = AsyncMock(), AsyncMock()
+    monkeypatch.setattr(guest, "expect", lambda _: SimpleNamespace(to_have_value=assertion))
+    page = cast(Page, SimpleNamespace(get_by_label=Mock(), evaluate=evaluate))
+    asyncio.run(guest.assert_accepted_handoff(page))
+    assertion.assert_awaited_once_with("accepted")
+    evaluate.assert_not_awaited()
+    assert guest.handoff_trace is None

@@ -57,3 +57,13 @@ accepted/review screen state on handoff failure. Existing login checkpoints also
 record capped monotonic elapsed milliseconds, including callback fulfillment.
 Observers never prevent events, move focus, retry actions or change deadlines.
 No exception message, input text, URL, cookie, identity or contact data is emitted.
+
+The repeated handoff assertion used an exact label match, but the wrapping select
+label includes its option text in Playwright's label matcher. It now uses the same
+anchored label matcher as existing association-state checks, retaining the required
+`accepted` value, single keyboard activation and original assertion deadline.
+Rendered-markup and harness regressions cover that selector. Failure snapshots are
+captured before browser teardown and the identical original assertion is re-raised;
+invalid/unavailable diagnostics cannot turn a failure into success. The installed
+PDF callback timeout did not recur on the next measured head; its historical cause
+remains unresolved. Hosted verification of the locator correction is still pending.

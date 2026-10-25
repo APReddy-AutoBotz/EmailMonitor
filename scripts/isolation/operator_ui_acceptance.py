@@ -100,6 +100,21 @@ async def handoff_snapshot(page: Page) -> HandoffTrace | Literal["unavailable"]:
         return "unavailable"
 
 
+handoff_trace: HandoffTrace | Literal["unavailable"] | None = None
+
+
+async def assert_accepted_handoff(page: Page) -> None:
+    global handoff_trace
+    handoff_trace = None
+    try:
+        # The wrapping label also contains the select's option text.
+        await expect(page.get_by_label(re.compile(r"^Association state"))).to_have_value("accepted")
+    except AssertionError:
+        # Capture while Playwright is still live; never replace the original failure.
+        handoff_trace = await handoff_snapshot(page)
+        raise
+
+
 focus_exhaustion: FocusExhaustion | Literal["unavailable"] | None = None
 HEADERS = {
     "content-type",
@@ -2037,9 +2052,7 @@ async def main() -> None:
                     "button", name="View accepted results for this selection", exact=True
                 ),
             )
-            await expect(page.get_by_label("Association state", exact=True)).to_have_value(
-                "accepted"
-            )
+            await assert_accepted_handoff(page)
             await expect(paper_table.locator("tbody tr")).to_have_count(1)
             await activate(
                 page, page.get_by_role("button", name="Export this selection", exact=True)
@@ -2381,7 +2394,7 @@ async def main() -> None:
             await browser.close()
     except Exception as error:
         name = type(error).__name__
-        handoff = await handoff_snapshot(page) if stage == "export_preview" else None
+        handoff = handoff_trace if stage == "export_preview" else None
         # Report before cancelling the owned stdin reader: its executor shutdown awaits host EOF.
         print(
             json.dumps(

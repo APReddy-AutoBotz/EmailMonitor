@@ -44,6 +44,16 @@ describe('accepted selection handoff', () => {
   it('offers a separately labeled accepted view from Review', () => {
     expect(renderToStaticMarkup(<Contacts context={context()} review filters={selection} />)).toContain('View accepted results for this selection')
   })
+  it('keeps the accepted-state assertion tied to the select label including option text', () => {
+    const html = renderToStaticMarkup(<Contacts context={context()} review={false} filters={{ ...selection, state: 'accepted' }} />)
+    const label = html.match(/<label>Association state<select[^>]*>(.*?)<\/select><\/label>/)!
+    expect(label).not.toBeNull()
+    const text = 'Association state' + label[1].replace(/<[^>]*>/g, '')
+    expect(text).toBe('Association stateAcceptedNeeds reviewUnmatchedRejected')
+    expect(text === 'Association state').toBe(false)
+    expect(text).toMatch(/^Association state/)
+    expect(label[1]).toContain('value="accepted" selected=""')
+  })
   it('renders carried selectors and explicit preview with no create authorization', () => {
     const html = renderToStaticMarkup(<Exports context={context()} selection={acceptedSelection(selection)} />)
     expect(html).toContain('Selection handoff')
