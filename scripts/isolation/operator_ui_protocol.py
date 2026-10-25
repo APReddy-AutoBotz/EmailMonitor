@@ -317,6 +317,11 @@ def asset_manifest(root: Path) -> dict[str, str]:
 
 STAGES = (
     "lifecycle_cancel",
+    "lifecycle_pause",
+    "lifecycle_resume",
+    "lifecycle_confirm_cancel",
+    "lifecycle_cancel_retry",
+    "lifecycle_retained_review",
     "lifecycle_export",
     "lifecycle_retry",
     "lifecycle_switch",

@@ -76,3 +76,113 @@ def test_added_case_does_not_relax_original_workflow_pin() -> None:
         except AssertionError:
             continue
         assert hashlib.sha256(normalized).hexdigest() != expected
+
+
+@pytest.mark.parametrize("mode", ["delayed", "incomplete", "unsequenced"])
+def test_cancel_waits_for_resume_render_before_capturing_revision(mode: str) -> None:
+    """Execute the authored sequence against a deterministic delayed reply model.
+
+    This proves sequencing, not browser execution or the historical failure's
+    exact operation. The genuine hosted journey remains mandatory.
+    """
+    import ast
+    import asyncio
+    from pathlib import Path
+    from typing import Any
+
+    module = ast.parse(
+        (
+            Path(__file__).resolve().parents[3] / "scripts/isolation/operator_ui_acceptance.py"
+        ).read_text()
+    )
+    journey = next(
+        node
+        for node in module.body
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "lifecycle_journey"
+    )
+    start = next(
+        i
+        for i, node in enumerate(journey.body)
+        if ast.unparse(node)
+        == "await activate(page, page.get_by_role('button', name='Resume', exact=True))"
+    )
+    end = next(
+        i
+        for i, node in enumerate(journey.body)
+        if ast.unparse(node)
+        == (
+            "await activate(page, dialog.get_by_role('button', "
+            "name='Confirm cancel job', exact=True))"
+        )
+    )
+    sequence = journey.body[start : end + 1]
+    readiness = "await expect(page.get_by_role('button', name='Pause', exact=True)).to_be_visible()"
+    assert sum(ast.unparse(node) == readiness for node in sequence) == 1
+    if mode == "unsequenced":
+        sequence = [node for node in sequence if ast.unparse(node) != readiness]
+    state = {"revision": 1, "captured": 0, "pending": False, "cancelled": False}
+    calls: list[str] = []
+
+    class Locator:
+        def __init__(self, name: str) -> None:
+            self.name = name
+
+        def get_by_role(self, role: str, *, name: str, exact: bool) -> "Locator":
+            assert exact
+            return Locator(name)
+
+    class Expect:
+        def __init__(self, target: Locator) -> None:
+            self.target = target
+
+        async def to_be_visible(self) -> None:
+            assert self.target.name == "Pause" and state["pending"]
+            calls.append("await resumed render")
+            if mode == "incomplete":
+                raise TimeoutError("Resume never rendered")
+            state["revision"] = 2
+            state["pending"] = False
+
+        async def to_contain_text(self, value: str) -> None:
+            assert (
+                self.target.name == "Cancel job"
+                and value == "Retained partial results stay available"
+            )
+
+    async def activate(page: Locator, target: Locator) -> None:
+        calls.append(target.name)
+        if target.name == "Resume":
+            state["pending"] = True
+        elif target.name == "Cancel job":
+            state["captured"] = state["revision"]
+        else:
+            assert target.name == "Confirm cancel job"
+            # Resume can finish after the dialog opens but before confirmation.
+            state["revision"] = 2
+            if state["captured"] != state["revision"]:
+                raise RuntimeError("EXECUTION_REVISION")
+            state["cancelled"] = True
+
+    wrapper = ast.parse("async def exercise():\n    pass\n")
+    function = wrapper.body[0]
+    assert isinstance(function, ast.AsyncFunctionDef)
+    function.body = sequence
+    namespace: dict[str, Any] = {
+        "page": Locator("page"),
+        "activate": activate,
+        "expect": Expect,
+        "checkpoint": lambda stage: None,
+    }
+    exec(compile(ast.fix_missing_locations(wrapper), "<lifecycle-sequence>", "exec"), namespace)
+    if mode == "incomplete":
+        with pytest.raises(TimeoutError, match="Resume never rendered"):
+            asyncio.run(namespace["exercise"]())
+        assert "Cancel job" not in calls and not state["cancelled"]
+    elif mode == "unsequenced":
+        with pytest.raises(RuntimeError, match="EXECUTION_REVISION"):
+            asyncio.run(namespace["exercise"]())
+        assert not state["cancelled"]
+    else:
+        asyncio.run(namespace["exercise"]())
+        assert calls == ["Resume", "await resumed render", "Cancel job", "Confirm cancel job"]
+        assert state["cancelled"]

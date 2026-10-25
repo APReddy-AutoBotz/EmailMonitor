@@ -38,3 +38,14 @@ No live acquisition, new catalog/policy/grant, reference-load certification,
 publication-date/reuse semantics or export reconciliation is included. Historical
 keyboard/DNS/parser intermittency remains unresolved. Formal final review and
 production release acceptance remain separate.
+
+The first hosted lifecycle journey encountered an optimistic revision conflict
+while the original journey passed. The broad phase label did not identify the
+specific control, so that historical cause remains unproven. The new journey
+omitted the original journey's wait for Pause to reappear after Resume. Because
+Cancel is available while paused, opening its dialog immediately can capture a
+pre-resume revision. A deterministic delayed-completion model reproduces that
+conflict, verifies the resumed-render wait, and refuses incomplete transitions.
+The journey now observes that same resumed state before opening cancellation;
+fixed phase labels distinguish pause, resume, confirmation, retry refusal and
+retained review. Runtime behavior, revision checks and deadlines are unchanged.
