@@ -21,7 +21,7 @@ OUTCOME = (
     "services/backend/tests/test_job_outcome_investigation_tenant.py::"
     "test_actual_more_than_100_outcomes_have_no_omissions_or_duplicates"
 )
-RESERVED_SQL = (
+RETAINED_SQL = (
     OUTCOME,
     (
         "services/backend/tests/test_retained_article_filters_tenant.py::"
@@ -140,6 +140,290 @@ RESERVED_SQL = (
         "test_actual_worker_filtered_authority_changes_between_claim_and_finish[revocation]"
     ),
 )
+# Exact authored-PDF cases share the existing SQL job; every case remains required.
+PDF_ACCEPTANCE = (
+    (
+        "services/backend/tests/test_controlled_pdf_channel.py::test_pdf_byte_capability_uses_s"
+        "upervisor_image_without_gateway[False-ambiguous.pdf]"
+    ),
+    (
+        "services/backend/tests/test_controlled_pdf_channel.py::test_pdf_byte_capability_uses_s"
+        "upervisor_image_without_gateway[False-article-a.pdf]"
+    ),
+    (
+        "services/backend/tests/test_controlled_pdf_channel.py::test_pdf_byte_capability_uses_s"
+        "upervisor_image_without_gateway[False-article-b.pdf]"
+    ),
+    (
+        "services/backend/tests/test_controlled_pdf_channel.py::test_pdf_byte_capability_uses_s"
+        "upervisor_image_without_gateway[False-corrupt.pdf]"
+    ),
+    (
+        "services/backend/tests/test_controlled_pdf_channel.py::test_pdf_byte_capability_uses_s"
+        "upervisor_image_without_gateway[False-encrypted.pdf]"
+    ),
+    (
+        "services/backend/tests/test_controlled_pdf_channel.py::test_pdf_byte_capability_uses_s"
+        "upervisor_image_without_gateway[False-no-contact.pdf]"
+    ),
+    (
+        "services/backend/tests/test_controlled_pdf_channel.py::test_pdf_byte_capability_uses_s"
+        "upervisor_image_without_gateway[False-page-cap.pdf]"
+    ),
+    (
+        "services/backend/tests/test_controlled_pdf_channel.py::test_pdf_byte_capability_uses_s"
+        "upervisor_image_without_gateway[False-scanned.pdf]"
+    ),
+    (
+        "services/backend/tests/test_controlled_pdf_channel.py::test_pdf_byte_capability_uses_s"
+        "upervisor_image_without_gateway[False-wrapped.pdf]"
+    ),
+    (
+        "services/backend/tests/test_controlled_pdf_channel.py::test_pdf_byte_capability_uses_s"
+        "upervisor_image_without_gateway[True-ambiguous.pdf]"
+    ),
+    (
+        "services/backend/tests/test_controlled_pdf_channel.py::test_pdf_byte_capability_uses_s"
+        "upervisor_image_without_gateway[True-article-a.pdf]"
+    ),
+    (
+        "services/backend/tests/test_controlled_pdf_channel.py::test_pdf_byte_capability_uses_s"
+        "upervisor_image_without_gateway[True-article-b.pdf]"
+    ),
+    (
+        "services/backend/tests/test_controlled_pdf_channel.py::test_pdf_byte_capability_uses_s"
+        "upervisor_image_without_gateway[True-corrupt.pdf]"
+    ),
+    (
+        "services/backend/tests/test_controlled_pdf_channel.py::test_pdf_byte_capability_uses_s"
+        "upervisor_image_without_gateway[True-encrypted.pdf]"
+    ),
+    (
+        "services/backend/tests/test_controlled_pdf_channel.py::test_pdf_byte_capability_uses_s"
+        "upervisor_image_without_gateway[True-no-contact.pdf]"
+    ),
+    (
+        "services/backend/tests/test_controlled_pdf_channel.py::test_pdf_byte_capability_uses_s"
+        "upervisor_image_without_gateway[True-page-cap.pdf]"
+    ),
+    (
+        "services/backend/tests/test_controlled_pdf_channel.py::test_pdf_byte_capability_uses_s"
+        "upervisor_image_without_gateway[True-scanned.pdf]"
+    ),
+    (
+        "services/backend/tests/test_controlled_pdf_channel.py::test_pdf_byte_capability_uses_s"
+        "upervisor_image_without_gateway[True-wrapped.pdf]"
+    ),
+    (
+        "services/backend/tests/test_controlled_pdf_channel.py::test_supervisor_rejects_unregis"
+        "tered_pdf_requests_before_parser[image]"
+    ),
+    (
+        "services/backend/tests/test_controlled_pdf_channel.py::test_supervisor_rejects_unregis"
+        "tered_pdf_requests_before_parser[command]"
+    ),
+    (
+        "services/backend/tests/test_controlled_pdf_channel.py::test_supervisor_rejects_unregis"
+        "tered_pdf_requests_before_parser[tenant]"
+    ),
+    (
+        "services/backend/tests/test_controlled_pdf_channel.py::test_supervisor_rejects_unregis"
+        "tered_pdf_requests_before_parser[extra]"
+    ),
+    (
+        "services/backend/tests/test_controlled_pdf_channel.py::test_supervisor_rejects_unregis"
+        "tered_pdf_requests_before_parser[unknown]"
+    ),
+    (
+        "services/backend/tests/test_controlled_pdf_channel.py::test_supervisor_rejects_unregis"
+        "tered_pdf_requests_before_parser[digest]"
+    ),
+    (
+        "services/backend/tests/test_controlled_pdf_channel.py::test_supervisor_rejects_unregis"
+        "tered_pdf_requests_before_parser[body]"
+    ),
+    (
+        "services/backend/tests/test_controlled_pdf_channel.py::test_supervisor_rejects_unregis"
+        "tered_pdf_requests_before_parser[kind]"
+    ),
+    (
+        "services/backend/tests/test_controlled_pdf_channel.py::test_pdf_client_rejects_cross_r"
+        "equest_or_cross_profile_response[id]"
+    ),
+    (
+        "services/backend/tests/test_controlled_pdf_channel.py::test_pdf_client_rejects_cross_r"
+        "equest_or_cross_profile_response[kind]"
+    ),
+    (
+        "services/backend/tests/test_controlled_pdf_channel.py::test_pdf_client_rejects_cross_r"
+        "equest_or_cross_profile_response[observation]"
+    ),
+    (
+        "services/backend/tests/test_controlled_pdf_tenant.py::test_actual_controlled_pdf_durab"
+        "le_replay_review_export"
+    ),
+    (
+        "services/backend/tests/test_controlled_pdf_tenant.py::test_actual_controlled_pdf_cance"
+        "l_after_parse_cannot_commit"
+    ),
+    (
+        "services/backend/tests/test_pdf_pipeline_tenant.py::test_actual_pdf_durable_journey[am"
+        "biguous.pdf]"
+    ),
+    (
+        "services/backend/tests/test_pdf_pipeline_tenant.py::test_actual_pdf_durable_journey[ar"
+        "ticle-a.pdf]"
+    ),
+    (
+        "services/backend/tests/test_pdf_pipeline_tenant.py::test_actual_pdf_durable_journey[ar"
+        "ticle-b.pdf]"
+    ),
+    (
+        "services/backend/tests/test_pdf_pipeline_tenant.py::test_actual_pdf_durable_journey[co"
+        "rrupt.pdf]"
+    ),
+    (
+        "services/backend/tests/test_pdf_pipeline_tenant.py::test_actual_pdf_durable_journey[en"
+        "crypted.pdf]"
+    ),
+    (
+        "services/backend/tests/test_pdf_pipeline_tenant.py::test_actual_pdf_durable_journey[no"
+        "-contact.pdf]"
+    ),
+    (
+        "services/backend/tests/test_pdf_pipeline_tenant.py::test_actual_pdf_durable_journey[pa"
+        "ge-cap.pdf]"
+    ),
+    (
+        "services/backend/tests/test_pdf_pipeline_tenant.py::test_actual_pdf_durable_journey[sc"
+        "anned.pdf]"
+    ),
+    (
+        "services/backend/tests/test_pdf_pipeline_tenant.py::test_actual_pdf_durable_journey[wr"
+        "apped.pdf]"
+    ),
+    (
+        "services/backend/tests/test_pdf_pipeline_tenant.py::test_sql_pdf_retention_review_and_"
+        "export[ambiguous.pdf]"
+    ),
+    (
+        "services/backend/tests/test_pdf_pipeline_tenant.py::test_sql_pdf_retention_review_and_"
+        "export[article-a.pdf]"
+    ),
+    (
+        "services/backend/tests/test_pdf_pipeline_tenant.py::test_sql_pdf_retention_review_and_"
+        "export[article-b.pdf]"
+    ),
+    (
+        "services/backend/tests/test_pdf_pipeline_tenant.py::test_sql_pdf_retention_review_and_"
+        "export[corrupt.pdf]"
+    ),
+    (
+        "services/backend/tests/test_pdf_pipeline_tenant.py::test_sql_pdf_retention_review_and_"
+        "export[encrypted.pdf]"
+    ),
+    (
+        "services/backend/tests/test_pdf_pipeline_tenant.py::test_sql_pdf_retention_review_and_"
+        "export[no-contact.pdf]"
+    ),
+    (
+        "services/backend/tests/test_pdf_pipeline_tenant.py::test_sql_pdf_retention_review_and_"
+        "export[page-cap.pdf]"
+    ),
+    (
+        "services/backend/tests/test_pdf_pipeline_tenant.py::test_sql_pdf_retention_review_and_"
+        "export[scanned.pdf]"
+    ),
+    (
+        "services/backend/tests/test_pdf_pipeline_tenant.py::test_sql_pdf_retention_review_and_"
+        "export[wrapped.pdf]"
+    ),
+    (
+        "services/backend/tests/test_pdf_pipeline_tenant.py::test_existing_policy_does_not_gain"
+        "_pdf_access"
+    ),
+    (
+        "services/backend/tests/test_pdf_pipeline_tenant.py::test_disabled_or_unknown_pdf_does_"
+        "not_plan[article-a.pdf-False]"
+    ),
+    (
+        "services/backend/tests/test_pdf_pipeline_tenant.py::test_disabled_or_unknown_pdf_does_"
+        "not_plan[unknown.pdf-True]"
+    ),
+    (
+        "services/backend/tests/test_pdf_pipeline_tenant.py::test_pdf_current_fences_reject_com"
+        "mit_after_parser[cancel]"
+    ),
+    (
+        "services/backend/tests/test_pdf_pipeline_tenant.py::test_pdf_current_fences_reject_com"
+        "mit_after_parser[pause]"
+    ),
+    (
+        "services/backend/tests/test_pdf_pipeline_tenant.py::test_pdf_current_fences_reject_com"
+        "mit_after_parser[delete]"
+    ),
+    (
+        "services/backend/tests/test_pdf_pipeline_tenant.py::test_pdf_current_fences_reject_com"
+        "mit_after_parser[retention]"
+    ),
+    (
+        "services/backend/tests/test_pdf_pipeline_tenant.py::test_pdf_current_fences_reject_com"
+        "mit_after_parser[expired_lease]"
+    ),
+    (
+        "services/backend/tests/test_pdf_pipeline_tenant.py::test_pdf_current_fences_reject_com"
+        "mit_after_parser[lost_lease]"
+    ),
+    (
+        "services/backend/tests/test_pdf_pipeline_tenant.py::test_pdf_current_fences_reject_com"
+        "mit_after_parser[revoked_policy]"
+    ),
+    (
+        "services/backend/tests/test_pdf_pipeline_tenant.py::test_pdf_current_fences_reject_com"
+        "mit_after_parser[expired_session]"
+    ),
+    (
+        "services/backend/tests/test_pdf_pipeline_tenant.py::test_pdf_current_fences_reject_com"
+        "mit_after_parser[revoked_session]"
+    ),
+    (
+        "services/backend/tests/test_pdf_pipeline_tenant.py::test_sql_pdf_commit_rechecks_curre"
+        "nt_authority[cancel]"
+    ),
+    (
+        "services/backend/tests/test_pdf_pipeline_tenant.py::test_sql_pdf_commit_rechecks_curre"
+        "nt_authority[pause]"
+    ),
+    (
+        "services/backend/tests/test_pdf_pipeline_tenant.py::test_sql_pdf_commit_rechecks_curre"
+        "nt_authority[delete]"
+    ),
+    (
+        "services/backend/tests/test_pdf_pipeline_tenant.py::test_sql_pdf_commit_rechecks_curre"
+        "nt_authority[retention]"
+    ),
+    (
+        "services/backend/tests/test_pdf_pipeline_tenant.py::test_sql_pdf_commit_rechecks_curre"
+        "nt_authority[expired_lease]"
+    ),
+    (
+        "services/backend/tests/test_pdf_pipeline_tenant.py::test_sql_pdf_commit_rechecks_curre"
+        "nt_authority[lost_lease]"
+    ),
+    (
+        "services/backend/tests/test_pdf_pipeline_tenant.py::test_sql_pdf_commit_rechecks_curre"
+        "nt_authority[revoked_policy]"
+    ),
+    (
+        "services/backend/tests/test_pdf_pipeline_tenant.py::test_sql_pdf_commit_rechecks_curre"
+        "nt_authority[expired_session]"
+    ),
+    (
+        "services/backend/tests/test_pdf_pipeline_tenant.py::test_sql_pdf_commit_rechecks_curre"
+        "nt_authority[revoked_session]"
+    ),
+)
+RESERVED_SQL = (*RETAINED_SQL, *PDF_ACCEPTANCE)
 PROFILES = ("backend", "outcome_sql")
 ARGUMENTS = (
     "-c",
@@ -152,7 +436,12 @@ ARGUMENTS = (
     "services/backend/tests",
     "tests",
 )
-OVERRIDES = ("PYTEST_ADDOPTS", "PYTEST_PLUGINS", "PYTEST_DISABLE_PLUGIN_AUTOLOAD", "PYTHONPATH")
+OVERRIDES = (
+    "PYTEST_ADDOPTS",
+    "PYTEST_PLUGINS",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD",
+    "PYTHONPATH",
+)
 COMMON = ("source_tree", "config", "full", "backend", "outcome_sql")
 
 
@@ -211,7 +500,10 @@ def configuration() -> str:
             "autoload": False,
             "files": {
                 name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest()
-                for name in ("services/backend/pyproject.toml", "services/backend/uv.lock")
+                for name in (
+                    "services/backend/pyproject.toml",
+                    "services/backend/uv.lock",
+                )
             },
         }
     )

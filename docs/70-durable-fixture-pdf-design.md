@@ -192,3 +192,7 @@ accepted association, then inspects its retained evidence and saves explicit rev
 It does not search the needs-review-only XML view or change association semantics.
 A local regression maps the actual authored PDF and checks the selected view against
 that association state. Page evidence and saved-review assertions remain mandatory.
+
+## Hosted execution balance
+
+The 70 exact authored-PDF channel, durable SQL and isolated composition cases run in the existing SQL partition alongside the 30 retained-outcome/filter cases. The backend partition remains their exact complement. Existing complete-collection, no-skip execution and matching-tree join checks remain mandatory; consumer deadlines and job limits are unchanged. This balances the measured PDF workload after a backend consumer deadline expired during otherwise progressing execution. The failed receipt remains historical evidence; repartitioned hosted acceptance must pass before closure.

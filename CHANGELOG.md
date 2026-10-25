@@ -1,3 +1,7 @@
+## 2026-10-25 — Authored PDF acceptance scheduling
+
+- Balance 70 exact PDF cases into the existing SQL partition, preserving the complete disjoint suite, mandatory receipts and all deadlines.
+
 ## 2026-10-24 — Isolated execution receipt lock candidate
 
 - Add forward migration 0017 for receipt-only shared job locking; retain control fences, authority predicates, outbox transitions and publication ordering.
