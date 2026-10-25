@@ -192,7 +192,12 @@ def test_ui_assembly_explicitly_uses_existing_test_identity_guard() -> None:
 def test_evidence_drawer_closes_natively_before_unmounting() -> None:
     code = (ROOT / "apps/web/src/views.tsx").read_text()
     drawer = code.split("function EvidenceDrawer(", 1)[1].split("const initialExport", 1)[0]
-    assert "onClose={close}" in drawer
+    assert "onClose={finishClose}" in drawer
+    assert "const closed = useRef(false)" in drawer
+    assert "if (closed.current) return; closed.current = true; close()" in drawer
+    assert "const requestClose = () => { dialog.current?.close(); finishClose() }" in drawer
+    assert "onClick={requestClose}" in drawer
+    assert "reason }); requestClose()" in drawer
     assert "onCancel=" not in drawer
     assert "dialog.current?.close()" in drawer
     assert "reason }); close()" not in drawer
