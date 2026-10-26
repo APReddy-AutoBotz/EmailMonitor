@@ -75,3 +75,9 @@ if another journey in the same pytest step later succeeds. Original exceptions,
 exit status, genuine-CI guards, guest restrictions and cleanup operations remain
 unchanged. This provides diagnostic evidence, not a runtime repair; a passing
 later run cannot explain earlier failures.
+
+Installed login failures additionally expose only the existing validated login
+subphase enum. Missing subphase remains `none`; no session values or navigation
+targets are reported. This separates readiness, activation, redirect, callback
+and organization-selection waits without changing the shared ten-second login
+budget or treating a later passing journey as a repair.

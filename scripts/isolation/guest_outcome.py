@@ -5,8 +5,9 @@ from collections.abc import Callable
 from contextvars import ContextVar
 from functools import wraps
 from pathlib import Path
+from typing import get_args
 
-from operator_ui_protocol import STAGES, DiagnosticFrame
+from operator_ui_protocol import STAGES, DiagnosticFrame, InstalledLoginPhase
 from pydantic import TypeAdapter
 
 HOST = frozenset(
@@ -31,6 +32,7 @@ class Trace:
         self.phase = "unavailable"
         self.reason = "unknown"
         self.error = "none"
+        self.login = "none"
         self.cleanup: set[str] = set()
 
     def label(self) -> str:
@@ -53,9 +55,12 @@ class Trace:
             raise ValueError("Closed guest error required")
         if not self.cleanup <= {"container", "image"}:
             raise ValueError("Exact owned cleanup kinds required")
+        if self.login not in ("none", *get_args(InstalledLoginPhase)):
+            raise ValueError("Closed installed login phase required")
         cleanup = "both" if len(self.cleanup) == 2 else next(iter(self.cleanup), "none")
         return (
             f"{stage}-phase_{self.phase}-error_{self.error}-reason_{self.reason}-cleanup_{cleanup}"
+            f"-login_{self.login}"
         )
 
 
@@ -90,6 +95,7 @@ def guest_frame(frame: DiagnosticFrame) -> None:
         trace.phase = fixed.stage
         if fixed.kind == "failure":
             trace.reason, trace.error = fixed.reason, fixed.error or "none"
+            trace.login = fixed.installed_login_phase or "none"
 
 
 def observed_guest[**P, T](function: Callable[P, T]) -> Callable[P, T]:
