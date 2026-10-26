@@ -85,3 +85,20 @@ is dropped or converted into success on refusal. An actual PostgreSQL regression
 covers the artifact shape before suppression and denied download after it. The
 new completion control verifies existing synthetic state only; it grants no
 application capability, source access or production operation.
+
+## Installed XML diagnostic boundary
+
+The completion candidate passed the actual suppression browser journey, all
+6,700 backend cases, SQL and the matching-receipt join. Seven hosted workflows
+passed; the separate installed XML step failed after installed operator success.
+Its exact case and cause remain unknown. The earlier fresh aggregate assembly
+probe failure also remains open; neither a standalone pass nor later hosted
+success establishes its repair.
+
+Future installed XML executions reuse the bounded numeric progress reporter:
+active/completed/first-failed/total ordinals, fixed exit/deadline categories, and
+an allowlisted shell check stage. No test names, assertion contents, paths or
+payloads enter this metadata. The six cases, marker predicates, original exit
+handling, consumer/wrapper deadlines and ownership cleanup remain unchanged.
+Owned synthetic shell and pytest tests validate reporting independently of
+genuine installed acceptance. This diagnostic is not a runtime repair.

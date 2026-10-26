@@ -1,0 +1,65 @@
+"""Owned shell fixtures test diagnostic propagation, not installed acceptance."""
+
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).resolve().parents[3]
+MARKERS = (
+    "INSTALLED_CONTROLLED_XML_KEYWORD_REVIEW_EXPORT",
+    "INSTALLED_CONTROLLED_XML_DIRECT_URL_REVIEW_EXPORT",
+    "INSTALLED_CONTROLLED_XML_POST_OBSERVATION_CRASH_RECOVERY",
+    "INSTALLED_CONTROLLED_XML_DELEGATION_REVOKED_DURING_RESPONSE",
+    "INSTALLED_AUTHORED_PDF_DIRECT_URL_REVIEW_EXPORT",
+    "INSTALLED_AUTHORED_PDF_POST_OBSERVATION_CRASH_RECOVERY",
+)
+STAGES = ("keyword", "direct_url", "crash_recovery", "revocation", "pdf", "pdf_recovery")
+
+
+@pytest.mark.parametrize("missing", [None, *range(6)])
+@pytest.mark.parametrize("code", [0, 1, 143])
+def test_fixed_shell_checks_preserve_exit_and_stage(
+    tmp_path: Path, missing: int | None, code: int
+) -> None:
+    executable = tmp_path / "uv"
+    markers = [marker for index, marker in enumerate(MARKERS) if index != missing]
+    executable.write_text(
+        f"#!{sys.executable}\nimport sys\nprint({chr(10).join(markers)!r})\nsys.exit({code})\n"
+    )
+    executable.chmod(0o700)
+    output = tmp_path / "output"
+    result = subprocess.run(
+        ["bash", "scripts/packaging/check_xml_installed.sh"],
+        cwd=ROOT,
+        env={
+            **os.environ,
+            "PATH": str(tmp_path) + os.pathsep + os.environ["PATH"],
+            "RUNNER_TEMP": str(tmp_path),
+            "GITHUB_OUTPUT": str(output),
+            "EM_BACKEND_OUTCOME_REPORT": "true",
+        },
+        capture_output=True,
+        timeout=10,
+    )
+    assert result.returncode == (code or int(missing is not None))
+    stage = "pytest" if code else "complete" if missing is None else STAGES[missing]
+    lines = output.read_text().splitlines()
+    assert lines[-1] == "xml_check=" + stage
+    assert all(
+        line.removeprefix("xml_check=") in {*STAGES, "pytest", "no_skips_warnings", "complete"}
+        for line in lines
+    )
+
+
+def test_xml_reporting_retains_guard_and_budgets() -> None:
+    from run_xml_integration import CONSUMER_SECONDS, WRAPPER_SECONDS
+
+    assert CONSUMER_SECONDS["installed"] == 900
+    assert WRAPPER_SECONDS["installed"] == 1200
+    workflow = (ROOT / ".github/workflows/service-runtime.yml").read_text()
+    assert "steps.installed-xml-test.outputs.backend_outcome" in workflow
+    assert "steps.installed-xml-test.outputs.xml_check" in workflow
+    assert 'EM_REQUIRE_XML_INTEGRATION: "synthetic-test-only"' in workflow

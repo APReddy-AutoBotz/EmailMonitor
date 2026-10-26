@@ -455,7 +455,7 @@ def main() -> None:
     # for setup/final runner overhead. Workload headroom is a separate risk.
     signal.alarm(WRAPPER_SECONDS[mode])
     try:
-        if mode == "application-backend":
+        if mode in {"application-backend", "installed"}:
             from backend_outcome import reported
 
             reported(lambda environment: execute(mode, environment), dict(os.environ))
