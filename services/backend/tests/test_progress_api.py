@@ -22,6 +22,7 @@ def unavailable_token(request: Request) -> str:
         ("POST", "retry", {"expected_revision": 1}),
         ("GET", "progress", None),
         ("GET", "events", None),
+        ("GET", "timing", None),
     ],
 )
 def test_production_refuses_before_database_or_credentials(

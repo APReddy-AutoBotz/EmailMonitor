@@ -1239,6 +1239,10 @@ async def lifecycle_journey(
     await activate(page, dialog.get_by_role("button", name="Confirm cancel job", exact=True))
     await expect(dialog).not_to_be_visible()
     await expect(page.get_by_text("cancelled", exact=True).first).to_be_visible()
+    timing = page.get_by_role("region", name="Recorded job elapsed time", exact=True)
+    await expect(timing).to_contain_text("Queue-to-terminal elapsed seconds")
+    await expect(timing).to_contain_text("includes waiting and pauses")
+    await expect(timing).to_contain_text("not worker CPU time")
     checkpoint("lifecycle_cancel_retry")
     await activate(
         page, page.get_by_role("button", name="Retry failed work as continuation", exact=True)

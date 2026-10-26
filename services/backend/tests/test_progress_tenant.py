@@ -257,6 +257,8 @@ def test_real_current_authorization_closes_replay_and_all_progress_tables(
         read.events(org, job, 0)
     with pytest.raises(AuthorizationDenied):
         read.snapshot(org, job)
+    with pytest.raises(AuthorizationDenied):
+        read.timing(org, job)
     if reason == "policy":
         # Metadata reconciliation records a gap without acquiring any further source bytes.
         progress.reconcile(org, job)

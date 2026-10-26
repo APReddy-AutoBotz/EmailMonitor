@@ -19,6 +19,7 @@ from emailmonitor.progress.models import Item, Snapshot
 from emailmonitor.progress.service import Progress
 from emailmonitor.progress.state import parse_cursor
 from emailmonitor.progress.stream import replay
+from emailmonitor.progress.timing import JobTiming
 from emailmonitor.runtime.delegation import ServiceBindings
 
 
@@ -73,6 +74,13 @@ def progress_router(
     )
     def items(request: Request, organization_id: UUID, job_id: UUID) -> list[Item]:
         return service(request).items(organization_id, job_id)
+
+    @router.get("/organizations/{organization_id}/jobs/{job_id}/timing", response_model=JobTiming)
+    def timing(request: Request, organization_id: UUID, job_id: UUID) -> JobTiming:
+        try:
+            return service(request).timing(organization_id, job_id)
+        except RevisionConflict as error:
+            raise HTTPException(409, "Job timing changed; refresh current metadata") from error
 
     @router.get("/organizations/{organization_id}/jobs/{job_id}/events")
     def events(request: Request, organization_id: UUID, job_id: UUID) -> StreamingResponse:

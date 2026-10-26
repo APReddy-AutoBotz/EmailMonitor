@@ -23,6 +23,7 @@ from emailmonitor.organizations.roles import Capability
 from emailmonitor.progress.binding import Lease, bound
 from emailmonitor.progress.models import Event, Item, Snapshot
 from emailmonitor.progress.state import Outcome, counts, percentage
+from emailmonitor.progress.timing import JobTiming, project_timing
 from emailmonitor.runtime.access import WorkAuthority, WorkDatabase
 from emailmonitor.runtime.delegation import ServiceBindings
 
@@ -96,6 +97,57 @@ class Progress:
     def authorize(self, org: UUID, job: UUID) -> None:
         with self._tenant(org, Capability.READ_ORGANIZATION) as connection:
             self._read_scope(connection, org, job)
+
+    def timing(self, org: UUID, job: UUID) -> JobTiming:
+        with self._tenant(org, Capability.READ_ORGANIZATION) as c:
+            self._read_scope(c, org, job)
+            row = (
+                c.execute(
+                    text("""
+SELECT j.state, j.row_version, j.generation,
+ q.occurred_at AS queued_at, q.sequence AS queued_sequence,
+ t.occurred_at AS terminal_at, t.sequence AS terminal_sequence,
+ t.aggregate_version AS terminal_revision
+FROM emailmonitor.jobs j
+LEFT JOIN LATERAL (
+ SELECT occurred_at, sequence FROM emailmonitor.execution_events
+ WHERE organization_id=j.organization_id AND job_id=j.id AND event_type='job.queued'
+ ORDER BY sequence LIMIT 1
+) q ON true
+LEFT JOIN LATERAL (
+ SELECT occurred_at, sequence, aggregate_version FROM emailmonitor.execution_events
+ WHERE organization_id=j.organization_id AND job_id=j.id
+ AND event_type=CASE WHEN j.state='cancelled' THEN 'job.cancelled' ELSE 'job.finished' END
+ ORDER BY sequence DESC LIMIT 1
+) t ON true
+WHERE j.organization_id=:org AND j.id=:job
+"""),
+                    {"org": org, "job": job},
+                )
+                .mappings()
+                .one()
+            )
+            result = project_timing(
+                org,
+                job,
+                row["state"],
+                row["row_version"],
+                row["generation"],
+                row["queued_at"],
+                row["terminal_at"],
+                row["queued_sequence"],
+                row["terminal_sequence"],
+                row["terminal_revision"],
+            )
+            self._read_scope(c, org, job)
+            current = c.execute(
+                text("""SELECT row_version, generation FROM emailmonitor.jobs
+WHERE organization_id=:org AND id=:job"""),
+                {"org": org, "job": job},
+            ).one()
+            if tuple(current) != (result.revision, result.generation):
+                raise RevisionConflict()
+            return result
 
     def snapshot(self, org: UUID, job: UUID) -> Snapshot:
         with self._tenant(org, Capability.READ_ORGANIZATION) as c:
