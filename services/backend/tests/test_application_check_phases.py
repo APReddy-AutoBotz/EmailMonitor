@@ -206,7 +206,19 @@ def test_workflow_requires_complete_backend_and_static_frontend_jobs() -> None:
     assert "timeout-minutes: 10" in jobs["static"]
     assert jobs["static"].count("run: scripts/check.sh static\n") == 1
     assert jobs["static"].count("run: scripts/check.sh frontend\n") == 1
-    assert jobs["outcome_sql"] == jobs["backend"].replace(
+    diagnostic_environment = '          EM_BACKEND_OUTCOME_REPORT: "true"\n'
+    diagnostic_step = (
+        '      - name: "Backend outcome: ${{ steps.tests.outputs.backend_outcome '
+        "|| 'unavailable' }}\"\n"
+        "        if: ${{ !cancelled() && steps.tests.outcome != 'skipped' }}\n"
+        "        run: ':'\n"
+    )
+    assert jobs["backend"].count(diagnostic_environment) == 1
+    assert jobs["backend"].count(diagnostic_step) == 1
+    assert "backend_outcome" not in jobs["outcome_sql"]
+    assert "EM_BACKEND_OUTCOME_REPORT" not in jobs["outcome_sql"]
+    execution = jobs["backend"].replace(diagnostic_environment, "").replace(diagnostic_step, "")
+    assert jobs["outcome_sql"] == execution.replace(
         "Execute offline scaffold and real tenant SQL/API checks",
         "Execute the complete retained outcome and article-filter SQL acceptance",
     ).replace("application-backend", "application-outcome-sql")
@@ -251,3 +263,25 @@ def test_scaffold_join_accepts_only_three_explicit_successes(
     else:
         with pytest.raises(partition.PartitionRefused, match="application_dependency_failed"):
             partition.join(environment)
+
+
+@pytest.mark.parametrize(
+    "before,after",
+    [
+        ('EM_BACKEND_OUTCOME_REPORT: "true"', 'EM_BACKEND_OUTCOME_REPORT: "false"'),
+        ("        run: ':'", "        run: 'false'"),
+        ("timeout-minutes: 25", "timeout-minutes: 26"),
+        ('EM_REQUIRE_SYNTHETIC_RESTORE: "true"', 'EM_REQUIRE_SYNTHETIC_RESTORE: "false"'),
+    ],
+)
+def test_workflow_diagnostic_exception_does_not_hide_other_changes(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, before: str, after: str
+) -> None:
+    workflow = (ROOT / ".github/workflows/application.yml").read_text()
+    assert before in workflow
+    destination = tmp_path / ".github/workflows/application.yml"
+    destination.parent.mkdir(parents=True)
+    destination.write_text(workflow.replace(before, after, 1))
+    monkeypatch.setattr(sys.modules[__name__], "ROOT", tmp_path)
+    with pytest.raises(AssertionError):
+        test_workflow_requires_complete_backend_and_static_frontend_jobs()
