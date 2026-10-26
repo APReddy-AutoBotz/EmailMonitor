@@ -1,6 +1,6 @@
 # Contextual suppression of a retained contact
 
-Local implementation in progress; not published or accepted. This connects the
+Draft implementation; hosted acceptance remains incomplete. This connects the
 existing EM-014 privacy suppression action to the currently readable contact in
 EM-012's evidence dialog. It introduces no new suppression matching rule, source
 permission, migration, acquisition route or production activation.
@@ -26,8 +26,8 @@ viewer, CSRF and cross-tenant refusal, and resulting contact visibility; existin
 lifecycle tests for export fencing and non-resurrection; an authored installed
 keyboard journey that cancels first, then explicitly confirms suppression after
 other retained-data journeys finish. Authored or skipped cases are not executed
-acceptance. Full normal/fresh and genuine installed checks remain required before
-publication. No merge, deployment or live-source claim follows from local proof.
+acceptance. Full normal/fresh local checks precede Draft publication; genuine
+hosted checks remain required before acceptance. No merge, deployment or live-source claim follows from local proof.
 
 ## Current integration boundary
 
@@ -37,4 +37,22 @@ candidate preserves timing presentation, current outcome replay readiness and
 existing fixed guest diagnostics. It changes no migration, authority predicate,
 source access or matching rule. Prior branch receipts are historical evidence;
 current normal/fresh, actual SQL and genuine hosted browser acceptance must be
-reported independently before publication or acceptance.
+reported independently for each tested candidate.
+
+## Validation checkpoint
+
+The product candidate passed normal and independent fresh local backend checks
+(6,292 passed, 578 explicit infrastructure skips each), 200 frontend tests each,
+static checks and a fresh web build. Separate disposable PostgreSQL runs each
+passed eight suppression role/refusal and lifecycle cases with zero skips and
+verified owned cleanup. Draft #60 preserves Draft #59 as its base.
+
+Its first operator workflow failed before reaching suppression, at the existing
+late-organization outcome pagination keyboard attempt. The fixed snapshot showed
+an enabled, non-inert target tab stop, focused document and another active button;
+it did not establish a cause. Existing passive attempt observations are now
+summarized as Tab count, truncation and count/first-Tab position for heading focus,
+target detachment and target replacement. No event arrays, values or payloads are
+exported. A truncated trace cannot prove absence beyond its capture cap. Original
+keyboard sequence, deadline, failure and cleanup remain unchanged. This diagnostic
+is not a runtime repair; prior failures remain unresolved.

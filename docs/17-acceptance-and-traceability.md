@@ -566,5 +566,6 @@ explicit confirmation, capability and current-contact binding, stale scope and
 refused/uncertain outcomes. `test_contextual_suppression_api_uses_existing_management_capability`
 authors real SQL role, CSRF, tenant and contact-fencing checks. The installed
 operator journey authors keyboard cancel then confirmation after retained-data
-journeys. These added SQL/browser cases remain pending execution; see
+journeys. The eight normal/fresh SQL cases passed; browser acceptance remains
+incomplete after a preceding outcome-keyboard failure. See
 [the bounded scope](80-contextual-contact-suppression.md).

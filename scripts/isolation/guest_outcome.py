@@ -13,6 +13,7 @@ from operator_ui_protocol import (
     DiagnosticFrame,
     FocusExhaustion,
     InstalledLoginPhase,
+    KeyboardAttemptTrace,
 )
 from pydantic import TypeAdapter
 
@@ -68,6 +69,7 @@ class Trace:
         if self.outcome not in ("none", *OUTCOME_PHASES):
             raise ValueError("Closed outcome phase required")
         focus = "none"
+        attempt = ""
         if isinstance(self.focus, FocusExhaustion):
             value = FocusExhaustion.model_validate(self.focus.model_dump())
             flags = "".join(
@@ -87,6 +89,22 @@ class Trace:
                 f"{value.active_kind}.{value.target_kind or 'none'}."
                 f"{value.active_control or 'none'}.{flags}"
             )
+            if isinstance(value.attempt_trace, KeyboardAttemptTrace):
+                observed = value.attempt_trace
+                # Summarize existing passive observations, never export event arrays.
+                # A truncated trace cannot establish absence after its capture cap.
+                parts = [f"tabs{observed.tabs}", f"truncated{int(observed.truncated)}"]
+                for kind, label in (
+                    ("heading_focus", "heading"),
+                    ("target_detached", "detached"),
+                    ("target_replaced", "replaced"),
+                ):
+                    events = [event for event in observed.events if event.kind == kind]
+                    first = str(events[0].tab) if events else "none"
+                    parts.append(f"{label}{len(events)}at{first}")
+                attempt = "-attempt_" + ".".join(parts)
+            elif value.attempt_trace == "unavailable":
+                attempt = "-attempt_unavailable"
         elif self.focus == "unavailable":
             focus = "unavailable"
         elif self.focus is not None:
@@ -95,7 +113,7 @@ class Trace:
         return (
             f"{stage}-phase_{self.phase}-error_{self.error}-reason_{self.reason}-cleanup_{cleanup}"
             f"-login_{self.login}"
-            f"-outcome_{self.outcome}-focus_{focus}"
+            f"-outcome_{self.outcome}-focus_{focus}{attempt}"
         )
 
 
