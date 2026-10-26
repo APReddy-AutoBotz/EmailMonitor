@@ -58,7 +58,7 @@
 | NFR-009 | EM-004, EM-006, EM-011 | LIMITS URL/page/byte/query/export resource tests |
 | NFR-010 | EM-013, EM-016 | PERF-FAIR multi-tenant blocked-source scenario |
 | NFR-011 | EM-012 | UX-A11Y keyboard and automated/manual accessibility report |
-| NFR-012 | EM-009, EM-012 | DATA-UNICODE/TIME round-trip tests |
+| NFR-012 | EM-009, EM-012 | DATA-UNICODE/TIME round-trip tests; render-level timezone evidence in `reports/nfr012-timezone-validation.md` |
 | NFR-013 | EM-017 | OPS-RESTORE timed recovery report |
 | NFR-014 | EM-018 | SEC-RELEASE findings and dispositions |
 | NFR-015 | EM-001, EM-017, EM-018 | REL-ARTIFACT dependency/license/migration evidence |
