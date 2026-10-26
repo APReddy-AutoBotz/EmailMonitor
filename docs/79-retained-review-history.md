@@ -35,3 +35,11 @@ unexecuted until the unchanged genuine hosted gates pass.
 This slice does not implement unmerge, source attachment or observation reuse,
 and does not claim complete FR-020 or release acceptance. Rolling back the UI
 requires no database change. Final formal review remains a separate release gate.
+
+The nine new history SQL cases are explicitly assigned to the existing outcome-SQL
+partition. Aggregate hosted timing showed the prior backend gate used 1,176 of
+1,200 seconds and the first history backend attempt ended at 1,199 seconds, while
+outcome SQL finished in about 826 seconds. This bounded scheduling correction
+preserves all collected tests, exact disjoint inventory, source-tree binding,
+zero-skip receipts and unchanged deadlines. It does not identify the assertion
+behind the separate installed XML failure or establish a causal runtime repair.
