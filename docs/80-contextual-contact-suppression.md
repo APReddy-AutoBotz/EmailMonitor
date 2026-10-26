@@ -102,3 +102,14 @@ payloads enter this metadata. The six cases, marker predicates, original exit
 handling, consumer/wrapper deadlines and ownership cleanup remain unchanged.
 Owned synthetic shell and pytest tests validate reporting independently of
 genuine installed acceptance. This diagnostic is not a runtime repair.
+
+The next hosted observation completed all six XML cases and localized the first
+failure to ordinal two (direct URL), with pytest exit one before marker checks.
+It did not identify the assertion or establish that only one case failed. The
+exact local case reaches the existing SQL/broker fixture guard and skips; no
+genuine-CI prerequisites are fabricated. First-failure reporting now records only
+the existing setup/call/teardown and validated guest host/phase categories. Guest
+state resets before each case, and later successes or teardown failures cannot
+overwrite the first failed report. Missing or invalid metadata remains unavailable
+without replacing the original failure. Owned synthetic regression tests exercise
+this behavior; the direct-URL runtime cause remains unproven.

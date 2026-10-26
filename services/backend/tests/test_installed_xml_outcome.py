@@ -4,8 +4,10 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
+from xml_progress import XmlProgress
 
 ROOT = Path(__file__).resolve().parents[3]
 MARKERS = (
@@ -78,3 +80,92 @@ def test_check_stage_rejects_arbitrary_values(tmp_path: Path) -> None:
     assert result.returncode == 1
     assert result.stdout == result.stderr == b""
     assert not output.exists()
+
+
+@pytest.mark.parametrize("when", ["setup", "call", "teardown"])
+def test_first_failed_case_survives_later_reports(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, when: str
+) -> None:
+    import guest_outcome as guest
+    from operator_ui_protocol import DiagnosticFrame
+
+    output = tmp_path / "output"
+    monkeypatch.setenv("EM_XML_CASE_OUTCOME_REPORT", "true")
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
+    progress = XmlProgress()
+    progress.pytest_runtest_logstart("private", None)
+
+    @guest.observed_guest
+    def failed() -> None:
+        guest.guest_stage("conversation")
+        guest.guest_frame(DiagnosticFrame(kind="stage", stage="evidence_review"))
+        raise AssertionError("private payload")
+
+    with pytest.raises(AssertionError, match="private payload"):
+        failed()
+    progress.pytest_runtest_logreport(SimpleNamespace(outcome="failed", when=when))
+    expected = f"xml_failure=case_1-{when}-host_conversation-phase_evidence_review\n"
+    assert output.read_text() == expected
+    progress.pytest_runtest_logstart("later private", None)
+    assert guest.case_categories() == ("unavailable", "unavailable")
+    progress.pytest_runtest_logreport(SimpleNamespace(outcome="passed", when="call"))
+    progress.pytest_runtest_logreport(SimpleNamespace(outcome="failed", when="teardown"))
+    assert output.read_text() == expected
+
+
+@pytest.mark.parametrize("invalid", ["phase", "host", "when", "output"])
+def test_invalid_reporting_never_replaces_original_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, invalid: str
+) -> None:
+    import guest_outcome as guest
+
+    output = tmp_path / "output"
+    monkeypatch.setenv("EM_XML_CASE_OUTCOME_REPORT", "true")
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output / "missing" if invalid == "output" else output))
+    progress = XmlProgress()
+    progress.pytest_runtest_logstart("private", None)
+    trace = guest.Trace()
+    if invalid == "phase":
+        trace.phase = "private\nxml_failure=complete"
+    if invalid == "host":
+        trace.stage = "private"
+    monkeypatch.setattr(guest, "_case_trace", trace)
+    report = SimpleNamespace(outcome="failed", when="private" if invalid == "when" else "call")
+    progress.pytest_runtest_logreport(report)
+    assert report.outcome == "failed"
+    assert progress.first_failure
+    assert not output.exists()
+
+
+def test_actual_pytest_failure_and_later_success_keep_first_phase(tmp_path: Path) -> None:
+    source = tmp_path / "test_owned.py"
+    source.write_text(
+        "from guest_outcome import observed_guest, guest_stage, guest_frame\n"
+        "from operator_ui_protocol import DiagnosticFrame\n"
+        "@observed_guest\ndef journey():\n"
+        "    guest_stage('conversation')\n"
+        "    guest_frame(DiagnosticFrame(kind='stage', stage='evidence_review'))\n"
+        "    raise AssertionError('private payload')\n"
+        "def test_one():\n    journey()\n"
+        "def test_two():\n    pass\n"
+    )
+    output = tmp_path / "output"
+    result = subprocess.run(
+        [sys.executable, "-m", "pytest", "-p", "xml_progress", "-c", "/dev/null", str(source)],
+        env={
+            **os.environ,
+            "PYTHONPATH": os.pathsep.join(
+                str(ROOT / part) for part in ("scripts/packaging", "scripts/isolation")
+            ),
+            "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+            "EM_OWNED_BACKEND_PROGRESS": str(tmp_path / "progress.json"),
+            "EM_XML_CASE_OUTCOME_REPORT": "true",
+            "GITHUB_OUTPUT": str(output),
+        },
+        capture_output=True,
+        timeout=20,
+    )
+    assert result.returncode == 1
+    assert output.read_text() == (
+        "xml_failure=case_1-call-host_conversation-phase_evidence_review\n"
+    )
