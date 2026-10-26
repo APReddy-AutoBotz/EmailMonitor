@@ -37,3 +37,13 @@ independent fresh and hosted gates must be reported separately.
 Test-only bounded import and process-exit diagnostics are carried independently
 from the unpublished suppression feature. Prior callback startup and post-assertion
 refusal timeouts remain unexplained. A later passing sample is not a causal fix.
+
+Installed acceptance also emits a closed host-stage label into its explicitly
+opted-in workflow output. A separate named metadata step exposes that label even
+when the original pytest step fails. It carries no exception text, identifiers,
+URLs or payloads; preserves the first failed stage through cleanup; and leaves
+all existing assertions, guards, deadlines and cleanup actions unchanged. A
+fixture/setup failure before the test body reports unavailable rather than an
+invented stage. This is future diagnostic evidence, not a repair or a substitute
+for installed acceptance. Browser execution and its owned cleanup share one host
+label; that label alone does not identify a browser assertion or root cause.

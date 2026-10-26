@@ -108,11 +108,16 @@ jobs:
           PYTHONPATH: services/backend/src:services/backend/tests:tests:scripts/isolation:scripts/packaging
         run: uv run --project services/backend pytest services/backend/tests/test_service_runtime_broker.py -v --tb=short
       - name: Installed service API and independent worker operator acceptance
+        id: installed-operator-test
         if: ${{ !cancelled() && steps.service-prerequisites.outcome == 'success' && steps.service-web.outcome == 'success' }}
         env:
           EM_REQUIRE_INSTALLED_OPERATOR: "true"
+          EM_INSTALLED_STAGE_REPORT: "true"
           PYTHONPATH: services/backend/src:services/backend/tests:tests:scripts/isolation:scripts/packaging
         run: uv run --project services/backend pytest scripts/isolation/test_installed_operator_acceptance.py -v -s
+      - name: "Installed operator stage: ${{ steps.installed-operator-test.outputs.stage || 'fixture_or_report_unavailable' }}"
+        if: ${{ !cancelled() && steps.installed-operator-test.outcome != 'skipped' }}
+        run: ':'
       - name: Installed controlled XML service and curated parser acceptance
         if: ${{ !cancelled() && steps.service-prerequisites.outcome == 'success' && steps.service-web.outcome == 'success' }}
         env:
