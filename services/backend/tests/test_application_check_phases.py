@@ -4,6 +4,7 @@ import json
 import os
 import re
 import shlex
+import signal
 import subprocess
 import sys
 from pathlib import Path
@@ -57,6 +58,33 @@ DATABASE_KEYS = (
 )
 
 
+def run_owned_shell(
+    command: list[str], *, cwd: Path, env: dict[str, str], timeout: float
+) -> subprocess.CompletedProcess[str]:
+    """Only the synthetic check shell and its descendants belong to this session."""
+    with subprocess.Popen(
+        command,
+        cwd=cwd,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=True,
+    ) as process:
+        try:
+            stdout, stderr = process.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            # subprocess.run kills only the shell, leaving its active stub alive.
+            # No parent/ambient process group is targeted; this PID owns a new session.
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            process.communicate(timeout=2)
+            raise
+        return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
+
+
 def invoke(
     temporary: Path,
     arguments: tuple[str, ...],
@@ -89,14 +117,16 @@ if len(log.read_text().splitlines()) == int(os.environ['CHECK_FAIL_AT']):
         "CHECK_FAIL_AT": str(fail_at),
     }
     script = "scripts/check_tenant_foundation.sh" if tenant else "scripts/check.sh"
-    result = subprocess.run(
-        ["bash", str(ROOT / script), *arguments],
-        cwd=temporary,
-        env=environment,
-        capture_output=True,
-        text=True,
-        timeout=10,
-    )
+    try:
+        result = run_owned_shell(
+            ["bash", str(ROOT / script), *arguments],
+            cwd=temporary,
+            env=environment,
+            timeout=10,
+        )
+    except subprocess.TimeoutExpired as error:
+        error.add_note(f"Synthetic command records completed: {len(log.read_text().splitlines())}")
+        raise
     return result, [json.loads(line) for line in log.read_text().splitlines()]
 
 
