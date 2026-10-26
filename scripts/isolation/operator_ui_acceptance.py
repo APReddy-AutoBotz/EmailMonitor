@@ -2600,6 +2600,49 @@ async def main() -> None:
                 raise RuntimeError("Read-only tenant configuration edit was enabled")
             if "Keyboard authored workspace" in await page.locator("body").inner_text():
                 raise RuntimeError("Previous organization branding survived switch")
+            # Exercise the existing management action only after the preceding
+            # retained-data journeys: suppression intentionally fences matching data.
+            organization = page.get_by_role("combobox", name="Active organization", exact=True)
+            values = await organization.locator("option").evaluate_all(
+                "nodes => nodes.map(node => node.value)"
+            )
+            await select_index(page, organization, values.index(setup["initial_organization"]))
+            await activate(page, page.get_by_role("button", name="Contacts", exact=True))
+            table = page.get_by_role("table", name="Current-authorized observed contacts")
+            await expect(table).to_be_visible()
+            selected_address = (
+                await table.locator("tbody tr").first.locator("td").nth(2).inner_text()
+            ).splitlines()[0]
+            for commit in (False, True):
+                await activate(
+                    page, page.get_by_role("button", name="Evidence and review", exact=True).first
+                )
+                action = page.get_by_role("button", name="Review contact suppression", exact=True)
+                await expect(action).to_be_disabled()
+                await select_index(page, page.get_by_label("Suppression reason", exact=True), 1)
+                await activate(page, action)
+                confirmation = page.get_by_role("dialog")
+                await expect(confirmation).to_contain_text("throughout this organization")
+                await expect(confirmation).to_contain_text(selected_address)
+                await activate(
+                    page,
+                    page.get_by_role(
+                        "button",
+                        name="Confirm suppress observed contact" if commit else "Keep unchanged",
+                        exact=True,
+                    ),
+                )
+                await expect(confirmation).not_to_be_visible()
+                if not commit:
+                    await expect(
+                        table.get_by_text(selected_address, exact=True).first
+                    ).to_be_visible()
+            await expect(
+                page.get_by_text(
+                    "Action completed. Current permissions are rechecked by the server.", exact=True
+                )
+            ).to_be_visible()
+            await expect(page.get_by_text(selected_address, exact=True)).to_have_count(0)
             checkpoint("final_cleanup")
             print(
                 json.dumps(

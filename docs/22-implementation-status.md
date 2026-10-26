@@ -703,3 +703,12 @@ no worker CPU, billing or performance claim. Isolated from review-history and
 suppression candidates. Implementation and acceptance scope are documented in
 `docs/81-retained-job-timing.md`; actual SQL, normal/fresh and hosted gates remain
 pending until executed. No migration, source access, merge or deployment.
+## Contextual contact suppression — unpublished implementation
+
+The existing EM-014 suppression action is connected to the current contact in the
+evidence dialog under the unchanged source-policy management capability. Explicit
+reason, organization-wide confirmation and fresh-contact binding are required.
+Frontend tests passed; authored SQL role/refusal and installed keyboard cases,
+normal/fresh completion and genuine hosted acceptance remain pending. See
+[scope and acceptance](80-contextual-contact-suppression.md). No runtime authority
+or migration change is included.

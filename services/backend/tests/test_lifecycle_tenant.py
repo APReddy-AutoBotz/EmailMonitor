@@ -721,3 +721,42 @@ def test_real_final_release_authority_serializes_with_privacy_tombstone(
             )
     finally:
         admin.dispose()
+
+
+@pytest.mark.parametrize(
+    "role", ["owner", "data_steward", "admin", "operator", "reviewer", "viewer"]
+)
+def test_contextual_suppression_api_uses_existing_management_capability(
+    scenario: Scenario, role: str
+) -> None:
+    results, job = prepared(scenario)
+    org = scenario.organizations[0]
+    contact = results.contacts(org, Filters(job_id=job)).items[0]
+    with fixture_client(scenario) as client:
+        csrf = scenario.login(client, role)
+        prefix = f"/api/v1/organizations/{org}"
+        detail = f"{prefix}/contacts/{contact.association_id}?batch_id={contact.batch_id}"
+        assert client.get(detail).status_code == 200
+        body = {"kind": "contact", "value": contact.raw_address, "reason": "privacy_request"}
+        path = f"{prefix}/privacy/suppressions"
+        # Neither a missing CSRF proof nor a different tenant may authorize the action.
+        assert client.post(path, json=body).status_code in (403, 404)
+        headers = {"Origin": ORIGIN, "X-CSRF-Token": csrf}
+        assert (
+            client.post(
+                path.replace(str(org), str(scenario.organizations[1])),
+                json=body,
+                headers=headers,
+            ).status_code
+            == 404
+        )
+        response = client.post(path, json=body, headers=headers)
+        if role in ("owner", "data_steward"):
+            assert response.status_code == 201
+            assert response.json()["active"] is True
+            assert response.json()["kind"] == "contact"
+            assert contact.raw_address not in response.text
+            assert client.get(detail).status_code == 404
+        else:
+            assert response.status_code == 404
+            assert client.get(detail).status_code == 200
