@@ -123,10 +123,22 @@ jobs:
         if: ${{ !cancelled() && steps.installed-operator-test.outcome != 'skipped' }}
         run: ':'
       - name: Installed controlled XML service and curated parser acceptance
+        id: installed-xml-test
         if: ${{ !cancelled() && steps.service-prerequisites.outcome == 'success' && steps.service-web.outcome == 'success' }}
         env:
           EM_REQUIRE_INSTALLED_OPERATOR: "true"
           EM_REQUIRE_CONTROLLED_NETWORK: "true"
           EM_REQUIRE_XML_INTEGRATION: "synthetic-test-only"
+          EM_BACKEND_OUTCOME_REPORT: "true"
+          EM_XML_CASE_OUTCOME_REPORT: "true"
           PYTHONPATH: services/backend/src:services/backend/tests:tests:scripts/isolation:scripts/packaging
         run: uv run --project services/backend python scripts/packaging/run_xml_integration.py installed
+      - name: "Installed XML outcome: ${{ steps.installed-xml-test.outputs.backend_outcome || 'unavailable' }}"
+        if: ${{ !cancelled() && steps.installed-xml-test.outcome != 'skipped' }}
+        run: ':'
+      - name: "Installed XML check: ${{ steps.installed-xml-test.outputs.xml_check || 'consumer_not_reached' }}"
+        if: ${{ !cancelled() && steps.installed-xml-test.outcome != 'skipped' }}
+        run: ':'
+      - name: "Installed XML first failure: ${{ steps.installed-xml-test.outputs.xml_failure || 'unavailable' }}"
+        if: ${{ !cancelled() && steps.installed-xml-test.outcome != 'skipped' }}
+        run: ':'

@@ -631,6 +631,18 @@ async def select_index(page: Page, target: Locator, index: int) -> None:
     await page.keyboard.press("Enter")
 
 
+def suppression_reason(page: Page) -> Locator:
+    # A wrapping select label includes its option text in Playwright's label matcher.
+    return page.get_by_label(re.compile(r"^Suppression reason"))
+
+
+def suppression_address_cells(table: Locator, address: str) -> Locator:
+    # Keep the exact retained-address boundary; the cell also shows normalization.
+    return table.locator("tbody tr td:nth-child(3)").filter(
+        has_text=re.compile(r"^" + re.escape(address) + r"\s*Normalized:")
+    )
+
+
 async def authored_outcome_paging(
     page: Page, organization: str, checkpoint: Callable[[str], None]
 ) -> None:
@@ -2600,6 +2612,55 @@ async def main() -> None:
                 raise RuntimeError("Read-only tenant configuration edit was enabled")
             if "Keyboard authored workspace" in await page.locator("body").inner_text():
                 raise RuntimeError("Previous organization branding survived switch")
+            # Exercise the existing management action only after the preceding
+            # retained-data journeys: suppression intentionally fences matching data.
+            await channel.request({"kind": "control", "action": "verify_retained"})
+            checkpoint("contact_suppression")
+            organization = page.get_by_role("combobox", name="Active organization", exact=True)
+            values = await organization.locator("option").evaluate_all(
+                "nodes => nodes.map(node => node.value)"
+            )
+            await select_index(page, organization, values.index(setup["initial_organization"]))
+            await activate(page, page.get_by_role("button", name="Contacts", exact=True))
+            table = page.get_by_role("table", name="Current-authorized observed contacts")
+            await expect(table).to_be_visible()
+            selected_address = (
+                await table.locator("tbody tr").first.locator("td").nth(2).inner_text()
+            ).splitlines()[0]
+            for commit in (False, True):
+                await activate(
+                    page, page.get_by_role("button", name="Evidence and review", exact=True).first
+                )
+                action = page.get_by_role("button", name="Review contact suppression", exact=True)
+                await expect(action).to_be_disabled()
+                await select_index(page, suppression_reason(page), 1)
+                await activate(page, action)
+                confirmation = page.get_by_role("dialog")
+                await expect(confirmation).to_contain_text("throughout this organization")
+                await expect(confirmation).to_contain_text(selected_address)
+                await activate(
+                    page,
+                    page.get_by_role(
+                        "button",
+                        name="Confirm suppress observed contact" if commit else "Keep unchanged",
+                        exact=True,
+                    ),
+                )
+                await expect(confirmation).not_to_be_visible()
+                if not commit:
+                    await expect(
+                        suppression_address_cells(table, selected_address).first
+                    ).to_be_visible()
+            await expect(
+                page.get_by_text(
+                    "Action completed. Current permissions are rechecked by the server.", exact=True
+                )
+            ).to_be_visible()
+            await expect(
+                table.or_(page.get_by_text("No contacts match these server filters.", exact=True))
+            ).to_be_visible()
+            await expect(suppression_address_cells(table, selected_address)).to_have_count(0)
+            await asyncio.wait_for(settled_requests(), timeout=10)
             checkpoint("final_cleanup")
             print(
                 json.dumps(
@@ -2629,6 +2690,7 @@ async def main() -> None:
                         "download_cancelled": True,
                         "org_switch": True,
                         "readonly_role": True,
+                        "contact_suppression": True,
                         "stale_network_retry": True,
                         "late_old_response_refused": True,
                         "late_old_replay_refused": True,

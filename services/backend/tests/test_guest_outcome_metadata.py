@@ -339,3 +339,138 @@ def test_synthetic_keyboard_flow_keeps_all_tabs_and_original_failure(
     assert output.read_text().endswith(
         "-outcome_outcomes_actual_modal-focus_body.none.none.010uuuuu\n"
     )
+
+
+@pytest.mark.parametrize("truncated", [False, True])
+@pytest.mark.parametrize("replaced", [False, True])
+def test_existing_attempt_summary_preserves_failure_without_event_payloads(
+    output: Path, truncated: bool, replaced: bool
+) -> None:
+    from operator_ui_protocol import KeyboardAttemptTrace, KeyboardTransition
+
+    events = [KeyboardTransition(kind="start", tab=0, target_connected=True)]
+    if replaced:
+        events.extend(
+            [
+                KeyboardTransition(kind="heading_focus", tab=47, target_connected=True),
+                KeyboardTransition(kind="target_detached", tab=47, target_connected=False),
+                KeyboardTransition(kind="target_replaced", tab=47, target_connected=True),
+            ]
+        )
+    events.append(KeyboardTransition(kind="finish", tab=100, target_connected=True))
+    frame = DiagnosticFrame(
+        kind="failure",
+        stage="url_worker",
+        error="RuntimeError",
+        reason="keyboard_focus",
+        outcome_phase="outcomes_late_organization",
+        focus_exhaustion=FocusExhaustion(
+            target_focused=False,
+            document_focused=True,
+            modal_open=False,
+            active_kind="other",
+            attempt_trace=KeyboardAttemptTrace(tabs=100, truncated=truncated, events=events),
+        ),
+    )
+    original = RuntimeError("private sentinel")
+
+    @trace.observed_guest
+    def execute() -> None:
+        trace.guest_stage("conversation")
+        trace.guest_frame(frame)
+        raise original
+
+    with pytest.raises(RuntimeError) as caught:
+        execute()
+    assert caught.value is original
+    suffix = "1at47" if replaced else "0atnone"
+    assert output.read_text().endswith(
+        f"-attempt_tabs100.truncated{int(truncated)}.heading{suffix}.detached{suffix}.replaced{suffix}\n"
+    )
+    assert "private" not in output.read_text()
+    assert "target_connected" not in output.read_text()
+    assert "events" not in output.read_text()
+
+
+def test_missing_and_unavailable_attempts_remain_distinct() -> None:
+    value = trace.Trace()
+    value.focus = FocusExhaustion(
+        target_focused=False, document_focused=True, modal_open=False, active_kind="other"
+    )
+    assert "-attempt_" not in value.label()
+    value.focus.attempt_trace = "unavailable"
+    assert value.label().endswith("-attempt_unavailable")
+
+
+@pytest.mark.parametrize("field,value", [("kind", "private@example.invalid"), ("tab", 101)])
+def test_mutated_nested_attempt_is_rejected_before_export(field: str, value: object) -> None:
+    from operator_ui_protocol import KeyboardAttemptTrace, KeyboardTransition
+
+    event = KeyboardTransition(kind="start", tab=0, target_connected=True)
+    observation = trace.Trace()
+    observation.focus = FocusExhaustion(
+        target_focused=False,
+        document_focused=True,
+        modal_open=False,
+        active_kind="other",
+        attempt_trace=KeyboardAttemptTrace(tabs=100, truncated=False, events=[event]),
+    )
+    object.__setattr__(event, field, value)
+    with pytest.raises(ValueError):
+        observation.label()
+
+
+@pytest.mark.parametrize("pending", [False, True])
+def test_completion_boundary_keeps_owned_pipe_failure(
+    output: Path, monkeypatch: pytest.MonkeyPatch, pending: bool
+) -> None:
+    import json
+    import subprocess
+    import sys
+    import time
+
+    import run_operator_ui_acceptance as host
+    from fastapi import FastAPI
+
+    original_popen = subprocess.Popen
+    processes = []
+    request = {"kind": "control", "identifier": 1, "action": "verify_retained"}
+    result = {"kind": "result", "diagnostic": "synthetic-operator-ui"}
+    program = "import sys;sys.stdin.readline();"
+    if pending:
+        program += f"print({json.dumps(request)!r},flush=True);"
+    program += f"print({json.dumps(result)!r},flush=True);sys.stdin.read();sys.exit(7)"
+
+    def owned_pipe(*args: object, **kwargs: object) -> subprocess.Popen[bytes]:
+        process = original_popen(
+            [sys.executable, "-c", program],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            bufsize=0,
+        )
+        processes.append(process)
+        return process
+
+    monkeypatch.setattr(subprocess, "Popen", owned_pipe)
+
+    @trace.observed_guest
+    def execute() -> None:
+        host.conversation(
+            "owned-synthetic-pipe",
+            FastAPI(),
+            {},
+            lambda action: time.sleep(0.1),
+            lambda request: False,
+        )
+
+    message = (
+        "Guest completed with pending requests"
+        if pending
+        else "Actual UI completion evidence missing"
+    )
+    with pytest.raises(RuntimeError, match=message):
+        execute()
+    stage = "conversation_result" if pending else "conversation_exit"
+    assert output.read_text().startswith("guest_outcome=" + stage + "-")
+    assert len(processes) == 1 and processes[0].poll() is not None

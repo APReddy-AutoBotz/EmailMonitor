@@ -14,14 +14,17 @@ from run_xml_integration import IntegrationRefused, interrupted
 
 
 @pytest.mark.parametrize("fails", [False, True])
-def test_actual_owned_pytest_counts_and_unchanged_exit(tmp_path: Path, fails: bool) -> None:
+@pytest.mark.parametrize("xml_plugin", [False, True])
+def test_actual_owned_pytest_counts_and_unchanged_exit(
+    tmp_path: Path, fails: bool, xml_plugin: bool
+) -> None:
     source = tmp_path / "test_owned.py"
     source.write_text(
         "def test_one():\n    assert " + str(not fails) + "\n\ndef test_two():\n    pass\n"
     )
     output = tmp_path / "output"
     script = """
-import sys
+import os, sys
 from pathlib import Path
 import pytest
 from backend_outcome import KEY, Progress, reported
@@ -29,7 +32,11 @@ from run_xml_integration import IntegrationRefused
 
 def action(env):
     args = ["-q", "-c", "/dev/null", "--confcutdir="+sys.argv[1], sys.argv[1]]
-    code = pytest.main(args, plugins=[Progress(Path(env[KEY]))])
+    if sys.argv[3] == "True":
+        os.environ[KEY] = env[KEY]
+        code = pytest.main(["-p", "xml_progress", *args])
+    else:
+        code = pytest.main(args, plugins=[Progress(Path(env[KEY]))])
     if code:
         error = IntegrationRefused("xml_integration_consumer_failed")
         error.outcome_category = "consumer_exit"
@@ -42,7 +49,7 @@ except IntegrationRefused as error:
 """
     root = Path(__file__).resolve().parents[3]
     result = subprocess.run(
-        [sys.executable, "-c", script, str(tmp_path), str(output)],
+        [sys.executable, "-c", script, str(tmp_path), str(output), str(xml_plugin)],
         env={
             **os.environ,
             "PYTHONPATH": str(root / "scripts/packaging"),

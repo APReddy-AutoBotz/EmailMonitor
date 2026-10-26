@@ -1,0 +1,115 @@
+# Contextual suppression of a retained contact
+
+Draft implementation; hosted acceptance remains incomplete. This connects the
+existing EM-014 privacy suppression action to the currently readable contact in
+EM-012's evidence dialog. It introduces no new suppression matching rule, source
+permission, migration, acquisition route or production activation.
+
+Only the existing `source.policy.manage` capability exposes the action (owner or
+data steward). Review authority alone is insufficient. An explicit privacy-request
+or source-restriction reason is required. Confirmation states that matching-address
+suppression applies throughout the organization, across jobs, and is not an
+undoable review rejection. Withdrawal does not restore previously fenced records.
+
+The evidence dialog closes before confirmation. On confirmation the UI rereads the
+exact contact and requires unchanged organization, batch, association, revision and
+retained address before invoking the existing API. The retained address is sent
+unchanged; normalization belongs to the server's existing privacy grammar.
+Unavailable/stale data, scope changes, read/write refusals and uncertain receipts
+must not report success or automatically retry. Server revalidation remains the
+authority; the client recheck is not an authorization token.
+
+Acceptance inventory: explicit confirmation/cancel, current-row binding, capability
+restrictions, organization/session changes and failure handling in frontend tests;
+actual PostgreSQL API checks for owner/data-steward versus admin/operator/reviewer/
+viewer, CSRF and cross-tenant refusal, and resulting contact visibility; existing
+lifecycle tests for export fencing and non-resurrection; an authored installed
+keyboard journey that cancels first, then explicitly confirms suppression after
+other retained-data journeys finish. Authored or skipped cases are not executed
+acceptance. Full normal/fresh local checks precede Draft publication; genuine
+hosted checks remain required before acceptance. No merge, deployment or live-source claim follows from local proof.
+
+## Current integration boundary
+
+The product-only suppression increment is integrated locally on the retained-job
+timing baseline. Earlier suppression diagnostic commits remain separate. This
+candidate preserves timing presentation, current outcome replay readiness and
+existing fixed guest diagnostics. It changes no migration, authority predicate,
+source access or matching rule. Prior branch receipts are historical evidence;
+current normal/fresh, actual SQL and genuine hosted browser acceptance must be
+reported independently for each tested candidate.
+
+## Validation checkpoint
+
+The product candidate passed normal and independent fresh local backend checks
+(6,292 passed, 578 explicit infrastructure skips each), 200 frontend tests each,
+static checks and a fresh web build. Separate disposable PostgreSQL runs each
+passed eight suppression role/refusal and lifecycle cases with zero skips and
+verified owned cleanup. Draft #60 preserves Draft #59 as its base.
+
+Its first operator workflow failed before reaching suppression, at the existing
+late-organization outcome pagination keyboard attempt. The fixed snapshot showed
+an enabled, non-inert target tab stop, focused document and another active button;
+it did not establish a cause. Existing passive attempt observations are now
+summarized as Tab count, truncation and count/first-Tab position for heading focus,
+target detachment and target replacement. No event arrays, values or payloads are
+exported. A truncated trace cannot prove absence beyond its capture cap. Original
+keyboard sequence, deadline, failure and cleanup remain unchanged. This diagnostic
+is not a runtime repair; prior failures remain unresolved.
+
+A later operator run reached the broad read-only stage and timed out; this alone
+could not locate its final operation. Locked Playwright selector-engine tests on
+authored nodes establish two independent harness defects: exact wrapping-select
+label matching includes option text, and exact address-cell text matching includes
+the normalized-address annotation. The journey now uses the established anchored
+label pattern and an escaped exact-address boundary before that annotation. It
+also requires a rendered current table/empty result before checking absence.
+The regression rejects prefixed and longer addresses. A separate fixed suppression
+stage distinguishes this journey from the preceding read-only checks. No authority,
+keyboard action, limit or runtime behavior changes. These local selector proofs
+are not browser acceptance or proof of the historical timeout's exact operation.
+
+The corrected browser reached its final cleanup stage, but the enclosing host
+conversation still failed; its result-admission versus child-exit cause was not
+available. Fixed host labels now distinguish those boundaries without changing
+exit/refusal behavior. Owned-pipe tests retain refusal for pending requests and
+nonzero child exit. The main guest drains its owned pending requests before
+reporting completion, within the unchanged host conversation limit; browser
+cleanup remains inside the unchanged child-exit wait.
+
+The host's earlier post-journey export-download expectation was incompatible with
+intentional suppression. All original durable job/review/usage and ready-artifact
+assertions now run at a fixed read-only checkpoint before suppression, and the
+host requires that same export download to be refused afterward. No prior proof
+is dropped or converted into success on refusal. An actual PostgreSQL regression
+covers the artifact shape before suppression and denied download after it. The
+new completion control verifies existing synthetic state only; it grants no
+application capability, source access or production operation.
+
+## Installed XML diagnostic boundary
+
+The completion candidate passed the actual suppression browser journey, all
+6,700 backend cases, SQL and the matching-receipt join. Seven hosted workflows
+passed; the separate installed XML step failed after installed operator success.
+Its exact case and cause remain unknown. The earlier fresh aggregate assembly
+probe failure also remains open; neither a standalone pass nor later hosted
+success establishes its repair.
+
+Future installed XML executions reuse the bounded numeric progress reporter:
+active/completed/first-failed/total ordinals, fixed exit/deadline categories, and
+an allowlisted shell check stage. No test names, assertion contents, paths or
+payloads enter this metadata. The six cases, marker predicates, original exit
+handling, consumer/wrapper deadlines and ownership cleanup remain unchanged.
+Owned synthetic shell and pytest tests validate reporting independently of
+genuine installed acceptance. This diagnostic is not a runtime repair.
+
+The next hosted observation completed all six XML cases and localized the first
+failure to ordinal two (direct URL), with pytest exit one before marker checks.
+It did not identify the assertion or establish that only one case failed. The
+exact local case reaches the existing SQL/broker fixture guard and skips; no
+genuine-CI prerequisites are fabricated. First-failure reporting now records only
+the existing setup/call/teardown and validated guest host/phase categories. Guest
+state resets before each case, and later successes or teardown failures cannot
+overwrite the first failed report. Missing or invalid metadata remains unavailable
+without replacing the original failure. Owned synthetic regression tests exercise
+this behavior; the direct-URL runtime cause remains unproven.

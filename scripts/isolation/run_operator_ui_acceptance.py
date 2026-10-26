@@ -71,6 +71,7 @@ def request_reply(
                 not in {
                     "publish",
                     "wait_exports",
+                    "verify_retained",
                     "wait_jobs",
                     "fault_contacts",
                     "fault_quality",
@@ -263,6 +264,7 @@ def conversation(
                             guest_frame(diagnostic)
                             continue
                         if value.get("kind") == "result":
+                            guest_stage("conversation_result")
                             if pending:
                                 raise RuntimeError("Guest completed with pending requests")
                             result = value
@@ -290,6 +292,7 @@ def conversation(
                         + "; actual reply statuses="
                         + str(statuses)
                     )
+        guest_stage("conversation_exit")
         process.stdin.close()
         if process.wait(timeout=10) != 0 or result.get("diagnostic") != "synthetic-operator-ui":
             raise RuntimeError("Actual UI completion evidence missing")

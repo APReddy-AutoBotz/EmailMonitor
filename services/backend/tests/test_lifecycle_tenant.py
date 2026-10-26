@@ -721,3 +721,72 @@ def test_real_final_release_authority_serializes_with_privacy_tombstone(
             )
     finally:
         admin.dispose()
+
+
+@pytest.mark.parametrize(
+    "role", ["owner", "data_steward", "admin", "operator", "reviewer", "viewer"]
+)
+def test_contextual_suppression_api_uses_existing_management_capability(
+    scenario: Scenario, role: str
+) -> None:
+    results, job = prepared(scenario)
+    org = scenario.organizations[0]
+    contact = results.contacts(org, Filters(job_id=job)).items[0]
+    with fixture_client(scenario) as client:
+        csrf = scenario.login(client, role)
+        prefix = f"/api/v1/organizations/{org}"
+        detail = f"{prefix}/contacts/{contact.association_id}?batch_id={contact.batch_id}"
+        assert client.get(detail).status_code == 200
+        body = {"kind": "contact", "value": contact.raw_address, "reason": "privacy_request"}
+        path = f"{prefix}/privacy/suppressions"
+        # Neither a missing CSRF proof nor a different tenant may authorize the action.
+        assert client.post(path, json=body).status_code in (403, 404)
+        headers = {"Origin": ORIGIN, "X-CSRF-Token": csrf}
+        assert (
+            client.post(
+                path.replace(str(org), str(scenario.organizations[1])),
+                json=body,
+                headers=headers,
+            ).status_code
+            == 404
+        )
+        response = client.post(path, json=body, headers=headers)
+        if role in ("owner", "data_steward"):
+            assert response.status_code == 201
+            assert response.json()["active"] is True
+            assert response.json()["kind"] == "contact"
+            assert contact.raw_address not in response.text
+            assert client.get(detail).status_code == 404
+        else:
+            assert response.status_code == 404
+            assert client.get(detail).status_code == 200
+
+
+def test_ready_export_proof_precedes_contact_suppression_and_then_refuses(
+    scenario: Scenario,
+) -> None:
+    import io
+    from zipfile import ZipFile
+
+    results, job = prepared(scenario)
+    org = scenario.organizations[0]
+    address = results.contacts(org, Filters(job_id=job)).items[0].raw_address
+    export = ready(results, org, job, optional_contact_fields=["article_title"])
+    artifact = results.download(org, export)
+    assert artifact.body.startswith(b"PK") and len(artifact.body) > 1000
+    with ZipFile(io.BytesIO(artifact.body)) as archive:
+        sheet = archive.read("xl/worksheets/sheet1.xml")
+    assert b">Affiliations<" not in sheet and b">Article title<" in sheet
+    lifecycle(scenario, results.token).suppress(
+        org,
+        SuppressionCreate.model_validate(
+            {
+                "kind": "contact",
+                "value": address,
+                "reason": "privacy_request",
+            }
+        ),
+    )
+    with pytest.raises(AuthorizationDenied):
+        results.download(org, export)
+    assert results.contacts(org, Filters()).items == ()

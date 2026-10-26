@@ -561,3 +561,17 @@ NFR-017 / FR-021 retained queue-to-terminal timing: `test_job_timing.py`,
 `test_job_timing_tenant.py`, current progress-authority refusals,
 `jobTiming.test.tsx` and the existing hosted lifecycle cancellation journey.
 See `docs/81-retained-job-timing.md`; authored/skipped checks remain pending.
+EM-014/EM-012 contextual contact suppression: `contactSuppression.test.tsx` covers
+explicit confirmation, capability and current-contact binding, stale scope and
+refused/uncertain outcomes. `test_contextual_suppression_api_uses_existing_management_capability`
+authors real SQL role, CSRF, tenant and contact-fencing checks. The installed
+operator journey authors keyboard cancel then confirmation after retained-data
+journeys. The eight normal/fresh SQL cases passed; browser acceptance remains
+incomplete after a preceding outcome-keyboard failure. See
+[the bounded scope](80-contextual-contact-suppression.md).
+
+Installed XML failure localization uses `test_installed_xml_outcome.py` and
+`test_backend_outcome_metadata.py` for fixed categories, numeric case ordinals
+and unchanged success/failure/signal/deadline propagation. These owned synthetic
+tests do not substitute for genuine installed XML execution or close historical
+aggregate timing failures.

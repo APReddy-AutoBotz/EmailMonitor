@@ -13,6 +13,7 @@ from operator_ui_protocol import (
     DiagnosticFrame,
     FocusExhaustion,
     InstalledLoginPhase,
+    KeyboardAttemptTrace,
 )
 from pydantic import TypeAdapter
 
@@ -23,6 +24,8 @@ HOST = frozenset(
         "create",
         "initial_validation",
         "conversation",
+        "conversation_result",
+        "conversation_exit",
         "final_validation",
         "cleanup_container",
         "cleanup_image",
@@ -68,6 +71,7 @@ class Trace:
         if self.outcome not in ("none", *OUTCOME_PHASES):
             raise ValueError("Closed outcome phase required")
         focus = "none"
+        attempt = ""
         if isinstance(self.focus, FocusExhaustion):
             value = FocusExhaustion.model_validate(self.focus.model_dump())
             flags = "".join(
@@ -87,6 +91,22 @@ class Trace:
                 f"{value.active_kind}.{value.target_kind or 'none'}."
                 f"{value.active_control or 'none'}.{flags}"
             )
+            if isinstance(value.attempt_trace, KeyboardAttemptTrace):
+                observed = value.attempt_trace
+                # Summarize existing passive observations, never export event arrays.
+                # A truncated trace cannot establish absence after its capture cap.
+                parts = [f"tabs{observed.tabs}", f"truncated{int(observed.truncated)}"]
+                for kind, label in (
+                    ("heading_focus", "heading"),
+                    ("target_detached", "detached"),
+                    ("target_replaced", "replaced"),
+                ):
+                    events = [event for event in observed.events if event.kind == kind]
+                    first = str(events[0].tab) if events else "none"
+                    parts.append(f"{label}{len(events)}at{first}")
+                attempt = "-attempt_" + ".".join(parts)
+            elif value.attempt_trace == "unavailable":
+                attempt = "-attempt_unavailable"
         elif self.focus == "unavailable":
             focus = "unavailable"
         elif self.focus is not None:
@@ -95,12 +115,25 @@ class Trace:
         return (
             f"{stage}-phase_{self.phase}-error_{self.error}-reason_{self.reason}-cleanup_{cleanup}"
             f"-login_{self.login}"
-            f"-outcome_{self.outcome}-focus_{focus}"
+            f"-outcome_{self.outcome}-focus_{focus}{attempt}"
         )
 
 
 _current: ContextVar[Trace | None] = ContextVar("owned_guest_outcome", default=None)
 _first_failure: tuple[str, str] | None = None
+_case_trace: Trace | None = None
+
+
+def reset_case_trace() -> None:
+    global _case_trace
+    _case_trace = None
+
+
+def case_categories() -> tuple[str, str]:
+    if _case_trace is None:
+        return "unavailable", "unavailable"
+    _case_trace.label()  # Revalidate, including mutated nested models.
+    return _case_trace.failure or _case_trace.stage, _case_trace.phase
 
 
 def guest_stage(stage: str) -> None:
@@ -138,7 +171,7 @@ def guest_frame(frame: DiagnosticFrame) -> None:
 def observed_guest[**P, T](function: Callable[P, T]) -> Callable[P, T]:
     @wraps(function)
     def observed(*args: P.args, **kwargs: P.kwargs) -> T:
-        global _first_failure
+        global _first_failure, _case_trace
         trace = Trace()
         token = _current.set(trace)
         primary: BaseException | None = None
@@ -150,16 +183,23 @@ def observed_guest[**P, T](function: Callable[P, T]) -> Callable[P, T]:
             raise
         finally:
             _current.reset(token)
-            if os.environ.get("EM_GUEST_OUTCOME_REPORT") == "true":
+            if (
+                os.environ.get("EM_GUEST_OUTCOME_REPORT") == "true"
+                or os.environ.get("EM_XML_CASE_OUTCOME_REPORT") == "true"
+            ):
                 try:
-                    target = os.environ["GITHUB_OUTPUT"]
                     label = trace.label()
-                    if _first_failure is not None and _first_failure[0] == target:
-                        label = _first_failure[1]
-                    elif trace.failure is not None:
-                        _first_failure = (target, label)
-                    with Path(target).open("a", encoding="ascii") as output:
-                        output.write("guest_outcome=" + label + "\n")
+                    if os.environ.get("EM_XML_CASE_OUTCOME_REPORT") == "true":
+                        if _case_trace is None or _case_trace.failure is None:
+                            _case_trace = trace
+                    if os.environ.get("EM_GUEST_OUTCOME_REPORT") == "true":
+                        target = os.environ["GITHUB_OUTPUT"]
+                        if _first_failure is not None and _first_failure[0] == target:
+                            label = _first_failure[1]
+                        elif trace.failure is not None:
+                            _first_failure = (target, label)
+                        with Path(target).open("a", encoding="ascii") as output:
+                            output.write("guest_outcome=" + label + "\n")
                 except Exception:
                     if primary is None:
                         raise
