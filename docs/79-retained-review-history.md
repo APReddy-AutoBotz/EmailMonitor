@@ -51,3 +51,18 @@ raise refusal instead. The history retention tests assert the existing distinct
 contracts explicitly: service/API release no decisions and contact access refuses.
 No runtime predicate or retention behavior is changed. This corrects a new test's
 exception assumption; it does not explain the separate backend budget failure.
+
+The parser acceptance runner now exposes only its fixed last phase (build,
+extraction, memory or complete) in an always-reported workflow step name. This
+adds diagnostic metadata for future execution; it does not retrieve prior logs,
+change the genuine-CI guard, split or skip checks, alter failure propagation,
+or change any isolation, memory, OOM evidence or time limits. Historical parser
+failures remain unclassified for this head until actual hosted evidence exists.
+
+The memory receipt uses only fixed categories: not verified, verified, absent OOM
+flag with observed stopped/exit-137 state, or other refusal. Exit 137 alone remains
+a failure. Exception text, parser content and environment values never enter the
+step name. Synthetic shell-contract tests also terminate only their own new process
+group on timeout; the ten-second command deadline and failure result are unchanged.
+A bounded local before/after probe established descendant cleanup, not the cause
+of earlier aggregate timing failures.

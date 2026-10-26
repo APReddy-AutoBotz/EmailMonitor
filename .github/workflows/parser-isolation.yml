@@ -22,4 +22,8 @@ jobs:
         with:
           persist-credentials: false
       - name: Actual network-none and bounded-memory parser checks
+        id: parser
         run: python3 scripts/isolation/run_parser_acceptance.py
+      - name: "Parser phase receipt: ${{ steps.parser.outputs.phase || 'unavailable' }} / ${{ steps.parser.outputs.memory || 'unavailable' }}"
+        if: always()
+        run: ":"
