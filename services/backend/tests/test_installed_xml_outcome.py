@@ -63,3 +63,18 @@ def test_xml_reporting_retains_guard_and_budgets() -> None:
     assert "steps.installed-xml-test.outputs.backend_outcome" in workflow
     assert "steps.installed-xml-test.outputs.xml_check" in workflow
     assert 'EM_REQUIRE_XML_INTEGRATION: "synthetic-test-only"' in workflow
+
+
+def test_check_stage_rejects_arbitrary_values(tmp_path: Path) -> None:
+    source = (ROOT / "scripts/packaging/check_xml_installed.sh").read_text()
+    function = source[source.index("check_stage() {") : source.index("\ncheck_stage pytest")]
+    output = tmp_path / "output"
+    result = subprocess.run(
+        ["bash", "-c", function + '\ncheck_stage "$1"', "owned", "private\nxml_check=complete"],
+        env={**os.environ, "EM_BACKEND_OUTCOME_REPORT": "true", "GITHUB_OUTPUT": str(output)},
+        capture_output=True,
+        timeout=5,
+    )
+    assert result.returncode == 1
+    assert result.stdout == result.stderr == b""
+    assert not output.exists()
