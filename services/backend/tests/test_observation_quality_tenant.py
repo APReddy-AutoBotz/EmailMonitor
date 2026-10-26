@@ -185,6 +185,16 @@ def test_quality_respects_current_retention_before_sweep(
         assert len(service.history(org, batch)) == 1
     else:
         assert getattr(service, view)(org, batch).scope == "article"
+    if view == "history":
+        retained_association = service.history(org, batch)[0]["association_id"]
+        with client(scenario) as c:
+            scenario.login(c, "viewer")
+            assert (
+                c.get(
+                    f"/api/v1/organizations/{org}/contacts/{retained_association}?batch_id={batch}"
+                ).status_code
+                == 200
+            )
     lifecycle = Lifecycle(service.database, service.token, SETTINGS)
     current = lifecycle.retention(org)
     lifecycle.update_retention(
@@ -194,8 +204,25 @@ def test_quality_respects_current_retention_before_sweep(
             retention=Retention.model_validate({field: 0}),
         ),
     )
-    with pytest.raises(AuthorizationDenied):
-        getattr(service, view)(org, batch)
+    if view == "history":
+        # History is a bounded list filtered by current association RLS. Unlike
+        # the singular observation projection, retention returns an empty list.
+        # Prove both no decision release and refusal of the selected contact;
+        # do not treat the empty response as permission to display cached data.
+        assert service.history(org, batch) == []
+        with client(scenario) as c:
+            scenario.login(c, "viewer")
+            prefix = f"/api/v1/organizations/{org}"
+            response = c.get(f"{prefix}/association-batches/{batch}/reviews")
+            assert response.status_code == 200
+            assert response.json() == []
+            assert (
+                c.get(f"{prefix}/contacts/{retained_association}?batch_id={batch}").status_code
+                == 404
+            )
+    else:
+        with pytest.raises(AuthorizationDenied):
+            getattr(service, view)(org, batch)
 
 
 def test_runtime_metadata_api_is_read_only_current_bound_and_review_independent(

@@ -43,3 +43,11 @@ outcome SQL finished in about 826 seconds. This bounded scheduling correction
 preserves all collected tests, exact disjoint inventory, source-tree binding,
 zero-skip receipts and unchanged deadlines. It does not identify the assertion
 behind the separate installed XML failure or establish a causal runtime repair.
+
+Actual local PostgreSQL reproduction established that reducing excerpt or contact
+retention returns an empty history list through current RLS, while the selected
+contact changes from readable to HTTP 404. The singular quality/metadata views
+raise refusal instead. The history retention tests assert the existing distinct
+contracts explicitly: service/API release no decisions and contact access refuses.
+No runtime predicate or retention behavior is changed. This corrects a new test's
+exception assumption; it does not explain the separate backend budget failure.
