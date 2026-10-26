@@ -257,6 +257,17 @@ def test_new_composer_preserves_original_one_shot_guest_parser_and_gates(
         assert content.count(backend) == 1
         assert content.count(command) == 1
         content = content.split(suffix, 1)[0]
+        # Normalize only the explicitly scoped, value-free backend metadata.
+        # Keep the original frozen digest and all execution bytes unchanged.
+        diagnostic_environment = b'          EM_BACKEND_OUTCOME_REPORT: "true"\n'
+        diagnostic_step = (
+            b'      - name: "Backend outcome: ${{ steps.tests.outputs.backend_outcome '
+            b"|| 'unavailable' }}\"\n"
+            b"        if: ${{ !cancelled() && steps.tests.outcome != 'skipped' }}\n"
+            b"        run: ':'\n"
+        )
+        assert content.count(diagnostic_environment) == content.count(diagnostic_step) == 1
+        content = content.replace(diagnostic_environment, b"").replace(diagnostic_step, b"")
         outputs = (
             b"    outputs:\n      partition_receipt: ${{ steps.tests.outputs.partition_receipt }}\n"
         )

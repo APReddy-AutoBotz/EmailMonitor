@@ -55,3 +55,14 @@ bounded temporary progress file; no test names or output are exported. The
 metadata never supplies a partition receipt or changes its fail-closed join.
 The wrapper alarm, consumer wait, exit/refusal behavior, complete test inventory
 and owned cleanup remain unchanged. Missing diagnostics are not success evidence.
+
+The hosted wrapper deadline was observed on the diagnostic head after 6,403 of
+6,593 backend tests completed; the active case was the XML worker import-closure
+check. An earlier workflow snapshot assertion also failed independently. Its
+original digest stays pinned, with only the exact diagnostic metadata normalized.
+The seven timing/current-authority SQL cases are now assigned to the existing
+SQL partition, whose measured hosted step had 435 seconds of wrapper headroom.
+Those seven cases previously took 24–70 seconds in actual local PostgreSQL runs;
+that local timing is not a hosted guarantee. All seven are explicitly enumerated,
+required exactly once, and joined against the same full inventory and tree.
+No test, assertion, timeout, migration or authority rule is removed or relaxed.
