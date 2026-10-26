@@ -8,6 +8,7 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 
+from emailmonitor.associations.metadata import ArticleMetadata
 from emailmonitor.associations.models import Bundle, Review
 from emailmonitor.associations.quality import ObservationQuality
 from emailmonitor.associations.service import Associations
@@ -104,6 +105,10 @@ def association_router(
     @router.get("/organizations/{organization_id}/association-batches/{batch_id}")
     def detail(request: Request, organization_id: UUID, batch_id: UUID) -> Bundle:
         return service_for(token(request)).detail(organization_id, batch_id)
+
+    @router.get("/organizations/{organization_id}/association-batches/{batch_id}/article-metadata")
+    def metadata(request: Request, organization_id: UUID, batch_id: UUID) -> ArticleMetadata:
+        return service_for(token(request)).metadata(organization_id, batch_id)
 
     @router.get(
         "/organizations/{organization_id}/association-batches/{batch_id}/observation-quality"

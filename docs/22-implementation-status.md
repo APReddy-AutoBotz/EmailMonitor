@@ -684,3 +684,14 @@ author/review and policy relationships remain independent. See
 [design and acceptance boundary](71-retained-paper-identity.md). The local normal aggregate and focused actual SQL cases pass; an independent
 fresh check and genuine hosted gates are tracked in the candidate report. No
 public publication or whole-product completion is claimed. The accepted authored-PDF Draft head remains unchanged.
+
+## Retained article metadata review slice
+
+The review workflow now has a current-authorized metadata projection and panel
+for retained title/journal/DOI/date text and HTML/PDF citations. Source/batch
+binding and the existing runtime RLS/final visibility checks are preserved.
+XML metadata remains unobserved where the retained profile recorded none.
+This is a read-only presentation feature, not publication-date filtering or
+observation reuse. See `docs/78-retained-article-metadata.md` for acceptance
+inventory and limits; authored SQL/browser cases require actual hosted execution
+and must not be inferred from local skips. No migration or acquisition change.
