@@ -81,3 +81,12 @@ subphase enum. Missing subphase remains `none`; no session values or navigation
 targets are reported. This separates readiness, activation, redirect, callback
 and organization-selection waits without changing the shared ten-second login
 budget or treating a later passing journey as a repair.
+
+For keyboard exhaustion, metadata also includes the existing validated outcome
+subphase and fixed focus categories: active kind, target control kind and active
+control kind. Eight flags encode target focused, document focused, modal open,
+target disabled, target in dialog, active in target dialog, target inert and
+target tab stop, in that order (`1` true, `0` false, `u` unknown). Missing and
+unavailable snapshots remain distinct. No DOM text, identities, arbitrary
+labels or attempt-event payloads are exported. The original 100-Tab sequence,
+visibility/enabled waits and failure remain unchanged.

@@ -7,7 +7,13 @@ from functools import wraps
 from pathlib import Path
 from typing import get_args
 
-from operator_ui_protocol import STAGES, DiagnosticFrame, InstalledLoginPhase
+from operator_ui_protocol import (
+    OUTCOME_PHASES,
+    STAGES,
+    DiagnosticFrame,
+    FocusExhaustion,
+    InstalledLoginPhase,
+)
 from pydantic import TypeAdapter
 
 HOST = frozenset(
@@ -33,6 +39,8 @@ class Trace:
         self.reason = "unknown"
         self.error = "none"
         self.login = "none"
+        self.outcome = "none"
+        self.focus: FocusExhaustion | str | None = None
         self.cleanup: set[str] = set()
 
     def label(self) -> str:
@@ -57,10 +65,37 @@ class Trace:
             raise ValueError("Exact owned cleanup kinds required")
         if self.login not in ("none", *get_args(InstalledLoginPhase)):
             raise ValueError("Closed installed login phase required")
+        if self.outcome not in ("none", *OUTCOME_PHASES):
+            raise ValueError("Closed outcome phase required")
+        focus = "none"
+        if isinstance(self.focus, FocusExhaustion):
+            value = FocusExhaustion.model_validate(self.focus.model_dump())
+            flags = "".join(
+                "1" if flag is True else "0" if flag is False else "u"
+                for flag in (
+                    value.target_focused,
+                    value.document_focused,
+                    value.modal_open,
+                    value.target_disabled,
+                    value.target_in_dialog,
+                    value.active_in_target_dialog,
+                    value.target_inert,
+                    value.target_tab_stop,
+                )
+            )
+            focus = (
+                f"{value.active_kind}.{value.target_kind or 'none'}."
+                f"{value.active_control or 'none'}.{flags}"
+            )
+        elif self.focus == "unavailable":
+            focus = "unavailable"
+        elif self.focus is not None:
+            raise ValueError("Closed focus categories required")
         cleanup = "both" if len(self.cleanup) == 2 else next(iter(self.cleanup), "none")
         return (
             f"{stage}-phase_{self.phase}-error_{self.error}-reason_{self.reason}-cleanup_{cleanup}"
             f"-login_{self.login}"
+            f"-outcome_{self.outcome}-focus_{focus}"
         )
 
 
@@ -96,6 +131,8 @@ def guest_frame(frame: DiagnosticFrame) -> None:
         if fixed.kind == "failure":
             trace.reason, trace.error = fixed.reason, fixed.error or "none"
             trace.login = fixed.installed_login_phase or "none"
+            trace.outcome = fixed.outcome_phase or "none"
+            trace.focus = fixed.focus_exhaustion
 
 
 def observed_guest[**P, T](function: Callable[P, T]) -> Callable[P, T]:

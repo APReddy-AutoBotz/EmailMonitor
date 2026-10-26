@@ -5,7 +5,13 @@ from typing import get_args
 
 import guest_outcome as trace
 import pytest
-from operator_ui_protocol import DiagnosticFrame, InstalledLoginPhase
+from operator_ui_protocol import (
+    OUTCOME_PHASES,
+    DiagnosticFrame,
+    FocusExhaustion,
+    InstalledLoginPhase,
+    OutcomePhase,
+)
 
 
 @pytest.fixture
@@ -30,7 +36,7 @@ def test_fixed_host_failure_preserves_original_exception(output: Path, stage: st
         synthetic()
     assert caught.value is original
     assert output.read_text() == (
-        f"guest_outcome={stage}-phase_unavailable-error_none-reason_unknown-cleanup_none-login_none\n"
+        f"guest_outcome={stage}-phase_unavailable-error_none-reason_unknown-cleanup_none-login_none-outcome_none-focus_none\n"
     )
     assert trace._current.get() is None
 
@@ -73,7 +79,7 @@ def test_first_failure_survives_cleanup_and_later_success(output: Path) -> None:
     assert len(lines) == 2 and lines[0] == lines[1]
     assert lines[0] == (
         "guest_outcome=conversation-phase_evidence_review-error_AssertionError-"
-        "reason_dialog_focus_restore-cleanup_both-login_none"
+        "reason_dialog_focus_restore-cleanup_both-login_none-outcome_none-focus_none"
     )
 
 
@@ -180,7 +186,9 @@ def test_existing_login_phase_preserves_timeout_and_first_failure(
         lines
         == [
             "guest_outcome=conversation-phase_keyword_worker-error_TimeoutError-"
-            "reason_installed_login_deadline-cleanup_none-login_" + phase
+            "reason_installed_login_deadline-cleanup_none-login_"
+            + phase
+            + "-outcome_none-focus_none"
         ]
         * 2
     )
@@ -210,3 +218,124 @@ def test_invalid_login_phase_cannot_enter_metadata(output: Path) -> None:
     value.login = "private@example.invalid"
     with pytest.raises(ValueError, match="Closed installed login phase"):
         value.label()
+
+
+@pytest.mark.parametrize("phase", OUTCOME_PHASES)
+def test_fixed_outcome_and_focus_preserve_failure(output: Path, phase: OutcomePhase) -> None:
+    original = RuntimeError("Control not reachable by keyboard")
+    frame = DiagnosticFrame(
+        kind="failure",
+        stage="url_worker",
+        error="RuntimeError",
+        reason="keyboard_focus",
+        outcome_phase=phase,
+        focus_exhaustion=FocusExhaustion(
+            target_focused=False,
+            document_focused=True,
+            modal_open=False,
+            active_kind="outcomes_heading",
+            target_kind="button",
+            active_control="other",
+            target_disabled=False,
+            target_in_dialog=False,
+            active_in_target_dialog=False,
+            target_inert=False,
+            target_tab_stop=True,
+        ),
+    )
+
+    @trace.observed_guest
+    def failed() -> None:
+        trace.guest_stage("conversation")
+        trace.guest_frame(frame)
+        raise original
+
+    with pytest.raises(RuntimeError) as caught:
+        failed()
+    assert caught.value is original
+    assert output.read_text().endswith(
+        "-outcome_" + phase + "-focus_outcomes_heading.button.other.01000001\n"
+    )
+
+
+def test_focus_unknowns_and_unavailable_are_distinct() -> None:
+    value = trace.Trace()
+    value.focus = FocusExhaustion(
+        target_focused=True, document_focused=False, modal_open=True, active_kind="target"
+    )
+    assert value.label().endswith("-focus_target.none.none.101uuuuu")
+    value.focus = "unavailable"
+    assert value.label().endswith("-focus_unavailable")
+    value.focus = None
+    assert value.label().endswith("-focus_none")
+
+
+@pytest.mark.parametrize("field", ["outcome", "focus"])
+def test_arbitrary_outcome_or_focus_cannot_be_reported(field: str) -> None:
+    value = trace.Trace()
+    setattr(value, field, "private@example.invalid")
+    with pytest.raises(ValueError, match="Closed"):
+        value.label()
+
+
+def test_mutated_focus_model_is_revalidated_before_reporting() -> None:
+    value = trace.Trace()
+    value.focus = FocusExhaustion(
+        target_focused=False, document_focused=True, modal_open=False, active_kind="body"
+    )
+    object.__setattr__(value.focus, "active_kind", "private@example.invalid")
+    with pytest.raises(ValueError):
+        value.label()
+
+
+def test_synthetic_keyboard_flow_keeps_all_tabs_and_original_failure(
+    output: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import asyncio
+    from types import SimpleNamespace
+    from typing import cast
+    from unittest.mock import AsyncMock
+
+    import operator_ui_acceptance as guest
+    from playwright.async_api import Locator, Page
+
+    snapshot = dict(
+        target_focused=False, document_focused=True, modal_open=False, active_kind="body"
+    )
+    target = SimpleNamespace(
+        wait_for=AsyncMock(), evaluate=AsyncMock(side_effect=[False] * 100 + [snapshot])
+    )
+    keyboard = SimpleNamespace(press=AsyncMock())
+    monkeypatch.setattr(guest, "expect", lambda _: SimpleNamespace(to_be_enabled=AsyncMock()))
+    original = []
+
+    @trace.observed_guest
+    def execute() -> None:
+        trace.guest_stage("conversation")
+        try:
+            asyncio.run(
+                guest.focus(cast(Page, SimpleNamespace(keyboard=keyboard)), cast(Locator, target))
+            )
+        except RuntimeError as error:
+            original.append(error)
+            trace.guest_frame(
+                DiagnosticFrame(
+                    kind="failure",
+                    stage="url_worker",
+                    error="RuntimeError",
+                    reason="keyboard_focus",
+                    outcome_phase="outcomes_actual_modal",
+                    focus_exhaustion=guest.focus_exhaustion,
+                )
+            )
+            raise
+
+    with pytest.raises(RuntimeError, match="^Control not reachable by keyboard$") as caught:
+        execute()
+    assert caught.value is original[0]
+    assert keyboard.press.await_count == 100
+    assert all(call.args == ("Tab",) for call in keyboard.press.await_args_list)
+    assert output.read_text().endswith(
+        "-outcome_outcomes_actual_modal-focus_body.none.none.010uuuuu\n"
+    )
