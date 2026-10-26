@@ -2196,6 +2196,8 @@ async def main() -> None:
             )
             await expect(metadata.get_by_role("list")).to_be_visible()
             await expect(metadata).to_contain_text("Recorded date type:")
+            history = page.get_by_role("region", name="Recorded review history", exact=True)
+            await expect(history).to_contain_text("earliest 100 records")
             await channel.request({"kind": "control", "action": "hold_quality"})
             await activate(
                 page,
@@ -2262,6 +2264,18 @@ async def main() -> None:
             )
             await activate(page, page.get_by_role("button", name="Save review", exact=True))
             await page.get_by_role("dialog").wait_for(state="hidden")
+            await activate(
+                page, page.get_by_role("button", name="Evidence and review", exact=True).first
+            )
+            history = page.get_by_role("region", name="Recorded review history", exact=True)
+            await expect(history).to_contain_text("Synthetic keyboard evidence review")
+            await activate(page, history.locator("summary"))
+            await expect(history.get_by_role("list")).to_be_visible()
+            await expect(history).to_contain_text("Recorded action: accept")
+            await expect(history).to_contain_text("Expected association revision:")
+            await expect(history.locator("time").first).to_be_visible()
+            await activate(page, page.get_by_role("button", name="Close evidence", exact=True))
+            await wait_evidence_closed(page)
             # Real retained DOI filtering, using only the authored article-a metadata.
             paper_input = page.get_by_label(
                 "Paper DOI (optional; across authorized jobs)", exact=True

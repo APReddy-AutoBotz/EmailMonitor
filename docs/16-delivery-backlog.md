@@ -111,3 +111,7 @@ Retained metadata review slice (FR-010/017, EM-007/008/009/012): expose existing
 article metadata and citations through the current-authorized read path and
 connected review panel. Scope and acceptance are in `docs/78-retained-article-metadata.md`;
 no search-filter or reuse semantics, migration or acquisition authority are added.
+
+Recorded review history slice (FR-020, EM-009/012): expose existing bounded
+versioned decisions for the currently readable selected association. See
+[history display and limits](79-retained-review-history.md); unmerge remains separate.

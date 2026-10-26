@@ -695,3 +695,12 @@ This is a read-only presentation feature, not publication-date filtering or
 observation reuse. See `docs/78-retained-article-metadata.md` for acceptance
 inventory and limits; authored SQL/browser cases require actual hosted execution
 and must not be inferred from local skips. No migration or acquisition change.
+
+## Recorded review history presentation
+
+The evidence dialog now exposes existing versioned review decisions for the
+currently readable selected association. The earliest-100 batch window and
+possible omissions are explicit; no current acceptance or missing history is
+inferred. See [scope and acceptance inventory](79-retained-review-history.md).
+No migration, server authority or review-write change. Local and hosted results
+must be recorded separately; this slice does not complete unmerge or all FR-020.

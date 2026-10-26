@@ -1,6 +1,7 @@
 import { Children, isValidElement, type ReactElement, type ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiScope } from './client'
+import { CurrentReviewHistory } from './reviewHistory'
 import { CurrentArticleMetadata } from './articleMetadata'
 import { CurrentObservationQuality } from './observationQuality'
 import type { Contact } from './models'
@@ -58,13 +59,13 @@ function setup(denied = false, revision = 0, organization = fixtures.contact.ass
 }
 
 describe('evidence selection across asynchronous native close and workspace refresh', () => {
-  it('gives metadata and quality distinct identities that reset on refresh and organization change', () => {
+  it('gives retained evidence panels distinct identities that reset on refresh and organization change', () => {
     const keys = (root: ReturnType<typeof EvidenceDrawer>) => Children.toArray(root.props.children)
-      .filter(child => isValidElement(child) && [CurrentArticleMetadata, CurrentObservationQuality].includes(child.type as typeof CurrentArticleMetadata))
+      .filter(child => isValidElement(child) && [CurrentArticleMetadata, CurrentObservationQuality, CurrentReviewHistory].includes(child.type as typeof CurrentArticleMetadata))
       .map(child => (child as ReactElement).key)
     const original = keys(setup().root)
-    expect(original).toHaveLength(2)
-    expect(new Set(original).size).toBe(2)
+    expect(original).toHaveLength(3)
+    expect(new Set(original).size).toBe(3)
     for (const changed of [keys(setup(false, 1).root), keys(setup(false, 0, '00000000-0000-4000-8000-000000000099').root)]) {
       expect(changed.every(key => !original.includes(key))).toBe(true)
     }

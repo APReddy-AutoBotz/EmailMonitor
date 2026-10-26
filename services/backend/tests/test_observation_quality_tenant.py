@@ -52,11 +52,15 @@ def test_runtime_quality_read_preserves_stored_snapshot_replay_and_review(
 
 
 @pytest.mark.parametrize("kind", ["policy", "session", "suppression", "deletion", "expiry"])
-@pytest.mark.parametrize("view", ["quality", "metadata"])
+@pytest.mark.parametrize("view", ["quality", "metadata", "history"])
 def test_quality_current_authority_refuses(scenario: Scenario, view: str, kind: str) -> None:
     service, job, batch = prepared(scenario)
     org = scenario.organizations[0]
-    assert getattr(service, view)(org, batch).scope == "article"
+    if view == "history":
+        service.review(org, batch, review_request(service, org, batch))
+        assert len(service.history(org, batch)) == 1
+    else:
+        assert getattr(service, view)(org, batch).scope == "article"
     from sqlalchemy import create_engine
 
     admin = create_engine(scenario.admin_url)
@@ -167,7 +171,7 @@ def test_quality_final_runtime_join_visibility_is_required(
 
 
 @pytest.mark.parametrize("field", ["excerpt_days", "contact_days"])
-@pytest.mark.parametrize("view", ["quality", "metadata"])
+@pytest.mark.parametrize("view", ["quality", "metadata", "history"])
 def test_quality_respects_current_retention_before_sweep(
     scenario: Scenario, view: str, field: str
 ) -> None:
@@ -176,7 +180,11 @@ def test_quality_respects_current_retention_before_sweep(
 
     service, _, batch = prepared(scenario)
     org = scenario.organizations[0]
-    assert getattr(service, view)(org, batch).scope == "article"
+    if view == "history":
+        service.review(org, batch, review_request(service, org, batch))
+        assert len(service.history(org, batch)) == 1
+    else:
+        assert getattr(service, view)(org, batch).scope == "article"
     lifecycle = Lifecycle(service.database, service.token, SETTINGS)
     current = lifecycle.retention(org)
     lifecycle.update_retention(
@@ -210,3 +218,51 @@ def test_runtime_metadata_api_is_read_only_current_bound_and_review_independent(
         assert response.json() == before.model_dump(mode="json")
         assert c.get(url.replace(str(org), str(scenario.organizations[1]))).status_code == 404
         assert c.get(url.replace(str(batch), str(uuid4()))).status_code == 404
+
+
+def test_history_viewer_api_current_batch_and_revision_conflict(scenario: Scenario) -> None:
+    from emailmonitor.organizations.database import RevisionConflict
+
+    service, _, batch = prepared(scenario)
+    org = scenario.organizations[0]
+    request = review_request(service, org, batch)
+    service.review(org, batch, request)
+    before = service.history(org, batch)
+    with pytest.raises(RevisionConflict):
+        service.review(org, batch, request)
+    assert service.history(org, batch) == before
+    with client(scenario) as c:
+        scenario.login(c, "viewer")
+        url = f"/api/v1/organizations/{org}/association-batches/{batch}/reviews"
+        response = c.get(url)
+        assert response.status_code == 200
+        rows = response.json()
+        assert len(rows) == 1
+        assert rows[0]["association_id"] == str(request.association_id)
+        assert rows[0]["action"] == request.action
+        assert rows[0]["expected_revision"] == request.expected_revision
+        assert rows[0]["reason"] == request.reason
+        assert c.get(url.replace(str(org), str(scenario.organizations[1]))).status_code == 404
+        assert c.get(url.replace(str(batch), str(uuid4()))).status_code == 404
+
+
+def test_history_final_visibility_refusal_releases_no_prior_decisions(
+    scenario: Scenario, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    service, _, batch = prepared(scenario)
+    org = scenario.organizations[0]
+    service.review(org, batch, review_request(service, org, batch))
+    original = service._lock
+    calls = 0
+
+    def refuse_final(c: Connection, current_org: UUID, current_batch: UUID) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise AuthorizationDenied()
+        original(c, current_org, current_batch)
+
+    monkeypatch.setattr(service, "_lock", refuse_final)
+    with pytest.raises(AuthorizationDenied):
+        service.history(org, batch)
+    assert calls == 2
