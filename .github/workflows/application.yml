@@ -73,10 +73,14 @@ jobs:
         env:
           EM_TEST_BROKER_CONTAINER: ${{ job.services.rabbitmq.id }}
           EM_TEST_POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+          EM_BACKEND_OUTCOME_REPORT: "true"
           EM_REQUIRE_SYNTHETIC_RESTORE: "true"
           EM_REQUIRE_XML_ISOLATION: "true"
           EM_REQUIRE_XML_INTEGRATION: "synthetic-test-only"
         run: uv run --project services/backend python scripts/packaging/run_xml_integration.py application-backend
+      - name: "Backend outcome: ${{ steps.tests.outputs.backend_outcome || 'unavailable' }}"
+        if: ${{ !cancelled() && steps.tests.outcome != 'skipped' }}
+        run: ':'
 
   outcome_sql:
     runs-on: ubuntu-24.04

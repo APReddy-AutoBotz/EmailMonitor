@@ -30,6 +30,7 @@ from emailmonitor.runtime.delegation import ServiceBinding, ServiceBindings
 from emailmonitor.runtime.worker import ServiceRuntimeConfig, broker_application
 from installed_operator_issuer import synthetic_issuer
 from installed_operator_relay import application
+from installed_operator_stage import InstalledStage, report_stage
 from operator_ui_protocol import asset_manifest
 from run_installed_operator import run_installed
 from service_artifacts import collect_service, tracked_service_sources, verify_service_archive
@@ -371,7 +372,26 @@ def test_required_installed_https_operator_journey(
     installed_scenario: Scenario,
     tmp_path: Path,
 ) -> None:
-    case = installed_scenario
+    stage = InstalledStage()
+    primary: BaseException | None = None
+    try:
+        installed_journey(installed_scenario, tmp_path, stage)
+    except BaseException as error:
+        primary = error
+        stage.fail()
+        raise
+    finally:
+        if os.environ.get("EM_INSTALLED_STAGE_REPORT") == "true":
+            try:
+                report_stage(stage, Path(os.environ["GITHUB_OUTPUT"]))
+            except Exception:
+                if primary is None:
+                    raise
+                primary.add_note("Fixed installed stage reporting failed")
+
+
+def installed_journey(case: Scenario, tmp_path: Path, stage: InstalledStage) -> None:
+    stage.enter("package")
     installed, assets, package_sha = installed_package(tmp_path)
     org, other = case.organizations
     admin = create_engine(case.admin_url, hide_parameters=True)
@@ -391,6 +411,7 @@ def test_required_installed_https_operator_journey(
     publisher_thread: threading.Thread | None = None
     primary: BaseException | None = None
     try:
+        stage.enter("identity_and_roles")
         with synthetic_issuer(
             tmp_path, origin + "/auth/complete", str(case.identities["owner"])
         ) as identity:
@@ -420,6 +441,7 @@ def test_required_installed_https_operator_journey(
                         ),
                         {"id": principals[kind], "org": org, "kind": kind, "name": name},
                     )
+            stage.enter("configuration")
             runtime_configs = {}
             for kind, name in names.items():
                 runtime_configs[kind] = ServiceRuntimeConfig(
@@ -461,11 +483,14 @@ def test_required_installed_https_operator_journey(
                 private_key=identity.key,
             )
             configs["api"] = config_file(tmp_path, configuration.model_dump_json())
+            stage.enter("service_identity")
             for kind in ("worker", "publisher"):
                 assert finite(installed, "check", configs[kind]) == "service_identity_ready"
+            stage.enter("broker_setup")
             app = broker_application(runtime_configs["publisher"])
             declare_owned(app, runtime_configs["publisher"].queue)
             context = ssl.create_default_context(cafile=str(identity.ca))
+            stage.enter("api_startup")
             with api_process_client(installed, configs["api"], context) as (api_process, client):
 
                 def api_ready(running: subprocess.Popen[bytes]) -> bool:
@@ -568,7 +593,9 @@ def test_required_installed_https_operator_journey(
                     else:
                         raise RuntimeError("Unexpected installed operator control")
 
+                stage.enter("api_readiness")
                 wait_for(lambda: api_ready(api_process), seconds=10)
+                stage.enter("profile_and_session")
                 profile = client.get(origin + "/api/v1/runtime-profile").json()
                 assert profile["production_ready"] is False
                 assert all(
@@ -588,8 +615,10 @@ def test_required_installed_https_operator_journey(
                     == 401
                 )
                 # Deliberately an empty-process restart, not a crash/lease recovery claim.
+                stage.enter("first_worker_readiness_and_stop")
                 with process(installed, "worker", configs["worker"]) as first:
                     wait_for(lambda: worker_ready(first), seconds=10)
+                stage.enter("restarted_worker_readiness")
                 with process(installed, "worker", configs["worker"]) as running:
                     wait_for(lambda: worker_ready(running), seconds=10)
                     publisher_thread = threading.Thread(target=publish, daemon=True)
@@ -607,12 +636,14 @@ def test_required_installed_https_operator_journey(
                         "initial_organization": str(org),
                         "other_organization": str(other),
                     }
+                    stage.enter("browser_execution_and_owned_cleanup")
                     evidence = run_installed(
                         application(origin, identity.origin, identity.ca, assets, downloads),
                         setup,
                         control,
                         lambda _: False,
                     )
+                    stage.enter("postconditions")
                     assert evidence["redirect_navigation"] == (
                         "observed_303_failed_target_explicit_navigation"
                     )
@@ -693,13 +724,18 @@ def test_required_installed_https_operator_journey(
                             sort_keys=True,
                         )
                     )
+                    stage.enter("publisher_stop")
                     stop.set()
                     publisher_thread.join(timeout=25)
                     assert not publisher_thread.is_alive()
+                    stage.enter("service_process_cleanup")
     except BaseException as error:
         primary = error
+        stage.fail()
         raise
     finally:
+        stage.enter("resource_cleanup")
         cleanup_resources(
             stop, publisher_thread, app, admin, org, principals, names, configs, primary
         )
+    stage.enter("complete")

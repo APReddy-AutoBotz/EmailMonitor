@@ -1,0 +1,14 @@
+{
+  "view_version": "job-timing-v1",
+  "organization_id": "00000000-0000-0000-0000-000000000001",
+  "job_id": "00000000-0000-0000-0000-000000000002",
+  "revision": 5,
+  "generation": 2,
+  "state": "completed",
+  "basis": "first_queued_to_current_terminal_event",
+  "availability": "recorded",
+  "queued_at": "2026-01-01T00:00:00Z",
+  "terminal_at": "2026-01-01T00:00:12.500000Z",
+  "elapsed_seconds": 12.5,
+  "includes_waiting_and_pauses": true
+}

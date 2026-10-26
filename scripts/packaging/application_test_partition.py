@@ -735,7 +735,17 @@ SERVICE_SQL = (
         "ver_reads_xml_bytes"
     ),
 )
-RESERVED_SQL = (*RETAINED_SQL, *PDF_ACCEPTANCE, *SERVICE_SQL)
+# Exact timing/authority cases move to the existing SQL partition; none are omitted.
+TIMING_SQL = (
+    "services/backend/tests/test_job_timing_tenant.py::test_real_terminal_interval_replay_and_tenant_refusal",
+    "services/backend/tests/test_job_timing_tenant.py::test_real_pause_resume_cancel_preserves_first_queue",
+    "services/backend/tests/test_job_timing_tenant.py::test_real_continuation_has_own_interval_without_rewriting_original",
+    "services/backend/tests/test_job_timing_tenant.py::test_real_expired_execution_refuses_timing",
+    "services/backend/tests/test_progress_tenant.py::test_real_current_authorization_closes_replay_and_all_progress_tables[policy]",
+    "services/backend/tests/test_progress_tenant.py::test_real_current_authorization_closes_replay_and_all_progress_tables[membership]",
+    "services/backend/tests/test_progress_tenant.py::test_real_current_authorization_closes_replay_and_all_progress_tables[deletion]",
+)
+RESERVED_SQL = (*RETAINED_SQL, *PDF_ACCEPTANCE, *SERVICE_SQL, *TIMING_SQL)
 PROFILES = ("backend", "outcome_sql")
 ARGUMENTS = (
     "-c",
@@ -912,7 +922,11 @@ def run(profile: str, environment: Mapping[str, str]) -> dict[str, Any]:
     import pytest
 
     os.chdir(ROOT)
-    code = pytest.main(list(ARGUMENTS), plugins=[proof])
+    from backend_outcome import KEY, Progress
+
+    path = environment.get(KEY)
+    diagnostics = [Progress(Path(path))] if path else []
+    code = pytest.main(list(ARGUMENTS), plugins=[proof, *diagnostics])
     if source_tree() != tree or configuration() != config:
         raise PartitionRefused("application_source_changed")
     return proof.receipt(int(code), tree, config)

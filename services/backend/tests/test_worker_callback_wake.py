@@ -16,6 +16,7 @@ from celery import signals
 from emailmonitor.jobs.broker import FixtureWorkerConfig, create_worker
 from emailmonitor.jobs.callback_wake import FixtureCallbackWake, ReadyCallbackWake
 from emailmonitor.jobs.diagnostics import TASK
+from owned_phase_trace import Mark, PhaseTrace, callback_entry, quiet_mark, receipt, resources
 
 Hub = import_module("kombu.asynchronous.hub").Hub
 NAMESPACE = "em-fixture-callback-wake"
@@ -318,7 +319,9 @@ def test_first_fd_close_failure_still_closes_second_once(
     hub.close()
 
 
-def _real_solo_delivery(with_wake: bool, diagnostics: bool, outcome: str) -> None:
+def _real_solo_delivery(
+    with_wake: bool, diagnostics: bool, outcome: str, *, mark: Mark = quiet_mark
+) -> None:
     """Only persistence and incoming broker bytes are synthetic, not ACK code."""
     from emailmonitor.jobs import broker
 
@@ -329,6 +332,7 @@ def _real_solo_delivery(with_wake: bool, diagnostics: bool, outcome: str) -> Non
     assert import_module("celery").__version__ == "5.6.3"
     assert import_module("kombu").__version__ == "5.6.2"
     assert import_module("amqp").__version__ == "5.4.1"
+    mark("dependencies_ready")
     monkeypatch = pytest.MonkeyPatch()
     counts = {"claim": 0, "process": 0, "postrun": 0, "failure": 0, "ack": 0}
     requests: list[Any] = []
@@ -363,6 +367,7 @@ def _real_solo_delivery(with_wake: bool, diagnostics: bool, outcome: str) -> Non
         broker, "Progress", lambda *_: SimpleNamespace(claim=claim, process_fixture=process)
     )
     asynchronous.set_event_loop(None)
+    mark("patches_ready")
     org = uuid4()
     app, _ = create_worker(
         FixtureWorkerConfig(
@@ -375,9 +380,11 @@ def _real_solo_delivery(with_wake: bool, diagnostics: bool, outcome: str) -> Non
             ui_diagnostics=diagnostics,
         )
     )
+    mark("app_ready")
     assert FixtureCallbackWake in app.steps["consumer"]
     if not with_wake:
         app.steps["consumer"].discard(FixtureCallbackWake)
+    mark("worker_construct_started")
     worker = app.Worker(
         pool="solo",
         concurrency=1,
@@ -387,6 +394,7 @@ def _real_solo_delivery(with_wake: bool, diagnostics: bool, outcome: str) -> Non
         without_mingle=True,
         without_heartbeat=True,
     )
+    mark("worker_ready")
     consumer = worker.consumer
     hub = consumer.hub
     assert hub is not None
@@ -405,6 +413,7 @@ def _real_solo_delivery(with_wake: bool, diagnostics: bool, outcome: str) -> Non
     assert consumer.initial_prefetch_count == 1
     consumer.update_strategies()
     handler = consumer.create_task_handler()
+    mark("handshake_ready")
 
     def received(sender: Any = None, request: Any = None, **_: Any) -> None:
         if sender is consumer:
@@ -477,9 +486,11 @@ def _real_solo_delivery(with_wake: bool, diagnostics: bool, outcome: str) -> Non
     hub.poller.poll = observed_poll
     loop = hub.create_loop()
     try:
+        mark("work_started")
         started = time.monotonic()
         next(loop)
         elapsed = time.monotonic() - started
+        mark("first_poll_done")
         assert polls[0] == (10.0, 2, 0)
         assert counts["claim"] == 1 and counts["postrun"] == 1 and counts["ack"] == 0
         assert counts["process"] == (0 if outcome in {"empty", "claim_error"} else 1)
@@ -491,7 +502,9 @@ def _real_solo_delivery(with_wake: bool, diagnostics: bool, outcome: str) -> Non
         next(loop)
         assert message.acknowledged and counts["ack"] == 1
         assert counts["postrun"] == 1
+        mark("ack_seen")
     finally:
+        mark("cleanup_started")
         loop.close()
         if step is not None:
             step.shutdown(consumer)
@@ -505,6 +518,7 @@ def _real_solo_delivery(with_wake: bool, diagnostics: bool, outcome: str) -> Non
         signals.task_failure.disconnect(failed)
         app.close()
         monkeypatch.undo()
+        mark("cleanup_complete")
 
 
 @pytest.mark.parametrize(
@@ -517,20 +531,44 @@ def _real_solo_delivery(with_wake: bool, diagnostics: bool, outcome: str) -> Non
     ],
 )
 def test_actual_worker_solo_task_ack_waits_for_next_ready_iteration(
-    with_wake: bool, diagnostics: bool, outcome: str
+    with_wake: bool, diagnostics: bool, outcome: str, tmp_path: Path
 ) -> None:
+    trace = PhaseTrace(tmp_path / "callback-parent.jsonl")
+    before = resources()
     child = multiprocessing.get_context("spawn").Process(
-        target=_real_solo_delivery, args=(with_wake, diagnostics, outcome)
+        target=callback_entry,
+        args=(str(tmp_path / "callback-child.jsonl"), with_wake, diagnostics, outcome),
     )
+    trace.mark("launch")
     child.start()
+    owned_pid = child.pid
+    timed_out = False
     try:
         child.join(timeout=20)
+        trace.mark("join_returned")
+        timed_out = child.exitcode is None
+        if timed_out:
+            trace.mark("timeout")
         assert child.exitcode == 0
     finally:
+        trace.mark("cleanup_started")
         if child.is_alive():
             child.kill()
             child.join(timeout=5)
+        code = child.exitcode
         child.close()
+        trace.mark("cleanup_complete")
+        receipt(
+            tmp_path / "callback-receipt.json",
+            {
+                "kind": "callback",
+                "owned_pid": owned_pid,
+                "exit_code": code,
+                "timed_out": timed_out,
+                "before": before,
+                "after": resources(),
+            },
+        )
 
 
 def test_bootstep_refuses_non_solo_or_missing_hub_and_controls_remain_unchanged() -> None:

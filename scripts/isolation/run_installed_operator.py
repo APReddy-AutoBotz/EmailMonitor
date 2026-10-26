@@ -7,11 +7,13 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI
+from guest_outcome import guest_failure, guest_stage, observed_guest
 from operator_ui_protocol import RequestFrame
 from run_operator_ui_acceptance import conversation, validate_guest
 from transport_topology import OWNER_LABEL, docker, remove_owned, require_owner, resource
 
 
+@observed_guest
 def run_installed(
     app: FastAPI,
     setup: dict[str, object],
@@ -29,6 +31,7 @@ def run_installed(
     profile = root / "scripts/isolation/seccomp-browser.json"
     # Register unique names before daemon actions, allowing owned-only ambiguous-outcome cleanup.
     try:
+        guest_stage("build")
         docker(
             "build",
             "--platform=linux/amd64",
@@ -46,6 +49,7 @@ def run_installed(
             raise RuntimeError("Owned UI image missing")
         require_owner("image", image, owner)
         image_id = str(image["Id"])
+        guest_stage("create")
         docker(
             "create",
             "--name",
@@ -76,11 +80,14 @@ def run_installed(
             "python",
             "/app/operator_ui_acceptance.py",
         )
+        guest_stage("initial_validation")
         guest = resource("container", container_name)
         if guest is None:
             raise RuntimeError("Owned UI guest missing")
         validate_guest(guest, image_id, owner, profile)
+        guest_stage("conversation")
         result = conversation(container_name, app, setup, control, before_reply)
+        guest_stage("final_validation")
         guest = resource("container", container_name)
         if guest is None:
             raise RuntimeError("Final guest state missing")
@@ -92,12 +99,18 @@ def run_installed(
         ):
             raise RuntimeError("Actual UI guest did not stop cleanly")
         return result
+    except BaseException:
+        guest_failure()
+        raise
     finally:
         cleanup_errors = []
         for kind, name in (("container", container_name), ("image", image_name)):
             try:
+                guest_stage("cleanup_" + kind)
                 remove_owned(kind, name, owner)
             except Exception as error:
+                guest_failure(kind)
                 cleanup_errors.append(type(error).__name__)
         if cleanup_errors:
             raise RuntimeError("Owned UI cleanup failed: " + ",".join(cleanup_errors))
+        guest_stage("complete")

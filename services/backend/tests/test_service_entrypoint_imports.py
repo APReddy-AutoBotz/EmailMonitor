@@ -1,18 +1,36 @@
 """Fresh-process CLI import boundaries; no server, database or broker is started."""
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
+from owned_phase_trace import PhaseTrace, receipt, resources
 
 SOURCE = Path(__file__).resolve().parents[1] / "src"
 
 REFUSAL_PROBE = """
-import builtins, pathlib, sys
+import builtins, pathlib, sys, os, time, resource, json, atexit
+trace_path = os.environ['EM_TEST_PHASE_TRACE']
+def phase(name):
+    value = dict(phase=name, monotonic_ns=time.monotonic_ns(), cpu_ns=time.process_time_ns(),
+                 pid=os.getpid(), pgid=os.getpgrp(),
+                 maxrss_kib=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+    try:
+        fd = os.open(trace_path, os.O_WRONLY|os.O_CREAT|os.O_APPEND|os.O_NOFOLLOW, 0o600)
+        try:
+            os.write(fd, (json.dumps(value) + chr(10)).encode())
+        finally:
+            os.close(fd)
+    except OSError:
+        pass
+phase('child_started')
+atexit.register(phase, 'exit_handlers_finished')
 sys.path.insert(0, sys.argv[1])
 forbidden = {
     'celery', 'kombu', 'sqlalchemy', 'fastapi', 'uvicorn', 'cryptography', 'jwt', 'pypdf',
@@ -30,14 +48,67 @@ def guarded(name, *args, **kwargs):
         raise AssertionError('Execution dependency imported before refusal')
     return original_import(name, *args, **kwargs)
 builtins.__import__ = guarded
+phase('entrypoint_import_started')
 from emailmonitor.runtime import entrypoint
+phase('entrypoint_import_complete')
 sys.argv = ['service', sys.argv[3] if len(sys.argv) > 3 else 'api', '--config', sys.argv[2]]
+phase('refusal_started')
 result = entrypoint.main()
+phase('refusal_complete')
 assert not attempts
 assert not any(matches(name) for name in sys.modules)
 assert result == 1
+phase('assertions_complete')
+atexit.register(phase, 'exit_handlers_started')
 raise SystemExit(result)
 """
+
+
+def run_refusal_probe(tmp_path: Path, args: list[str]) -> subprocess.CompletedProcess[bytes]:
+    trace = PhaseTrace(tmp_path / "refusal-parent.jsonl")
+    before = resources()
+    env = dict(os.environ, EM_TEST_PHASE_TRACE=str(tmp_path / "refusal-child.jsonl"))
+    classification = "exception"
+    code = None
+    timeout_state: dict[str, int | bool | None] = {}
+
+    class ObservedPopen(subprocess.Popen[bytes]):
+        def communicate(
+            self, input: bytes | None = None, timeout: float | None = None
+        ) -> tuple[bytes, bytes]:
+            try:
+                return super().communicate(input=input, timeout=timeout)
+            except subprocess.TimeoutExpired:
+                # Observe before subprocess.run performs its unchanged kill/wait cleanup.
+                timeout_state.update(pid=self.pid, exit_code=self.poll(), observed=True)
+                trace.mark("timeout_observed")
+                raise
+
+    trace.mark("launch")
+    try:
+        with patch.object(subprocess, "Popen", ObservedPopen):
+            result = subprocess.run(args, capture_output=True, timeout=5, check=False, env=env)
+        code = result.returncode
+        classification = "returned"
+        trace.mark("returned")
+        return result
+    except subprocess.TimeoutExpired:
+        classification = "timeout"
+        trace.mark("timeout")
+        raise
+    finally:
+        trace.mark("cleanup_complete")
+        receipt(
+            tmp_path / "refusal-receipt.json",
+            {
+                "kind": "refusal",
+                "classification": classification,
+                "exit_code": code,
+                "before_timeout_cleanup": timeout_state,
+                "before": before,
+                "after": resources(),
+            },
+        )
 
 
 @pytest.mark.parametrize(
@@ -60,11 +131,9 @@ def test_api_refusal_precedes_execution_imports_in_fresh_process(
 ) -> None:
     config = tmp_path / "synthetic-config.json"
     config.write_bytes(body)
-    result = subprocess.run(
+    result = run_refusal_probe(
+        tmp_path,
         [sys.executable, "-I", "-B", "-c", REFUSAL_PROBE, str(SOURCE), str(config)],
-        capture_output=True,
-        timeout=5,
-        check=False,
     )
     assert result.returncode == 1
     assert result.stdout == b""
@@ -84,11 +153,9 @@ def test_api_file_boundaries_still_refuse_before_execution_imports(
         config.symlink_to(target)
     elif kind == "directory":
         config.mkdir()
-    result = subprocess.run(
+    result = run_refusal_probe(
+        tmp_path,
         [sys.executable, "-I", "-B", "-c", REFUSAL_PROBE, str(SOURCE), str(config)],
-        capture_output=True,
-        timeout=5,
-        check=False,
     )
     assert (result.returncode, result.stdout, result.stderr) == (
         1,
@@ -118,11 +185,9 @@ def test_service_refusal_precedes_execution_imports_in_fresh_process(
 ) -> None:
     config = tmp_path / "synthetic-config.json"
     config.write_bytes(body)
-    result = subprocess.run(
+    result = run_refusal_probe(
+        tmp_path,
         [sys.executable, "-I", "-B", "-c", REFUSAL_PROBE, str(SOURCE), str(config), command],
-        capture_output=True,
-        timeout=5,
-        check=False,
     )
     assert (result.returncode, result.stdout, result.stderr) == (
         1,
@@ -142,11 +207,9 @@ def test_service_file_boundaries_refuse_before_execution_imports(tmp_path: Path,
         config.symlink_to(target)
     elif kind == "directory":
         config.mkdir()
-    result = subprocess.run(
+    result = run_refusal_probe(
+        tmp_path,
         [sys.executable, "-I", "-B", "-c", REFUSAL_PROBE, str(SOURCE), str(config), "worker"],
-        capture_output=True,
-        timeout=5,
-        check=False,
     )
     assert (result.returncode, result.stdout, result.stderr) == (
         1,

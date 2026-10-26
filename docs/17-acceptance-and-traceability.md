@@ -556,3 +556,8 @@ Retained metadata view: FR-010/017 use `test_article_metadata.py`, the metadata
 variants in `test_observation_quality_tenant.py`, `articleMetadata.test.tsx`, and
 the existing hosted operator evidence-review journey. See `docs/78-retained-article-metadata.md`
 for the distinction between authored coverage and actual executed acceptance.
+
+NFR-017 / FR-021 retained queue-to-terminal timing: `test_job_timing.py`,
+`test_job_timing_tenant.py`, current progress-authority refusals,
+`jobTiming.test.tsx` and the existing hosted lifecycle cancellation journey.
+See `docs/81-retained-job-timing.md`; authored/skipped checks remain pending.

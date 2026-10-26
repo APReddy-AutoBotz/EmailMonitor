@@ -695,3 +695,11 @@ This is a read-only presentation feature, not publication-date filtering or
 observation reuse. See `docs/78-retained-article-metadata.md` for acceptance
 inventory and limits; authored SQL/browser cases require actual hosted execution
 and must not be inferred from local skips. No migration or acquisition change.
+
+## Independent retained job timing candidate
+
+NFR-017 / FR-021: read-only queue-to-terminal interval under existing job authority;
+no worker CPU, billing or performance claim. Isolated from review-history and
+suppression candidates. Implementation and acceptance scope are documented in
+`docs/81-retained-job-timing.md`; actual SQL, normal/fresh and hosted gates remain
+pending until executed. No migration, source access, merge or deployment.

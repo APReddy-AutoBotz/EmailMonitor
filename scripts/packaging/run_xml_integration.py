@@ -47,6 +47,9 @@ MODES = {
 class IntegrationRefused(RuntimeError):
     """Fixed reason only; never command output, credentials or parser data."""
 
+    outcome_category = "wrapper_failure"
+    consumer_code = 0
+
 
 def require_context(environ: Mapping[str, str], mode: str) -> None:
     if (
@@ -236,7 +239,10 @@ def run_consumer(
             try:
                 code = process.wait(timeout=CONSUMER_SECONDS[mode])
                 if code:
-                    raise IntegrationRefused("xml_integration_consumer_failed")
+                    failure = IntegrationRefused("xml_integration_consumer_failed")
+                    failure.outcome_category = "consumer_signal" if code < 0 else "consumer_exit"
+                    failure.consumer_code = code
+                    raise failure
             finally:
                 stop_consumer(process)
         verify_alias()
@@ -429,7 +435,10 @@ def execute(mode: str, environ: Mapping[str, str]) -> None:
 
 
 def interrupted(signum: int, frame: object) -> None:
-    raise IntegrationRefused("xml_integration_interrupted")
+    failure = IntegrationRefused("xml_integration_interrupted")
+    failure.outcome_category = "wrapper_deadline" if signum == signal.SIGALRM else "wrapper_signal"
+    failure.consumer_code = -signum
+    raise failure
 
 
 def main() -> None:
@@ -446,7 +455,12 @@ def main() -> None:
     # for setup/final runner overhead. Workload headroom is a separate risk.
     signal.alarm(WRAPPER_SECONDS[mode])
     try:
-        execute(mode, dict(os.environ))
+        if mode == "application-backend":
+            from backend_outcome import reported
+
+            reported(lambda environment: execute(mode, environment), dict(os.environ))
+        else:
+            execute(mode, dict(os.environ))
     finally:
         signal.alarm(0)
         for kind, handler in previous.items():
