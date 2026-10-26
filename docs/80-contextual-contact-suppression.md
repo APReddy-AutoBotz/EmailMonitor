@@ -68,3 +68,20 @@ The regression rejects prefixed and longer addresses. A separate fixed suppressi
 stage distinguishes this journey from the preceding read-only checks. No authority,
 keyboard action, limit or runtime behavior changes. These local selector proofs
 are not browser acceptance or proof of the historical timeout's exact operation.
+
+The corrected browser reached its final cleanup stage, but the enclosing host
+conversation still failed; its result-admission versus child-exit cause was not
+available. Fixed host labels now distinguish those boundaries without changing
+exit/refusal behavior. Owned-pipe tests retain refusal for pending requests and
+nonzero child exit. The main guest drains its owned pending requests before
+reporting completion, within the unchanged host conversation limit; browser
+cleanup remains inside the unchanged child-exit wait.
+
+The host's earlier post-journey export-download expectation was incompatible with
+intentional suppression. All original durable job/review/usage and ready-artifact
+assertions now run at a fixed read-only checkpoint before suppression, and the
+host requires that same export download to be refused afterward. No prior proof
+is dropped or converted into success on refusal. An actual PostgreSQL regression
+covers the artifact shape before suppression and denied download after it. The
+new completion control verifies existing synthetic state only; it grants no
+application capability, source access or production operation.

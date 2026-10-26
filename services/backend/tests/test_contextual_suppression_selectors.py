@@ -99,3 +99,42 @@ console.log(JSON.stringify({
         "other": False,
         "longer": False,
     }
+
+
+def test_retained_proof_and_pending_drain_precede_suppression_completion() -> None:
+    import ast
+
+    root = Path(__file__).resolve().parents[3]
+    guest = (root / "scripts/isolation/operator_ui_acceptance.py").read_text()
+    main = next(
+        n for n in ast.parse(guest).body if isinstance(n, ast.AsyncFunctionDef) and n.name == "main"
+    )
+    code = ast.unparse(main)
+    assert code.index("'action': 'verify_retained'") < code.index(
+        "checkpoint('contact_suppression')"
+    )
+    start = code.index(
+        "await expect(suppression_address_cells(table, selected_address)).to_have_count(0)"
+    )
+    tail = code[start:]
+    assert tail.index("await asyncio.wait_for(settled_requests(), timeout=10)") < tail.index(
+        "checkpoint('final_cleanup')"
+    )
+    assert "'contact_suppression': True" in tail
+    host = (root / "scripts/isolation/test_operator_ui_acceptance.py").read_text()
+    tree = ast.parse(host)
+    proof = next(
+        n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "verify_retained"
+    )
+    proof_code = ast.unparse(proof)
+    for assertion in [
+        "assert reviews == 1 and effects >= 5",
+        "assert first.counts.discovered == first.counts.terminal == 4",
+        "assert len(exports) == 1 and exports[0].state == 'ready'",
+        "assert artifact.body.startswith(b'PK') and len(artifact.body) > 1000",
+        "assert b'>Affiliations<' not in contact_sheet and b'>Article title<' in contact_sheet",
+    ]:
+        assert assertion in proof_code
+    host_code = ast.unparse(tree)
+    assert "with pytest.raises(AuthorizationDenied):" in host_code
+    assert "results.download(org, UUID(str(retained_receipt['export_id'])))" in host_code

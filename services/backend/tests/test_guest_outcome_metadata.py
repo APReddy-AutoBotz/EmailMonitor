@@ -418,3 +418,59 @@ def test_mutated_nested_attempt_is_rejected_before_export(field: str, value: obj
     object.__setattr__(event, field, value)
     with pytest.raises(ValueError):
         observation.label()
+
+
+@pytest.mark.parametrize("pending", [False, True])
+def test_completion_boundary_keeps_owned_pipe_failure(
+    output: Path, monkeypatch: pytest.MonkeyPatch, pending: bool
+) -> None:
+    import json
+    import subprocess
+    import sys
+    import time
+
+    import run_operator_ui_acceptance as host
+    from fastapi import FastAPI
+
+    original_popen = subprocess.Popen
+    processes = []
+    request = {"kind": "control", "identifier": 1, "action": "verify_retained"}
+    result = {"kind": "result", "diagnostic": "synthetic-operator-ui"}
+    program = "import sys;sys.stdin.readline();"
+    if pending:
+        program += f"print({json.dumps(request)!r},flush=True);"
+    program += f"print({json.dumps(result)!r},flush=True);sys.stdin.read();sys.exit(7)"
+
+    def owned_pipe(*args: object, **kwargs: object) -> subprocess.Popen[bytes]:
+        process = original_popen(
+            [sys.executable, "-c", program],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            bufsize=0,
+        )
+        processes.append(process)
+        return process
+
+    monkeypatch.setattr(subprocess, "Popen", owned_pipe)
+
+    @trace.observed_guest
+    def execute() -> None:
+        host.conversation(
+            "owned-synthetic-pipe",
+            FastAPI(),
+            {},
+            lambda action: time.sleep(0.1),
+            lambda request: False,
+        )
+
+    message = (
+        "Guest completed with pending requests"
+        if pending
+        else "Actual UI completion evidence missing"
+    )
+    with pytest.raises(RuntimeError, match=message):
+        execute()
+    stage = "conversation_result" if pending else "conversation_exit"
+    assert output.read_text().startswith("guest_outcome=" + stage + "-")
+    assert len(processes) == 1 and processes[0].poll() is not None

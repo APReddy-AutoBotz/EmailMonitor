@@ -18,6 +18,7 @@ from emailmonitor.jobs.broker import create_worker
 from emailmonitor.jobs.entitlement_diagnostics import snapshot as entitlement_snapshot
 from emailmonitor.jobs.ledger import Ledger
 from emailmonitor.jobs.queues import owned_queues
+from emailmonitor.organizations.database import AuthorizationDenied
 from emailmonitor.organizations.roles import Capability
 from emailmonitor.progress.broker import publish as publish_execution
 from emailmonitor.progress.service import Progress
@@ -163,6 +164,81 @@ def test_required_actual_keyboard_operator_ui(
                     errors.append(type(error).__name__)
                     stop.set()
 
+    retained_receipt: dict[str, object] = {}
+
+    def verify_retained() -> None:
+        assert not retained_receipt
+        with progress.database.tenant(token, org, Capability.READ_ORGANIZATION) as (
+            c,
+            _,
+        ):
+            jobs = c.execute(
+                text(
+                    "SELECT id,state FROM emailmonitor.jobs "
+                    "WHERE organization_id=:org AND kind='extraction' ORDER BY created_at"
+                ),
+                {"org": org},
+            ).all()
+            reviews: int = c.execute(
+                text(
+                    "SELECT count(*) FROM emailmonitor.association_reviews "
+                    "WHERE organization_id=:org"
+                ),
+                {"org": org},
+            ).scalar_one()
+            effects: int = c.execute(
+                text(
+                    "SELECT count(*) FROM emailmonitor.execution_effects WHERE organization_id=:org"
+                ),
+                {"org": org},
+            ).scalar_one()
+        assert (
+            len(jobs) == 2 and jobs[0].state == "completed_partial" and jobs[1].state == "completed"
+        )
+        with progress.database.tenant(token, org, Capability.READ_ORGANIZATION) as (
+            c,
+            _,
+        ):
+            event_types: Sequence[str] = (
+                c.execute(
+                    text(
+                        "SELECT event_type FROM emailmonitor.execution_events "
+                        "WHERE organization_id=:org AND job_id=:job ORDER BY sequence"
+                    ),
+                    {"org": org, "job": jobs[0].id},
+                )
+                .scalars()
+                .all()
+            )
+        assert "job.paused" in event_types and event_types.count("job.queued") >= 2
+        assert "job.cancelled" not in event_types
+        first = progress.snapshot(org, UUID(str(jobs[0].id)))
+        assert first.counts.discovered == first.counts.terminal == 4
+        assert first.counts.by_outcome["unsupported"] == first.counts.by_outcome["no_contact"] == 1
+        assert reviews == 1 and effects >= 5
+        assert len(quality_faults) == len(quality_holds) == 1
+        administration = Administration(progress.database, token, progress.settings)
+        configuration = administration.read(org)
+        usage = administration.usage(org)
+        assert configuration.branding.label == "Keyboard authored workspace"
+        assert configuration.branding.accent_color == "#123456" and configuration.revision == 2
+        assert usage.settled_resolution_units == effects and usage.reserved_resolution_units == 0
+        assert usage.source_resource_attempts == 0  # Authored file reads are not HTTP attempts.
+        exports = results.exports(org)
+        assert len(exports) == 1 and exports[0].state == "ready"
+        artifact = results.download(org, exports[0].id)
+        assert artifact.body.startswith(b"PK") and len(artifact.body) > 1000
+        with ZipFile(io.BytesIO(artifact.body)) as archive:
+            contact_sheet = archive.read("xl/worksheets/sheet1.xml")
+        assert b">Affiliations<" not in contact_sheet and b">Article title<" in contact_sheet
+        retained_receipt.update(
+            export_id=exports[0].id,
+            review_receipts=reviews,
+            durable_effects=effects,
+            export_sha256=hashlib.sha256(artifact.body).hexdigest(),
+            export_bytes=len(artifact.body),
+        )
+
     def control(action: str) -> None:
         if action == "publish":
             release.set()
@@ -272,6 +348,8 @@ WHERE i.organization_id=:org AND j.kind='extraction' LIMIT 33
                     flush=True,
                 )
                 raise
+        elif action == "verify_retained":
+            verify_retained()
         elif action == "wait_exports":
             wait_for(
                 lambda: (
@@ -337,79 +415,13 @@ WHERE i.organization_id=:org AND j.kind='extraction' LIMIT 33
                     "download_cancelled",
                     "org_switch",
                     "readonly_role",
+                    "contact_suppression",
                 ]
             )
             assert evidence["network_errno"] == [101, 101] and evidence["interfaces"] == ["lo"]
-            with progress.database.tenant(token, org, Capability.READ_ORGANIZATION) as (
-                c,
-                _,
-            ):
-                jobs = c.execute(
-                    text(
-                        "SELECT id,state FROM emailmonitor.jobs "
-                        "WHERE organization_id=:org AND kind='extraction' ORDER BY created_at"
-                    ),
-                    {"org": org},
-                ).all()
-                reviews: int = c.execute(
-                    text(
-                        "SELECT count(*) FROM emailmonitor.association_reviews "
-                        "WHERE organization_id=:org"
-                    ),
-                    {"org": org},
-                ).scalar_one()
-                effects: int = c.execute(
-                    text(
-                        "SELECT count(*) FROM emailmonitor.execution_effects "
-                        "WHERE organization_id=:org"
-                    ),
-                    {"org": org},
-                ).scalar_one()
-            assert (
-                len(jobs) == 2
-                and jobs[0].state == "completed_partial"
-                and jobs[1].state == "completed"
-            )
-            with progress.database.tenant(token, org, Capability.READ_ORGANIZATION) as (
-                c,
-                _,
-            ):
-                event_types: Sequence[str] = (
-                    c.execute(
-                        text(
-                            "SELECT event_type FROM emailmonitor.execution_events "
-                            "WHERE organization_id=:org AND job_id=:job ORDER BY sequence"
-                        ),
-                        {"org": org, "job": jobs[0].id},
-                    )
-                    .scalars()
-                    .all()
-                )
-            assert "job.paused" in event_types and event_types.count("job.queued") >= 2
-            assert "job.cancelled" not in event_types
-            first = progress.snapshot(org, UUID(str(jobs[0].id)))
-            assert first.counts.discovered == first.counts.terminal == 4
-            assert (
-                first.counts.by_outcome["unsupported"] == first.counts.by_outcome["no_contact"] == 1
-            )
-            assert reviews == 1 and effects >= 5
-            assert len(quality_faults) == len(quality_holds) == 1
-            administration = Administration(progress.database, token, progress.settings)
-            configuration = administration.read(org)
-            usage = administration.usage(org)
-            assert configuration.branding.label == "Keyboard authored workspace"
-            assert configuration.branding.accent_color == "#123456" and configuration.revision == 2
-            assert (
-                usage.settled_resolution_units == effects and usage.reserved_resolution_units == 0
-            )
-            assert usage.source_resource_attempts == 0  # Authored file reads are not HTTP attempts.
-            exports = results.exports(org)
-            assert len(exports) == 1 and exports[0].state == "ready"
-            artifact = results.download(org, exports[0].id)
-            assert artifact.body.startswith(b"PK") and len(artifact.body) > 1000
-            with ZipFile(io.BytesIO(artifact.body)) as archive:
-                contact_sheet = archive.read("xl/worksheets/sheet1.xml")
-            assert b">Affiliations<" not in contact_sheet and b">Article title<" in contact_sheet
+            assert retained_receipt
+            with pytest.raises(AuthorizationDenied):
+                results.download(org, UUID(str(retained_receipt["export_id"])))
 
             print(
                 json.dumps(
@@ -417,10 +429,12 @@ WHERE i.organization_id=:org AND j.kind='extraction' LIMIT 33
                         **evidence,
                         "actual_postgresql": True,
                         "actual_broker_worker": True,
-                        "review_receipts": reviews,
-                        "durable_effects": effects,
-                        "export_sha256": hashlib.sha256(artifact.body).hexdigest(),
-                        "export_bytes": len(artifact.body),
+                        **{
+                            key: value
+                            for key, value in retained_receipt.items()
+                            if key != "export_id"
+                        },
+                        "export_refused_after_suppression": True,
                         "sse_transport": "actual_frames_bounded_disconnect_buffered",
                         "download_saved_to_disk": False,
                     }

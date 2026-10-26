@@ -24,6 +24,8 @@ HOST = frozenset(
         "create",
         "initial_validation",
         "conversation",
+        "conversation_result",
+        "conversation_exit",
         "final_validation",
         "cleanup_container",
         "cleanup_image",

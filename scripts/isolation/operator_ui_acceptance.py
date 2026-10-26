@@ -2614,6 +2614,7 @@ async def main() -> None:
                 raise RuntimeError("Previous organization branding survived switch")
             # Exercise the existing management action only after the preceding
             # retained-data journeys: suppression intentionally fences matching data.
+            await channel.request({"kind": "control", "action": "verify_retained"})
             checkpoint("contact_suppression")
             organization = page.get_by_role("combobox", name="Active organization", exact=True)
             values = await organization.locator("option").evaluate_all(
@@ -2659,6 +2660,7 @@ async def main() -> None:
                 table.or_(page.get_by_text("No contacts match these server filters.", exact=True))
             ).to_be_visible()
             await expect(suppression_address_cells(table, selected_address)).to_have_count(0)
+            await asyncio.wait_for(settled_requests(), timeout=10)
             checkpoint("final_cleanup")
             print(
                 json.dumps(
@@ -2688,6 +2690,7 @@ async def main() -> None:
                         "download_cancelled": True,
                         "org_switch": True,
                         "readonly_role": True,
+                        "contact_suppression": True,
                         "stale_network_retry": True,
                         "late_old_response_refused": True,
                         "late_old_replay_refused": True,
