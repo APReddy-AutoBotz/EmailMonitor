@@ -1,10 +1,13 @@
 """Actual SQL timing projection through unchanged job authority and lifecycle fences."""
 
 import pytest
+from api_client import APIClient
+from emailmonitor.api import create_app
 from emailmonitor.organizations.database import AuthorizationDenied
 from sqlalchemy import create_engine, text
+from test_durable_jobs import SETTINGS
 from test_progress_tenant import claim, drain, planned
-from test_tenant_foundation import Scenario
+from test_tenant_foundation import ORIGIN, Scenario
 from test_tenant_foundation import scenario as scenario
 
 
@@ -24,7 +27,10 @@ def test_real_terminal_interval_replay_and_tenant_refusal(scenario: Scenario) ->
     assert progress.timing(org, job) == value
     with pytest.raises(AuthorizationDenied):
         progress.timing(scenario.organizations[1], job)
-    with scenario.client() as client:
+    with APIClient(
+        create_app(SETTINGS.model_copy(update={"identity_stub": True}), scenario.foundation),
+        base_url=ORIGIN,
+    ) as client:
         scenario.login(client, "owner")
         response = client.get(f"/api/v1/organizations/{org}/jobs/{job}/timing")
         assert response.status_code == 200
