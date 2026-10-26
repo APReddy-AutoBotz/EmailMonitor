@@ -912,7 +912,11 @@ def run(profile: str, environment: Mapping[str, str]) -> dict[str, Any]:
     import pytest
 
     os.chdir(ROOT)
-    code = pytest.main(list(ARGUMENTS), plugins=[proof])
+    from backend_outcome import KEY, Progress
+
+    path = environment.get(KEY)
+    diagnostics = [Progress(Path(path))] if path else []
+    code = pytest.main(list(ARGUMENTS), plugins=[proof, *diagnostics])
     if source_tree() != tree or configuration() != config:
         raise PartitionRefused("application_source_changed")
     return proof.receipt(int(code), tree, config)

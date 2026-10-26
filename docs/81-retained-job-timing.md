@@ -47,3 +47,11 @@ fixture/setup failure before the test body reports unavailable rather than an
 invented stage. This is future diagnostic evidence, not a repair or a substitute
 for installed acceptance. Browser execution and its owned cleanup share one host
 label; that label alone does not identify a browser assertion or root cause.
+
+The backend wrapper can additionally opt into fixed outcome metadata: normal
+completion, test failure, consumer exit/signal/deadline, or wrapper signal/deadline.
+Numeric active/completed/first-failed/total test ordinals come from a parent-owned
+bounded temporary progress file; no test names or output are exported. The
+metadata never supplies a partition receipt or changes its fail-closed join.
+The wrapper alarm, consumer wait, exit/refusal behavior, complete test inventory
+and owned cleanup remain unchanged. Missing diagnostics are not success evidence.
