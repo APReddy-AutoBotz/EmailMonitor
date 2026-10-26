@@ -71,8 +71,8 @@ def test_committed_timing_schema_and_example_match_runtime() -> None:
     from jsonschema import Draft202012Validator, FormatChecker
 
     root = Path(__file__).resolve().parents[3]
-    schema = json.loads((root / "contracts/job-timing.schema.json").read_text())
-    raw = (root / "contracts/examples/job-timing.json").read_text()
+    schema = json.loads((root / "contracts/progress-timing.schema.json").read_text())
+    raw = (root / "contracts/examples/progress-timing.json").read_text()
     assert schema == JobTiming.model_json_schema()
     Draft202012Validator(schema, format_checker=FormatChecker()).validate(json.loads(raw))
     assert JobTiming.model_validate_json(raw) == timing()
