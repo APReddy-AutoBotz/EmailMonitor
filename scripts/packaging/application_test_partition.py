@@ -735,7 +735,19 @@ SERVICE_SQL = (
         "ver_reads_xml_bytes"
     ),
 )
-RESERVED_SQL = (*RETAINED_SQL, *PDF_ACCEPTANCE, *SERVICE_SQL)
+# Keep newly added review-history SQL off the nearly saturated backend partition.
+HISTORY_SQL = (
+    "services/backend/tests/test_observation_quality_tenant.py::test_quality_current_authority_refuses[history-policy]",
+    "services/backend/tests/test_observation_quality_tenant.py::test_quality_current_authority_refuses[history-session]",
+    "services/backend/tests/test_observation_quality_tenant.py::test_quality_current_authority_refuses[history-suppression]",
+    "services/backend/tests/test_observation_quality_tenant.py::test_quality_current_authority_refuses[history-deletion]",
+    "services/backend/tests/test_observation_quality_tenant.py::test_quality_current_authority_refuses[history-expiry]",
+    "services/backend/tests/test_observation_quality_tenant.py::test_quality_respects_current_retention_before_sweep[history-excerpt_days]",
+    "services/backend/tests/test_observation_quality_tenant.py::test_quality_respects_current_retention_before_sweep[history-contact_days]",
+    "services/backend/tests/test_observation_quality_tenant.py::test_history_viewer_api_current_batch_and_revision_conflict",
+    "services/backend/tests/test_observation_quality_tenant.py::test_history_final_visibility_refusal_releases_no_prior_decisions",
+)
+RESERVED_SQL = (*RETAINED_SQL, *PDF_ACCEPTANCE, *SERVICE_SQL, *HISTORY_SQL)
 PROFILES = ("backend", "outcome_sql")
 ARGUMENTS = (
     "-c",

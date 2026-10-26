@@ -556,3 +556,9 @@ Retained metadata view: FR-010/017 use `test_article_metadata.py`, the metadata
 variants in `test_observation_quality_tenant.py`, `articleMetadata.test.tsx`, and
 the existing hosted operator evidence-review journey. See `docs/78-retained-article-metadata.md`
 for the distinction between authored coverage and actual executed acceptance.
+
+FR-020 / AT-20 and UX03 retained-history presentation: `reviewHistory.test.tsx`,
+`evidenceLifecycle.test.tsx`, the history cases in `test_observation_quality_tenant.py`
+and the connected operator keyboard journey cover the bounded read-only display.
+See [history acceptance boundary](79-retained-review-history.md); authored SQL
+and hosted cases are not passed evidence until actually executed.

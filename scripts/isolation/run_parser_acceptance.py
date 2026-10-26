@@ -9,6 +9,14 @@ from pathlib import Path
 IMAGE = "emailmonitor-parser-diagnostic:local"
 
 
+class MemoryProofRefused(RuntimeError):
+    """Fixed diagnostic category; never a substitute for required OOM evidence."""
+
+    def __init__(self, message: str, category: str) -> None:
+        super().__init__(message)
+        self.category = category
+
+
 def docker(*arguments: str, timeout: float = 180) -> subprocess.CompletedProcess[str]:
     try:
         return subprocess.run(
@@ -103,7 +111,7 @@ def run(command: list[str], *, expected_oom: bool = False) -> dict[str, object]:
                 or after["OOMKilled"] is not True
                 or after["ExitCode"] != 137
             ):
-                raise RuntimeError(
+                raise MemoryProofRefused(
                     "Actual memory enforcement not established: "
                     + json.dumps(
                         {
@@ -112,7 +120,12 @@ def run(command: list[str], *, expected_oom: bool = False) -> dict[str, object]:
                             "engine_error": str(after.get("Error", ""))[:1024],
                             "stderr": started.stderr[:1024],
                         }
-                    )
+                    ),
+                    "oom_flag_absent_exit137"
+                    if after.get("Running") is False
+                    and after.get("OOMKilled") is False
+                    and after.get("ExitCode") == 137
+                    else "other_refusal",
                 )
         elif started.returncode or after["ExitCode"] or after["OOMKilled"]:
             raise RuntimeError("Parser diagnostic failed: " + started.stderr[:300])
@@ -129,24 +142,48 @@ def run(command: list[str], *, expected_oom: bool = False) -> dict[str, object]:
 def main() -> None:
     if os.environ.get("GITHUB_ACTIONS") != "true":
         raise RuntimeError("Reviewed disposable CI environment required")
-    root = Path(__file__).resolve().parents[2]
-    docker(
-        "build",
-        "--file",
-        str(root / "scripts/isolation/Dockerfile.parser"),
-        "--tag",
-        IMAGE,
-        str(root),
-        timeout=600,
-    )
-    run(["python", "/app/parser_acceptance.py"])
-    # Ordinary synthetic memory exhaustion proves the configured limit actually
-    # terminates just this disposable process. No host limit/security is changed.
-    evidence = run(
-        ["python", "-c", "chunks=[]\nwhile True: chunks.append(bytearray(8 * 1024 * 1024))"],
-        expected_oom=True,
-    )
-    print(json.dumps({"diagnostic": "parser-memory-limit", **evidence}))
+    phase = "build"
+    memory = "not_verified"
+    try:
+        root = Path(__file__).resolve().parents[2]
+        docker(
+            "build",
+            "--file",
+            str(root / "scripts/isolation/Dockerfile.parser"),
+            "--tag",
+            IMAGE,
+            str(root),
+            timeout=600,
+        )
+        phase = "extraction"
+        run(["python", "/app/parser_acceptance.py"])
+        # Ordinary synthetic memory exhaustion proves the configured limit actually
+        # terminates just this disposable process. No host limit/security is changed.
+        phase = "memory"
+        evidence = run(
+            ["python", "-c", "chunks=[]\nwhile True: chunks.append(bytearray(8 * 1024 * 1024))"],
+            expected_oom=True,
+        )
+        memory = "verified"
+        print(json.dumps({"diagnostic": "parser-memory-limit", **evidence}))
+        phase = "complete"
+    except MemoryProofRefused as error:
+        memory = (
+            error.category
+            if error.category in {"oom_flag_absent_exit137", "other_refusal"}
+            else "other_refusal"
+        )
+        raise
+    finally:
+        # Fixed categories only; never exception text, environment or parser data.
+        # The original run/cleanup exception still determines the job result.
+        output = os.environ.get("GITHUB_OUTPUT")
+        if output:
+            try:
+                with Path(output).open("a") as stream:
+                    stream.write("phase=" + phase + "\nmemory=" + memory + "\n")
+            except OSError:
+                print("Parser phase receipt unavailable", flush=True)
 
 
 if __name__ == "__main__":

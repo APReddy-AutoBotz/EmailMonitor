@@ -71,3 +71,5 @@ Versioning: documents use Git history; public API uses `/api/v1`; event/schema r
 - [69 — Exact retained article selection and candidate presence](69-retained-article-filters.md)
 
 - [78 — Retained article metadata in review](78-retained-article-metadata.md)
+
+- [79 — Recorded review history in the evidence dialog](79-retained-review-history.md)
