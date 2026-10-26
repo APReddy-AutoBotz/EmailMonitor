@@ -66,3 +66,12 @@ Those seven cases previously took 24–70 seconds in actual local PostgreSQL run
 that local timing is not a hosted guarantee. All seven are explicitly enumerated,
 required exactly once, and joined against the same full inventory and tree.
 No test, assertion, timeout, migration or authority rule is removed or relaxed.
+
+Future operator and installed guest runs expose fixed build/create/validation,
+conversation and exact owned-cleanup stages in workflow metadata. Only validated
+guest stage/error/reason enums are included; no assertion text, stderr, API
+statuses, payloads or identifiers are copied. The first failure remains visible
+if another journey in the same pytest step later succeeds. Original exceptions,
+exit status, genuine-CI guards, guest restrictions and cleanup operations remain
+unchanged. This provides diagnostic evidence, not a runtime repair; a passing
+later run cannot explain earlier failures.

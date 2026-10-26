@@ -76,6 +76,11 @@ jobs:
           pnpm --dir apps/web test
           pnpm --dir apps/web build
       - name: Actual isolated keyboard UI and durable worker acceptance
+        id: operator-guest
         env:
+          EM_GUEST_OUTCOME_REPORT: "true"
           PYTHONPATH: services/backend/src:services/backend/tests:tests:scripts/isolation
         run: uv run --project services/backend pytest scripts/isolation/test_operator_ui_acceptance.py scripts/isolation/test_operator_lifecycle_acceptance.py -v -s
+      - name: "Operator guest outcome: ${{ steps.operator-guest.outputs.guest_outcome || 'unavailable' }}"
+        if: ${{ !cancelled() && steps.operator-guest.outcome != 'skipped' }}
+        run: ':'

@@ -113,9 +113,13 @@ jobs:
         env:
           EM_REQUIRE_INSTALLED_OPERATOR: "true"
           EM_INSTALLED_STAGE_REPORT: "true"
+          EM_GUEST_OUTCOME_REPORT: "true"
           PYTHONPATH: services/backend/src:services/backend/tests:tests:scripts/isolation:scripts/packaging
         run: uv run --project services/backend pytest scripts/isolation/test_installed_operator_acceptance.py -v -s
       - name: "Installed operator stage: ${{ steps.installed-operator-test.outputs.stage || 'fixture_or_report_unavailable' }}"
+        if: ${{ !cancelled() && steps.installed-operator-test.outcome != 'skipped' }}
+        run: ':'
+      - name: "Installed guest outcome: ${{ steps.installed-operator-test.outputs.guest_outcome || 'unavailable' }}"
         if: ${{ !cancelled() && steps.installed-operator-test.outcome != 'skipped' }}
         run: ':'
       - name: Installed controlled XML service and curated parser acceptance
