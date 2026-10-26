@@ -2184,6 +2184,18 @@ async def main() -> None:
                 "Parser-specific reasons are not recorded for this route.", exact=True
             ).wait_for()
             await expect(quality).to_contain_text("Missing affiliations remain unobserved")
+            metadata = page.get_by_role("region", name="Retained article metadata", exact=True)
+            await expect(metadata).to_contain_text("Example Research Journal")
+            await expect(metadata).to_contain_text("Content digest:")
+            await expect(metadata).to_contain_text("no inferred calendar date")
+            await activate(
+                page,
+                metadata.get_by_text(
+                    "Inspect all retained metadata values and citations", exact=True
+                ),
+            )
+            await expect(metadata.get_by_role("list")).to_be_visible()
+            await expect(metadata).to_contain_text("Recorded date type:")
             await channel.request({"kind": "control", "action": "hold_quality"})
             await activate(
                 page,

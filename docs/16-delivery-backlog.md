@@ -106,3 +106,8 @@ actual hosted acceptance and publication remain pending, with no new acquisition
 [Fixture-only lifecycle journey](74-connected-operator-lifecycle.md) connects
 existing controls to retained review/export and continuation recovery. No new
 runtime policy or migration; hosted acceptance remains pending until executed.
+
+Retained metadata review slice (FR-010/017, EM-007/008/009/012): expose existing
+article metadata and citations through the current-authorized read path and
+connected review panel. Scope and acceptance are in `docs/78-retained-article-metadata.md`;
+no search-filter or reuse semantics, migration or acquisition authority are added.

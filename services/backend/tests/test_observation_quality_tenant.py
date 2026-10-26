@@ -52,10 +52,11 @@ def test_runtime_quality_read_preserves_stored_snapshot_replay_and_review(
 
 
 @pytest.mark.parametrize("kind", ["policy", "session", "suppression", "deletion", "expiry"])
-def test_quality_current_authority_refuses(scenario: Scenario, kind: str) -> None:
+@pytest.mark.parametrize("view", ["quality", "metadata"])
+def test_quality_current_authority_refuses(scenario: Scenario, view: str, kind: str) -> None:
     service, job, batch = prepared(scenario)
     org = scenario.organizations[0]
-    assert service.quality(org, batch).scope == "article"
+    assert getattr(service, view)(org, batch).scope == "article"
     from sqlalchemy import create_engine
 
     admin = create_engine(scenario.admin_url)
@@ -94,13 +95,14 @@ def test_quality_current_authority_refuses(scenario: Scenario, kind: str) -> Non
                 org, SuppressionCreate(kind="contact", value=contact, reason="privacy_request")
             )
         with pytest.raises(AuthorizationDenied):
-            service.quality(org, batch)
+            getattr(service, view)(org, batch)
     finally:
         admin.dispose()
 
 
+@pytest.mark.parametrize("view", ["quality", "metadata"])
 def test_quality_final_visibility_failure_releases_no_summary(
-    scenario: Scenario, monkeypatch: pytest.MonkeyPatch
+    scenario: Scenario, view: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     service, _, batch = prepared(scenario)
     original = service._lock
@@ -115,7 +117,7 @@ def test_quality_final_visibility_failure_releases_no_summary(
 
     monkeypatch.setattr(service, "_lock", revoke_at_final)
     with pytest.raises(AuthorizationDenied):
-        service.quality(scenario.organizations[0], batch)
+        getattr(service, view)(scenario.organizations[0], batch)
 
 
 def test_no_contact_batch_quality_is_available_without_contact_row(scenario: Scenario) -> None:
@@ -139,8 +141,9 @@ def test_no_contact_batch_quality_is_available_without_contact_row(scenario: Sce
         assert response.json()["reason_availability"] == "not_recorded"
 
 
+@pytest.mark.parametrize("view", ["quality", "metadata"])
 def test_quality_final_runtime_join_visibility_is_required(
-    scenario: Scenario, monkeypatch: pytest.MonkeyPatch
+    scenario: Scenario, view: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from typing import Any
 
@@ -159,18 +162,21 @@ def test_quality_final_runtime_join_visibility_is_required(
 
     monkeypatch.setattr(Connection, "execute", hide_final_join)
     with pytest.raises(AuthorizationDenied):
-        service.quality(scenario.organizations[0], batch)
+        getattr(service, view)(scenario.organizations[0], batch)
     assert reads == 2
 
 
 @pytest.mark.parametrize("field", ["excerpt_days", "contact_days"])
-def test_quality_respects_current_retention_before_sweep(scenario: Scenario, field: str) -> None:
+@pytest.mark.parametrize("view", ["quality", "metadata"])
+def test_quality_respects_current_retention_before_sweep(
+    scenario: Scenario, view: str, field: str
+) -> None:
     from emailmonitor.lifecycle.models import Retention, RetentionUpdate
     from emailmonitor.lifecycle.service import Lifecycle
 
     service, _, batch = prepared(scenario)
     org = scenario.organizations[0]
-    assert service.quality(org, batch).scope == "article"
+    assert getattr(service, view)(org, batch).scope == "article"
     lifecycle = Lifecycle(service.database, service.token, SETTINGS)
     current = lifecycle.retention(org)
     lifecycle.update_retention(
@@ -181,4 +187,26 @@ def test_quality_respects_current_retention_before_sweep(scenario: Scenario, fie
         ),
     )
     with pytest.raises(AuthorizationDenied):
-        service.quality(org, batch)
+        getattr(service, view)(org, batch)
+
+
+def test_runtime_metadata_api_is_read_only_current_bound_and_review_independent(
+    scenario: Scenario,
+) -> None:
+    service, job, batch = prepared(scenario)
+    org = scenario.organizations[0]
+    before = service.metadata(org, batch)
+    assert before.preferred_metadata.journal is not None and before.facts
+    service.review(org, batch, review_request(service, org, batch))
+    assert service.metadata(org, batch) == before
+    assert (
+        service.derive(org, job, "https://synthetic.publisher.example/article-a.html", 1) == batch
+    )
+    with client(scenario) as c:
+        scenario.login(c, "viewer")
+        url = f"/api/v1/organizations/{org}/association-batches/{batch}/article-metadata"
+        response = c.get(url)
+        assert response.status_code == 200
+        assert response.json() == before.model_dump(mode="json")
+        assert c.get(url.replace(str(org), str(scenario.organizations[1]))).status_code == 404
+        assert c.get(url.replace(str(batch), str(uuid4()))).status_code == 404

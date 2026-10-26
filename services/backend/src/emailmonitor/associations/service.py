@@ -7,13 +7,15 @@ acquisition/persistence route and cannot fetch, validate mailboxes or export.
 
 import hashlib
 import json
-from typing import NoReturn
+from collections.abc import Callable
+from typing import NoReturn, TypeVar
 from uuid import UUID, uuid4
 
 from sqlalchemy import Connection, text
 from sqlalchemy.exc import DBAPIError
 
 from emailmonitor.associations.mapping import identifier, map_observation
+from emailmonitor.associations.metadata import ArticleMetadata, project_metadata
 from emailmonitor.associations.models import Bundle, Review
 from emailmonitor.associations.quality import ObservationQuality, SourceBinding, project_quality
 from emailmonitor.associations.review import apply_review
@@ -26,6 +28,8 @@ from emailmonitor.extraction.xml_retained import RetainedXml
 from emailmonitor.organizations.database import AuthorizationDenied, RevisionConflict
 from emailmonitor.organizations.roles import Capability
 from emailmonitor.runtime.access import WorkAuthority, WorkDatabase
+
+View = TypeVar("View", ObservationQuality, ArticleMetadata)
 
 RECORDS = {
     "authors": "association_authors",
@@ -266,6 +270,17 @@ VALUES(:org,:batch,:candidate,:ordinal,:raw)
             return self._bundle(c, org, batch)
 
     def quality(self, org: UUID, batch: UUID) -> ObservationQuality:
+        return self._observation_view(org, batch, project_quality)
+
+    def metadata(self, org: UUID, batch: UUID) -> ArticleMetadata:
+        return self._observation_view(org, batch, project_metadata)
+
+    def _observation_view(
+        self,
+        org: UUID,
+        batch: UUID,
+        project: Callable[[UUID, UUID, Bundle, object, SourceBinding], View],
+    ) -> View:
         with self.discovery._tenant(org, Capability.READ_ORGANIZATION) as (c, _):
             bundle = self._bundle(c, org, batch)
             # Ordinary runtime SELECT retains both tables' current restrictive RLS.
@@ -285,7 +300,7 @@ WHERE batch.organization_id=:org AND batch.id=:batch
             if row is None:
                 raise AuthorizationDenied()
             try:
-                result = project_quality(
+                result = project(
                     org,
                     batch,
                     bundle,

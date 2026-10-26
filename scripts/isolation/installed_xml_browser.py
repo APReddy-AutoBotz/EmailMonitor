@@ -119,6 +119,15 @@ async def xml_journey(
         await expect(quality).to_contain_text("Retained parser outcome:")
         await expect(quality).to_contain_text("does not resolve affiliation uncertainty")
         await expect(quality).not_to_contain_text("reasons are not recorded for this route")
+        metadata = page.get_by_role("region", name="Retained article metadata", exact=True)
+        await expect(metadata).to_contain_text("Content digest:")
+        if pdf:
+            await expect(metadata).to_contain_text("route pdf")
+            await expect(metadata).to_contain_text("no inferred calendar date")
+        else:
+            await expect(metadata).to_contain_text(
+                "Individual metadata citations were not recorded"
+            )
         if pdf:
             await expect(page.get_by_role("dialog")).to_contain_text("PDF page 2")
             await expect(page.get_by_role("dialog")).to_contain_text("full_cropbox_not_glyph_bbox")

@@ -551,3 +551,8 @@ current fences. Positive multi-publisher isolation is not claimed; hosted proof 
 Connected FR-021/022/025/026 lifecycle acceptance candidate:
 [confirmed cancellation, continuation and retained exports](74-connected-operator-lifecycle.md).
 Actual SQL/broker receipts and genuine hosted keyboard results remain distinct.
+
+Retained metadata view: FR-010/017 use `test_article_metadata.py`, the metadata
+variants in `test_observation_quality_tenant.py`, `articleMetadata.test.tsx`, and
+the existing hosted operator evidence-review journey. See `docs/78-retained-article-metadata.md`
+for the distinction between authored coverage and actual executed acceptance.
