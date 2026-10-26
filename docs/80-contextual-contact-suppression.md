@@ -56,3 +56,15 @@ target detachment and target replacement. No event arrays, values or payloads ar
 exported. A truncated trace cannot prove absence beyond its capture cap. Original
 keyboard sequence, deadline, failure and cleanup remain unchanged. This diagnostic
 is not a runtime repair; prior failures remain unresolved.
+
+A later operator run reached the broad read-only stage and timed out; this alone
+could not locate its final operation. Locked Playwright selector-engine tests on
+authored nodes establish two independent harness defects: exact wrapping-select
+label matching includes option text, and exact address-cell text matching includes
+the normalized-address annotation. The journey now uses the established anchored
+label pattern and an escaped exact-address boundary before that annotation. It
+also requires a rendered current table/empty result before checking absence.
+The regression rejects prefixed and longer addresses. A separate fixed suppression
+stage distinguishes this journey from the preceding read-only checks. No authority,
+keyboard action, limit or runtime behavior changes. These local selector proofs
+are not browser acceptance or proof of the historical timeout's exact operation.

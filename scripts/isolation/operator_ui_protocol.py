@@ -343,6 +343,7 @@ STAGES = (
     "empty_contacts",
     "old_contact_response",
     "readonly_role",
+    "contact_suppression",
     "final_cleanup",
 )
 ERRORS = {
