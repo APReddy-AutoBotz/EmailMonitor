@@ -1,6 +1,8 @@
 import { Children, isValidElement, type ReactElement, type ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiScope } from './client'
+import { CurrentArticleMetadata } from './articleMetadata'
+import { CurrentObservationQuality } from './observationQuality'
 import type { Contact } from './models'
 import type { Context } from './ui'
 import { EvidenceDrawer } from './views'
@@ -30,8 +32,8 @@ function find(node: ReactNode, tag: string): ReactElement<Record<string, unknown
   throw new Error(`Missing authored ${tag}`)
 }
 
-function setup(denied = false) {
-  const scope = new ApiScope(fixtures.contact.association_id, 'synthetic-test-only')
+function setup(denied = false, revision = 0, organization = fixtures.contact.association_id) {
+  const scope = new ApiScope(organization, 'synthetic-test-only')
   const write = vi.spyOn(scope, 'write')
   if (denied) write.mockRejectedValue(new Error('authored refusal'))
   else write.mockResolvedValue(undefined)
@@ -40,7 +42,7 @@ function setup(denied = false) {
   const close = vi.fn(() => { selected = false })
   const queued: (() => void)[] = []
   const refresh = vi.fn(() => { connected = false; reopened = selected })
-  const context: Context = { scope, revision: 0, can: () => true, refresh,
+  const context: Context = { scope, revision, can: () => true, refresh,
     act: (_label, work) => { action = (async () => { try { await work(); refresh() } catch { /* The real workspace preserves the refusal. */ } })(); return action },
     confirm: vi.fn(), identity: 'synthetic-test-only', zone: 'UTC', openJob: vi.fn() }
   const root = EvidenceDrawer({ context, contact: fixtures.contact as Contact, close })
@@ -56,6 +58,18 @@ function setup(denied = false) {
 }
 
 describe('evidence selection across asynchronous native close and workspace refresh', () => {
+  it('gives metadata and quality distinct identities that reset on refresh and organization change', () => {
+    const keys = (root: ReturnType<typeof EvidenceDrawer>) => Children.toArray(root.props.children)
+      .filter(child => isValidElement(child) && [CurrentArticleMetadata, CurrentObservationQuality].includes(child.type as typeof CurrentArticleMetadata))
+      .map(child => (child as ReactElement).key)
+    const original = keys(setup().root)
+    expect(original).toHaveLength(2)
+    expect(new Set(original).size).toBe(2)
+    for (const changed of [keys(setup(false, 1).root), keys(setup(false, 0, '00000000-0000-4000-8000-000000000099').root)]) {
+      expect(changed.every(key => !original.includes(key))).toBe(true)
+    }
+  })
+
   it('clears selection before successful review refresh can unmount the queued close event', async () => {
     const state = setup()
     await state.save()
