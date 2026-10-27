@@ -937,7 +937,7 @@ async def authored_outcome_paging(
         presence_select = region.get_by_role(
             "combobox", name="Article-outcome candidate presence", exact=True
         )
-        await activate(
+        await traced_activate(
             page,
             region.get_by_role("button", name="Next article outcome page", exact=True),
         )

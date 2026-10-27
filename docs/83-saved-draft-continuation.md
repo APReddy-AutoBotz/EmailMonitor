@@ -33,3 +33,10 @@ resource checks still disable launch until the refreshed draft matches. A
 structural regression rejects the original nesting; behavioral tests retain all
 scope, authority, revision and single-submission checks. Hosted keyboard execution
 remains required to establish the complete interaction.
+
+The corrected hosted journey passed saved-draft continuation, then failed at the
+later article-presence Next-page keyboard activation. That exact activation now
+uses the existing passive same-attempt trace to distinguish target replacement
+and heading-focus events. It retains the target, keyboard sequence, Tab cap,
+deadlines and original failure. Fixed categories are diagnostic evidence, not a
+claim that the historical failure is repaired.
