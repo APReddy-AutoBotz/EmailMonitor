@@ -39,3 +39,10 @@ executed acceptance. Local and hosted results must be reported separately.
 This dependent Draft preserves PR60 and its historical XML/assembly failure
 uncertainty. No live acquisition, new credentials, purge, merge or deployment is
 part of this implementation.
+
+The first hosted run passed the selected-job keyboard and SQL assertions but
+failed the separate installed XML journey during export preview. Future failure
+metadata includes the existing validated export subphase and CSV/XLSX category,
+retaining the first failed case. It includes no arbitrary text or payloads and
+does not change execution, deadlines or exit propagation. A phase identifies
+where evidence is needed; it does not establish a root cause.
