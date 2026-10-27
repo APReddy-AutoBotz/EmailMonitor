@@ -25,3 +25,11 @@ Actual hosted SQL/browser execution is a separate gate, not implied by local tes
 
 This candidate is based on PR60, independently of the unresolved PR61 installed
 XML failure. It does not claim to repair historical XML or assembly-probe failures.
+
+The saved-plan component must remain outside the job-loading child boundary.
+Successful actions refresh the job resource; its loading state removes those
+children. Keeping the component mounted preserves the reviewed plan while current
+resource checks still disable launch until the refreshed draft matches. A
+structural regression rejects the original nesting; behavioral tests retain all
+scope, authority, revision and single-submission checks. Hosted keyboard execution
+remains required to establish the complete interaction.
