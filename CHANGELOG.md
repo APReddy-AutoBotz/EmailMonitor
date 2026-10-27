@@ -487,3 +487,6 @@ Add a trusted Python-only executor factory to the normal claimed Celery path, re
 
 - Record a fixed process-exit category for failed synthetic browser checks while
   retaining the existing runner, exact exit status and reviewed source digest.
+
+- Preserve the historical browser workflow digest across its exact exit-reporting
+  addition and include validated fixed XML failure categories in future receipts.

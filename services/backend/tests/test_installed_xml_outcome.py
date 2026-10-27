@@ -104,7 +104,10 @@ def test_first_failed_case_survives_later_reports(
     with pytest.raises(AssertionError, match="private payload"):
         failed()
     progress.pytest_runtest_logreport(SimpleNamespace(outcome="failed", when=when))
-    expected = f"xml_failure=case_1-{when}-host_conversation-phase_evidence_review\n"
+    expected = (
+        f"xml_failure=case_1-{when}-host_conversation-phase_evidence_review"
+        "-error_none-reason_unknown\n"
+    )
     assert output.read_text() == expected
     progress.pytest_runtest_logstart("later private", None)
     assert guest.case_categories() == ("unavailable", "unavailable")
@@ -113,7 +116,7 @@ def test_first_failed_case_survives_later_reports(
     assert output.read_text() == expected
 
 
-@pytest.mark.parametrize("invalid", ["phase", "host", "when", "output"])
+@pytest.mark.parametrize("invalid", ["phase", "host", "error", "reason", "when", "output"])
 def test_invalid_reporting_never_replaces_original_failure(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, invalid: str
 ) -> None:
@@ -129,6 +132,10 @@ def test_invalid_reporting_never_replaces_original_failure(
         trace.phase = "private\nxml_failure=complete"
     if invalid == "host":
         trace.stage = "private"
+    if invalid == "error":
+        trace.error = "private\nxml_failure=complete"
+    if invalid == "reason":
+        trace.reason = "private\nxml_failure=complete"
     monkeypatch.setattr(guest, "_case_trace", trace)
     report = SimpleNamespace(outcome="failed", when="private" if invalid == "when" else "call")
     progress.pytest_runtest_logreport(report)
@@ -167,5 +174,36 @@ def test_actual_pytest_failure_and_later_success_keep_first_phase(tmp_path: Path
     )
     assert result.returncode == 1
     assert output.read_text() == (
-        "xml_failure=case_1-call-host_conversation-phase_evidence_review\n"
+        "xml_failure=case_1-call-host_conversation-phase_evidence_review-error_none-reason_unknown\n"
+    )
+
+
+def test_first_guest_failure_emits_only_validated_error_and_reason(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import guest_outcome as guest
+    from operator_ui_protocol import DiagnosticFrame
+
+    output = tmp_path / "output"
+    monkeypatch.setenv("EM_XML_CASE_OUTCOME_REPORT", "true")
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
+    progress = XmlProgress()
+    progress.pytest_runtest_logstart("private", None)
+
+    @guest.observed_guest
+    def failed() -> None:
+        guest.guest_stage("conversation")
+        guest.guest_frame(
+            DiagnosticFrame(
+                kind="failure", stage="url_worker", error="TimeoutError", reason="unknown"
+            )
+        )
+        raise TimeoutError("private payload")
+
+    with pytest.raises(TimeoutError):
+        failed()
+    progress.pytest_runtest_logreport(SimpleNamespace(outcome="failed", when="call"))
+    assert output.read_text() == (
+        "xml_failure=case_1-call-host_conversation-phase_url_worker"
+        "-error_TimeoutError-reason_unknown\n"
     )

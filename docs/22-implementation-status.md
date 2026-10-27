@@ -731,3 +731,13 @@ for future failed synthetic isolation checks. The existing guarded runner, seale
 source bytes, sandbox and resources remain unchanged; high exit codes are not
 asserted to be signals. This receipt cannot identify the earlier failure stage
 or establish a root cause. Local wrapper tests do not replace actual browser CI.
+
+The browser outcome wrapper is an exact additive workflow change. Its original
+workflow digest remains enforced after removing only the single exact reviewed
+wrapper-and-receipt block; altered wrapper, duplicate block, changed reporting or
+unrelated workflow bytes still fail. A prior backend first-failure ordinal mapped
+to that digest assertion, and the exact case reproduced before this normalization.
+The separate cumulative backend deadline is not explained by that assertion.
+Installed XML first-failure metadata now includes only the existing validated
+fixed guest error and reason categories; the original failure and first-case
+selection remain authoritative. Hosted acceptance is still required.

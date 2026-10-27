@@ -32,7 +32,11 @@ class XmlProgress(Progress):
                 raise ValueError("Bounded case ordinal required")
             module = sys.modules.get("guest_outcome")
             host, phase = module.case_categories() if module else ("unavailable", "unavailable")
+            error, reason = (
+                module.case_failure_details() if module else ("unavailable", "unavailable")
+            )
             label = f"case_{ordinal}-{report.when}-host_{host}-phase_{phase}"
+            label += f"-error_{error}-reason_{reason}"
             with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="ascii") as output:
                 output.write("xml_failure=" + label + "\n")
         except Exception:

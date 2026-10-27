@@ -136,6 +136,14 @@ def case_categories() -> tuple[str, str]:
     return _case_trace.failure or _case_trace.stage, _case_trace.phase
 
 
+def case_failure_details() -> tuple[str, str]:
+    """Return only the existing validated fixed guest failure categories."""
+    if _case_trace is None:
+        return "unavailable", "unavailable"
+    _case_trace.label()
+    return _case_trace.error, _case_trace.reason
+
+
 def guest_stage(stage: str) -> None:
     if stage not in HOST:
         raise ValueError("Closed host stage required")
