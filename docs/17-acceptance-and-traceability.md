@@ -1,5 +1,10 @@
 # 17 — Acceptance scenarios and requirements traceability
 
+Saved draft continuation (FR-006/021/025, UX03, EM-012): `savedDraft.test.tsx`
+covers current-plan/launch binding and refusals. The authored operator keyboard
+journey reopens the same draft before planning/start; existing SQL and lifecycle
+assertions remain mandatory. See [scope and limits](83-saved-draft-continuation.md).
+
 **Baseline:** 2026-10-08. Test IDs below are planned test families. They are not tests that have already passed. Actual evidence is recorded in document 22 and implementation reports.
 
 ## Functional traceability

@@ -2122,13 +2122,30 @@ async def main() -> None:
                 page, page.get_by_role("button", name="Create and validate plan", exact=True)
             )
             await page.get_by_role("region", name="Server source plan").wait_for()
-            await activate(page, page.get_by_role("button", name="Launch extraction", exact=True))
+            await activate(page, page.get_by_role("button", name="Open draft job", exact=True))
+            saved_draft = (
+                await page.get_by_role(
+                    "heading", name=re.compile(r"^Job [0-9a-f-]{36}$")
+                ).inner_text()
+            ).removeprefix("Job ")
+            await activate(page, page.get_by_role("button", name="Back to recent jobs", exact=True))
+            await activate(
+                page, page.get_by_role("button", name="Open job " + saved_draft, exact=True)
+            )
+            await activate(
+                page, page.get_by_role("button", name="Validate saved draft plan", exact=True)
+            )
+            await page.get_by_role("region", name="Validated saved draft", exact=True).wait_for()
+            await activate(
+                page, page.get_by_role("button", name="Launch this saved draft", exact=True)
+            )
             await page.get_by_text("Enumeration unknown", exact=False).wait_for()
             keyword_job = (
                 await page.get_by_role(
                     "heading", name=re.compile(r"^Job [0-9a-f-]{36}$")
                 ).inner_text()
             ).removeprefix("Job ")
+            assert keyword_job == saved_draft
             checkpoint("pause_resume")
             await activate(page, page.get_by_role("button", name="Pause", exact=True))
             await page.get_by_role("button", name="Resume", exact=True).wait_for()

@@ -1,5 +1,11 @@
 # 22 — Implementation status and evidence ledger
 
+Saved draft continuation is an independent local candidate based on PR60. It
+exposes existing plan/start controls for the same reopened draft, with current
+revision/generation/session binding. [Scope](83-saved-draft-continuation.md).
+Normal/fresh and hosted acceptance are separate pending gates; PR61's installed
+XML failure and historical intermittency remain unresolved.
+
 **Baseline date:** 2026-10-08. **Updated:** 2026-10-13. **Product state:** unmerged synthetic/offline foundations verified through scoped operator UI and shared admission; live/production deployment unavailable.
 
 ## Documentation deliverables

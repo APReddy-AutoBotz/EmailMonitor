@@ -1,3 +1,7 @@
+## Saved draft continuation candidate
+
+- Reopen and validate the same saved draft before explicit launch, preserving source authority, current revision/generation and uncertain-outcome handling. No replacement job, backend or migration change. See [scope](docs/83-saved-draft-continuation.md).
+
 ## Connected operator lifecycle acceptance candidate
 
 - Add fixture-only confirmed cancellation, retained review/export, continuation and original-message worker-redelivery acceptance; no runtime authority or migration change. See [scope](docs/74-connected-operator-lifecycle.md).
