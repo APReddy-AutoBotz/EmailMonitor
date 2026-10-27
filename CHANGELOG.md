@@ -484,3 +484,6 @@ Add a trusted Python-only executor factory to the normal claimed Celery path, re
 - Correlate authored outcome pagination with the current terminal replay and
   rendered response before its original bounded keyboard activation; preserve
   invalidation coverage and distinguish harness proof from hosted acceptance.
+
+- Record a fixed process-exit category for failed synthetic browser checks while
+  retaining the existing runner, exact exit status and reviewed source digest.

@@ -725,3 +725,9 @@ authority, migration or deadline change. The historical target replacement at
 Tab48 is evidence for the missing precondition, not attribution of the stream
 trigger. Candidate normal/fresh and hosted gates must be recorded separately;
 installed-login, XML and cumulative backend deadline failures remain distinct.
+
+A bounded browser workflow diagnostic records only the child process exit range
+for future failed synthetic isolation checks. The existing guarded runner, sealed
+source bytes, sandbox and resources remain unchanged; high exit codes are not
+asserted to be signals. This receipt cannot identify the earlier failure stage
+or establish a root cause. Local wrapper tests do not replace actual browser CI.
