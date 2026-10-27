@@ -967,10 +967,16 @@ def test_late_organization_hold_follows_ready_first_page_and_targets_next_page()
     body = next(node for node in helper.body if isinstance(node, ast.Try)).body
     statements = [ast.unparse(node) for node in body]
     marker = statements.index("checkpoint('outcomes_late_organization')")
-    assert "name='Jobs'" in statements[marker - 3]
-    assert "to_contain_text('Page 1: 25 article outcomes')" in statements[marker - 2]
-    assert "name='Next article outcome page'" in statements[marker - 1]
-    assert statements[marker - 1].endswith(".to_be_enabled()")
+    returned = max(index for index in range(marker) if "name='Jobs'" in statements[index])
+    readiness = body[returned + 1]
+    assert isinstance(readiness, ast.AsyncWith)
+    assert ast.unparse(readiness.items[0].context_expr) == "asyncio.timeout(5)"
+    checks = [ast.unparse(node) for node in readiness.body]
+    assert "wait_outcome_replay(page, readiness, changed, timeout=5)" in checks[0]
+    assert "to_contain_text('Page 1: 25 article outcomes')" in checks[1]
+    assert "name='Next article outcome page'" in checks[2]
+    assert checks[2].endswith(".to_be_enabled()")
+    assert returned < marker
     following = statements[marker + 1 :]
     assert following.index("held_offset = None") < following.index("hold = True")
     held_assertion = following.index("assert held_offset == 25")

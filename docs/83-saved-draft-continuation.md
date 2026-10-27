@@ -52,3 +52,11 @@ separate delayed-replay invalidation exercise are unchanged. Deterministic tests
 refuse incomplete/stale/wrong-scope and retained-old-DOM proofs. This corrects the
 harness precondition, not runtime focus restoration, and does not identify the
 specific historical stream event or repair unrelated login/XML/backend timing.
+
+Hosted execution passed the corrected presence step, then observed a separate
+replacement at the final Review-to-Jobs return before the held-page organization
+switch test. That remount now obtains its own replay/render proof under the same
+five-second budget, retaining its page/enabled checks and the original held-page
+invalidation assertions. An additional regression rejects reuse of the earlier
+mount's readiness. This does not suppress later stream failures or promise that
+all historical focus failures share a cause.

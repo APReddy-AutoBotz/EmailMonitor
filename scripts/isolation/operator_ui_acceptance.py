@@ -1079,11 +1079,20 @@ async def authored_outcome_paging(
         await expect(page.get_by_label(re.compile(r"^Association state"))).to_have_value(
             "needs_review"
         )
+        readiness = AuthoredOutcomeReplayReadiness(organization, job)
+        observe(readiness, None, None)
         await activate(page, page.get_by_role("button", name="Jobs", exact=True))
-        await expect(region).to_contain_text("Page 1: 25 article outcomes")
-        await expect(
-            region.get_by_role("button", name="Next article outcome page", exact=True)
-        ).to_be_enabled()
+        # Returning from Review creates a new job workspace/stream. The earlier
+        # presence-phase proof cannot authorize this mount's keyboard traversal.
+        async with asyncio.timeout(5):
+            _, rendered = await wait_outcome_replay(page, readiness, changed, timeout=5)
+            await expect(region).to_contain_text("Page 1: 25 article outcomes")
+            await expect(
+                region.get_by_role("button", name="Next article outcome page", exact=True)
+            ).to_be_enabled()
+        await rendered.dispose()
+        observe(None, None, None)
+        readiness = None
         checkpoint("outcomes_late_organization")
         held_offset = None
         requested.clear()

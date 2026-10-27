@@ -22,10 +22,15 @@ def test_presence_activation_requires_replay_render_not_just_visible_table() -> 
     function = ast.parse(inspect.getsource(authored_outcome_paging)).body[0]
     assert isinstance(function, ast.AsyncFunctionDef)
     calls = [node for node in ast.walk(function) if isinstance(node, ast.Call)]
+    marker = next(
+        node for node in calls if ast.unparse(node) == "checkpoint('outcomes_presence_keyboard')"
+    )
     readiness = [
         node
         for node in calls
-        if isinstance(node.func, ast.Name) and node.func.id == "wait_outcome_replay"
+        if isinstance(node.func, ast.Name)
+        and node.func.id == "wait_outcome_replay"
+        and node.lineno < marker.lineno
     ]
     assert len(readiness) == 1, "the initial visible table can precede terminal replay"
     call = readiness[0]
@@ -268,3 +273,43 @@ def test_readiness_never_accepts_another_selection(suffix: str) -> None:
     state, _ = ready()
     request(state, f"/article-outcomes?job_id={JOB}&limit=25" + suffix)
     assert state.failed and state.ready() is None
+
+
+def test_late_organization_requires_new_mount_readiness() -> None:
+    function = ast.parse(inspect.getsource(authored_outcome_paging)).body[0]
+    calls = [node for node in ast.walk(function) if isinstance(node, ast.Call)]
+    marker = next(
+        node for node in calls if ast.unparse(node) == "checkpoint('outcomes_late_organization')"
+    )
+    returns = [
+        node
+        for node in calls
+        if node.lineno < marker.lineno
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "activate"
+        and "name='Jobs'" in ast.unparse(node)
+    ]
+    last_return = max(returns, key=lambda node: node.lineno)
+    waits = [
+        node
+        for node in calls
+        if last_return.lineno < node.lineno < marker.lineno
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "wait_outcome_replay"
+    ]
+    assert len(waits) == 1, "earlier presence readiness cannot cover a new Jobs mount"
+    assert any(
+        keyword.arg == "timeout" and ast.literal_eval(keyword.value) == 5
+        for keyword in waits[0].keywords
+    )
+
+
+def test_new_mount_requires_its_own_replay_and_deliveries() -> None:
+    previous, old_proof = ready()
+    current = armed()
+    current.finish(old_proof, True)
+    current.finish(previous.replay, True)
+    assert current.ready() is None
+    current.finish(replay(current), True)
+    fresh_proof = following(current)
+    assert current.ready() is fresh_proof and fresh_proof is not old_proof
