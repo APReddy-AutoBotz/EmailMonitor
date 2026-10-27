@@ -23,6 +23,7 @@ from emailmonitor.organizations.roles import Capability
 from emailmonitor.progress.broker import publish as publish_execution
 from emailmonitor.progress.service import Progress
 from emailmonitor.results.broker import publish as publish_exports
+from emailmonitor.results.models import Filters
 from emailmonitor.results.service import Results
 from entitlement_sql_diagnostic import entitlement_diagnostic
 from operator_queue_probe import observe as observe_parse_queue
@@ -232,6 +233,7 @@ def test_required_actual_keyboard_operator_ui(
             contact_sheet = archive.read("xl/worksheets/sheet1.xml")
         assert b">Affiliations<" not in contact_sheet and b">Article title<" in contact_sheet
         retained_receipt.update(
+            target_job=str(jobs[1].id),
             export_id=exports[0].id,
             review_receipts=reviews,
             durable_effects=effects,
@@ -416,12 +418,42 @@ WHERE i.organization_id=:org AND j.kind='extraction' LIMIT 33
                     "org_switch",
                     "readonly_role",
                     "contact_suppression",
+                    "job_deletion",
                 ]
             )
             assert evidence["network_errno"] == [101, 101] and evidence["interfaces"] == ["lo"]
             assert retained_receipt
             with pytest.raises(AuthorizationDenied):
                 results.download(org, UUID(str(retained_receipt["export_id"])))
+            target_job = UUID(str(retained_receipt["target_job"]))
+            with pytest.raises(AuthorizationDenied):
+                results.contacts(org, Filters(job_id=target_job))
+            admin = create_engine(scenario.admin_url, hide_parameters=True)
+            try:
+                with admin.connect() as connection:
+                    markers = connection.execute(
+                        text(
+                            "SELECT job_id,reason,purged_at FROM emailmonitor.deletion_tombstones "
+                            "WHERE organization_id=:org"
+                        ),
+                        {"org": org},
+                    ).all()
+                    assert len(markers) == 2 and all(row.job_id is not None for row in markers)
+                    selected = [row for row in markers if row.job_id == target_job]
+                    assert len(selected) == 1
+                    assert selected[0].reason == "owner_request" and selected[0].purged_at is None
+                    assert (
+                        connection.execute(
+                            text(
+                                "SELECT count(*) FROM emailmonitor.article_observations "
+                                "WHERE organization_id=:org AND job_id=:job"
+                            ),
+                            {"org": org, "job": target_job},
+                        ).scalar_one()
+                        > 0
+                    )
+            finally:
+                admin.dispose()
 
             print(
                 json.dumps(

@@ -208,6 +208,10 @@
 
 # Changelog
 
+- Connect owner-only selected-job deletion staging to the job workspace, with
+  explicit organization-wide export-invalidation warning, current-job recheck,
+  bound receipt and uncertain-outcome handling. Physical purge remains separate.
+
 ## 2026-10-13 — EM-012 scoped synthetic operator foundation verified in Draft
 
 - Independently reconcile exact reviewed head/merge/tree and all six authoritative full job logs

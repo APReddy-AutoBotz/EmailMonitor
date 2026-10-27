@@ -1,5 +1,14 @@
 # 22 — Implementation status and evidence ledger
 
+## Selected-job deletion staging candidate
+
+FR-029 / EM-014 / EM-012 has an owner-only job-workspace staging control on a
+dependent candidate. It uses the existing API, explicitly warns about organization-
+wide export invalidation, preserves current-job/receipt binding and does not offer
+physical purge. Normal/fresh and genuine hosted acceptance remain distinct gates;
+see [the bounded scope](82-contextual-job-deletion.md). PR60 and earlier heads are
+preserved; no merge, deployment or live-source activation is claimed.
+
 **Baseline date:** 2026-10-08. **Updated:** 2026-10-13. **Product state:** unmerged synthetic/offline foundations verified through scoped operator UI and shared admission; live/production deployment unavailable.
 
 ## Documentation deliverables

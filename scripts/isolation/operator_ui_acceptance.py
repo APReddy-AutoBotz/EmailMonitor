@@ -2660,6 +2660,40 @@ async def main() -> None:
                 table.or_(page.get_by_text("No contacts match these server filters.", exact=True))
             ).to_be_visible()
             await expect(suppression_address_cells(table, selected_address)).to_have_count(0)
+            checkpoint("job_deletion")
+            await activate(page, page.get_by_role("button", name="Jobs", exact=True))
+            await activate(
+                page, page.get_by_role("button", name="Open job " + actual_job, exact=True)
+            )
+            deletion = page.get_by_role("region", name="Job deletion", exact=True)
+            for commit in (False, True):
+                action = deletion.get_by_role("button", name="Review job deletion", exact=True)
+                if not commit:
+                    await expect(action).to_be_disabled()
+                    await select_index(page, page.get_by_label(re.compile(r"^Deletion reason")), 2)
+                await activate(page, action)
+                confirmation = page.get_by_role("dialog")
+                await expect(confirmation).to_contain_text(actual_job)
+                await expect(confirmation).to_contain_text(
+                    "all existing exports in this organization"
+                )
+                await expect(confirmation).to_contain_text("Physical purge")
+                await activate(
+                    page,
+                    confirmation.get_by_role(
+                        "button",
+                        name="Confirm stage job deletion" if commit else "Keep unchanged",
+                        exact=True,
+                    ),
+                )
+                await expect(confirmation).not_to_be_visible()
+                if not commit:
+                    await expect(
+                        page.get_by_role("heading", name="Job " + actual_job, exact=True)
+                    ).to_be_visible()
+            await expect(deletion).to_contain_text("Verified deletion receipt:")
+            await expect(deletion).to_contain_text("is fenced")
+            await expect(deletion).to_contain_text("No physical purge was requested")
             await asyncio.wait_for(settled_requests(), timeout=10)
             checkpoint("final_cleanup")
             print(
@@ -2691,6 +2725,7 @@ async def main() -> None:
                         "org_switch": True,
                         "readonly_role": True,
                         "contact_suppression": True,
+                        "job_deletion": True,
                         "stale_network_retry": True,
                         "late_old_response_refused": True,
                         "late_old_replay_refused": True,

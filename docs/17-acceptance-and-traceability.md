@@ -575,3 +575,9 @@ Installed XML failure localization uses `test_installed_xml_outcome.py` and
 and unchanged success/failure/signal/deadline propagation. These owned synthetic
 tests do not substitute for genuine installed XML execution or close historical
 aggregate timing failures.
+
+FR-029 / EM-014 selected-job staging: `jobDeletion.test.tsx`,
+`test_real_selected_job_staging_receipt_is_idempotent_without_physical_purge`,
+existing lifecycle SQL authority/fence cases and the hosted operator keyboard
+journey cover [selected-job deletion staging](82-contextual-job-deletion.md).
+No physical purge or organization-wide deletion control is introduced.
