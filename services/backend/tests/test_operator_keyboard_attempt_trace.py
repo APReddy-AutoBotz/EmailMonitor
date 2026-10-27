@@ -1,6 +1,8 @@
 """Passive same-attempt diagnostics preserve the real keyboard failure."""
 
+import ast
 import asyncio
+import inspect
 import json
 import subprocess
 from types import SimpleNamespace
@@ -11,6 +13,24 @@ import pytest
 from operator_ui_protocol import FocusExhaustion, KeyboardAttemptTrace
 from playwright.async_api import Locator, Page
 from pydantic import ValidationError
+
+
+def test_presence_next_page_uses_same_target_with_passive_attempt_trace() -> None:
+    import operator_ui_acceptance as guest
+
+    module = ast.parse(inspect.getsource(guest))
+    for node in ast.walk(module):
+        if not isinstance(node, ast.Try):
+            continue
+        for index, statement in enumerate(node.body):
+            if ast.unparse(statement) == "checkpoint('outcomes_presence_keyboard')":
+                call = node.body[index + 2]
+                assert ast.unparse(call) == (
+                    "await traced_activate(page, region.get_by_role('button', "
+                    "name='Next article outcome page', exact=True))"
+                )
+                return
+    raise AssertionError("Existing presence keyboard checkpoint must remain covered")
 
 
 @pytest.mark.parametrize("overflow", [False, True])

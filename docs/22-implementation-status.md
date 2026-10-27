@@ -1,5 +1,11 @@
 # 22 — Implementation status and evidence ledger
 
+Saved draft continuation is an independent local candidate based on PR60. It
+exposes existing plan/start controls for the same reopened draft, with current
+revision/generation/session binding. [Scope](83-saved-draft-continuation.md).
+Normal/fresh and hosted acceptance are separate pending gates; PR61's installed
+XML failure and historical intermittency remain unresolved.
+
 **Baseline date:** 2026-10-08. **Updated:** 2026-10-13. **Product state:** unmerged synthetic/offline foundations verified through scoped operator UI and shared admission; live/production deployment unavailable.
 
 ## Documentation deliverables
@@ -712,3 +718,26 @@ Normal/fresh backend, frontend and eight actual SQL cases passed; genuine hosted
 acceptance remains incomplete after a preceding outcome-keyboard failure. See
 [scope and acceptance](80-contextual-contact-suppression.md). No runtime authority
 or migration change is included.
+
+PR62 bounded pagination harness correction: replace the five-second table-only
+precondition with exact authored replay/response/render readiness. No runtime,
+authority, migration or deadline change. The historical target replacement at
+Tab48 is evidence for the missing precondition, not attribution of the stream
+trigger. Candidate normal/fresh and hosted gates must be recorded separately;
+installed-login, XML and cumulative backend deadline failures remain distinct.
+
+A bounded browser workflow diagnostic records only the child process exit range
+for future failed synthetic isolation checks. The existing guarded runner, sealed
+source bytes, sandbox and resources remain unchanged; high exit codes are not
+asserted to be signals. This receipt cannot identify the earlier failure stage
+or establish a root cause. Local wrapper tests do not replace actual browser CI.
+
+The browser outcome wrapper is an exact additive workflow change. Its original
+workflow digest remains enforced after removing only the single exact reviewed
+wrapper-and-receipt block; altered wrapper, duplicate block, changed reporting or
+unrelated workflow bytes still fail. A prior backend first-failure ordinal mapped
+to that digest assertion, and the exact case reproduced before this normalization.
+The separate cumulative backend deadline is not explained by that assertion.
+Installed XML first-failure metadata now includes only the existing validated
+fixed guest error and reason categories; the original failure and first-case
+selection remain authoritative. Hosted acceptance is still required.

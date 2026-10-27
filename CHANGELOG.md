@@ -1,3 +1,7 @@
+## Saved draft continuation candidate
+
+- Reopen and validate the same saved draft before explicit launch, preserving source authority, current revision/generation and uncertain-outcome handling. No replacement job, backend or migration change. See [scope](docs/83-saved-draft-continuation.md).
+
 ## Connected operator lifecycle acceptance candidate
 
 - Add fixture-only confirmed cancellation, retained review/export, continuation and original-message worker-redelivery acceptance; no runtime authority or migration change. See [scope](docs/74-connected-operator-lifecycle.md).
@@ -476,3 +480,13 @@ Add a trusted Python-only executor factory to the normal claimed Celery path, re
   preserving separate evidence, authors and reviews; no live acquisition.
 - Forward-only migration 0019 adds a derived identity index and filtered export
   checks. Validation is in progress; no deployment or public release is claimed.
+
+- Correlate authored outcome pagination with the current terminal replay and
+  rendered response before its original bounded keyboard activation; preserve
+  invalidation coverage and distinguish harness proof from hosted acceptance.
+
+- Record a fixed process-exit category for failed synthetic browser checks while
+  retaining the existing runner, exact exit status and reviewed source digest.
+
+- Preserve the historical browser workflow digest across its exact exit-reporting
+  addition and include validated fixed XML failure categories in future receipts.
