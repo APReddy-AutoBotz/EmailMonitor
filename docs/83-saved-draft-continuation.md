@@ -40,3 +40,15 @@ uses the existing passive same-attempt trace to distinguish target replacement
 and heading-focus events. It retains the target, keyboard sequence, Tab cap,
 deadlines and original failure. Fixed categories are diagnostic evidence, not a
 claim that the historical failure is repaired.
+
+The authored pagination precondition now correlates the current job/generation's
+terminal replay, cursor acknowledgement, progress and exact authored first-page
+response with its resulting DOM render. It replaces the existing five-second
+visibility wait, without adding a readiness budget. A visible initial table alone
+can precede replay-driven replacement. The fixed 25-row validator is separate
+from the actual one-row no-contact validator; both retain current-epoch and
+successful-delivery requirements. The single Next activation, 100-Tab cap and
+separate delayed-replay invalidation exercise are unchanged. Deterministic tests
+refuse incomplete/stale/wrong-scope and retained-old-DOM proofs. This corrects the
+harness precondition, not runtime focus restoration, and does not identify the
+specific historical stream event or repair unrelated login/XML/backend timing.

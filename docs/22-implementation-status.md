@@ -718,3 +718,10 @@ Normal/fresh backend, frontend and eight actual SQL cases passed; genuine hosted
 acceptance remains incomplete after a preceding outcome-keyboard failure. See
 [scope and acceptance](80-contextual-contact-suppression.md). No runtime authority
 or migration change is included.
+
+PR62 bounded pagination harness correction: replace the five-second table-only
+precondition with exact authored replay/response/render readiness. No runtime,
+authority, migration or deadline change. The historical target replacement at
+Tab48 is evidence for the missing precondition, not attribution of the stream
+trigger. Candidate normal/fresh and hosted gates must be recorded separately;
+installed-login, XML and cumulative backend deadline failures remain distinct.

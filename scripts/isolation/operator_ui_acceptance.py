@@ -20,6 +20,7 @@ from operator_ui_protocol import (
     EVIDENCE_PHASES,
     OUTCOME_PHASES,
     STAGES,
+    AuthoredOutcomeReplayReadiness,
     EvidenceFocusTrace,
     FocusExhaustion,
     HandoffTrace,
@@ -378,9 +379,9 @@ async def require_outcome_render(
 
 
 async def wait_outcome_replay(
-    page: Page, state: OutcomeReplayReadiness, changed: asyncio.Event
+    page: Page, state: OutcomeReplayReadiness, changed: asyncio.Event, *, timeout: float = 10
 ) -> tuple[ReplayRequest, JSHandle]:
-    async with asyncio.timeout(10):
+    async with asyncio.timeout(timeout):
         while True:
             changed.clear()
             if state.failed:
@@ -644,7 +645,13 @@ def suppression_address_cells(table: Locator, address: str) -> Locator:
 
 
 async def authored_outcome_paging(
-    page: Page, organization: str, checkpoint: Callable[[str], None]
+    page: Page,
+    organization: str,
+    checkpoint: Callable[[str], None],
+    observe: Callable[
+        [OutcomeReplayReadiness | None, asyncio.Event | None, asyncio.Event | None], None
+    ],
+    changed: asyncio.Event,
 ) -> None:
     """Separate authored browser contract; these 127 rows are not SQL/worker evidence."""
     job_heading = page.get_by_role("heading", name=re.compile(r"^Job [0-9a-f-]{36}$"))
@@ -666,6 +673,7 @@ async def authored_outcome_paging(
     requested = asyncio.Event()
     release = asyncio.Event()
     finished = asyncio.Event()
+    readiness: AuthoredOutcomeReplayReadiness | None = None
     quality_denied = False
     quality_hold = False
     quality_requested = asyncio.Event()
@@ -680,7 +688,7 @@ async def authored_outcome_paging(
         "succeeded",
     ]
 
-    async def fulfill(route: Route, payload: object, status: int = 200) -> None:
+    async def fulfill(route: Route, payload: object, status: int = 200) -> bool:
         try:
             await route.fulfill(
                 status=status, content_type="application/json", body=json.dumps(payload)
@@ -688,6 +696,8 @@ async def authored_outcome_paging(
         except Error:
             if route.request.failure != "net::ERR_ABORTED":
                 raise
+            return False
+        return True
 
     async def outcomes(route: Route) -> None:
         nonlocal held_offset
@@ -697,6 +707,10 @@ async def authored_outcome_paging(
         if query.get("job_id") != [job]:
             await route.fallback()
             return
+        observed = readiness
+        ticket = observed.begin(route.request.url, route.request.method) if observed else None
+        if observed is not None and ticket is not None and ticket.eligible:
+            ticket.loading = await outcome_loading(page, observed)
         assert query.get("limit") == ["25"]
         offset = int(query.get("cursor", ["0"])[0])
         assert offset in {0, 25, 50, 75, 100, 125}
@@ -764,7 +778,12 @@ async def authored_outcome_paging(
         elif denied:
             await fulfill(route, {"detail": "Current scope unavailable"}, 404)
         else:
-            await fulfill(route, payload)
+            if observed is not None:
+                observed.offer(ticket, 200, json.dumps(payload).encode())
+            delivered = await fulfill(route, payload)
+            if observed is not None:
+                observed.finish(ticket, delivered)
+                changed.set()
 
     async def quality(route: Route) -> None:
         methods.append(route.request.method)
@@ -931,8 +950,17 @@ async def authored_outcome_paging(
         await expect(region).to_contain_text("Current article outcomes are unavailable")
         await expect(table).not_to_be_visible()
         denied = False
+        readiness = AuthoredOutcomeReplayReadiness(organization, job)
+        observe(readiness, None, None)
         await activate(page, page.get_by_role("button", name="Refresh current view", exact=True))
-        await expect(table).to_be_visible()
+        # Replace the prior five-second table-visibility precondition. The first
+        # table can render before the refresh's terminal replay remounts it.
+        async with asyncio.timeout(5):
+            _, rendered = await wait_outcome_replay(page, readiness, changed, timeout=5)
+            await expect(table).to_be_visible()
+        await rendered.dispose()
+        observe(None, None, None)
+        readiness = None
         checkpoint("outcomes_presence_keyboard")
         presence_select = region.get_by_role(
             "combobox", name="Article-outcome candidate presence", exact=True
@@ -1089,6 +1117,7 @@ async def authored_outcome_paging(
         assert methods and set(methods) == {"GET"}
         assert set(requested_pages) == {0, 25, 50, 75, 100, 125}
     finally:
+        observe(None, None, None)
         release.set()
         quality_release.set()
         page.remove_listener("request", observe_request)
@@ -2552,7 +2581,11 @@ async def main() -> None:
                 0,
             )
             await authored_outcome_paging(
-                page, str(setup["initial_organization"]), outcome_checkpoint
+                page,
+                str(setup["initial_organization"]),
+                outcome_checkpoint,
+                observe_replay,
+                replay_changed,
             )
             await prove_delayed_outcome_replay(
                 page,

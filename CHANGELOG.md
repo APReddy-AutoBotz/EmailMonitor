@@ -480,3 +480,7 @@ Add a trusted Python-only executor factory to the normal claimed Celery path, re
   preserving separate evidence, authors and reviews; no live acquisition.
 - Forward-only migration 0019 adds a derived identity index and filtered export
   checks. Validation is in progress; no deployment or public release is claimed.
+
+- Correlate authored outcome pagination with the current terminal replay and
+  rendered response before its original bounded keyboard activation; preserve
+  invalidation coverage and distinguish harness proof from hosted acceptance.
