@@ -647,6 +647,39 @@ def test_export_failure_receipt_keeps_publisher_failure_when_sql_unavailable(
     assert "sensitive" not in note and "private-url" not in note
 
 
+def test_export_failure_receipt_records_only_fixed_owned_snapshot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import threading
+    from uuid import uuid4
+
+    import guest_outcome
+
+    guest_outcome.reset_case_trace()
+    monkeypatch.setenv("EM_XML_CASE_OUTCOME_REPORT", "true")
+    monkeypatch.setattr(
+        harness,
+        "owned_export_states",
+        lambda *_: [
+            {
+                "format": "csv",
+                "state": "queued",
+                "attempts": 0,
+                "lease_present": False,
+                "lease_active": False,
+                "pending": True,
+                "confirmed": False,
+                "delivered": False,
+            }
+        ],
+    )
+    note = harness.export_failure_note(
+        "private-url", uuid4(), uuid4(), None, threading.Event(), False, True
+    )
+    assert "private-url" not in note
+    assert guest_outcome.case_export_snapshot() == "p00001.csv_queued.0.00100"
+
+
 @pytest.mark.parametrize(
     "change",
     [

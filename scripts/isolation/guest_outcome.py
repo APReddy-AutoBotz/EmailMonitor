@@ -5,7 +5,7 @@ from collections.abc import Callable
 from contextvars import ContextVar
 from functools import wraps
 from pathlib import Path
-from typing import get_args
+from typing import Annotated, Literal, get_args
 
 from operator_ui_protocol import (
     OUTCOME_PHASES,
@@ -16,7 +16,7 @@ from operator_ui_protocol import (
     InstalledLoginPhase,
     KeyboardAttemptTrace,
 )
-from pydantic import TypeAdapter
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 
 HOST = frozenset(
     {
@@ -132,9 +132,90 @@ _first_failure: tuple[str, str] | None = None
 _case_trace: Trace | None = None
 
 
+class _ExportSnapshot(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    format: Literal["xlsx", "csv"]
+    state: Literal["queued", "running", "ready", "failed", "revoked", "expired"]
+    attempts: int = Field(ge=0, le=3)
+    lease_present: bool
+    lease_active: bool
+    pending: bool
+    confirmed: bool
+    delivered: bool
+
+
+class _PublisherSnapshot(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    publisher_started: bool
+    publisher_alive: bool
+    publisher_stop_requested: bool
+    publisher_failed: bool
+    publisher_completed_pass: bool
+    exports: Literal["unavailable"] | Annotated[list[_ExportSnapshot], Field(max_length=2)]
+
+
+_case_export_snapshot: _PublisherSnapshot | None = None
+
+
+def record_export_snapshot(fields: object) -> None:
+    """Keep only fixed categories from the existing owned, failure-only snapshot."""
+    global _case_export_snapshot
+    _case_export_snapshot = None
+    try:
+        value = _PublisherSnapshot.model_validate(fields)
+        if isinstance(value.exports, list) and len({row.format for row in value.exports}) != len(
+            value.exports
+        ):
+            return
+        _case_export_snapshot = value
+    except Exception:
+        pass
+
+
+def case_export_snapshot() -> str:
+    try:
+        if _case_export_snapshot is None:
+            return "unavailable"
+        value = _PublisherSnapshot.model_validate(_case_export_snapshot.model_dump(warnings=False))
+        flags = "".join(
+            "1" if bit else "0"
+            for bit in (
+                value.publisher_started,
+                value.publisher_alive,
+                value.publisher_stop_requested,
+                value.publisher_failed,
+                value.publisher_completed_pass,
+            )
+        )
+        if value.exports == "unavailable":
+            csv = "sql_unavailable"
+        else:
+            if len({row.format for row in value.exports}) != len(value.exports):
+                return "unavailable"
+            row = next((row for row in value.exports if row.format == "csv"), None)
+            if row is None:
+                csv = "csv_missing"
+            else:
+                bits = "".join(
+                    "1" if bit else "0"
+                    for bit in (
+                        row.lease_present,
+                        row.lease_active,
+                        row.pending,
+                        row.confirmed,
+                        row.delivered,
+                    )
+                )
+                csv = f"csv_{row.state}.{row.attempts}.{bits}"
+        return "p" + flags + "." + csv
+    except Exception:
+        return "unavailable"
+
+
 def reset_case_trace() -> None:
-    global _case_trace
+    global _case_trace, _case_export_snapshot
     _case_trace = None
+    _case_export_snapshot = None
 
 
 def case_categories() -> tuple[str, str]:

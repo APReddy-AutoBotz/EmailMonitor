@@ -544,10 +544,8 @@ async def main() -> None:
                 await activate(page, page.get_by_role("button", name="Save review", exact=True))
                 await page.get_by_role("dialog").wait_for(state="hidden")
                 checkpoint("export_preview")
-                export_checkpoint("navigate", None)
                 await activate(page, page.get_by_role("button", name="Exports", exact=True))
                 for index, format_name in enumerate(("xlsx", "csv")):
-                    export_checkpoint("format", format_name)
                     await select_index(page, page.get_by_label(re.compile(r"^Format")), index)
                     if format_name == "csv":
                         outcomes = page.get_by_role(
@@ -557,41 +555,31 @@ async def main() -> None:
                         await focus(page, outcomes)
                         await page.keyboard.press("Space")
                         await expect(outcomes).not_to_be_checked()
-                    export_checkpoint("preview_activate", format_name)
                     await activate(
                         page,
                         page.get_by_role(
                             "button", name="Preview eligible export counts", exact=True
                         ),
                     )
-                    export_checkpoint("preview_wait", format_name)
                     await page.get_by_role("region", name="Current export preview").wait_for()
-                    export_checkpoint("create", format_name)
                     await activate(
                         page,
                         page.get_by_role("button", name="Create asynchronous export", exact=True),
                     )
                     row = page.get_by_role("row").filter(has_text=" · " + format_name)
-                    export_checkpoint("row_wait", format_name)
                     await row.wait_for()
-                    export_checkpoint("ready_wait", format_name)
                     async with asyncio.timeout(30):
                         while not await row.get_by_role(
                             "button", name="Download", exact=True
                         ).is_enabled():
                             await asyncio.sleep(0.4)
-                            export_checkpoint("refresh", format_name)
                             await activate(
                                 page,
                                 page.get_by_role("button", name="Refresh current view", exact=True),
                             )
-                            export_checkpoint("ready_wait", format_name)
                     download_seen.clear()
-                    export_checkpoint("download_activate", format_name)
                     await activate(page, row.get_by_role("button", name="Download", exact=True))
-                    export_checkpoint("download_wait", format_name)
                     await asyncio.wait_for(download_seen.wait(), timeout=5)
-                export_checkpoint("verify", None)
                 await channel.request({"kind": "control", "action": "wait_exports"})
                 checkpoint("url_plan")
                 await activate(page, page.get_by_role("button", name="New extraction", exact=True))
