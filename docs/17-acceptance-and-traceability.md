@@ -68,6 +68,8 @@
 
 Business mapping: BR-01 → FR-004/005; BR-02 → FR-007/009/021; BR-03 → FR-016/017; BR-04 → FR-015; BR-05 → FR-001/030; BR-06 → FR-032; BR-07 → FR-024/025; BR-08 → FR-022/026; BR-09 → FR-021/026; BR-10 → FR-030; BR-11 → FR-028/029; BR-12 → FR-035/036 and NFR-016.
 
+FR-004 retained-date precision is a partial supporting slice: authored supplied date text, conflicting cited facts, invalid/partial dates and current-authorized metadata presentation are exercised by `test_retained_date_precision.py`, `test_article_metadata.py` and `articleMetadata.test.tsx`. These checks do not prove source-side date filtering, complete discovery or live-source support.
+
 ## Core UAT scenarios
 
 **UAT-01 — Keyword to contacts.** Given tenant A and approved synthetic publisher, when an operator searches the topic, the system visits both fixture result pages, follows each eligible article once, excludes the footer support address, and shows correct author/contact evidence. Query and cap remain visible.

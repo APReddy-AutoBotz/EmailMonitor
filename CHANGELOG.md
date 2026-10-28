@@ -1,3 +1,7 @@
+## Retained date-text precision candidate
+
+- Display precision recognized from each current-authorized retained date fact while preserving exact text and citations. Partial or invalid text does not acquire a fabricated day, and source filtering remains unsupported. See [date decisions](docs/82-evidence-date-reuse-decisions.md).
+
 ## Connected operator lifecycle acceptance candidate
 
 - Add fixture-only confirmed cancellation, retained review/export, continuation and original-message worker-redelivery acceptance; no runtime authority or migration change. See [scope](docs/74-connected-operator-lifecycle.md).

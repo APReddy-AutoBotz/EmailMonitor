@@ -1,5 +1,7 @@
 # 22 — Implementation status and evidence ledger
 
+Retained date-text precision is a local partial candidate under FR-004: annotations describe existing cited text without declaring source type or enabling filtering. It requires its own exact-head checks; source-declared complete date-search semantics remain unimplemented. See [date decisions](82-evidence-date-reuse-decisions.md).
+
 **Baseline date:** 2026-10-08. **Updated:** 2026-10-13. **Product state:** unmerged synthetic/offline foundations verified through scoped operator UI and shared admission; live/production deployment unavailable.
 
 ## Documentation deliverables

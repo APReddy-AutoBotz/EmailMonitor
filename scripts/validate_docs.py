@@ -104,6 +104,7 @@ def main() -> int:
         'pdf-observation.json': 'pdf-observation.schema.json',
         'observation-quality.json': 'observation-quality.schema.json',
         'article-metadata.json': 'article-metadata.schema.json',
+        'article-metadata-precision.json': 'article-metadata-precision.schema.json',
         'association-bundle.json': 'association-bundle.schema.json',
         'association-review-request.json': 'association-review-request.schema.json',
         'progress-snapshot.json': 'progress-snapshot.schema.json',
