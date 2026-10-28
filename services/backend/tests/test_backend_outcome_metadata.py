@@ -139,3 +139,87 @@ def test_actual_owned_signal_exit_and_temporary_cleanup(tmp_path: Path) -> None:
         reported(action, {"EM_BACKEND_OUTCOME_REPORT": "true", "GITHUB_OUTPUT": str(output)})
     assert output.read_text().startswith("backend_outcome=consumer_signal-exit_-15-")
     assert len(owned) == 1 and not owned[0].exists()
+
+
+def test_wrapper_timing_reports_preparation_and_consumer_without_consumer_hooks(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import backend_outcome as outcome
+
+    ticks = iter([10.0, 16.9, 40.2])
+    monkeypatch.setattr(outcome, "_monotonic", lambda: next(ticks))
+    output = tmp_path / "output"
+    original = IntegrationRefused("synthetic timeout")
+    original.outcome_category = "wrapper_deadline"
+    original.consumer_code = -signal.SIGALRM
+
+    def action(environment: Mapping[str, str]) -> None:
+        assert KEY in environment
+        outcome.wrapper_consumer_started()
+        outcome.wrapper_work_finished()
+        raise original
+
+    with pytest.raises(IntegrationRefused) as caught:
+        reported(action, {"EM_BACKEND_OUTCOME_REPORT": "true", "GITHUB_OUTPUT": str(output)})
+    assert caught.value is original
+    assert output.read_text() == (
+        "backend_outcome=wrapper_deadline-exit_-14-active_0-completed_0-failed_0-total_0"
+        "-setup_s_6-work_s_23-work_stage_consumer\n"
+    )
+    assert outcome._wrapper_timing.get() is None
+
+
+def test_wrapper_timing_records_failure_before_consumer_and_never_replaces_exception(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import backend_outcome as outcome
+
+    ticks = iter([10.0, 12.0])
+    monkeypatch.setattr(outcome, "_monotonic", lambda: next(ticks))
+    output = tmp_path / "output"
+    original = RuntimeError("private synthetic failure")
+
+    def action(_: Mapping[str, str]) -> None:
+        outcome.wrapper_work_finished()
+        raise original
+
+    with pytest.raises(RuntimeError) as caught:
+        reported(action, {"EM_BACKEND_OUTCOME_REPORT": "true", "GITHUB_OUTPUT": str(output)})
+    assert caught.value is original
+    assert output.read_text().endswith("-setup_s_2-work_s_0-work_stage_preparation\n")
+    assert "private" not in output.read_text() and outcome._wrapper_timing.get() is None
+
+
+@pytest.mark.parametrize("failure_at", [0, 1, 2])
+def test_unavailable_wrapper_clock_never_changes_action_or_cleanup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure_at: int
+) -> None:
+    import backend_outcome as outcome
+
+    calls = 0
+
+    def clock() -> float:
+        nonlocal calls
+        point = calls
+        calls += 1
+        if point == failure_at:
+            raise OSError("synthetic clock unavailable")
+        return float(point + 1)
+
+    monkeypatch.setattr(outcome, "_monotonic", clock)
+    output = tmp_path / "output"
+    executed: list[str] = []
+
+    def action(_: Mapping[str, str]) -> None:
+        executed.append("work")
+        outcome.wrapper_consumer_started()
+        outcome.wrapper_work_finished()
+        executed.append("cleanup")
+
+    reported(action, {"EM_BACKEND_OUTCOME_REPORT": "true", "GITHUB_OUTPUT": str(output)})
+    assert executed == ["work", "cleanup"]
+    assert (
+        output.read_text()
+        == "backend_outcome=normal-exit_0-active_0-completed_0-failed_0-total_0\n"
+    )
+    assert outcome._wrapper_timing.get() is None

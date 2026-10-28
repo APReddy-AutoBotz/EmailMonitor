@@ -669,3 +669,34 @@ def test_successful_partition_still_fails_when_owned_cleanup_is_incomplete(
     output = capsys.readouterr().out
     assert owned.closed and '"xml_integration_owned_cleanup_verified": false' in output
     assert "xml_integration_fixed_checks_passed" not in output
+
+
+def test_wrapper_timing_brackets_real_wrapper_calls_before_owned_cleanup(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import backend_outcome as outcome
+
+    owned = FakeOwned()
+    runtime = SimpleNamespace(OwnedXmlBuilds=lambda owner: owned, command=owned.command)
+    monkeypatch.setattr(integration, "load_runtime", lambda: runtime)
+    monkeypatch.setattr(integration, "prepare_image", lambda *args: (IMAGE, {}))
+    original = integration.IntegrationRefused("synthetic consumer failure")
+    original.outcome_category = "wrapper_deadline"
+    original.consumer_code = -signal.SIGALRM
+    ticks = iter([10.0, 17.0, 41.0])
+    monkeypatch.setattr(outcome, "_monotonic", lambda: next(ticks))
+
+    def fail(*args: object) -> None:
+        assert not owned.closed
+        raise original
+
+    monkeypatch.setattr(integration, "run_consumer", fail)
+    output = tmp_path / "output"
+    with pytest.raises(integration.IntegrationRefused) as raised:
+        outcome.reported(
+            lambda environment: integration.execute("application-backend", environment),
+            {**ENV, "EM_BACKEND_OUTCOME_REPORT": "true", "GITHUB_OUTPUT": str(output)},
+        )
+    assert raised.value is original and owned.closed
+    assert output.read_text().endswith("-setup_s_7-work_s_24-work_stage_consumer\n")
+    assert outcome._wrapper_timing.get() is None

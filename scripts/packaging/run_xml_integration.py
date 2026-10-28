@@ -411,12 +411,19 @@ def execute(mode: str, environ: Mapping[str, str]) -> None:
             flush=True,
         )
         alias.verify()
+        from backend_outcome import wrapper_consumer_started
+
+        wrapper_consumer_started()
         run_consumer(mode, image_id, owned.owner, environ, alias.verify)
         alias.verify()
         failed = False
     finally:
         # Main's deadline cannot interrupt the bounded ownership reconciliation.
         signal.alarm(0)
+        # The wrapper clock is independent of the consumer and ends before cleanup.
+        from backend_outcome import wrapper_work_finished
+
+        wrapper_work_finished()
         cleanup(owned, alias, failed)
     # This attests the fixed checks succeeded; actual parser ID assertions belong
     # to their captured verify_profile callbacks, not to alias checks alone.

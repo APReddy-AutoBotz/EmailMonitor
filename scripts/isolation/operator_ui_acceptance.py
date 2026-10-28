@@ -1280,6 +1280,7 @@ async def lifecycle_journey(
     await expect(page.get_by_role("dialog")).not_to_be_visible()
     checkpoint("lifecycle_export")
     await activate(page, page.get_by_role("button", name="Export this selection", exact=True))
+    checkpoint("lifecycle_export_preview")
     await expect(
         page.get_by_label("Job UUID (blank selects authorized matching jobs)", exact=True)
     ).to_have_value(cancel_job)
@@ -1289,12 +1290,15 @@ async def lifecycle_journey(
     await expect(page.get_by_role("region", name="Current export preview")).to_contain_text(
         "1 contacts;"
     )
+    checkpoint("lifecycle_export_create")
     await activate(page, page.get_by_role("button", name="Create asynchronous export", exact=True))
     await expect(
         page.get_by_text("Private export queued. Wait for actual worker completion.", exact=True)
     ).to_be_visible()
+    checkpoint("lifecycle_export_wait")
     await channel.request({"kind": "control", "action": "wait_exports"})
     await activate(page, page.get_by_role("button", name="Refresh current view", exact=True))
+    checkpoint("lifecycle_export_ready")
     await expect(page.get_by_role("button", name="Download", exact=True)).to_be_enabled()
 
     checkpoint("lifecycle_retry")
@@ -1360,7 +1364,7 @@ async def lifecycle_journey(
         page.get_by_role("heading", name="Actual retained citation", exact=True)
     ).to_be_visible()
     await activate(page, page.get_by_role("button", name="Close evidence", exact=True))
-    checkpoint("lifecycle_export")
+    checkpoint("lifecycle_unlink_export")
     await activate(page, page.get_by_role("button", name="Exports", exact=True))
     await expect(page.get_by_role("button", name="Download", exact=True).first).to_be_disabled()
 

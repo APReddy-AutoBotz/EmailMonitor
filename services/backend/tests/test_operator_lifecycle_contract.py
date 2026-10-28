@@ -253,3 +253,43 @@ def test_lifecycle_result_requires_bounded_request_drain(mode: str) -> None:
     assert code.index("await lifecycle_journey") < code.index("Back to recent jobs")
     assert code.index("Recent authorized jobs") < code.index("await settle_lifecycle_requests")
     assert code.index("await settle_lifecycle_requests") < code.index("'kind': 'result'")
+
+
+def test_unlink_export_stage_is_distinct_from_original_lifecycle_export() -> None:
+    import ast
+    from pathlib import Path
+
+    from operator_ui_protocol import DiagnosticFrame
+
+    source = Path(__file__).resolve().parents[3] / "scripts/isolation/operator_ui_acceptance.py"
+    module = ast.parse(source.read_text())
+    journey = next(
+        node
+        for node in module.body
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "lifecycle_journey"
+    )
+    checkpoints = [
+        ast.literal_eval(node.args[0])
+        for node in ast.walk(journey)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "checkpoint"
+        and len(node.args) == 1
+    ]
+    assert checkpoints.count("lifecycle_export") == 1
+    assert checkpoints.count("lifecycle_unlink_export") == 1
+    assert checkpoints.index("lifecycle_export") < checkpoints.index("lifecycle_unlink_export")
+    stages = [
+        "lifecycle_export",
+        "lifecycle_export_preview",
+        "lifecycle_export_create",
+        "lifecycle_export_wait",
+        "lifecycle_export_ready",
+        "lifecycle_unlink_export",
+    ]
+    assert all(checkpoints.count(stage) == 1 for stage in stages)
+    assert [checkpoints.index(stage) for stage in stages] == sorted(
+        checkpoints.index(stage) for stage in stages
+    )
+    frame = DiagnosticFrame(kind="failure", stage="lifecycle_unlink_export", error="TimeoutError")
+    assert frame.stage == "lifecycle_unlink_export" and frame.error == "TimeoutError"

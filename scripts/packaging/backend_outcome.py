@@ -6,7 +6,9 @@ import json
 import subprocess
 import tempfile
 from collections.abc import Callable, Mapping
+from contextvars import ContextVar
 from pathlib import Path
+from time import monotonic as _monotonic
 from typing import Any
 
 KEY = "EM_OWNED_BACKEND_PROGRESS"
@@ -21,6 +23,51 @@ CATEGORIES = {
     "wrapper_signal",
     "wrapper_failure",
 }
+
+
+class WrapperTiming:
+    """Wrapper-only measurements; never changes the consumer or its clocks."""
+
+    def __init__(self) -> None:
+        self.started = _monotonic()
+        self.consumer_started: float | None = None
+        self.finished: float | None = None
+
+    def start_consumer(self) -> None:
+        self.consumer_started = _monotonic()
+
+    def finish_work(self) -> None:
+        self.finished = _monotonic()
+
+    def label(self) -> str:
+        end = self.finished if self.finished is not None else _monotonic()
+        split = self.consumer_started if self.consumer_started is not None else end
+        setup, work = int(split - self.started), int(end - split)
+        if not 0 <= setup < 1000000 or not 0 <= work < 1000000:
+            raise ValueError("Bounded wrapper timing required")
+        phase = "consumer" if self.consumer_started is not None else "preparation"
+        return f"-setup_s_{setup}-work_s_{work}-work_stage_{phase}"
+
+
+_wrapper_timing: ContextVar[WrapperTiming | None] = ContextVar("owned_wrapper_timing", default=None)
+
+
+def wrapper_consumer_started() -> None:
+    timing = _wrapper_timing.get()
+    if timing is not None:
+        try:
+            timing.start_consumer()
+        except OSError:
+            _wrapper_timing.set(None)
+
+
+def wrapper_work_finished() -> None:
+    timing = _wrapper_timing.get()
+    if timing is not None:
+        try:
+            timing.finish_work()
+        except OSError:
+            _wrapper_timing.set(None)
 
 
 class Progress:
@@ -75,6 +122,11 @@ def reported(action: Callable[[Mapping[str, str]], None], environment: Mapping[s
         path = Path(directory) / "progress.json"
         category, code, primary = "normal", 0, None
         try:
+            timing: WrapperTiming | None = WrapperTiming()
+        except OSError:
+            timing = None
+        token = _wrapper_timing.set(timing)
+        try:
             action({**environment, KEY: str(path)})
         except BaseException as error:
             primary = error
@@ -92,9 +144,16 @@ def reported(action: Callable[[Mapping[str, str]], None], environment: Mapping[s
                     raise ValueError("Closed outcome required")
                 label = category + "-exit_" + str(code)
                 label += "".join("-" + key + "_" + str(counts[key]) for key in FIELDS)
+                if timing is not None and timing.finished is not None:
+                    try:
+                        label += timing.label()
+                    except (ValueError, OverflowError):
+                        pass  # Diagnostic failure cannot change acceptance.
                 with Path(environment["GITHUB_OUTPUT"]).open("a", encoding="ascii") as output:
                     output.write("backend_outcome=" + label + "\n")
             except Exception:
                 if primary is None:
                     raise
                 primary.add_note("Fixed backend outcome reporting unavailable")
+            finally:
+                _wrapper_timing.reset(token)
