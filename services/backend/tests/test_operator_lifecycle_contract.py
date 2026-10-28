@@ -298,6 +298,81 @@ def test_unlink_export_stage_is_distinct_from_original_lifecycle_export() -> Non
         assert frame.stage == stage and frame.error == "TimeoutError"
 
 
+def test_lifecycle_returns_to_jobs_before_leaving_selected_job() -> None:
+    """Execute the authored cleanup from the actual post-unlink Exports screen."""
+    import ast
+    import asyncio
+    from pathlib import Path
+    from typing import Any
+
+    source = Path(__file__).resolve().parents[3] / "scripts/isolation/operator_ui_acceptance.py"
+    module = ast.parse(source.read_text())
+    branch = next(
+        node
+        for node in ast.walk(module)
+        if isinstance(node, ast.If)
+        and ast.unparse(node.test) == "setup.get('journey') == 'controlled_lifecycle'"
+    )
+    start = next(
+        i for i, node in enumerate(branch.body) if "await lifecycle_journey" in ast.unparse(node)
+    )
+    end = next(
+        i
+        for i, node in enumerate(branch.body)
+        if "await settle_lifecycle_requests" in ast.unparse(node)
+    )
+    statements = branch.body[start + 1 : end]
+    function = ast.AsyncFunctionDef(
+        name="cleanup",
+        args=ast.arguments(posonlyargs=[], args=[], kwonlyargs=[], kw_defaults=[], defaults=[]),
+        body=statements,
+        decorator_list=[],
+        type_params=[],
+    )
+    state = {"screen": "Exports", "selected": True}
+
+    class SyntheticPage:
+        def get_by_role(self, role: str, name: str, exact: bool) -> tuple[str, str]:
+            assert exact
+            return role, name
+
+    async def activate(page: SyntheticPage, target: tuple[str, str]) -> None:
+        assert target[0] == "button"
+        if target[1] == "Jobs":
+            state["screen"] = "Jobs"
+        elif target[1] == "Back to recent jobs":
+            assert state["screen"] == "Jobs" and state["selected"]
+            state["selected"] = False
+        else:
+            raise AssertionError("Unexpected synthetic navigation")
+
+    class Visible:
+        async def to_be_visible(self) -> None:
+            assert state == {"screen": "Jobs", "selected": False}
+
+    def expect(target: tuple[str, str]) -> Visible:
+        assert target == ("table", "Recent authorized jobs")
+        return Visible()
+
+    stages: list[str] = []
+    namespace: dict[str, Any] = {
+        "page": SyntheticPage(),
+        "activate": activate,
+        "expect": expect,
+        "checkpoint": stages.append,
+    }
+    exec(
+        compile(
+            ast.fix_missing_locations(ast.Module(body=[function], type_ignores=[])),
+            "<synthetic-cleanup>",
+            "exec",
+        ),
+        namespace,
+    )
+    asyncio.run(namespace["cleanup"]())
+    assert stages == ["lifecycle_cleanup"]
+
+
 @pytest.mark.parametrize(
     "snapshot",
     [

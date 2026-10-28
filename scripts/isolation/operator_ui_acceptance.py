@@ -1708,6 +1708,8 @@ async def main() -> None:
                 checkpoint("pause_resume")
                 await lifecycle_journey(page, channel, setup, checkpoint)
                 # Leave the live job subscription through the ordinary keyboard UI.
+                checkpoint("lifecycle_cleanup")
+                await activate(page, page.get_by_role("button", name="Jobs", exact=True))
                 await activate(
                     page, page.get_by_role("button", name="Back to recent jobs", exact=True)
                 )

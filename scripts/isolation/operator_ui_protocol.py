@@ -337,6 +337,7 @@ STAGES = (
     "lifecycle_unlink_export_missing",
     "lifecycle_unlink_export_not_exports",
     "lifecycle_unlink_export_unavailable",
+    "lifecycle_cleanup",
     "lifecycle_retry",
     "lifecycle_switch",
     "browser_launch",
