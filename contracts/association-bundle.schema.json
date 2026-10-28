@@ -146,7 +146,8 @@
             "unsupported_address",
             "partial_document",
             "retained_locator_only",
-            "reviewed_evidence"
+            "reviewed_evidence",
+            "reviewed_unlinked"
           ],
           "title": "Reason",
           "type": "string"

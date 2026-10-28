@@ -20,6 +20,7 @@ from operator_ui_protocol import (
     EVIDENCE_PHASES,
     OUTCOME_PHASES,
     STAGES,
+    AuthoredOutcomeReplayReadiness,
     EvidenceFocusTrace,
     FocusExhaustion,
     HandoffTrace,
@@ -378,9 +379,9 @@ async def require_outcome_render(
 
 
 async def wait_outcome_replay(
-    page: Page, state: OutcomeReplayReadiness, changed: asyncio.Event
+    page: Page, state: OutcomeReplayReadiness, changed: asyncio.Event, *, timeout: float = 10
 ) -> tuple[ReplayRequest, JSHandle]:
-    async with asyncio.timeout(10):
+    async with asyncio.timeout(timeout):
         while True:
             changed.clear()
             if state.failed:
@@ -644,7 +645,13 @@ def suppression_address_cells(table: Locator, address: str) -> Locator:
 
 
 async def authored_outcome_paging(
-    page: Page, organization: str, checkpoint: Callable[[str], None]
+    page: Page,
+    organization: str,
+    checkpoint: Callable[[str], None],
+    observe: Callable[
+        [OutcomeReplayReadiness | None, asyncio.Event | None, asyncio.Event | None], None
+    ],
+    changed: asyncio.Event,
 ) -> None:
     """Separate authored browser contract; these 127 rows are not SQL/worker evidence."""
     job_heading = page.get_by_role("heading", name=re.compile(r"^Job [0-9a-f-]{36}$"))
@@ -666,6 +673,7 @@ async def authored_outcome_paging(
     requested = asyncio.Event()
     release = asyncio.Event()
     finished = asyncio.Event()
+    readiness: AuthoredOutcomeReplayReadiness | None = None
     quality_denied = False
     quality_hold = False
     quality_requested = asyncio.Event()
@@ -680,7 +688,7 @@ async def authored_outcome_paging(
         "succeeded",
     ]
 
-    async def fulfill(route: Route, payload: object, status: int = 200) -> None:
+    async def fulfill(route: Route, payload: object, status: int = 200) -> bool:
         try:
             await route.fulfill(
                 status=status, content_type="application/json", body=json.dumps(payload)
@@ -688,6 +696,8 @@ async def authored_outcome_paging(
         except Error:
             if route.request.failure != "net::ERR_ABORTED":
                 raise
+            return False
+        return True
 
     async def outcomes(route: Route) -> None:
         nonlocal held_offset
@@ -697,6 +707,10 @@ async def authored_outcome_paging(
         if query.get("job_id") != [job]:
             await route.fallback()
             return
+        observed = readiness
+        ticket = observed.begin(route.request.url, route.request.method) if observed else None
+        if observed is not None and ticket is not None and ticket.eligible:
+            ticket.loading = await outcome_loading(page, observed)
         assert query.get("limit") == ["25"]
         offset = int(query.get("cursor", ["0"])[0])
         assert offset in {0, 25, 50, 75, 100, 125}
@@ -764,7 +778,12 @@ async def authored_outcome_paging(
         elif denied:
             await fulfill(route, {"detail": "Current scope unavailable"}, 404)
         else:
-            await fulfill(route, payload)
+            if observed is not None:
+                observed.offer(ticket, 200, json.dumps(payload).encode())
+            delivered = await fulfill(route, payload)
+            if observed is not None:
+                observed.finish(ticket, delivered)
+                changed.set()
 
     async def quality(route: Route) -> None:
         methods.append(route.request.method)
@@ -813,7 +832,7 @@ async def authored_outcome_paging(
                 )
             )
             if number < 5:
-                await activate(
+                await traced_activate(
                     page,
                     region.get_by_role("button", name="Next article outcome page", exact=True),
                 )
@@ -931,8 +950,17 @@ async def authored_outcome_paging(
         await expect(region).to_contain_text("Current article outcomes are unavailable")
         await expect(table).not_to_be_visible()
         denied = False
+        readiness = AuthoredOutcomeReplayReadiness(organization, job)
+        observe(readiness, None, None)
         await activate(page, page.get_by_role("button", name="Refresh current view", exact=True))
-        await expect(table).to_be_visible()
+        # Replace the prior five-second table-visibility precondition. The first
+        # table can render before the refresh's terminal replay remounts it.
+        async with asyncio.timeout(5):
+            _, rendered = await wait_outcome_replay(page, readiness, changed, timeout=5)
+            await expect(table).to_be_visible()
+        await rendered.dispose()
+        observe(None, None, None)
+        readiness = None
         checkpoint("outcomes_presence_keyboard")
         presence_select = region.get_by_role(
             "combobox", name="Article-outcome candidate presence", exact=True
@@ -1051,11 +1079,20 @@ async def authored_outcome_paging(
         await expect(page.get_by_label(re.compile(r"^Association state"))).to_have_value(
             "needs_review"
         )
+        readiness = AuthoredOutcomeReplayReadiness(organization, job)
+        observe(readiness, None, None)
         await activate(page, page.get_by_role("button", name="Jobs", exact=True))
-        await expect(region).to_contain_text("Page 1: 25 article outcomes")
-        await expect(
-            region.get_by_role("button", name="Next article outcome page", exact=True)
-        ).to_be_enabled()
+        # Returning from Review creates a new job workspace/stream. The earlier
+        # presence-phase proof cannot authorize this mount's keyboard traversal.
+        async with asyncio.timeout(5):
+            _, rendered = await wait_outcome_replay(page, readiness, changed, timeout=5)
+            await expect(region).to_contain_text("Page 1: 25 article outcomes")
+            await expect(
+                region.get_by_role("button", name="Next article outcome page", exact=True)
+            ).to_be_enabled()
+        await rendered.dispose()
+        observe(None, None, None)
+        readiness = None
         checkpoint("outcomes_late_organization")
         held_offset = None
         requested.clear()
@@ -1089,6 +1126,7 @@ async def authored_outcome_paging(
         assert methods and set(methods) == {"GET"}
         assert set(requested_pages) == {0, 25, 50, 75, 100, 125}
     finally:
+        observe(None, None, None)
         release.set()
         quality_release.set()
         page.remove_listener("request", observe_request)
@@ -1219,6 +1257,56 @@ async def settle_lifecycle_requests(channel: Channel) -> None:
     await asyncio.wait_for(drained(), timeout=10)
 
 
+async def check_lifecycle_unlink_export(page: Page, checkpoint: Callable[[str], None]) -> None:
+    """Preserve the assertion; on failure observe only a fixed page-state category."""
+    checkpoint("lifecycle_unlink_export_assertion")
+    try:
+        await expect(page.get_by_role("button", name="Download", exact=True).first).to_be_disabled()
+    except Exception:
+        # This is a bounded after-failure snapshot, not an extra readiness wait.
+        # Any diagnostic error is ignored and the original assertion is re-raised.
+        # Loading/alert presence is page-wide and does not attribute the source.
+        try:
+            snapshot = await asyncio.wait_for(
+                page.evaluate(
+                    """() => {
+                      const main = document.querySelector('main');
+                      if (!main || !Array.from(main.querySelectorAll('h3')).some(
+                          node => node.textContent.trim() === 'Exports')) return 'not_exports';
+                      const download = Array.from(main.querySelectorAll('button')).find(
+                          node => node.textContent.trim() === 'Download');
+                      if (download) return download.disabled ? 'disabled' : 'enabled';
+                      if (Array.from(main.querySelectorAll('[role=status]')).some(
+                          node => node.textContent.trim() === 'Loading current organization data…'))
+                          return 'loading_present';
+                      if (main.querySelector('[role=alert]')) return 'alert_present';
+                      if (Array.from(main.querySelectorAll('p.empty')).some(
+                          node => node.textContent.trim() === 'No exports in this organization.'))
+                          return 'empty';
+                      return 'missing';
+                    }"""
+                ),
+                timeout=0.25,
+            )
+            allowed = {
+                "loading_present",
+                "alert_present",
+                "empty",
+                "enabled",
+                "disabled",
+                "missing",
+                "not_exports",
+            }
+            category = snapshot if snapshot in allowed else "unavailable"
+        except Exception:
+            category = "unavailable"
+        try:
+            checkpoint("lifecycle_unlink_export_" + category)
+        except Exception:
+            pass
+        raise
+
+
 async def lifecycle_journey(
     page: Page, channel: Channel, setup: dict[str, Any], checkpoint: Callable[[str], None]
 ) -> None:
@@ -1280,6 +1368,7 @@ async def lifecycle_journey(
     await expect(page.get_by_role("dialog")).not_to_be_visible()
     checkpoint("lifecycle_export")
     await activate(page, page.get_by_role("button", name="Export this selection", exact=True))
+    checkpoint("lifecycle_export_preview")
     await expect(
         page.get_by_label("Job UUID (blank selects authorized matching jobs)", exact=True)
     ).to_have_value(cancel_job)
@@ -1289,13 +1378,17 @@ async def lifecycle_journey(
     await expect(page.get_by_role("region", name="Current export preview")).to_contain_text(
         "1 contacts;"
     )
+    checkpoint("lifecycle_export_create")
     await activate(page, page.get_by_role("button", name="Create asynchronous export", exact=True))
     await expect(
         page.get_by_text("Private export queued. Wait for actual worker completion.", exact=True)
     ).to_be_visible()
+    checkpoint("lifecycle_export_wait")
     await channel.request({"kind": "control", "action": "wait_exports"})
     await activate(page, page.get_by_role("button", name="Refresh current view", exact=True))
+    checkpoint("lifecycle_export_ready")
     await expect(page.get_by_role("button", name="Download", exact=True)).to_be_enabled()
+    await channel.request({"kind": "control", "action": "verify_retained"})
 
     checkpoint("lifecycle_retry")
     await open_job(retry_job)
@@ -1329,6 +1422,40 @@ async def lifecycle_journey(
     await expect(page.get_by_text("completed", exact=True).first).to_be_visible()
     await open_job(retry_job)
     await expect(page.get_by_text("completed partial", exact=True).first).to_be_visible()
+
+    # The cancelled job's retained association and already-created export are
+    # deliberately used here to verify unlink without removing source evidence.
+    checkpoint("lifecycle_retained_review")
+    await open_job(cancel_job)
+    await activate(page, page.get_by_role("button", name="Contacts for this job", exact=True))
+    await activate(page, page.get_by_role("button", name="Evidence and review", exact=True).first)
+    await expect(
+        page.get_by_role("heading", name="Actual retained citation", exact=True)
+    ).to_be_visible()
+    await select_index(page, page.get_by_label("Review action", exact=True), 3)
+    await expect(page.get_by_text("Existing source evidence remains", exact=False)).to_be_visible()
+    await type_text(page, page.get_by_label("Reason", exact=True), "Synthetic unlink review")
+    await activate(page, page.get_by_role("button", name="Save review", exact=True))
+    await expect(page.get_by_role("dialog")).not_to_be_visible()
+    await expect(
+        page.get_by_text("No contacts match these server filters.", exact=True)
+    ).to_be_visible()
+    await open_job(cancel_job)
+    await activate(page, page.get_by_role("button", name="Review queue for this job", exact=True))
+    await expect(
+        page.get_by_role("table", name="Current-authorized observed contacts", exact=True).locator(
+            "tbody tr"
+        )
+    ).to_have_count(1)
+    await expect(page.get_by_text("needs review", exact=True).first).to_be_visible()
+    await activate(page, page.get_by_role("button", name="Evidence and review", exact=True).first)
+    await expect(
+        page.get_by_role("heading", name="Actual retained citation", exact=True)
+    ).to_be_visible()
+    await activate(page, page.get_by_role("button", name="Close evidence", exact=True))
+    checkpoint("lifecycle_unlink_export_navigation")
+    await activate(page, page.get_by_role("button", name="Exports", exact=True))
+    await check_lifecycle_unlink_export(page, checkpoint)
 
 
 async def main() -> None:
@@ -1619,6 +1746,8 @@ async def main() -> None:
                 checkpoint("pause_resume")
                 await lifecycle_journey(page, channel, setup, checkpoint)
                 # Leave the live job subscription through the ordinary keyboard UI.
+                checkpoint("lifecycle_cleanup")
+                await activate(page, page.get_by_role("button", name="Jobs", exact=True))
                 await activate(
                     page, page.get_by_role("button", name="Back to recent jobs", exact=True)
                 )
@@ -2535,7 +2664,11 @@ async def main() -> None:
                 0,
             )
             await authored_outcome_paging(
-                page, str(setup["initial_organization"]), outcome_checkpoint
+                page,
+                str(setup["initial_organization"]),
+                outcome_checkpoint,
+                observe_replay,
+                replay_changed,
             )
             await prove_delayed_outcome_replay(
                 page,

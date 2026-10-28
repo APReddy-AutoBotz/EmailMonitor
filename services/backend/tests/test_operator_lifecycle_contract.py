@@ -253,3 +253,317 @@ def test_lifecycle_result_requires_bounded_request_drain(mode: str) -> None:
     assert code.index("await lifecycle_journey") < code.index("Back to recent jobs")
     assert code.index("Recent authorized jobs") < code.index("await settle_lifecycle_requests")
     assert code.index("await settle_lifecycle_requests") < code.index("'kind': 'result'")
+
+
+def test_unlink_export_stage_is_distinct_from_original_lifecycle_export() -> None:
+    import ast
+    from pathlib import Path
+
+    from operator_ui_protocol import DiagnosticFrame
+
+    source = Path(__file__).resolve().parents[3] / "scripts/isolation/operator_ui_acceptance.py"
+    module = ast.parse(source.read_text())
+    journey = next(
+        node
+        for node in module.body
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "lifecycle_journey"
+    )
+    checkpoints = [
+        ast.literal_eval(node.args[0])
+        for node in ast.walk(journey)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "checkpoint"
+        and len(node.args) == 1
+    ]
+    assert checkpoints.count("lifecycle_export") == 1
+    assert checkpoints.count("lifecycle_unlink_export_navigation") == 1
+    assert checkpoints.index("lifecycle_export") < checkpoints.index(
+        "lifecycle_unlink_export_navigation"
+    )
+    stages = [
+        "lifecycle_export",
+        "lifecycle_export_preview",
+        "lifecycle_export_create",
+        "lifecycle_export_wait",
+        "lifecycle_export_ready",
+        "lifecycle_unlink_export_navigation",
+    ]
+    assert all(checkpoints.count(stage) == 1 for stage in stages)
+    assert [checkpoints.index(stage) for stage in stages] == sorted(
+        checkpoints.index(stage) for stage in stages
+    )
+    for stage in ("lifecycle_unlink_export_navigation", "lifecycle_unlink_export_assertion"):
+        frame = DiagnosticFrame(kind="failure", stage=stage, error="TimeoutError")
+        assert frame.stage == stage and frame.error == "TimeoutError"
+
+
+def test_lifecycle_returns_to_jobs_before_leaving_selected_job() -> None:
+    """Execute the authored cleanup from the actual post-unlink Exports screen."""
+    import ast
+    import asyncio
+    from pathlib import Path
+    from typing import Any
+
+    source = Path(__file__).resolve().parents[3] / "scripts/isolation/operator_ui_acceptance.py"
+    module = ast.parse(source.read_text())
+    branch = next(
+        node
+        for node in ast.walk(module)
+        if isinstance(node, ast.If)
+        and ast.unparse(node.test) == "setup.get('journey') == 'controlled_lifecycle'"
+    )
+    start = next(
+        i for i, node in enumerate(branch.body) if "await lifecycle_journey" in ast.unparse(node)
+    )
+    end = next(
+        i
+        for i, node in enumerate(branch.body)
+        if "await settle_lifecycle_requests" in ast.unparse(node)
+    )
+    statements = branch.body[start + 1 : end]
+    function = ast.AsyncFunctionDef(
+        name="cleanup",
+        args=ast.arguments(posonlyargs=[], args=[], kwonlyargs=[], kw_defaults=[], defaults=[]),
+        body=statements,
+        decorator_list=[],
+        type_params=[],
+    )
+    state = {"screen": "Exports", "selected": True}
+
+    class SyntheticPage:
+        def get_by_role(self, role: str, name: str, exact: bool) -> tuple[str, str]:
+            assert exact
+            return role, name
+
+    async def activate(page: SyntheticPage, target: tuple[str, str]) -> None:
+        assert target[0] == "button"
+        if target[1] == "Jobs":
+            state["screen"] = "Jobs"
+        elif target[1] == "Back to recent jobs":
+            assert state["screen"] == "Jobs" and state["selected"]
+            state["selected"] = False
+        else:
+            raise AssertionError("Unexpected synthetic navigation")
+
+    class Visible:
+        async def to_be_visible(self) -> None:
+            assert state == {"screen": "Jobs", "selected": False}
+
+    def expect(target: tuple[str, str]) -> Visible:
+        assert target == ("table", "Recent authorized jobs")
+        return Visible()
+
+    stages: list[str] = []
+    namespace: dict[str, Any] = {
+        "page": SyntheticPage(),
+        "activate": activate,
+        "expect": expect,
+        "checkpoint": stages.append,
+    }
+    exec(
+        compile(
+            ast.fix_missing_locations(ast.Module(body=[function], type_ignores=[])),
+            "<synthetic-cleanup>",
+            "exec",
+        ),
+        namespace,
+    )
+    asyncio.run(namespace["cleanup"]())
+    assert stages == ["lifecycle_cleanup"]
+
+
+@pytest.mark.parametrize(
+    "snapshot",
+    [
+        "loading_present",
+        "alert_present",
+        "empty",
+        "enabled",
+        "disabled",
+        "missing",
+        "not_exports",
+        "unavailable",
+    ],
+)
+def test_unlink_export_failure_preserves_original_and_emits_only_fixed_state(
+    monkeypatch: pytest.MonkeyPatch, snapshot: str
+) -> None:
+    import asyncio
+    from unittest.mock import AsyncMock, Mock
+
+    import operator_ui_acceptance as guest
+
+    failure = AssertionError("synthetic private assertion must not be emitted")
+    page = Mock()
+    page.evaluate = AsyncMock(return_value=snapshot)
+    assertion = Mock()
+    assertion.to_be_disabled = AsyncMock(side_effect=failure)
+    monkeypatch.setattr(guest, "expect", Mock(return_value=assertion))
+    stages: list[str] = []
+    with pytest.raises(AssertionError) as caught:
+        asyncio.run(guest.check_lifecycle_unlink_export(page, stages.append))
+    assert caught.value is failure
+    assert stages == ["lifecycle_unlink_export_assertion", "lifecycle_unlink_export_" + snapshot]
+    assert failure.args == ("synthetic private assertion must not be emitted",)
+    from guest_outcome import Trace
+    from operator_ui_protocol import DiagnosticFrame
+
+    trace = Trace()
+    trace.phase = stages[-1]
+    assert "phase_" + stages[-1] in trace.label()
+    DiagnosticFrame(kind="failure", stage=stages[-1], error="AssertionError")
+
+
+def test_unlink_export_snapshot_refuses_arbitrary_state_without_masking_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import asyncio
+    from unittest.mock import AsyncMock, Mock
+
+    import operator_ui_acceptance as guest
+
+    failure = AssertionError("synthetic")
+    page = Mock()
+    page.evaluate = AsyncMock(return_value="untrusted arbitrary value")
+    assertion = Mock()
+    assertion.to_be_disabled = AsyncMock(side_effect=failure)
+    monkeypatch.setattr(guest, "expect", Mock(return_value=assertion))
+    stages: list[str] = []
+    with pytest.raises(AssertionError) as caught:
+        asyncio.run(guest.check_lifecycle_unlink_export(page, stages.append))
+    assert caught.value is failure
+    assert stages[-1] == "lifecycle_unlink_export_unavailable"
+
+
+def test_unlink_export_success_preserves_assertion_without_snapshot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import asyncio
+    from unittest.mock import AsyncMock, Mock
+
+    import operator_ui_acceptance as guest
+
+    page = Mock()
+    page.evaluate = AsyncMock()
+    assertion = Mock()
+    assertion.to_be_disabled = AsyncMock()
+    monkeypatch.setattr(guest, "expect", Mock(return_value=assertion))
+    stages: list[str] = []
+    asyncio.run(guest.check_lifecycle_unlink_export(page, stages.append))
+    assertion.to_be_disabled.assert_awaited_once_with()
+    page.evaluate.assert_not_awaited()
+    assert stages == ["lifecycle_unlink_export_assertion"]
+
+
+@pytest.mark.parametrize("snapshot_failure", ["evaluate", "checkpoint"])
+def test_unlink_export_snapshot_failure_does_not_replace_assertion(
+    monkeypatch: pytest.MonkeyPatch, snapshot_failure: str
+) -> None:
+    import asyncio
+    from unittest.mock import AsyncMock, Mock
+
+    import operator_ui_acceptance as guest
+
+    failure = AssertionError("synthetic assertion")
+    page = Mock()
+    page.evaluate = AsyncMock(
+        side_effect=RuntimeError("synthetic diagnostic failure")
+        if snapshot_failure == "evaluate"
+        else None,
+        return_value="empty",
+    )
+    assertion = Mock()
+    assertion.to_be_disabled = AsyncMock(side_effect=failure)
+    monkeypatch.setattr(guest, "expect", Mock(return_value=assertion))
+
+    def checkpoint(stage: str) -> None:
+        if stage != "lifecycle_unlink_export_assertion":
+            raise RuntimeError("synthetic reporting failure")
+
+    with pytest.raises(AssertionError) as caught:
+        asyncio.run(guest.check_lifecycle_unlink_export(page, checkpoint))
+    assert caught.value is failure
+
+
+def test_lifecycle_export_proof_precedes_unlink_and_old_download_is_fenced(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from types import SimpleNamespace
+    from typing import cast
+    from uuid import UUID
+
+    import test_operator_lifecycle_acceptance as harness
+    from emailmonitor.organizations.database import AuthorizationDenied
+    from emailmonitor.results.service import Results
+
+    export, job, other_job, org = (UUID(int=n) for n in (1, 2, 3, 4))
+    state = {"valid": True, "downloads": 0}
+
+    class SyntheticResults:
+        def exports(self, selected_org: UUID) -> list[object]:
+            assert selected_org == org
+            return [SimpleNamespace(id=export, state="ready")]
+
+        def download(self, selected_org: UUID, selected_export: UUID) -> object:
+            assert selected_org == org and selected_export == export
+            state["downloads"] += 1
+            if not state["valid"]:
+                raise AuthorizationDenied()
+            return SimpleNamespace(body=b"synthetic artifact")
+
+    monkeypatch.setattr(harness, "rows", lambda *_: [["header"], [str(job)]])
+    results = SyntheticResults()
+    assert harness.verify_lifecycle_export(cast(Results, results), org, job, other_job) == export
+    state["valid"] = False
+    with pytest.raises(AuthorizationDenied):
+        results.download(org, export)
+    assert state["downloads"] == 2
+
+
+def test_authored_lifecycle_schedules_retained_export_proof_before_unlink() -> None:
+    import ast
+    from pathlib import Path
+
+    source = Path(__file__).resolve().parents[3] / "scripts/isolation/operator_ui_acceptance.py"
+    module = ast.parse(source.read_text())
+    journey = next(
+        node
+        for node in module.body
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "lifecycle_journey"
+    )
+    statements = [ast.unparse(node) for node in journey.body]
+    proof = next(
+        i for i, statement in enumerate(statements) if "'action': 'verify_retained'" in statement
+    )
+    unlink = next(i for i, statement in enumerate(statements) if "'Review action'" in statement)
+    assert proof < unlink
+
+
+def test_authored_outcome_next_uses_existing_single_keyboard_trace() -> None:
+    import ast
+    from pathlib import Path
+
+    source = Path(__file__).resolve().parents[3] / "scripts/isolation/operator_ui_acceptance.py"
+    module = ast.parse(source.read_text())
+    journey = next(
+        node
+        for node in module.body
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "authored_outcome_paging"
+    )
+    calls = [
+        node
+        for node in ast.walk(journey)
+        if isinstance(node, ast.Await)
+        and isinstance(node.value, ast.Call)
+        and isinstance(node.value.func, ast.Name)
+        and node.value.func.id == "traced_activate"
+        and "Next article outcome page" in ast.unparse(node)
+    ]
+    assert len(calls) == 2  # This page loop plus the existing late-organization probe.
+    loop = next(
+        node
+        for node in ast.walk(journey)
+        if isinstance(node, ast.For) and ast.unparse(node.iter) == "range(6)"
+    )
+    assert sum(node in ast.walk(loop) for node in calls) == 1

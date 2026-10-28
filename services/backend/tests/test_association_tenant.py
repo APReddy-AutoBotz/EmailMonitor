@@ -590,3 +590,105 @@ def test_real_atomic_derivation_and_review_rollback(
             ).scalar_one()
             == 0
         )
+
+
+@pytest.mark.parametrize(
+    "role,permitted",
+    [
+        ("owner", True),
+        ("admin", True),
+        ("data_steward", True),
+        ("reviewer", True),
+        ("operator", False),
+        ("viewer", False),
+    ],
+)
+def test_real_unlink_preserves_existing_review_role_matrix(
+    scenario: Scenario, role: str, permitted: bool
+) -> None:
+    service, _, batch = prepared(scenario)
+    org = scenario.organizations[0]
+    request = review_request(service, org, batch, action="unlink").model_dump(mode="json")
+    request["batch_id"] = str(batch)
+    with client(scenario) as c:
+        csrf = scenario.login(c, role)
+        root = f"/api/v1/organizations/{org}"
+        assert c.post(root + "/reviews", json=request).status_code == 403
+        response = c.post(
+            root + "/reviews", headers={"Origin": ORIGIN, "X-CSRF-Token": csrf}, json=request
+        )
+        assert response.status_code == (200 if permitted else 404), response.text
+    current = service.detail(org, batch).associations[0]
+    assert current.revision == (2 if permitted else 1)
+    if permitted:
+        assert current.state == "needs_review" and current.author_id is None
+
+
+@pytest.mark.parametrize("mutation", ["author", "evidence", "stale"])
+def test_real_unlink_database_entrypoint_refuses_invalid_input(
+    scenario: Scenario, mutation: str
+) -> None:
+    from sqlalchemy.exc import DBAPIError
+
+    service, _, batch = prepared(scenario)
+    org = scenario.organizations[0]
+    before = service.detail(org, batch)
+    item = before.associations[0]
+    arguments = {
+        "org": org,
+        "batch": batch,
+        "association": item.id,
+        "revision": item.revision - 1 if mutation == "stale" else item.revision,
+        "author": item.author_id if mutation == "author" else None,
+        "evidence": [uuid4()] if mutation == "evidence" else list(item.evidence_ids),
+        "review": uuid4(),
+        "event": uuid4(),
+    }
+    with pytest.raises(DBAPIError) as failure:
+        with service.database.tenant(service.token, org, Capability.REVIEW_ASSOCIATIONS) as (c, _):
+            c.execute(
+                text("""
+SELECT emailmonitor.review_association(:org,:batch,:association,:revision,'unlink',:author,
+ CAST(:evidence AS uuid[]),'Synthetic negative test',:review,:event)
+"""),
+                arguments,
+            )
+    assert failure.value.orig is not None
+    detail = failure.value.orig.args[0]
+    assert isinstance(detail, dict)
+    assert (detail.get("C"), detail.get("M")) == (
+        ("EM409", "ASSOCIATION_REVISION")
+        if mutation == "stale"
+        else ("P0001", "ASSOCIATION_REVIEW_INPUT")
+    )
+    assert service.detail(org, batch) == before
+    assert not service.history(org, batch)
+
+
+def test_real_concurrent_unlinks_have_one_revision_and_audit_receipt(scenario: Scenario) -> None:
+    service, _, batch = prepared(scenario)
+    org = scenario.organizations[0]
+    request = review_request(service, org, batch, action="unlink")
+    other = Database(service.database.engine.url.render_as_string(hide_password=False))
+    barrier = Barrier(2)
+
+    def invoke(database: Database) -> str:
+        barrier.wait(timeout=10)
+        try:
+            Associations(database, service.token, SETTINGS).review(org, batch, request)
+            return "committed"
+        except RevisionConflict:
+            return "conflict"
+
+    try:
+        assert isinstance(service.database, Database)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            futures = [pool.submit(invoke, database) for database in (service.database, other)]
+            assert sorted(f.result(timeout=20) for f in futures) == ["committed", "conflict"]
+        current = service.detail(org, batch).associations[0]
+        assert (
+            current.revision == 2 and current.state == "needs_review" and current.author_id is None
+        )
+        assert len(service.history(org, batch)) == 1
+    finally:
+        other.engine.dispose()

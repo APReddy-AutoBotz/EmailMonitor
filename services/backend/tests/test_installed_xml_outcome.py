@@ -104,13 +104,130 @@ def test_first_failed_case_survives_later_reports(
     with pytest.raises(AssertionError, match="private payload"):
         failed()
     progress.pytest_runtest_logreport(SimpleNamespace(outcome="failed", when=when))
-    expected = f"xml_failure=case_1-{when}-host_conversation-phase_evidence_review\n"
+    expected = (
+        f"xml_failure=case_1-{when}-host_conversation-phase_evidence_review-export_unavailable\n"
+    )
     assert output.read_text() == expected
     progress.pytest_runtest_logstart("later private", None)
     assert guest.case_categories() == ("unavailable", "unavailable")
     progress.pytest_runtest_logreport(SimpleNamespace(outcome="passed", when="call"))
     progress.pytest_runtest_logreport(SimpleNamespace(outcome="failed", when="teardown"))
     assert output.read_text() == expected
+
+
+def test_owned_csv_snapshot_is_value_free_and_retains_first_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import guest_outcome as guest
+    from operator_ui_protocol import DiagnosticFrame, InstalledExportStep
+
+    output = tmp_path / "output"
+    monkeypatch.setenv("EM_XML_CASE_OUTCOME_REPORT", "true")
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
+    progress = XmlProgress()
+    progress.pytest_runtest_logstart("private", None)
+
+    @guest.observed_guest
+    def failed() -> None:
+        guest.guest_stage("conversation")
+        guest.guest_frame(
+            DiagnosticFrame(
+                kind="failure",
+                stage="export_preview",
+                error="TimeoutError",
+                installed_export_step=InstalledExportStep(phase="ready_wait", format="csv"),
+            )
+        )
+        raise TimeoutError("private detail")
+
+    with pytest.raises(TimeoutError):
+        failed()
+    guest.record_export_snapshot(
+        {
+            "publisher_started": True,
+            "publisher_alive": False,
+            "publisher_stop_requested": True,
+            "publisher_failed": True,
+            "publisher_completed_pass": True,
+            "exports": [
+                {
+                    "format": "csv",
+                    "state": "queued",
+                    "attempts": 0,
+                    "lease_present": False,
+                    "lease_active": False,
+                    "pending": True,
+                    "confirmed": False,
+                    "delivered": False,
+                }
+            ],
+        }
+    )
+    progress.pytest_runtest_logreport(SimpleNamespace(outcome="failed", when="call"))
+    expected = (
+        "xml_failure=case_1-call-host_conversation-phase_export_preview-"
+        "export_ready_wait.csv-snapshot_p10111.csv_queued.0.00100\n"
+    )
+    assert output.read_text() == expected
+    progress.pytest_runtest_logstart("next private", None)
+    progress.pytest_runtest_logreport(SimpleNamespace(outcome="failed", when="call"))
+    assert output.read_text() == expected
+
+
+@pytest.mark.parametrize("invalid", ["extra", "state", "boolean", "attempts", "duplicate"])
+def test_owned_export_snapshot_rejects_untrusted_values(invalid: str) -> None:
+    import guest_outcome as guest
+
+    row: dict[str, object] = {
+        "format": "csv",
+        "state": "queued",
+        "attempts": 0,
+        "lease_present": False,
+        "lease_active": False,
+        "pending": True,
+        "confirmed": False,
+        "delivered": False,
+    }
+    fields: dict[str, object] = {
+        "publisher_started": True,
+        "publisher_alive": True,
+        "publisher_stop_requested": False,
+        "publisher_failed": False,
+        "publisher_completed_pass": True,
+        "exports": [row],
+    }
+    if invalid == "extra":
+        row["secret"] = "must not escape"
+    if invalid == "state":
+        row["state"] = "secret"
+    if invalid == "boolean":
+        row["pending"] = "true"
+    if invalid == "attempts":
+        row["attempts"] = True
+    if invalid == "duplicate":
+        fields["exports"] = [row, row]
+    guest.reset_case_trace()
+    guest.record_export_snapshot(fields)
+    assert guest.case_export_snapshot() == "unavailable"
+
+
+def test_snapshot_revalidates_mutation_and_reports_sql_unavailability() -> None:
+    import guest_outcome as guest
+
+    fields = {
+        "publisher_started": True,
+        "publisher_alive": True,
+        "publisher_stop_requested": False,
+        "publisher_failed": False,
+        "publisher_completed_pass": True,
+        "exports": "unavailable",
+    }
+    guest.reset_case_trace()
+    guest.record_export_snapshot(fields)
+    assert guest.case_export_snapshot() == "p11001.sql_unavailable"
+    assert guest._case_export_snapshot is not None
+    guest._case_export_snapshot.exports = "private"  # type: ignore[assignment]
+    assert guest.case_export_snapshot() == "unavailable"
 
 
 @pytest.mark.parametrize("invalid", ["phase", "host", "when", "output"])
@@ -167,5 +284,73 @@ def test_actual_pytest_failure_and_later_success_keep_first_phase(tmp_path: Path
     )
     assert result.returncode == 1
     assert output.read_text() == (
-        "xml_failure=case_1-call-host_conversation-phase_evidence_review\n"
+        "xml_failure=case_1-call-host_conversation-phase_evidence_review-export_unavailable\n"
     )
+
+
+@pytest.mark.parametrize("phase", ["preview_wait", "ready_wait", "download_wait"])
+@pytest.mark.parametrize("format_name", [None, "csv", "xlsx"])
+def test_existing_export_subphase_is_fixed_and_first_failure_retained(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, phase: str, format_name: str | None
+) -> None:
+    import guest_outcome as guest
+    from operator_ui_protocol import DiagnosticFrame, InstalledExportStep
+
+    output = tmp_path / "output"
+    monkeypatch.setenv("EM_XML_CASE_OUTCOME_REPORT", "true")
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
+    progress = XmlProgress()
+    progress.pytest_runtest_logstart("owned", None)
+    original = RuntimeError("synthetic failure")
+
+    @guest.observed_guest
+    def failed() -> None:
+        guest.guest_stage("conversation")
+        guest.guest_frame(
+            DiagnosticFrame(
+                kind="failure",
+                stage="export_preview",
+                error="RuntimeError",
+                reason="unknown",
+                installed_export_step=InstalledExportStep.model_validate(
+                    {"phase": phase, "format": format_name}
+                ),
+            )
+        )
+        raise original
+
+    with pytest.raises(RuntimeError) as caught:
+        failed()
+    assert caught.value is original
+    progress.pytest_runtest_logreport(SimpleNamespace(outcome="failed", when="call"))
+    expected = (
+        "xml_failure=case_1-call-host_conversation-phase_export_preview-"
+        f"export_{phase}.{format_name or 'none'}"
+        + ("-snapshot_unavailable" if phase == "ready_wait" and format_name == "csv" else "")
+        + "\n"
+    )
+    assert output.read_text() == expected
+    progress.pytest_runtest_logstart("later", None)
+    progress.pytest_runtest_logreport(SimpleNamespace(outcome="failed", when="call"))
+    assert output.read_text() == expected
+
+
+@pytest.mark.parametrize("field", ["phase", "format"])
+def test_mutated_export_step_cannot_emit_arbitrary_values(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, field: str
+) -> None:
+    import guest_outcome as guest
+    from operator_ui_protocol import InstalledExportStep
+
+    output = tmp_path / "output"
+    monkeypatch.setenv("EM_XML_CASE_OUTCOME_REPORT", "true")
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
+    progress = XmlProgress()
+    progress.pytest_runtest_logstart("owned", None)
+    trace = guest.Trace()
+    trace.phase = "export_preview"
+    trace.export = InstalledExportStep.model_construct(phase="preview_wait", format="csv")
+    setattr(trace.export, field, "unlisted\nxml_failure=complete")
+    monkeypatch.setattr(guest, "_case_trace", trace)
+    progress.pytest_runtest_logreport(SimpleNamespace(outcome="failed", when="call"))
+    assert progress.first_failure and not output.exists()

@@ -20,7 +20,8 @@
       "enum": [
         "accept",
         "reject",
-        "correct"
+        "correct",
+        "unlink"
       ],
       "title": "Action",
       "type": "string"

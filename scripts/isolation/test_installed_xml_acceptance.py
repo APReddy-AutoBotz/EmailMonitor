@@ -141,6 +141,13 @@ def export_failure_note(
             fields["exports"] = owned_export_states(admin_url, organization, owner)
         except BaseException:
             fields["exports"] = "unavailable"
+        if os.environ.get("EM_XML_CASE_OUTCOME_REPORT") == "true":
+            try:
+                from guest_outcome import record_export_snapshot
+
+                record_export_snapshot(fields)
+            except Exception:
+                pass
         return "Installed XML export diagnostic " + json.dumps(fields, sort_keys=True)
     except BaseException:
         return "Installed XML export diagnostic unavailable"

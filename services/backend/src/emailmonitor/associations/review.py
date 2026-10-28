@@ -27,16 +27,28 @@ def apply_review(settings: Settings, bundle: Bundle, request: Review) -> Bundle:
         raise ValueError("Correction requires an observed author instance")
     if request.action == "reject" and request.author_id is not None:
         raise ValueError("Rejection cannot silently change identity")
+    if request.action == "unlink" and (
+        request.author_id is not None
+        or current.author_id is None
+        or request.evidence_ids != current.evidence_ids
+    ):
+        raise ValueError("Unlink requires a linked author and unchanged retained evidence")
     candidate = next(c for c in bundle.candidates if c.id == current.candidate_id)
     if not set(candidate.evidence_ids) & set(request.evidence_ids):
         raise ValueError("Review requires cited observed address evidence")
     update: dict[str, object] = {
-        "state": "rejected" if request.action == "reject" else "accepted",
-        "reason": "reviewed_evidence",
+        "state": "needs_review"
+        if request.action == "unlink"
+        else "rejected"
+        if request.action == "reject"
+        else "accepted",
+        "reason": "reviewed_unlinked" if request.action == "unlink" else "reviewed_evidence",
         "revision": current.revision + 1,
         "evidence_ids": request.evidence_ids,
     }
-    if request.action != "reject":
+    if request.action == "unlink":
+        update.update(author_id=None, evidence_strength="ambiguous")
+    elif request.action != "reject":
         observed = next((a for a in bundle.authors if a.id == author), None)
         if (
             observed is None

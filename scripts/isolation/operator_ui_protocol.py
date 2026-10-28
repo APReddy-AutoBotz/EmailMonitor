@@ -174,26 +174,29 @@ class OutcomeReplayReadiness:
                         ):
                             raise ValueError
                     elif token.kind == "outcomes":
-                        items = data.get("items")
-                        if (
-                            not isinstance(items, list)
-                            or len(items) != 1
-                            or data.get("next_cursor") is not None
-                            or not token.loading
-                        ):
-                            raise ValueError
-                        item = items[0]
-                        if (
-                            item.get("organization_id") != self.organization
-                            or item.get("job_id") != self.job
-                            or item.get("state") != "no_contact"
-                            or item.get("batch_id") is None
-                        ):
-                            raise ValueError
-                        token.item = str(UUID(item["item_id"]))
+                        token.item = self.outcome_item(data, token)
             token.offered = True
         except (ValueError, TypeError, KeyError, AttributeError):
             self.failed = True
+
+    def outcome_item(self, data: dict[str, object], token: ReplayRequest) -> str:
+        items = data.get("items")
+        if (
+            not isinstance(items, list)
+            or len(items) != 1
+            or data.get("next_cursor") is not None
+            or not token.loading
+        ):
+            raise ValueError
+        item = items[0]
+        if (
+            item.get("organization_id") != self.organization
+            or item.get("job_id") != self.job
+            or item.get("state") != "no_contact"
+            or item.get("batch_id") is None
+        ):
+            raise ValueError
+        return str(UUID(item["item_id"]))
 
     def finish(self, token: ReplayRequest | None, delivered: bool) -> None:
         if token is None or not self.current(token):
@@ -213,6 +216,43 @@ class OutcomeReplayReadiness:
         if any(token is None or not token.eligible for token in (self.progress, self.outcomes)):
             return None
         return self.outcomes if self.outcomes is not None and self.outcomes.item else None
+
+
+class AuthoredOutcomeReplayReadiness(OutcomeReplayReadiness):
+    """Only the existing authored 127-row journey's first 25-row response."""
+
+    def outcome_item(self, data: dict[str, object], token: ReplayRequest) -> str:
+        items = data.get("items")
+        if (
+            not token.loading
+            or not isinstance(items, list)
+            or len(items) != 25
+            or data.get("next_cursor") != "25"
+        ):
+            raise ValueError
+        states = (
+            "no_contact",
+            "policy_blocked",
+            "access_blocked",
+            "unsupported",
+            "failed",
+            "succeeded",
+        )
+        for index, item in enumerate(items):
+            if not isinstance(item, dict) or any(
+                (
+                    item.get("organization_id") != self.organization,
+                    item.get("job_id") != self.job,
+                    item.get("item_id") != f"00000000-0000-4000-8000-{index + 1:012d}",
+                    item.get("source_url")
+                    != f"https://synthetic.publisher.example/authored-outcome-{index:03d}.html",
+                    item.get("state") != states[index % len(states)],
+                    item.get("batch_id")
+                    != ("00000000-0000-4000-8000-000000000127" if index == 0 else None),
+                )
+            ):
+                raise ValueError
+        return "00000000-0000-4000-8000-000000000001"
 
 
 class RequestFrame(BaseModel):
@@ -323,6 +363,21 @@ STAGES = (
     "lifecycle_cancel_retry",
     "lifecycle_retained_review",
     "lifecycle_export",
+    "lifecycle_export_preview",
+    "lifecycle_export_create",
+    "lifecycle_export_wait",
+    "lifecycle_export_ready",
+    "lifecycle_unlink_export_navigation",
+    "lifecycle_unlink_export_assertion",
+    "lifecycle_unlink_export_loading_present",
+    "lifecycle_unlink_export_alert_present",
+    "lifecycle_unlink_export_empty",
+    "lifecycle_unlink_export_enabled",
+    "lifecycle_unlink_export_disabled",
+    "lifecycle_unlink_export_missing",
+    "lifecycle_unlink_export_not_exports",
+    "lifecycle_unlink_export_unavailable",
+    "lifecycle_cleanup",
     "lifecycle_retry",
     "lifecycle_switch",
     "browser_launch",
