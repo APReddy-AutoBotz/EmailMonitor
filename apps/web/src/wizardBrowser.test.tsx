@@ -43,11 +43,15 @@ function setup(canAcquire = true, option = 'allow_browser') {
   const toggle = (checked: boolean) => { checkbox().props.onChange!({ target: { checked } }); render() }
   const submit = () => { render().props.onSubmit({ preventDefault: vi.fn() }); return pending }
   const hasPlan = () => elements(render()).some(element => element.props['aria-label'] === 'Server source plan')
+  const launchDisabled = () => elements(render()).find(element => element.type === 'button' && element.props.children === 'Launch extraction')!.props.disabled
   const launch = () => { elements(render()).find(element => element.type === 'button' && element.props.children === 'Launch extraction')!.props.onClick!(); return pending }
   const chooseSource = (value: string) => {
     elements(render()).find(element => element.type === 'select')!.props.onChange!({ target: { checked: false, value } }); render()
   }
-  return { checkbox, toggle, submit, hasPlan, launch, write, context, chooseSource }
+  const changeDate = (label: string, value: string) => {
+    elements(render()).find(element => element.props['aria-label'] === label && element.props.onChange)!.props.onChange!({ target: { checked: false, value } }); render()
+  }
+  return { checkbox, toggle, submit, hasPlan, launch, launchDisabled, write, context, chooseSource, changeDate }
 }
 beforeEach(() => { hooks.values = []; hooks.index = 0; vi.restoreAllMocks() })
 
@@ -147,4 +151,44 @@ it('does not navigate from a completed launch response after source or session i
   form.chooseSource(''); form.context.scope.close()
   release(); await pending
   expect(form.context.openJob).not.toHaveBeenCalled()
+})
+
+
+describe('publication date request ownership', () => {
+  it('preserves the explicit date type, clears old plans and changes request identity', async () => {
+    const form = setup()
+    await form.submit(); expect(form.hasPlan()).toBe(true)
+    const firstKey = form.write.mock.calls[0][3]
+    form.changeDate('Publication date from', '2026-01-15')
+    expect(form.hasPlan()).toBe(false)
+    await expect(form.submit()).rejects.toThrow('Choose a publication date type')
+    form.changeDate('Publication date type', 'online')
+    await form.submit()
+    const creates = form.write.mock.calls.filter(([path]) => path === '/jobs')
+    expect(creates[1][1]).toMatchObject({ filters: { publication_date_type: 'online', publication_from: '2026-01-15' } })
+    expect(creates[1][3]).not.toBe(firstKey)
+    form.changeDate('Publication date type', 'issue')
+    expect(form.hasPlan()).toBe(false)
+  })
+  it('keeps launch disabled when the server refuses the selected filter', async () => {
+    const form = setup()
+    form.changeDate('Publication date from', '2026-01-15')
+    form.changeDate('Publication date type', 'published')
+    form.write.mockImplementation(async path => path === '/jobs' ? { id: '00000000-0000-0000-0000-000000000002' } : { plan: { classification: 'unsupported', reason: 'fixture_filters_unavailable' } })
+    await form.submit()
+    expect(form.hasPlan()).toBe(true)
+    expect(form.launchDisabled()).toBe(true)
+    expect(form.write.mock.calls.some(([path]) => path.endsWith('/start'))).toBe(false)
+  })
+  it('cannot restore a late plan after a date selection changes', async () => {
+    const form = setup()
+    let release!: (value: { classification: string }) => void
+    form.write.mockImplementation(async path => path === '/jobs' ? { id: '00000000-0000-0000-0000-000000000002' } : new Promise(resolve => { release = resolve }))
+    const pending = form.submit()
+    await vi.waitFor(() => expect(release).toBeTypeOf('function'))
+    form.changeDate('Publication date from', '2026-01-15')
+    release({ classification: 'article' }); await pending
+    expect(form.hasPlan()).toBe(false)
+    expect(form.context.openJob).not.toHaveBeenCalled()
+  })
 })

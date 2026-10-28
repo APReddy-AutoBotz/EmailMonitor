@@ -107,6 +107,33 @@ def test_filters_are_not_silently_ignored() -> None:
     assert plan_input(JobRequest.model_validate(body)).reason == "fixture_filters_unavailable"
 
 
+@pytest.mark.parametrize("date_type", ["published", "online", "issue"])
+@pytest.mark.parametrize(
+    "input_value",
+    [
+        {
+            "type": "keyword",
+            "source_id": "synthetic-publisher",
+            "original_query": "Myocardial Infarction",
+        },
+        {"type": "url", "url": ORIGIN + "/article-a.html"},
+    ],
+)
+def test_explicit_date_filter_refuses_unsupported_fixture(
+    date_type: str, input_value: dict[str, str]
+) -> None:
+    body = request_body()
+    body["input"] = input_value
+    body["filters"] = {
+        "publication_date_type": date_type,
+        "publication_from": "2026-01-15",
+        "publication_to": "2026-01-15",
+    }
+    plan = plan_input(JobRequest.model_validate(body))
+    assert plan.classification == "unsupported"
+    assert plan.reason == "fixture_filters_unavailable" and plan.start_url is None
+
+
 @pytest.mark.parametrize("pages,articles,reason", [(1, 500, "page_cap"), (2, 1, "article_cap")])
 def test_caps_truthfully_stop_partial(pages: int, articles: int, reason: str) -> None:
     state = advance(initial(), page(1), pages, articles)

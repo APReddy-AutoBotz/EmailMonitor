@@ -1,5 +1,6 @@
 """Real PostgreSQL discovery fences and fixture API; never acquires live bytes."""
 
+from typing import cast
 from uuid import UUID, uuid4
 
 import pytest
@@ -36,6 +37,39 @@ def begin(s: Scenario, *, articles: int = 500, pages: int = 100) -> tuple[Discov
     discovery = Discovery(ledger.database, ledger.token, SETTINGS)
     discovery.plan(s.organizations[0], job, 1)
     return discovery, job
+
+
+@pytest.mark.parametrize("date_type", ["published", "online", "issue"])
+def test_real_date_request_is_retained_but_plan_has_no_discovery(
+    scenario: Scenario, date_type: str
+) -> None:
+    ledger = approved(scenario)
+    org = scenario.organizations[0]
+    body = request_body()
+    body["input"] = {
+        "type": "keyword",
+        "source_id": "synthetic-publisher",
+        "original_query": "Myocardial Infarction",
+    }
+    body["filters"] = {"publication_date_type": date_type, "publication_from": "2026-01-15"}
+    request = JobRequest.model_validate(body)
+    key = str(uuid4())
+    job = ledger.create(org, request, key)
+    assert ledger.create(org, request, key) == job
+    discovery = Discovery(ledger.database, ledger.token, SETTINGS)
+    result = discovery.plan(org, job, 1)
+    assert result["persisted"] is False
+    plan = cast(dict[str, object], result["plan"])
+    assert plan["classification"] == "unsupported"
+    assert plan["reason"] == "fixture_filters_unavailable"
+    saved = snapshot(ledger, org, job)
+    assert saved["state"] == "draft"
+    saved_request = cast(dict[str, object], saved["request"])
+    filters = cast(dict[str, object], saved_request["filters"])
+    assert filters["publication_date_type"] == date_type
+    assert filters["publication_from"] == "2026-01-15"
+    with pytest.raises(HTTPException):
+        discovery.prepare(org, job)
 
 
 def test_real_checkpoint_restart_replay_and_no_contact_or_usage(scenario: Scenario) -> None:

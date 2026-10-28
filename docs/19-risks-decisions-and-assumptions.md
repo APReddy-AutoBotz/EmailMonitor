@@ -111,3 +111,7 @@ and current privacy/retention remain mandatory; see [document 69](69-retained-ar
 ### Receipt concurrency proof limit
 
 Controlled SQL reproduction established publisher receipt/worker authority self-contention. Candidate 0017 uses a shared job lock for receipts only. Existing extraction jobs leave `jobs.source_id` null, so the unchanged permission fence does not acquire source/policy locks via that field; both original and candidate reproduce this limitation. No source-authority repair is included. Full disabling/revocation/deletion linearization remains a proof gate before publication.
+
+### Delegated date, reuse and unlink defaults
+
+The selected conservative product semantics and current implementation limits are recorded in `docs/82-evidence-date-reuse-decisions.md`. In particular, the existing generic HTML `time` parser label does not itself prove an explicit source publication-date declaration, and the current search fixture cannot apply date filtering. Do not infer complete filter support from an accepted request shape.
