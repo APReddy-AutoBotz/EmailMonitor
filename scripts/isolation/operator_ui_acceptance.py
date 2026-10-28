@@ -813,7 +813,7 @@ async def authored_outcome_paging(
                 )
             )
             if number < 5:
-                await activate(
+                await traced_activate(
                     page,
                     region.get_by_role("button", name="Next article outcome page", exact=True),
                 )

@@ -347,3 +347,32 @@ def test_authored_lifecycle_schedules_retained_export_proof_before_unlink() -> N
     )
     unlink = next(i for i, statement in enumerate(statements) if "'Review action'" in statement)
     assert proof < unlink
+
+
+def test_authored_outcome_next_uses_existing_single_keyboard_trace() -> None:
+    import ast
+    from pathlib import Path
+
+    source = Path(__file__).resolve().parents[3] / "scripts/isolation/operator_ui_acceptance.py"
+    module = ast.parse(source.read_text())
+    journey = next(
+        node
+        for node in module.body
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "authored_outcome_paging"
+    )
+    calls = [
+        node
+        for node in ast.walk(journey)
+        if isinstance(node, ast.Await)
+        and isinstance(node.value, ast.Call)
+        and isinstance(node.value.func, ast.Name)
+        and node.value.func.id == "traced_activate"
+        and "Next article outcome page" in ast.unparse(node)
+    ]
+    assert len(calls) == 2  # This page loop plus the existing late-organization probe.
+    loop = next(
+        node
+        for node in ast.walk(journey)
+        if isinstance(node, ast.For) and ast.unparse(node.iter) == "range(6)"
+    )
+    assert sum(node in ast.walk(loop) for node in calls) == 1
