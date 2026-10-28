@@ -232,6 +232,8 @@ ON CONFLICT DO NOTHING
             hashlib.sha256(key.encode()).hexdigest(),
         )
         with self.database.tenant(self.token, organization, Capability.ACQUIRE_SOURCE) as (c, ctx):
+            if request.reuse is not None:
+                raise HTTPException(409, "Retained observation reuse is not yet available")
             # Serialize the same actor/key without retaining the raw key.
             lock = int(
                 hashlib.sha256(

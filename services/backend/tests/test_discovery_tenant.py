@@ -5,6 +5,15 @@ from uuid import UUID, uuid4
 
 import pytest
 from api_client import APIClient
+from fastapi import HTTPException
+from sqlalchemy import text
+from test_discovery import page
+from test_durable_jobs import SETTINGS, approved, snapshot
+from test_job_contracts import request_body
+from test_source_foundation import policy_body, source_path
+from test_tenant_foundation import ORIGIN, Scenario
+from test_tenant_foundation import scenario as scenario
+
 from emailmonitor.api import create_app
 from emailmonitor.discovery.fixture import step_fixture
 from emailmonitor.discovery.service import Discovery
@@ -14,14 +23,6 @@ from emailmonitor.jobs.ledger import Ledger
 from emailmonitor.jobs.models import JobRequest
 from emailmonitor.organizations.database import AuthorizationDenied
 from emailmonitor.organizations.roles import Capability
-from fastapi import HTTPException
-from sqlalchemy import text
-from test_discovery import page
-from test_durable_jobs import SETTINGS, approved, snapshot
-from test_job_contracts import request_body
-from test_source_foundation import policy_body, source_path
-from test_tenant_foundation import ORIGIN, Scenario
-from test_tenant_foundation import scenario as scenario
 
 
 def begin(s: Scenario, *, articles: int = 500, pages: int = 100) -> tuple[Discovery, UUID]:
@@ -70,6 +71,42 @@ def test_real_date_request_is_retained_but_plan_has_no_discovery(
     assert filters["publication_from"] == "2026-01-15"
     with pytest.raises(HTTPException):
         discovery.prepare(org, job)
+
+
+def test_real_reuse_refusal_creates_no_job_or_idempotency_receipt(scenario: Scenario) -> None:
+    ledger = approved(scenario)
+    org, key = scenario.organizations[0], str(uuid4())
+    body = request_body()
+    body["input"] = {
+        "type": "keyword",
+        "source_id": "synthetic-publisher",
+        "original_query": "Myocardial Infarction",
+    }
+    choice = {"mode": "verified_retained", "fresh_since": "2026-10-01T13:00:00Z"}
+
+    def counts() -> tuple[int, int]:
+        with ledger.database.tenant(ledger.token, org, Capability.ACQUIRE_SOURCE) as (c, _):
+            jobs = c.execute(
+                text("SELECT count(*) FROM emailmonitor.jobs WHERE organization_id=:org"),
+                {"org": org},
+            ).scalar_one()
+            keys = c.execute(
+                text(
+                    "SELECT count(*) FROM emailmonitor.job_idempotency WHERE organization_id=:org"
+                ),
+                {"org": org},
+            ).scalar_one()
+            return int(jobs), int(keys)
+
+    before = counts()
+    with pytest.raises(HTTPException) as failure:
+        ledger.create(org, JobRequest.model_validate({**body, "reuse": choice}), key)
+    assert failure.value.status_code == 409 and counts() == before
+    fresh = JobRequest.model_validate(body)
+    job = ledger.create(org, fresh, key)
+    assert ledger.create(org, fresh, key) == job
+    result = Discovery(ledger.database, ledger.token, SETTINGS).plan(org, job, 1)
+    assert result["persisted"] is True
 
 
 def test_real_checkpoint_restart_replay_and_no_contact_or_usage(scenario: Scenario) -> None:

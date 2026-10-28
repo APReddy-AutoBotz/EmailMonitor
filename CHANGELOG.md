@@ -1,3 +1,7 @@
+## Explicit reuse request foundation — local, incomplete
+
+- Record an explicit UTC freshness choice, reject it before job creation while reuse execution is unavailable, and reconstruct independent unaccepted review drafts from authored observations offline. This does not implement durable reuse or establish current authority. See [reuse decisions](docs/82-evidence-date-reuse-decisions.md).
+
 ## Retained date-text precision candidate
 
 - Display precision recognized from each current-authorized retained date fact while preserving exact text and citations. Partial or invalid text does not acquire a fabricated day, and source filtering remains unsupported. See [date decisions](docs/82-evidence-date-reuse-decisions.md).

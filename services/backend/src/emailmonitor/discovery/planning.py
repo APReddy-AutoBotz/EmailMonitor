@@ -29,6 +29,8 @@ def plan_input(request: JobRequest) -> InputPlan:
     from emailmonitor.sources import provider_documents as provider
 
     value = request.input
+    if request.reuse is not None:
+        return InputPlan("unsupported", "retained_reuse_unavailable")
     if any(request.filters.model_dump(exclude_none=True).values()):
         return InputPlan("unsupported", "fixture_filters_unavailable")
     if isinstance(value, KeywordInput):

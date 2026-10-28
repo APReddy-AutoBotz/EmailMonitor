@@ -3,17 +3,18 @@
 import json
 from pathlib import Path
 from unittest.mock import MagicMock
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import jsonschema
 import pytest
+from pydantic import ValidationError
+from sqlalchemy import Connection
+from sqlalchemy.exc import DBAPIError
+
 from emailmonitor.jobs.broker import FixtureWorkerConfig
 from emailmonitor.jobs.ledger import Ledger, Work
 from emailmonitor.jobs.models import TERMINAL, TRANSITIONS, JobRequest, effect_key
 from emailmonitor.organizations.database import AuthorizationDenied
-from pydantic import ValidationError
-from sqlalchemy import Connection
-from sqlalchemy.exc import DBAPIError
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -39,6 +40,84 @@ def test_original_request_and_committed_example_contract_parity() -> None:
     jsonschema.validate(parsed.model_dump(mode="json", exclude_none=True), schema)
     for path in (ROOT / "contracts/examples").glob("*job*.json"):
         JobRequest.model_validate_json(path.read_text())
+
+
+def test_reuse_choice_is_explicit_and_legacy_request_stays_unchanged() -> None:
+    body = request_body()
+    legacy = JobRequest.model_validate(body).model_dump(mode="json", exclude_none=True)
+    assert "reuse" not in legacy
+    requested = {
+        **body,
+        "reuse": {"mode": "verified_retained", "fresh_since": "2026-10-01T09:00:00-04:00"},
+    }
+    model = JobRequest.model_validate(requested)
+    assert model.model_dump(mode="json", exclude_none=True)["reuse"] == {
+        "mode": "verified_retained",
+        "fresh_since": "2026-10-01T13:00:00Z",
+    }
+    schema = json.loads((ROOT / "contracts/job-request.schema.json").read_text())
+    jsonschema.validate(requested, schema, format_checker=jsonschema.FormatChecker())
+    jsonschema.validate(
+        model.model_dump(mode="json", exclude_none=True),
+        schema,
+        format_checker=jsonschema.FormatChecker(),
+    )
+
+
+@pytest.mark.parametrize(
+    "choice",
+    [
+        {"mode": "verified_retained"},
+        {"mode": "verified_retained", "fresh_since": "2026-10-01"},
+        {"mode": "verified_retained", "fresh_since": "2026-10-01T13:00:00"},
+        {"mode": "verified_retained", "fresh_since": 1790860000},
+        {"mode": "automatic", "fresh_since": "2026-10-01T13:00:00Z"},
+        {"mode": "verified_retained", "fresh_since": "2026-02-30T13:00:00Z"},
+    ],
+)
+def test_reuse_choice_requires_explicit_offset_and_valid_cutoff(choice: object) -> None:
+    with pytest.raises(ValidationError):
+        JobRequest.model_validate({**request_body(), "reuse": choice})
+
+
+def test_unavailable_reuse_refuses_after_authorization_before_job_writes() -> None:
+    from fastapi import HTTPException
+
+    from emailmonitor.config import Settings
+    from emailmonitor.organizations.roles import Capability
+
+    database, connection = MagicMock(), MagicMock()
+    database.tenant.return_value.__enter__.return_value = (connection, MagicMock())
+    request = JobRequest.model_validate(
+        {
+            **request_body(),
+            "reuse": {"mode": "verified_retained", "fresh_since": "2026-10-01T13:00:00Z"},
+        }
+    )
+    with pytest.raises(HTTPException) as error:
+        Ledger(database, "synthetic", Settings(environment="test", fixture_mode=True)).create(
+            UUID(int=1), request, "synthetic-key"
+        )
+    assert error.value.status_code == 409
+    database.tenant.assert_called_once_with("synthetic", UUID(int=1), Capability.ACQUIRE_SOURCE)
+    connection.execute.assert_not_called()
+
+
+def test_unavailable_reuse_does_not_override_authorization_refusal() -> None:
+    from emailmonitor.config import Settings
+
+    database = MagicMock()
+    database.tenant.side_effect = AuthorizationDenied()
+    request = JobRequest.model_validate(
+        {
+            **request_body(),
+            "reuse": {"mode": "verified_retained", "fresh_since": "2026-10-01T13:00:00Z"},
+        }
+    )
+    with pytest.raises(AuthorizationDenied):
+        Ledger(database, "synthetic", Settings(environment="test", fixture_mode=True)).create(
+            UUID(int=1), request, "synthetic-key"
+        )
 
 
 def test_unconfirmed_query_change_is_rejected() -> None:

@@ -4,6 +4,9 @@ import shlex
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
+from test_job_contracts import request_body
+
 from emailmonitor.config import Settings
 from emailmonitor.discovery.fixture import fixture_bytes
 from emailmonitor.discovery.planning import ORIGIN, plan_input
@@ -11,8 +14,6 @@ from emailmonitor.discovery.search import SearchPage, parse_search
 from emailmonitor.discovery.state import DiscoveryState, advance
 from emailmonitor.fetching.safety import FetchDenied
 from emailmonitor.jobs.models import JobRequest
-from pydantic import ValidationError
-from test_job_contracts import request_body
 
 SETTINGS = Settings(environment="test", fixture_mode=True)
 ROOT = Path(__file__).resolve().parents[3]
@@ -105,6 +106,30 @@ def test_filters_are_not_silently_ignored() -> None:
     body = request_body()
     body["filters"] = {"journal": "Synthetic journal"}
     assert plan_input(JobRequest.model_validate(body)).reason == "fixture_filters_unavailable"
+
+
+@pytest.mark.parametrize(
+    "input_value",
+    [
+        {
+            "type": "keyword",
+            "source_id": "synthetic-publisher",
+            "original_query": "Myocardial Infarction",
+        },
+        {"type": "url", "url": ORIGIN + "/article-a.html"},
+    ],
+)
+def test_explicit_reuse_does_not_silently_start_fresh_acquisition(
+    input_value: dict[str, str],
+) -> None:
+    body = {
+        **request_body(),
+        "input": input_value,
+        "reuse": {"mode": "verified_retained", "fresh_since": "2026-10-01T13:00:00Z"},
+    }
+    plan = plan_input(JobRequest.model_validate(body))
+    assert plan.classification == "unsupported"
+    assert plan.reason == "retained_reuse_unavailable" and plan.start_url is None
 
 
 @pytest.mark.parametrize("date_type", ["published", "online", "issue"])
@@ -246,6 +271,7 @@ def test_discovery_schemas_examples_and_runtime_output_parity() -> None:
     import json
 
     import jsonschema
+
     from emailmonitor.discovery.broker import DiscoveryEvent
 
     for name, model in (
@@ -299,6 +325,7 @@ def test_event_schema_matches_canonical_uuid_runtime_restriction(invalid: str) -
     import json
 
     import jsonschema
+
     from emailmonitor.discovery.broker import DiscoveryEvent
 
     body = json.loads((ROOT / "contracts/examples/discovery-event.json").read_text())
@@ -337,8 +364,9 @@ def test_only_exact_policy_sql_fence_is_classified_as_denial(
 ) -> None:
     import importlib
 
-    from emailmonitor.discovery.service import policy_fence_denied
     from sqlalchemy.exc import DBAPIError
+
+    from emailmonitor.discovery.service import policy_fence_denied
 
     original = importlib.import_module("pg8000.dbapi").ProgrammingError({"C": code, "M": message})
     error = DBAPIError(None, None, original, False)
