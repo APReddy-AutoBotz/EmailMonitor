@@ -277,22 +277,138 @@ def test_unlink_export_stage_is_distinct_from_original_lifecycle_export() -> Non
         and len(node.args) == 1
     ]
     assert checkpoints.count("lifecycle_export") == 1
-    assert checkpoints.count("lifecycle_unlink_export") == 1
-    assert checkpoints.index("lifecycle_export") < checkpoints.index("lifecycle_unlink_export")
+    assert checkpoints.count("lifecycle_unlink_export_navigation") == 1
+    assert checkpoints.index("lifecycle_export") < checkpoints.index(
+        "lifecycle_unlink_export_navigation"
+    )
     stages = [
         "lifecycle_export",
         "lifecycle_export_preview",
         "lifecycle_export_create",
         "lifecycle_export_wait",
         "lifecycle_export_ready",
-        "lifecycle_unlink_export",
+        "lifecycle_unlink_export_navigation",
     ]
     assert all(checkpoints.count(stage) == 1 for stage in stages)
     assert [checkpoints.index(stage) for stage in stages] == sorted(
         checkpoints.index(stage) for stage in stages
     )
-    frame = DiagnosticFrame(kind="failure", stage="lifecycle_unlink_export", error="TimeoutError")
-    assert frame.stage == "lifecycle_unlink_export" and frame.error == "TimeoutError"
+    for stage in ("lifecycle_unlink_export_navigation", "lifecycle_unlink_export_assertion"):
+        frame = DiagnosticFrame(kind="failure", stage=stage, error="TimeoutError")
+        assert frame.stage == stage and frame.error == "TimeoutError"
+
+
+@pytest.mark.parametrize(
+    "snapshot",
+    [
+        "loading_present",
+        "alert_present",
+        "empty",
+        "enabled",
+        "disabled",
+        "missing",
+        "not_exports",
+        "unavailable",
+    ],
+)
+def test_unlink_export_failure_preserves_original_and_emits_only_fixed_state(
+    monkeypatch: pytest.MonkeyPatch, snapshot: str
+) -> None:
+    import asyncio
+    from unittest.mock import AsyncMock, Mock
+
+    import operator_ui_acceptance as guest
+
+    failure = AssertionError("synthetic private assertion must not be emitted")
+    page = Mock()
+    page.evaluate = AsyncMock(return_value=snapshot)
+    assertion = Mock()
+    assertion.to_be_disabled = AsyncMock(side_effect=failure)
+    monkeypatch.setattr(guest, "expect", Mock(return_value=assertion))
+    stages: list[str] = []
+    with pytest.raises(AssertionError) as caught:
+        asyncio.run(guest.check_lifecycle_unlink_export(page, stages.append))
+    assert caught.value is failure
+    assert stages == ["lifecycle_unlink_export_assertion", "lifecycle_unlink_export_" + snapshot]
+    assert failure.args == ("synthetic private assertion must not be emitted",)
+    from guest_outcome import Trace
+    from operator_ui_protocol import DiagnosticFrame
+
+    trace = Trace()
+    trace.phase = stages[-1]
+    assert "phase_" + stages[-1] in trace.label()
+    DiagnosticFrame(kind="failure", stage=stages[-1], error="AssertionError")
+
+
+def test_unlink_export_snapshot_refuses_arbitrary_state_without_masking_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import asyncio
+    from unittest.mock import AsyncMock, Mock
+
+    import operator_ui_acceptance as guest
+
+    failure = AssertionError("synthetic")
+    page = Mock()
+    page.evaluate = AsyncMock(return_value="untrusted arbitrary value")
+    assertion = Mock()
+    assertion.to_be_disabled = AsyncMock(side_effect=failure)
+    monkeypatch.setattr(guest, "expect", Mock(return_value=assertion))
+    stages: list[str] = []
+    with pytest.raises(AssertionError) as caught:
+        asyncio.run(guest.check_lifecycle_unlink_export(page, stages.append))
+    assert caught.value is failure
+    assert stages[-1] == "lifecycle_unlink_export_unavailable"
+
+
+def test_unlink_export_success_preserves_assertion_without_snapshot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import asyncio
+    from unittest.mock import AsyncMock, Mock
+
+    import operator_ui_acceptance as guest
+
+    page = Mock()
+    page.evaluate = AsyncMock()
+    assertion = Mock()
+    assertion.to_be_disabled = AsyncMock()
+    monkeypatch.setattr(guest, "expect", Mock(return_value=assertion))
+    stages: list[str] = []
+    asyncio.run(guest.check_lifecycle_unlink_export(page, stages.append))
+    assertion.to_be_disabled.assert_awaited_once_with()
+    page.evaluate.assert_not_awaited()
+    assert stages == ["lifecycle_unlink_export_assertion"]
+
+
+@pytest.mark.parametrize("snapshot_failure", ["evaluate", "checkpoint"])
+def test_unlink_export_snapshot_failure_does_not_replace_assertion(
+    monkeypatch: pytest.MonkeyPatch, snapshot_failure: str
+) -> None:
+    import asyncio
+    from unittest.mock import AsyncMock, Mock
+
+    import operator_ui_acceptance as guest
+
+    failure = AssertionError("synthetic assertion")
+    page = Mock()
+    page.evaluate = AsyncMock(
+        side_effect=RuntimeError("synthetic diagnostic failure")
+        if snapshot_failure == "evaluate"
+        else None,
+        return_value="empty",
+    )
+    assertion = Mock()
+    assertion.to_be_disabled = AsyncMock(side_effect=failure)
+    monkeypatch.setattr(guest, "expect", Mock(return_value=assertion))
+
+    def checkpoint(stage: str) -> None:
+        if stage != "lifecycle_unlink_export_assertion":
+            raise RuntimeError("synthetic reporting failure")
+
+    with pytest.raises(AssertionError) as caught:
+        asyncio.run(guest.check_lifecycle_unlink_export(page, checkpoint))
+    assert caught.value is failure
 
 
 def test_lifecycle_export_proof_precedes_unlink_and_old_download_is_fenced(

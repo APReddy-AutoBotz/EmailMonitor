@@ -1219,6 +1219,56 @@ async def settle_lifecycle_requests(channel: Channel) -> None:
     await asyncio.wait_for(drained(), timeout=10)
 
 
+async def check_lifecycle_unlink_export(page: Page, checkpoint: Callable[[str], None]) -> None:
+    """Preserve the assertion; on failure observe only a fixed page-state category."""
+    checkpoint("lifecycle_unlink_export_assertion")
+    try:
+        await expect(page.get_by_role("button", name="Download", exact=True).first).to_be_disabled()
+    except Exception:
+        # This is a bounded after-failure snapshot, not an extra readiness wait.
+        # Any diagnostic error is ignored and the original assertion is re-raised.
+        # Loading/alert presence is page-wide and does not attribute the source.
+        try:
+            snapshot = await asyncio.wait_for(
+                page.evaluate(
+                    """() => {
+                      const main = document.querySelector('main');
+                      if (!main || !Array.from(main.querySelectorAll('h3')).some(
+                          node => node.textContent.trim() === 'Exports')) return 'not_exports';
+                      const download = Array.from(main.querySelectorAll('button')).find(
+                          node => node.textContent.trim() === 'Download');
+                      if (download) return download.disabled ? 'disabled' : 'enabled';
+                      if (Array.from(main.querySelectorAll('[role=status]')).some(
+                          node => node.textContent.trim() === 'Loading current organization data…'))
+                          return 'loading_present';
+                      if (main.querySelector('[role=alert]')) return 'alert_present';
+                      if (Array.from(main.querySelectorAll('p.empty')).some(
+                          node => node.textContent.trim() === 'No exports in this organization.'))
+                          return 'empty';
+                      return 'missing';
+                    }"""
+                ),
+                timeout=0.25,
+            )
+            allowed = {
+                "loading_present",
+                "alert_present",
+                "empty",
+                "enabled",
+                "disabled",
+                "missing",
+                "not_exports",
+            }
+            category = snapshot if snapshot in allowed else "unavailable"
+        except Exception:
+            category = "unavailable"
+        try:
+            checkpoint("lifecycle_unlink_export_" + category)
+        except Exception:
+            pass
+        raise
+
+
 async def lifecycle_journey(
     page: Page, channel: Channel, setup: dict[str, Any], checkpoint: Callable[[str], None]
 ) -> None:
@@ -1365,9 +1415,9 @@ async def lifecycle_journey(
         page.get_by_role("heading", name="Actual retained citation", exact=True)
     ).to_be_visible()
     await activate(page, page.get_by_role("button", name="Close evidence", exact=True))
-    checkpoint("lifecycle_unlink_export")
+    checkpoint("lifecycle_unlink_export_navigation")
     await activate(page, page.get_by_role("button", name="Exports", exact=True))
-    await expect(page.get_by_role("button", name="Download", exact=True).first).to_be_disabled()
+    await check_lifecycle_unlink_export(page, checkpoint)
 
 
 async def main() -> None:
