@@ -4,6 +4,7 @@ import json
 import os
 import selectors
 import subprocess
+import sys
 import tempfile
 import time
 from pathlib import Path
@@ -26,6 +27,18 @@ from emailmonitor.sources.policy import Operation
 from tls_fixture_server import Response, server
 
 IMAGE = "emailmonitor-browser-diagnostic:local"
+PHASES = frozenset(
+    {
+        "guard",
+        "image_build",
+        "container_create",
+        "configuration",
+        "conversation",
+        "verification",
+        "cleanup",
+    }
+)
+_phase = "guard"
 BOUNDARY_PAGE = b"""<!doctype html><html><body><p id="marker">synthetic marker</p>
 <button id="reveal">Reveal synthetic marker</button><script>
 globalThis.boundaryState = {worker_blocked:false,fetch_denied:false,
@@ -338,10 +351,12 @@ def conversation(identifier: str, mediator: BrowserMediator) -> dict[str, object
 
 
 def main() -> None:
+    global _phase
     if os.environ.get("GITHUB_ACTIONS") != "true":
         raise RuntimeError("Reviewed disposable CI environment required")
     root = Path(__file__).resolve().parents[2]
     profile = root / "scripts/isolation/seccomp-browser.json"
+    _phase = "image_build"
     docker(
         "build",
         "--platform=linux/amd64",
@@ -352,6 +367,7 @@ def main() -> None:
         str(root),
         timeout=600,
     )
+    _phase = "container_create"
     created = docker(
         "create",
         "--interactive",
@@ -382,6 +398,7 @@ def main() -> None:
     if len(identifier) != 64 or any(c not in "0123456789abcdef" for c in identifier):
         raise RuntimeError("Unexpected owned container identifier")
     try:
+        _phase = "configuration"
         host = json.loads(docker("inspect", identifier).stdout)[0]["HostConfig"]
         if (
             host["NetworkMode"] != "none"
@@ -419,7 +436,9 @@ def main() -> None:
                 mediator = BrowserFixtureMediator(
                     Settings(environment="test", fixture_mode=True), gateway
                 )
+                _phase = "conversation"
                 evidence = conversation(identifier, mediator)
+                _phase = "verification"
                 if len(dns_queries) != 2 * mediator.accepted:
                     raise RuntimeError("DNS snapshot/gateway counters disagree")
                 if len(calls) != mediator.accepted or any(
@@ -446,8 +465,24 @@ def main() -> None:
         if state["ExitCode"] or state["OOMKilled"] or state["Running"]:
             raise RuntimeError("Browser did not close cleanly")
     finally:
+        if sys.exc_info()[0] is None:
+            _phase = "cleanup"
         docker("rm", "--force", identifier)
 
 
+def run() -> None:
+    """Report only a fixed stage on failure, without changing the original result."""
+    try:
+        main()
+    except BaseException:
+        try:
+            if _phase in PHASES and os.environ.get("GITHUB_OUTPUT"):
+                with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="ascii") as output:
+                    output.write("browser_phase=" + _phase + "\n")
+        except Exception:
+            pass
+        raise
+
+
 if __name__ == "__main__":
-    main()
+    run()

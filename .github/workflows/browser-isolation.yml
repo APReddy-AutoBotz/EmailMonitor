@@ -28,6 +28,10 @@ jobs:
           echo "$RUNNER_TEMP/tooling/bin" >> "$GITHUB_PATH"
           "$RUNNER_TEMP/tooling/bin/uv" sync --project services/backend --locked
       - name: Actual sandboxed browser and mediated synthetic gateway checks
+        id: browser-check
         env:
           PYTHONPATH: services/backend/src:tests
-        run: uv run --project services/backend python scripts/isolation/run_browser_acceptance.py
+        run: bash scripts/isolation/browser_result.sh uv run --project services/backend python scripts/isolation/run_browser_acceptance.py
+      - name: "Browser process outcome: ${{ steps.browser-check.outputs.browser_outcome || 'unavailable' }}-phase_${{ steps.browser-check.outputs.browser_phase || 'unavailable' }}"
+        if: always() && steps.browser-check.outcome == 'failure'
+        run: "true"

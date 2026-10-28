@@ -104,7 +104,9 @@ def test_first_failed_case_survives_later_reports(
     with pytest.raises(AssertionError, match="private payload"):
         failed()
     progress.pytest_runtest_logreport(SimpleNamespace(outcome="failed", when=when))
-    expected = f"xml_failure=case_1-{when}-host_conversation-phase_evidence_review\n"
+    expected = (
+        f"xml_failure=case_1-{when}-host_conversation-phase_evidence_review-export_unavailable\n"
+    )
     assert output.read_text() == expected
     progress.pytest_runtest_logstart("later private", None)
     assert guest.case_categories() == ("unavailable", "unavailable")
@@ -167,5 +169,71 @@ def test_actual_pytest_failure_and_later_success_keep_first_phase(tmp_path: Path
     )
     assert result.returncode == 1
     assert output.read_text() == (
-        "xml_failure=case_1-call-host_conversation-phase_evidence_review\n"
+        "xml_failure=case_1-call-host_conversation-phase_evidence_review-export_unavailable\n"
     )
+
+
+@pytest.mark.parametrize("phase", ["preview_wait", "ready_wait", "download_wait"])
+@pytest.mark.parametrize("format_name", [None, "csv", "xlsx"])
+def test_existing_export_subphase_is_fixed_and_first_failure_retained(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, phase: str, format_name: str | None
+) -> None:
+    import guest_outcome as guest
+    from operator_ui_protocol import DiagnosticFrame, InstalledExportStep
+
+    output = tmp_path / "output"
+    monkeypatch.setenv("EM_XML_CASE_OUTCOME_REPORT", "true")
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
+    progress = XmlProgress()
+    progress.pytest_runtest_logstart("owned", None)
+    original = RuntimeError("synthetic failure")
+
+    @guest.observed_guest
+    def failed() -> None:
+        guest.guest_stage("conversation")
+        guest.guest_frame(
+            DiagnosticFrame(
+                kind="failure",
+                stage="export_preview",
+                error="RuntimeError",
+                reason="unknown",
+                installed_export_step=InstalledExportStep.model_validate(
+                    {"phase": phase, "format": format_name}
+                ),
+            )
+        )
+        raise original
+
+    with pytest.raises(RuntimeError) as caught:
+        failed()
+    assert caught.value is original
+    progress.pytest_runtest_logreport(SimpleNamespace(outcome="failed", when="call"))
+    expected = (
+        "xml_failure=case_1-call-host_conversation-phase_export_preview-"
+        f"export_{phase}.{format_name or 'none'}\n"
+    )
+    assert output.read_text() == expected
+    progress.pytest_runtest_logstart("later", None)
+    progress.pytest_runtest_logreport(SimpleNamespace(outcome="failed", when="call"))
+    assert output.read_text() == expected
+
+
+@pytest.mark.parametrize("field", ["phase", "format"])
+def test_mutated_export_step_cannot_emit_arbitrary_values(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, field: str
+) -> None:
+    import guest_outcome as guest
+    from operator_ui_protocol import InstalledExportStep
+
+    output = tmp_path / "output"
+    monkeypatch.setenv("EM_XML_CASE_OUTCOME_REPORT", "true")
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
+    progress = XmlProgress()
+    progress.pytest_runtest_logstart("owned", None)
+    trace = guest.Trace()
+    trace.phase = "export_preview"
+    trace.export = InstalledExportStep.model_construct(phase="preview_wait", format="csv")
+    setattr(trace.export, field, "unlisted\nxml_failure=complete")
+    monkeypatch.setattr(guest, "_case_trace", trace)
+    progress.pytest_runtest_logreport(SimpleNamespace(outcome="failed", when="call"))
+    assert progress.first_failure and not output.exists()

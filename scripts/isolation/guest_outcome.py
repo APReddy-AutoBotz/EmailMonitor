@@ -12,6 +12,7 @@ from operator_ui_protocol import (
     STAGES,
     DiagnosticFrame,
     FocusExhaustion,
+    InstalledExportStep,
     InstalledLoginPhase,
     KeyboardAttemptTrace,
 )
@@ -45,6 +46,7 @@ class Trace:
         self.outcome = "none"
         self.focus: FocusExhaustion | str | None = None
         self.cleanup: set[str] = set()
+        self.export: InstalledExportStep | None = None
 
     def label(self) -> str:
         stage = self.failure if self.failure is not None else self.stage
@@ -112,10 +114,16 @@ class Trace:
         elif self.focus is not None:
             raise ValueError("Closed focus categories required")
         cleanup = "both" if len(self.cleanup) == 2 else next(iter(self.cleanup), "none")
+        export = ""
+        if self.export is not None:
+            export_step = InstalledExportStep.model_validate(self.export.model_dump())
+            if self.phase != "export_preview":
+                raise ValueError("Export step requires its exact failure phase")
+            export = "-export_" + export_step.phase + "." + (export_step.format or "none")
         return (
             f"{stage}-phase_{self.phase}-error_{self.error}-reason_{self.reason}-cleanup_{cleanup}"
             f"-login_{self.login}"
-            f"-outcome_{self.outcome}-focus_{focus}{attempt}"
+            f"-outcome_{self.outcome}-focus_{focus}{attempt}{export}"
         )
 
 
@@ -134,6 +142,16 @@ def case_categories() -> tuple[str, str]:
         return "unavailable", "unavailable"
     _case_trace.label()  # Revalidate, including mutated nested models.
     return _case_trace.failure or _case_trace.stage, _case_trace.phase
+
+
+def case_export_category() -> str:
+    if _case_trace is None or _case_trace.export is None:
+        return "unavailable"
+    _case_trace.label()
+    value = InstalledExportStep.model_validate(_case_trace.export.model_dump())
+    if _case_trace.phase != "export_preview":
+        raise ValueError("Export step requires its exact failure phase")
+    return value.phase + "." + (value.format or "none")
 
 
 def guest_stage(stage: str) -> None:
@@ -166,6 +184,7 @@ def guest_frame(frame: DiagnosticFrame) -> None:
             trace.login = fixed.installed_login_phase or "none"
             trace.outcome = fixed.outcome_phase or "none"
             trace.focus = fixed.focus_exhaustion
+            trace.export = fixed.installed_export_step
 
 
 def observed_guest[**P, T](function: Callable[P, T]) -> Callable[P, T]:

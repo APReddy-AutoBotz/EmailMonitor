@@ -9,6 +9,7 @@ from operator_ui_protocol import (
     OUTCOME_PHASES,
     DiagnosticFrame,
     FocusExhaustion,
+    InstalledExportStep,
     InstalledLoginPhase,
     OutcomePhase,
 )
@@ -81,6 +82,50 @@ def test_first_failure_survives_cleanup_and_later_success(output: Path) -> None:
         "guest_outcome=conversation-phase_evidence_review-error_AssertionError-"
         "reason_dialog_focus_restore-cleanup_both-login_none-outcome_none-focus_none"
     )
+
+
+@pytest.mark.parametrize(
+    "phase",
+    [
+        "navigate",
+        "format",
+        "preview_activate",
+        "preview_wait",
+        "create",
+        "row_wait",
+        "ready_wait",
+        "refresh",
+        "download_activate",
+        "download_wait",
+        "verify",
+    ],
+)
+def test_installed_export_failure_reports_fixed_step_and_preserves_failure(
+    output: Path, phase: str
+) -> None:
+    original = TimeoutError("synthetic private detail")
+
+    @trace.observed_guest
+    def failed() -> None:
+        trace.guest_stage("conversation")
+        trace.guest_frame(
+            DiagnosticFrame(
+                kind="failure",
+                stage="export_preview",
+                error="TimeoutError",
+                installed_export_step=InstalledExportStep.model_validate(
+                    {"phase": phase, "format": "xlsx"}
+                ),
+            )
+        )
+        raise original
+
+    with pytest.raises(TimeoutError) as caught:
+        failed()
+    assert caught.value is original
+    result = output.read_text()
+    assert f"-export_{phase}.xlsx" in result
+    assert "synthetic private detail" not in result
 
 
 def test_success_and_owned_cleanup_are_not_skipped(output: Path, tmp_path: Path) -> None:
