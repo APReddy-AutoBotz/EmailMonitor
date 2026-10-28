@@ -255,32 +255,6 @@ def lifecycle_operator_baseline(content: bytes) -> bytes:
     return content.replace(expanded, original)
 
 
-def browser_workflow_baseline(content: bytes) -> bytes:
-    """Remove exactly the value-free exit receipt, retaining all original bytes."""
-    original = (
-        b"      - name: Actual sandboxed browser and mediated synthetic gateway checks\n"
-        b"        env:\n"
-        b"          PYTHONPATH: services/backend/src:tests\n"
-        b"        run: uv run --project services/backend python "
-        b"scripts/isolation/run_browser_acceptance.py\n"
-    )
-    wrapped = (
-        b"      - name: Actual sandboxed browser and mediated synthetic gateway checks\n"
-        b"        id: browser-check\n"
-        b"        env:\n"
-        b"          PYTHONPATH: services/backend/src:tests\n"
-        b"        run: bash scripts/isolation/browser_result.sh uv run "
-        b"--project services/backend python scripts/isolation/run_browser_acceptance.py\n"
-        b'      - name: "Browser process outcome: ${{ '
-        b"steps.browser-check.outputs.browser_outcome || 'unavailable' }}-phase_${{ "
-        b"steps.browser-check.outputs.browser_phase || 'unavailable' }}\"\n"
-        b"        if: always() && steps.browser-check.outcome == 'failure'\n"
-        b'        run: "true"\n'
-    )
-    assert content.count(wrapped) == 1 and content.count(original) == 0
-    return content.replace(wrapped, original)
-
-
 @pytest.mark.parametrize("relative,expected", PRESERVED_BOUNDARIES.items())
 def test_new_composer_preserves_original_one_shot_guest_parser_and_gates(
     relative: str, expected: str
@@ -288,8 +262,6 @@ def test_new_composer_preserves_original_one_shot_guest_parser_and_gates(
     content = (ROOT / relative).read_bytes()
     if relative == ".github/workflows/operator-ui.yml":
         content = lifecycle_operator_baseline(content)
-    if relative == ".github/workflows/browser-isolation.yml":
-        content = browser_workflow_baseline(content)
     if relative == ".github/workflows/application.yml":
         # Preserve the original backend bytes, normalizing only its fixed receipt
         # wiring. Additional mandatory jobs/join have executable contract tests.
@@ -337,22 +309,3 @@ def test_new_workflow_is_additional_to_all_seven_synthetic_gates_and_original_on
         WORKFLOW.name,
         "service-runtime.yml",
     }
-
-
-@pytest.mark.parametrize("mutation", ["wrapper", "report", "duplicate", "timeout"])
-def test_browser_normalization_rejects_unrelated_or_incomplete_changes(mutation: str) -> None:
-    content = (ROOT / ".github/workflows/browser-isolation.yml").read_bytes()
-    if mutation == "wrapper":
-        content = content.replace(b"browser_result.sh", b"unexpected_wrapper.sh")
-    elif mutation == "report":
-        content = content.replace(b"browser_outcome", b"unexpected_outcome")
-    elif mutation == "duplicate":
-        content += content[content.index(b"      - name: Actual sandboxed browser") :]
-    else:
-        content = content.replace(b"timeout-minutes: 20", b"timeout-minutes: 21")
-    if mutation == "timeout":
-        expected = PRESERVED_BOUNDARIES[".github/workflows/browser-isolation.yml"]
-        assert hashlib.sha256(browser_workflow_baseline(content)).hexdigest() != expected
-    else:
-        with pytest.raises(AssertionError):
-            browser_workflow_baseline(content)
