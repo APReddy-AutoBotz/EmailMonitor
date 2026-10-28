@@ -1330,6 +1330,40 @@ async def lifecycle_journey(
     await open_job(retry_job)
     await expect(page.get_by_text("completed partial", exact=True).first).to_be_visible()
 
+    # The cancelled job's retained association and already-created export are
+    # deliberately used here to verify unlink without removing source evidence.
+    checkpoint("lifecycle_retained_review")
+    await open_job(cancel_job)
+    await activate(page, page.get_by_role("button", name="Contacts for this job", exact=True))
+    await activate(page, page.get_by_role("button", name="Evidence and review", exact=True).first)
+    await expect(
+        page.get_by_role("heading", name="Actual retained citation", exact=True)
+    ).to_be_visible()
+    await select_index(page, page.get_by_label("Review action", exact=True), 3)
+    await expect(page.get_by_text("Existing source evidence remains", exact=False)).to_be_visible()
+    await type_text(page, page.get_by_label("Reason", exact=True), "Synthetic unlink review")
+    await activate(page, page.get_by_role("button", name="Save review", exact=True))
+    await expect(page.get_by_role("dialog")).not_to_be_visible()
+    await expect(
+        page.get_by_text("No contacts match these server filters.", exact=True)
+    ).to_be_visible()
+    await open_job(cancel_job)
+    await activate(page, page.get_by_role("button", name="Review queue for this job", exact=True))
+    await expect(
+        page.get_by_role("table", name="Current-authorized observed contacts", exact=True).locator(
+            "tbody tr"
+        )
+    ).to_have_count(1)
+    await expect(page.get_by_text("needs review", exact=True).first).to_be_visible()
+    await activate(page, page.get_by_role("button", name="Evidence and review", exact=True).first)
+    await expect(
+        page.get_by_role("heading", name="Actual retained citation", exact=True)
+    ).to_be_visible()
+    await activate(page, page.get_by_role("button", name="Close evidence", exact=True))
+    checkpoint("lifecycle_export")
+    await activate(page, page.get_by_role("button", name="Exports", exact=True))
+    await expect(page.get_by_role("button", name="Download", exact=True).first).to_be_disabled()
+
 
 async def main() -> None:
     if os.environ.get("EM_ISOLATION_DIAGNOSTIC") != "synthetic-operator-ui" or os.geteuid() == 0:
