@@ -379,3 +379,59 @@ def test_real_confirmed_pending_and_duplicate_effects_remain_bounded(scenario: S
             ),
             {"org": org, "id": export},
         ).scalars().all() == ["export.requested", "export.ready"]
+
+
+def test_real_review_unlink_preserves_evidence_and_invalidates_export(scenario: Scenario) -> None:
+    from emailmonitor.associations.models import Review
+    from emailmonitor.associations.service import Associations
+
+    results, job = prepared(scenario)
+    org = scenario.organizations[0]
+    export = ready(results, org, job)
+    contact = results.contacts(org, Filters(job_id=job)).items[0]
+    service = Associations(results.database, results.token, SETTINGS)
+    before = service.detail(org, contact.batch_id)
+    request = Review(
+        association_id=contact.association_id,
+        expected_revision=contact.revision,
+        action="unlink",
+        author_id=None,
+        evidence_ids=contact.evidence_ids,
+        reason="Synthetic review: unlink this association",
+    )
+    after = service.review(org, contact.batch_id, request)
+    association = next(a for a in after.associations if a.id == contact.association_id)
+    assert (association.state, association.author_id, association.reason, association.revision) == (
+        "needs_review",
+        None,
+        "reviewed_unlinked",
+        contact.revision + 1,
+    )
+    assert association.evidence_ids == contact.evidence_ids
+    assert after.evidence == before.evidence and after.authors == before.authors
+    assert after.candidates == before.candidates
+    assert service.history(org, contact.batch_id)[-1]["action"] == "unlink"
+    assert not results.state(org, export).download_available
+    with pytest.raises(AuthorizationDenied):
+        results.download(org, export)
+    with pytest.raises(RevisionConflict):
+        service.review(org, contact.batch_id, request)
+    with pytest.raises(AuthorizationDenied):
+        service.review(scenario.organizations[1], contact.batch_id, request)
+    assert not results.contacts(org, Filters(job_id=job)).items
+    restored = service.review(
+        org,
+        contact.batch_id,
+        Review(
+            association_id=contact.association_id,
+            expected_revision=association.revision,
+            action="correct",
+            author_id=contact.author_id,
+            evidence_ids=contact.evidence_ids,
+            reason="Synthetic review: restore supported association",
+        ),
+    )
+    assert (
+        next(a for a in restored.associations if a.id == contact.association_id).state == "accepted"
+    )
+    assert not results.state(org, export).download_available

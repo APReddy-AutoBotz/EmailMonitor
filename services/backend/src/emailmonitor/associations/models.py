@@ -105,6 +105,7 @@ class Association(Record):
         "partial_document",
         "retained_locator_only",
         "reviewed_evidence",
+        "reviewed_unlinked",
     ]
     heuristic_score: None = None
     calibrated_probability: None = None
@@ -194,7 +195,7 @@ class Bundle(Record):
 class Review(Record):
     association_id: UUID
     expected_revision: int = Field(ge=1)
-    action: Literal["accept", "reject", "correct"]
+    action: Literal["accept", "reject", "correct", "unlink"]
     author_id: UUID | None = None
     evidence_ids: tuple[UUID, ...] = Field(min_length=1, max_length=40)
     reason: str = Field(min_length=1, max_length=300, pattern=r"\S")

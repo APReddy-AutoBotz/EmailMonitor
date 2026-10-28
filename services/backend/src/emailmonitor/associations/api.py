@@ -52,7 +52,7 @@ class ReviewInput(BaseModel):
     batch_id: Identifier
     association_id: Identifier
     expected_revision: int = Field(ge=1, strict=True)
-    action: Literal["accept", "reject", "correct"]
+    action: Literal["accept", "reject", "correct", "unlink"]
     author_id: Identifier | None = None
     evidence_ids: list[Identifier] = Field(min_length=1, max_length=40)
     reason: str = Field(min_length=1, max_length=300, pattern=r"\S", strict=True)

@@ -26,7 +26,7 @@ from sqlalchemy.exc import DBAPIError
 from test_source_foundation import policy_body
 
 ROOT = Path(__file__).resolve().parents[3]
-HEAD = "0020_retained_source_selection"
+HEAD = "0021_review_unlink"
 FILTER_PREVIOUS = "0015_service_plan_cache"
 SERVICE_PREVIOUS = "0014_service_authority"
 PREVIOUS = "0013_provider_journey"
@@ -579,6 +579,7 @@ def test_actual_fresh_and_populated_upgrade_schema_acl_rls_equivalence(
         (SERVICE_PREVIOUS,),
         (FILTER_PREVIOUS,),
         ("0019_retained_paper_identity",),
+        ("0020_retained_source_selection",),
         ("9999_unsupported",),
         (HEAD, PREVIOUS),
     ],

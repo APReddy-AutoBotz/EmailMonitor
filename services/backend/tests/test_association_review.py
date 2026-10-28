@@ -96,3 +96,62 @@ def test_duplicate_or_author_only_citations_refuse() -> None:
         apply_review(SETTINGS, bundle, request(evidence_ids=(bundle.evidence[0].id,) * 2))
     with pytest.raises(ValueError):
         apply_review(SETTINGS, bundle, request(evidence_ids=bundle.authors[0].evidence_ids))
+
+
+def test_unlink_preserves_observations_and_requires_explicit_reacceptance() -> None:
+    original = html("article-a.html")
+    accepted = apply_review(SETTINGS, original, request())
+    before = accepted.associations[0]
+    unlinked = apply_review(
+        SETTINGS,
+        accepted,
+        request(action="unlink", expected_revision=2, evidence_ids=before.evidence_ids),
+    )
+    result = unlinked.associations[0]
+    assert (result.state, result.reason, result.author_id, result.revision) == (
+        "needs_review",
+        "reviewed_unlinked",
+        None,
+        3,
+    )
+    assert result.evidence_strength == "ambiguous" and result.evidence_ids == before.evidence_ids
+    assert unlinked.evidence == accepted.evidence
+    assert unlinked.authors == accepted.authors and unlinked.candidates == accepted.candidates
+    with pytest.raises(ValueError):
+        apply_review(
+            SETTINGS, unlinked, request(expected_revision=3, evidence_ids=result.evidence_ids)
+        )
+    restored = apply_review(
+        SETTINGS,
+        unlinked,
+        request(
+            action="correct",
+            expected_revision=3,
+            author_id=before.author_id,
+            evidence_ids=result.evidence_ids,
+        ),
+    )
+    assert restored.associations[0].state == "accepted" and restored.associations[0].revision == 4
+
+
+def test_unlink_refuses_stale_or_changed_evidence_and_identity() -> None:
+    original = html("article-a.html")
+    accepted = apply_review(SETTINGS, original, request())
+    before = accepted.associations[0]
+    with pytest.raises(RevisionConflict):
+        apply_review(SETTINGS, accepted, request(action="unlink", expected_revision=1))
+    with pytest.raises(ValueError):
+        apply_review(
+            SETTINGS,
+            accepted,
+            request(action="unlink", expected_revision=2, author_id=before.author_id),
+        )
+    with pytest.raises(ValueError):
+        apply_review(
+            SETTINGS,
+            accepted,
+            request(action="unlink", expected_revision=2, evidence_ids=(accepted.evidence[0].id,)),
+        )
+    unlinked = apply_review(SETTINGS, accepted, request(action="unlink", expected_revision=2))
+    with pytest.raises(ValueError):
+        apply_review(SETTINGS, unlinked, request(action="unlink", expected_revision=3))
