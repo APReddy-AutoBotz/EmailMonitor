@@ -1300,6 +1300,7 @@ async def lifecycle_journey(
     await activate(page, page.get_by_role("button", name="Refresh current view", exact=True))
     checkpoint("lifecycle_export_ready")
     await expect(page.get_by_role("button", name="Download", exact=True)).to_be_enabled()
+    await channel.request({"kind": "control", "action": "verify_retained"})
 
     checkpoint("lifecycle_retry")
     await open_job(retry_job)

@@ -293,3 +293,57 @@ def test_unlink_export_stage_is_distinct_from_original_lifecycle_export() -> Non
     )
     frame = DiagnosticFrame(kind="failure", stage="lifecycle_unlink_export", error="TimeoutError")
     assert frame.stage == "lifecycle_unlink_export" and frame.error == "TimeoutError"
+
+
+def test_lifecycle_export_proof_precedes_unlink_and_old_download_is_fenced(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from types import SimpleNamespace
+    from typing import cast
+    from uuid import UUID
+
+    import test_operator_lifecycle_acceptance as harness
+    from emailmonitor.organizations.database import AuthorizationDenied
+    from emailmonitor.results.service import Results
+
+    export, job, other_job, org = (UUID(int=n) for n in (1, 2, 3, 4))
+    state = {"valid": True, "downloads": 0}
+
+    class SyntheticResults:
+        def exports(self, selected_org: UUID) -> list[object]:
+            assert selected_org == org
+            return [SimpleNamespace(id=export, state="ready")]
+
+        def download(self, selected_org: UUID, selected_export: UUID) -> object:
+            assert selected_org == org and selected_export == export
+            state["downloads"] += 1
+            if not state["valid"]:
+                raise AuthorizationDenied()
+            return SimpleNamespace(body=b"synthetic artifact")
+
+    monkeypatch.setattr(harness, "rows", lambda *_: [["header"], [str(job)]])
+    results = SyntheticResults()
+    assert harness.verify_lifecycle_export(cast(Results, results), org, job, other_job) == export
+    state["valid"] = False
+    with pytest.raises(AuthorizationDenied):
+        results.download(org, export)
+    assert state["downloads"] == 2
+
+
+def test_authored_lifecycle_schedules_retained_export_proof_before_unlink() -> None:
+    import ast
+    from pathlib import Path
+
+    source = Path(__file__).resolve().parents[3] / "scripts/isolation/operator_ui_acceptance.py"
+    module = ast.parse(source.read_text())
+    journey = next(
+        node
+        for node in module.body
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "lifecycle_journey"
+    )
+    statements = [ast.unparse(node) for node in journey.body]
+    proof = next(
+        i for i, statement in enumerate(statements) if "'action': 'verify_retained'" in statement
+    )
+    unlink = next(i for i, statement in enumerate(statements) if "'Review action'" in statement)
+    assert proof < unlink

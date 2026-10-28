@@ -29,6 +29,16 @@ from test_tenant_foundation import scenario as scenario
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def verify_lifecycle_export(results: Results, org: UUID, cancel_job: UUID, retry_job: UUID) -> UUID:
+    """Verify the original artifact before the later unlink intentionally fences it."""
+    exports = results.exports(org)
+    assert len(exports) == 1 and exports[0].state == "ready"
+    artifact = rows(results.download(org, exports[0].id).body, "xlsx", False)
+    assert len(artifact) == 2 and str(cancel_job) in artifact[1]
+    assert str(retry_job) not in artifact[1]
+    return exports[0].id
+
+
 def test_required_connected_lifecycle_keyboard(scenario: Scenario, tmp_path: Path) -> None:
     if (
         os.environ.get("GITHUB_ACTIONS") != "true"
@@ -69,6 +79,7 @@ def test_required_connected_lifecycle_keyboard(scenario: Scenario, tmp_path: Pat
     results = Results(progress.database, progress.token, SETTINGS)
     hold, held, released = threading.Event(), threading.Event(), threading.Event()
     replies: list[int] = []
+    verified_exports: list[UUID] = []
 
     def child() -> UUID:
         with progress.database.tenant(progress.token, org, Capability.READ_ORGANIZATION) as (c, _):
@@ -114,6 +125,9 @@ def test_required_connected_lifecycle_keyboard(scenario: Scenario, tmp_path: Pat
                 ),
                 seconds=8,
             )
+        elif action == "verify_retained":
+            assert not verified_exports
+            verified_exports.append(verify_lifecycle_export(results, org, cancel_job, retry_job))
         else:
             raise RuntimeError("Unexpected fixed lifecycle control")
 
@@ -151,10 +165,11 @@ def test_required_connected_lifecycle_keyboard(scenario: Scenario, tmp_path: Pat
         assert progress.extraction.read(org, retry_job) == original_rows
         assert progress.retry(org, retry_job, original.revision) == child()
         exports = results.exports(org)
+        assert len(verified_exports) == 1
         assert len(exports) == 1 and exports[0].state == "ready"
-        artifact = rows(results.download(org, exports[0].id).body, "xlsx", False)
-        assert len(artifact) == 2 and str(cancel_job) in artifact[1]
-        assert str(retry_job) not in artifact[1]
+        assert exports[0].id == verified_exports[0] and not exports[0].download_available
+        with pytest.raises(AuthorizationDenied):
+            results.download(org, exports[0].id)
     finally:
         released.set()
         with broker.connection_for_write() as connection:
