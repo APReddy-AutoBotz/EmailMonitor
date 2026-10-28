@@ -127,6 +127,42 @@ def test_dates_and_null_input_contract_boundary() -> None:
         JobRequest.model_validate(body)
 
 
+@pytest.mark.parametrize("date_type", ["published", "online", "issue"])
+def test_explicit_date_type_preserves_legacy_request_and_contract(date_type: str) -> None:
+    schema = json.loads((ROOT / "contracts/job-request.schema.json").read_text())
+    body = request_body()
+    body["filters"] = {"publication_from": "2026-02-20", "publication_date_type": date_type}
+    parsed = JobRequest.model_validate(body)
+    document = parsed.model_dump(mode="json", exclude_none=True)
+    jsonschema.validate(document, schema)
+    assert document["filters"]["publication_date_type"] == date_type
+    legacy = request_body()
+    legacy["filters"] = {"publication_from": "2026-02-20"}
+    old_document = JobRequest.model_validate(legacy).model_dump(mode="json", exclude_none=True)
+    assert "publication_date_type" not in old_document["filters"]
+
+
+@pytest.mark.parametrize(
+    "filters",
+    [
+        {"publication_date_type": "published"},
+        {"publication_date_type": "accepted", "publication_from": "2026-01-01"},
+        {"publication_date_type": None, "publication_from": "2026-01-01"},
+        {"publication_date_type": "issue", "publication_from": "2026-02-30"},
+        {
+            "publication_date_type": "online",
+            "publication_from": "2026-03-01",
+            "publication_to": "2026-02-01",
+        },
+    ],
+)
+def test_explicit_date_selection_invalid_shapes_refused(filters: dict[str, object]) -> None:
+    body = request_body()
+    body["filters"] = filters
+    with pytest.raises(ValidationError):
+        JobRequest.model_validate(body)
+
+
 def test_disposable_container_context_is_only_used_in_runner_step() -> None:
     workflow = (ROOT / ".github/workflows/application.yml").read_text()
     before_steps, steps = workflow.split("    steps:", 1)

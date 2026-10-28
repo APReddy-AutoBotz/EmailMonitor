@@ -54,6 +54,7 @@ class URLInput(StrictModel):
 class Filters(StrictModel):
     publication_from: date | None = None
     publication_to: date | None = None
+    publication_date_type: Literal["published", "online", "issue"] | None = None
     journal: str | None = Field(default=None, max_length=300)
     article_types: list[Annotated[str, Field(min_length=1, max_length=100)]] = Field(
         default_factory=list, max_length=20
@@ -71,6 +72,8 @@ class Filters(StrictModel):
 
     @model_validator(mode="after")
     def ordered(self) -> "Filters":
+        if self.publication_date_type and not (self.publication_from or self.publication_to):
+            raise ValueError("Publication date type requires a date bound")
         if len(set(self.article_types)) != len(self.article_types):
             raise ValueError("Article types must be unique")
         if self.publication_from and self.publication_to:
