@@ -85,6 +85,12 @@ def test_stages_exact_source_lineage_and_rechecks_source(monkeypatch: pytest.Mon
     assert isinstance(inserted, list) and len(inserted) == 1
     assert inserted[0]["job"] == TARGET and inserted[0]["source_job"] == SOURCE
     assert inserted[0]["source_revision"] == 1 and inserted[0]["source_batch"] == BATCH
+    selection = next(
+        call
+        for call in connection.execute.call_args_list
+        if "SELECT b.id FROM" in str(call.args[0])
+    )
+    assert selection.args[1]["route"] == "html"
     service._lock.assert_called_once()
     service.discovery._audit.assert_called_once_with(
         connection, ORG, TARGET, "extraction.retained_reused"

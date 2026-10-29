@@ -7,6 +7,7 @@ from fastapi import HTTPException
 from sqlalchemy import text
 
 from emailmonitor.administration.admission import Admission
+from emailmonitor.associations.reuse_adapters import HTML_URLS, retained_adapter
 from emailmonitor.associations.reuse_preparation import _SOURCE, prepare_reuse
 from emailmonitor.associations.service import Associations
 from emailmonitor.jobs.ledger import Ledger
@@ -26,21 +27,19 @@ def materialize_draft(service: Associations, org: UUID, target_job: UUID, url: s
     """
     if isinstance(service.database, ServiceDatabase) or type(service.token) is not str:
         raise AuthorizationDenied()
-    if url not in {
-        "https://synthetic.publisher.example/article-a.html",
-        "https://synthetic.publisher.example/article-b.html",
-        "https://synthetic.publisher.example/no-contact.html",
-    }:
+    if url not in HTML_URLS:
         raise HTTPException(409, "Retained reuse is unavailable for this source route")
     with Admission(service.database, service.token, service.settings).fixture(org, target_job, url):
         with service.discovery._tenant(org, Capability.ACQUIRE_SOURCE) as (c, _):
             target = Ledger._lock(c, org, target_job)
             request = JobRequest.model_validate(target["request"])
+            adapter = retained_adapter(request)
             if (
                 request.reuse is None
                 or not isinstance(request.input, URLInput)
                 or request.input.url != url
                 or target["state"] != "draft"
+                or adapter != "html"
             ):
                 raise AuthorizationDenied()
             existing = (
@@ -67,7 +66,7 @@ JOIN emailmonitor.article_observations a ON a.organization_id=b.organization_id
  AND a.job_id=b.job_id AND a.article_url=b.article_url AND a.revision=b.source_revision
 WHERE b.organization_id=:org AND b.job_id<>:target AND b.article_url=:url
  AND a.observed_at>=:cutoff AND a.expires_at>clock_timestamp()
- AND a.reused_from_job IS NULL AND a.observation->>'route'='html'
+ AND a.reused_from_job IS NULL AND a.observation->>'route'=:route
  AND a.observation->>'status' IN ('observed','no_contact')
 ORDER BY a.observed_at DESC,b.id ASC LIMIT 1
                 """),
@@ -76,6 +75,7 @@ ORDER BY a.observed_at DESC,b.id ASC LIMIT 1
                         "target": target_job,
                         "url": url,
                         "cutoff": request.reuse.fresh_since,
+                        "route": adapter,
                     },
                 ).scalar_one_or_none()
             )
