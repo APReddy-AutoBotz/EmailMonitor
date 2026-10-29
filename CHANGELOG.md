@@ -3,6 +3,7 @@
 - Record an explicit UTC freshness choice, reject it before job creation while reuse execution is unavailable, and reconstruct independent unaccepted review drafts from authored observations offline. This does not implement durable reuse or establish current authority. See [reuse decisions](docs/82-evidence-date-reuse-decisions.md).
 - Add an isolated transaction-scoped source preparation candidate with target/source checks, unchanged original timestamps and independent review draft; no route or worker can invoke reuse. Worker source delegation, persistence and database validation remain incomplete.
 - Explore unreachable draft-time materialization of one authored HTML observation under the requesting user's existing authority, with replay-stable source choice and independent target review mapping. Source-linked physical purge, durable SQL guards and connected acceptance remain unimplemented.
+- Refuse fresh fixture acquisition when an explicitly reused observation is missing; actual SQL/worker regression remains pending.
 
 ## Retained date-text precision candidate
 

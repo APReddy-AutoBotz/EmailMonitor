@@ -406,6 +406,7 @@ SELECT emailmonitor.execution_finish(:org, :job, :item, :token, :batch, :failure
                 None,
             )
             if existing is None:
+                self._require_fresh_acquisition_allowed(scope.organization, scope.job)
                 if work.url.endswith(".pdf"):
                     from emailmonitor.extraction.pdf_service import PdfExtraction
 
@@ -432,6 +433,16 @@ SELECT emailmonitor.execution_finish(:org, :job, :item, :token, :batch, :failure
             # Static fixtures never impersonate an actual browser. A dynamic result
             # enters through the separately trusted isolated composition only.
             return self.finish(work, batch)
+
+    def _require_fresh_acquisition_allowed(self, org: UUID, job: UUID) -> None:
+        """A missing retained observation never turns explicit reuse into collection."""
+        from emailmonitor.jobs.ledger import Ledger
+        from emailmonitor.jobs.models import JobRequest
+
+        with self._tenant(org, Capability.ACQUIRE_SOURCE) as c:
+            request = JobRequest.model_validate(Ledger._lock(c, org, job)["request"])
+            if request.reuse is not None:
+                raise AuthorizationDenied()
 
     def confirmed(self, org: UUID, job: UUID, event: UUID) -> None:
         with self._tenant(org, Capability.ACQUIRE_SOURCE) as c:
