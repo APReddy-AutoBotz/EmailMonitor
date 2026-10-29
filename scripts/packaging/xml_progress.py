@@ -47,6 +47,9 @@ class XmlProgress(Progress):
                         "xml_worker_failure="
                         f"error_{error}-reason_{reason}-login_{login}-callback_{callback}\n"
                     )
+                    if login == "callback_document":
+                        timing = module.case_login_timing() if module else "unavailable"
+                        output.write("xml_login_timing=" + timing + "\n")
         except Exception:
             # The original failing pytest report and exit remain authoritative.
             # Absent metadata is explicitly unavailable, never a success label.

@@ -16,6 +16,7 @@ from operator_ui_protocol import (
     InstalledExportStep,
     InstalledLoginPhase,
     KeyboardAttemptTrace,
+    LoginTimingTrace,
 )
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 
@@ -45,6 +46,7 @@ class Trace:
         self.error = "none"
         self.login = "none"
         self.callback: InstalledCallbackDelivery | None = None
+        self.login_timing: LoginTimingTrace | None = None
         self.outcome = "none"
         self.focus: FocusExhaustion | str | None = None
         self.cleanup: set[str] = set()
@@ -247,6 +249,20 @@ def case_worker_failure_details() -> tuple[str, str, str, str]:
     )
 
 
+def case_login_timing() -> str:
+    """Export only bounded timing already captured for callback navigation."""
+    if _case_trace is None:
+        return "unavailable"
+    _case_trace.label()
+    if _case_trace.login != "callback_document" or _case_trace.login_timing is None:
+        return "unavailable"
+    value = LoginTimingTrace.model_validate(_case_trace.login_timing.model_dump())
+    fulfilled = (
+        str(value.callback_fulfilled_ms) if value.callback_fulfilled_ms is not None else "none"
+    )
+    return f"total_{value.total_ms}-phase_{value.phase_ms}-fulfilled_{fulfilled}"
+
+
 def case_export_category() -> str:
     if _case_trace is None or _case_trace.export is None:
         return "unavailable"
@@ -286,6 +302,7 @@ def guest_frame(frame: DiagnosticFrame) -> None:
             trace.reason, trace.error = fixed.reason, fixed.error or "none"
             trace.login = fixed.installed_login_phase or "none"
             trace.callback = fixed.installed_callback_delivery
+            trace.login_timing = fixed.installed_login_timing
             trace.outcome = fixed.outcome_phase or "none"
             trace.focus = fixed.focus_exhaustion
             trace.export = fixed.installed_export_step

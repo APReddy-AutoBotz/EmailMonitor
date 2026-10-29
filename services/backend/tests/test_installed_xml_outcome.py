@@ -121,7 +121,7 @@ def test_worker_failure_detail_is_closed_and_preserves_first_exception(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stage: str
 ) -> None:
     import guest_outcome as guest
-    from operator_ui_protocol import DiagnosticFrame
+    from operator_ui_protocol import DiagnosticFrame, LoginTimingTrace
 
     output = tmp_path / "output"
     monkeypatch.setenv("EM_XML_CASE_OUTCOME_REPORT", "true")
@@ -141,6 +141,9 @@ def test_worker_failure_detail_is_closed_and_preserves_first_exception(
                 reason="installed_login_deadline",
                 installed_login_phase="callback_document",
                 installed_callback_delivery="asset_verified",
+                installed_login_timing=LoginTimingTrace(
+                    total_ms=10000, phase_ms=7000, callback_fulfilled_ms=9500
+                ),
             )
         )
         raise original
@@ -153,11 +156,33 @@ def test_worker_failure_detail_is_closed_and_preserves_first_exception(
         f"xml_failure=case_1-call-host_conversation-phase_{stage}-export_unavailable",
         "xml_worker_failure=error_TimeoutError-reason_installed_login_deadline-"
         "login_callback_document-callback_asset_verified",
+        "xml_login_timing=total_10000-phase_7000-fulfilled_9500",
     ]
     progress.pytest_runtest_logstart("later", None)
     progress.pytest_runtest_logreport(SimpleNamespace(outcome="failed", when="call"))
-    assert len(output.read_text().splitlines()) == 2
+    assert len(output.read_text().splitlines()) == 3
     assert "private" not in output.read_text()
+
+
+def test_callback_timing_revalidates_bounds_and_refuses_other_phases(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import guest_outcome as guest
+    from operator_ui_protocol import LoginTimingTrace
+    from pydantic import ValidationError
+
+    trace = guest.Trace()
+    trace.login = "initial_session"
+    trace.login_timing = LoginTimingTrace(total_ms=1, phase_ms=1, callback_fulfilled_ms=None)
+    monkeypatch.setattr(guest, "_case_trace", trace)
+    assert guest.case_login_timing() == "unavailable"
+    trace.login = "callback_document"
+    assert guest.case_login_timing() == "total_1-phase_1-fulfilled_none"
+    trace.login_timing = LoginTimingTrace.model_construct(
+        total_ms=100000, phase_ms=1, callback_fulfilled_ms=None
+    )
+    with pytest.raises(ValidationError):
+        guest.case_login_timing()
 
 
 def test_invalid_worker_detail_does_not_replace_original_failure(

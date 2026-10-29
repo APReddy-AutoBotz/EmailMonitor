@@ -117,6 +117,16 @@ jobs:
       - name: "Retained reuse case evidence: ${{ steps.reuse-diagnostic.outputs.reuse_diagnostic || 'unavailable' }}"
         if: ${{ !cancelled() && steps.reuse-diagnostic.outcome != 'skipped' }}
         run: ':'
+      - name: Focused retained tenant SQL timing evidence
+        id: tenant-sql-diagnostic
+        timeout-minutes: 5
+        env:
+          EM_TEST_BROKER_CONTAINER: ${{ job.services.rabbitmq.id }}
+          PYTHONPATH: services/backend/src:services/backend/tests:tests:scripts/isolation:scripts/packaging
+        run: uv run --project services/backend python scripts/packaging/tenant_sql_diagnostic.py
+      - name: "Tenant SQL timing evidence: ${{ steps.tenant-sql-diagnostic.outputs.tenant_sql_diagnostic || 'unavailable' }}"
+        if: ${{ !cancelled() && steps.tenant-sql-diagnostic.outcome != 'skipped' }}
+        run: ':'
       - name: Installed service API and independent worker operator acceptance
         id: installed-operator-test
         if: ${{ !cancelled() && steps.service-prerequisites.outcome == 'success' && steps.service-web.outcome == 'success' }}
@@ -156,5 +166,8 @@ jobs:
         if: ${{ !cancelled() && steps.installed-xml-test.outcome != 'skipped' }}
         run: ':'
       - name: "Installed XML worker failure: ${{ steps.installed-xml-test.outputs.xml_worker_failure || 'unavailable' }}"
+        if: ${{ !cancelled() && steps.installed-xml-test.outcome != 'skipped' }}
+        run: ':'
+      - name: "Installed XML login timing: ${{ steps.installed-xml-test.outputs.xml_login_timing || 'unavailable' }}"
         if: ${{ !cancelled() && steps.installed-xml-test.outcome != 'skipped' }}
         run: ':'
