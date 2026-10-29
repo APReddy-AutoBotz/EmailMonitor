@@ -43,7 +43,7 @@ def plan_input(request: JobRequest) -> InputPlan:
         from emailmonitor.associations.reuse_adapters import retained_plan
 
         candidate = retained_plan(request)
-        if candidate is not None and candidate.adapter == "html":
+        if candidate is not None:
             return InputPlan("article", "retained_reuse_authored", candidate.article_url)
         return InputPlan("unsupported", "retained_reuse_unavailable")
     if any(request.filters.model_dump(exclude_none=True).values()):

@@ -73,12 +73,16 @@ class ServiceSnapshot(SafetySnapshot):
 
 
 def seal(snapshot: SafetySnapshot) -> ServiceSeal:
-    if not isinstance(snapshot, ServiceSnapshot) or not isinstance(snapshot.service, ServiceSeal):
+    if not isinstance(snapshot, ServiceSnapshot) or not isinstance(
+        snapshot.service, ServiceSeal
+    ):
         raise RestoreRefused("restore_service_seal_required")
     return snapshot.service
 
 
-def snapshot_difference_sections(before: ServiceSnapshot, restored: ServiceSnapshot) -> list[str]:
+def snapshot_difference_sections(
+    before: ServiceSnapshot, restored: ServiceSnapshot
+) -> list[str]:
     """Fixed labels only: never include row values, identifiers, hashes or tokens."""
     labels = []
     for name in ("organizations", "identities", "sessions", "catalog"):
@@ -160,7 +164,9 @@ def _validate_service_seal(snapshot: ServiceSnapshot) -> None:
     delegations = index(authority.delegations)
     jobs = index(snapshot.rows["jobs"])
     exports = index(snapshot.rows["exports"])
-    members = {(r["organization_id"], r["identity_id"]) for r in snapshot.rows["memberships"]}
+    members = {
+        (r["organization_id"], r["identity_id"]) for r in snapshot.rows["memberships"]
+    }
     identities = {r["id"] for r in snapshot.identities}
     sessions = {r["token_hash"]: r for r in snapshot.sessions}
     policies = {
@@ -183,8 +189,10 @@ def _validate_service_seal(snapshot: ServiceSnapshot) -> None:
         logins.add((row["login_oid"], row["login_name"]))
     if (
         len(logins) != len(authority.principals)
-        or len({r["login_oid"] for r in authority.principals}) != len(authority.principals)
-        or len({r["login_name"] for r in authority.principals}) != len(authority.principals)
+        or len({r["login_oid"] for r in authority.principals})
+        != len(authority.principals)
+        or len({r["login_name"] for r in authority.principals})
+        != len(authority.principals)
         or len({r["id"] for r in authority.principals}) != len(authority.principals)
     ):
         raise RestoreRefused("restore_service_principal_refused")
@@ -198,7 +206,8 @@ def _validate_service_seal(snapshot: ServiceSnapshot) -> None:
             or (org, row["initiator_id"]) not in members
             or row["initiator_id"] not in identities
             or row["origin_session_hash"] not in sessions
-            or sessions[row["origin_session_hash"]]["identity_id"] != row["initiator_id"]
+            or sessions[row["origin_session_hash"]]["identity_id"]
+            != row["initiator_id"]
             or (org, row["source_id"], row["policy_version"]) not in policies
         ):
             raise RestoreRefused("restore_service_anchor_refused")
@@ -288,10 +297,17 @@ def supported_service_delta(before: SafetySnapshot, current: SafetySnapshot) -> 
     for key, prior in old_markers.items():
         row = new_markers[key]
         if (
-            any(row.get(k) != v for k, v in prior.items() if k not in ("stage", "purged_at"))
+            any(
+                row.get(k) != v
+                for k, v in prior.items()
+                if k not in ("stage", "purged_at")
+            )
             or (prior["stage"] == "purged" and row != prior)
             or row["stage"] not in (prior["stage"], "purged")
-            or (prior["purged_at"] is not None and row["purged_at"] != prior["purged_at"])
+            or (
+                prior["purged_at"] is not None
+                and row["purged_at"] != prior["purged_at"]
+            )
         ):
             raise RestoreRefused("restore_service_marker_history_refused")
     if old.roles != new.roles or old.catalog != new.catalog:
@@ -347,7 +363,9 @@ def supported_service_delta(before: SafetySnapshot, current: SafetySnapshot) -> 
 def bounded_rows(
     c: Connection, query: str, params: dict[str, Any] | None = None, *, limit: int = 500
 ) -> list[dict[str, Any]]:
-    values = c.execute(text(query + f" LIMIT {limit + 1}"), params or {}).mappings().all()
+    values = (
+        c.execute(text(query + f" LIMIT {limit + 1}"), params or {}).mappings().all()
+    )
     if len(values) > limit:
         raise RestoreRefused("restore_row_cap")
     return [dict(row) for row in values]
@@ -372,7 +390,9 @@ def service_rows(c: Connection, table: str) -> list[dict[str, Any]]:
     ]
 
 
-def export_seal(c: Connection, organizations: tuple[UUID, UUID]) -> dict[str, list[dict[str, Any]]]:
+def export_seal(
+    c: Connection, organizations: tuple[UUID, UUID]
+) -> dict[str, list[dict[str, Any]]]:
     return {
         table: bounded_rows(
             c,
@@ -385,7 +405,9 @@ def export_seal(c: Connection, organizations: tuple[UUID, UUID]) -> dict[str, li
     }
 
 
-def capture_service(engine: Engine, organizations: tuple[UUID, UUID]) -> ServiceSnapshot:
+def capture_service(
+    engine: Engine, organizations: tuple[UUID, UUID]
+) -> ServiceSnapshot:
     if len(set(organizations)) != 2:
         raise RestoreRefused("restore_tenant_scope_refused")
     with (
@@ -395,9 +417,9 @@ def capture_service(engine: Engine, organizations: tuple[UUID, UUID]) -> Service
         c.execute(text("SET LOCAL statement_timeout='5000'"))
         base = capture_rows(c, organizations)
         authority = [service_rows(c, table) for table in SERVICE_TABLES]
-        if c.execute(text("SELECT version_num FROM public.alembic_version")).scalars().all() != [
-            "0025_staged_bound_reuse"
-        ]:
+        if c.execute(
+            text("SELECT version_num FROM public.alembic_version")
+        ).scalars().all() != ["0026_bound_reuse"]:
             raise RestoreRefused("restore_service_schema_refused")
         # Cluster roles are not in pg_dump. Capture public attributes and membership
         # edges only, never pg_authid/credential verifiers. This is the same cluster.
@@ -443,7 +465,8 @@ def capture_service(engine: Engine, organizations: tuple[UUID, UUID]) -> Service
         # Portable catalog queries already used by fresh/populated upgrade proof.
         # Columns exceed the data-row cap; a separate finite 5000 catalog cap applies.
         catalog = {
-            name: bounded_rows(c, query, limit=5000) for name, query in CATALOG_QUERIES.items()
+            name: bounded_rows(c, query, limit=5000)
+            for name, query in CATALOG_QUERIES.items()
         }
         result = ServiceSnapshot(
             **base.__dict__,
@@ -496,7 +519,9 @@ class ServiceRestoreExercise(RestoreExercise):
     def restore_closed(self) -> None:
         with self.admin.connect() as c:
             self.admin_owner_oid: int = c.execute(
-                text("SELECT oid FROM pg_roles WHERE rolname='postgres' AND rolname=session_user")
+                text(
+                    "SELECT oid FROM pg_roles WHERE rolname='postgres' AND rolname=session_user"
+                )
             ).scalar_one()
         super().restore_closed()
         self.closed()
@@ -506,7 +531,9 @@ class ServiceRestoreExercise(RestoreExercise):
     ) -> None:
         self.closed()
         # Recheck source even for an identical second replay; never accept a stale seal.
-        if fingerprint(self.capture(self.admin, current.organizations)) != fingerprint(current):
+        if fingerprint(self.capture(self.admin, current.organizations)) != fingerprint(
+            current
+        ):
             raise RestoreRefused("restore_source_changed")
         super().replay(before, current, tokens)
         self.closed()
@@ -594,7 +621,9 @@ class ServiceRestoreExercise(RestoreExercise):
                             prior is None or prior["stage"] != "purged"
                         ):
                             omitted.add("purged_at")
-                        result.append({k: v for k, v in row.items() if k not in omitted})
+                        result.append(
+                            {k: v for k, v in row.items() if k not in omitted}
+                        )
                     return result
 
                 if actual is None or markers(actual) != markers(expected):

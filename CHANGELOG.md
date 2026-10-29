@@ -1,9 +1,7 @@
-## Explicit reuse request foundation — local, incomplete
+## Retained observation reuse — local candidate, acceptance pending
 
-- Record an explicit UTC freshness choice, reject it before job creation while reuse execution is unavailable, and reconstruct independent unaccepted review drafts from authored observations offline. This does not implement durable reuse or establish current authority. See [reuse decisions](docs/82-evidence-date-reuse-decisions.md).
-- Prepare target-specific review under current source and target checks, and connect draft-time materialization of one authored HTML observation under the requesting user's existing authority. The API and database still refuse reuse; source-linked SQL, cleanup and connected acceptance remain unverified.
-- Refuse fresh fixture acquisition when an explicitly reused observation is missing; actual SQL/worker regression remains pending.
-- Draft migration 0022 for same-tenant immutable source lineage, current-source fences and bounded dependent cleanup, with hard-disabled reuse links. Connect authored HTML planning and provenance display behind the existing API refusal; actual PostgreSQL and connected acceptance remain pending.
+- Add explicitly selected, fixture-only retained reuse with source-bound XML/PDF support proposed in migration 0026, original-time provenance and independent target review. Unsupported inputs and production-mode requests refuse; no live acquisition is enabled.
+- Use the existing source execution-read fence for retained item checks without a runtime table grant. Actual source-bound SQL, lifecycle, export, service, broker, installed and hosted acceptance remains required. See [reuse decisions](docs/82-evidence-date-reuse-decisions.md).
 
 ## Retained date-text precision candidate
 

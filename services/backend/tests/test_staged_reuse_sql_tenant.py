@@ -1,4 +1,4 @@
-"""Disposable PostgreSQL proof of staged bound-route refusal, not parser isolation."""
+"""Disposable PostgreSQL bound-reuse checks; not parser-isolation acceptance."""
 
 import json
 import os
@@ -84,37 +84,35 @@ def source_target(scenario: Scenario, route: str) -> tuple[Progress, UUID, UUID,
 
 
 @pytest.mark.parametrize("route", ["pdf", "article_xml"])
-def test_staged_non_html_source_is_bound_but_database_refuses_copy(
+def test_bound_non_html_copy_keeps_original_binding_and_replays(
     scenario: Scenario, route: str
 ) -> None:
     progress, source, target, batch, url = source_target(scenario, route)
     org = scenario.organizations[0]
     discovery = Discovery(progress.database, progress.token, SETTINGS)
-    with pytest.raises(DBAPIError) as failure:
-        _stage_bound_reuse(discovery, progress.associations, org, target, 1)
-    original = failure.value.orig
-    code = getattr(original, "sqlstate", None)
-    if (
-        code is None
-        and original is not None
-        and original.args
-        and isinstance(original.args[0], dict)
-    ):
-        code = original.args[0].get("C")
-    assert code == "EM009"
-    assert original is not None and original.args and isinstance(original.args[0], dict)
-    assert original.args[0].get("M") == "REUSE_SCOPE_DENIED"
+    _, selected = _stage_bound_reuse(discovery, progress.associations, org, target, 1)
+    assert selected == batch
+    _, replay = _stage_bound_reuse(discovery, progress.associations, org, target, 1)
+    assert replay == batch
     with progress.database.tenant(progress.token, org, Capability.READ_ORGANIZATION) as (c, _):
-        assert (
+        rows = (
             c.execute(
                 text(
-                    "SELECT count(*) FROM emailmonitor.article_observations "
-                    "WHERE organization_id=:org AND job_id=:job"
+                    "SELECT job_id,observation,observed_at,reused_from_job,reused_source_batch "
+                    "FROM emailmonitor.article_observations WHERE organization_id=:org "
+                    "AND job_id IN (:source,:target) AND article_url=:url"
                 ),
-                {"org": org, "job": target},
-            ).scalar_one()
-            == 0
+                {"org": org, "source": source, "target": target, "url": url},
+            )
+            .mappings()
+            .all()
         )
+        assert len(rows) == 2
+        original = next(row for row in rows if row["job_id"] == source)
+        reused = next(row for row in rows if row["job_id"] == target)
+        assert reused["observation"] == original["observation"]
+        assert reused["observed_at"] == original["observed_at"]
+        assert reused["reused_from_job"] == source and reused["reused_source_batch"] == batch
     assert progress.associations.detail(org, batch).observation_route == route
 
 

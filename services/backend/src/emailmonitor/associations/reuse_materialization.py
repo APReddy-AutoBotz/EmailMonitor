@@ -26,7 +26,7 @@ from emailmonitor.runtime.database import ServiceDatabase
 
 
 def materialize_draft(service: Associations, org: UUID, target_job: UUID, url: str) -> UUID:
-    """Stage one exact authored HTML observation for an opted-in draft job.
+    """Stage one exact authored retained observation for an opted-in draft job.
 
     Only explicitly opted-in authored fixture jobs reach this path. The source
     is selected under the human caller's existing tenant scope; no cross-job
@@ -35,9 +35,15 @@ def materialize_draft(service: Associations, org: UUID, target_job: UUID, url: s
     """
     if isinstance(service.database, ServiceDatabase) or type(service.token) is not str:
         raise AuthorizationDenied()
-    if url not in HTML_URLS:
+    if url in HTML_URLS:
+        adapter: Adapter = "html"
+    elif url in PDF_URLS:
+        adapter = "pdf"
+    elif url in XML_URLS:
+        adapter = "article_xml"
+    else:
         raise HTTPException(409, "Retained reuse is unavailable for this source route")
-    return _materialize_candidate(service, org, target_job, url, "html")
+    return _materialize_candidate(service, org, target_job, url, adapter)
 
 
 def _stage_bound_reuse(
@@ -46,8 +52,8 @@ def _stage_bound_reuse(
     """Connect staged planning and bound materialization without exposing a route.
 
     A failed materialization never starts fresh acquisition. The existing SQL
-    start fence requires a current copied observation, and the database still
-    refuses non-HTML links until its independent acceptance gates are complete.
+    start fence requires a current copied observation; the database separately
+    verifies any original XML/PDF execution binding.
     """
     if (
         discovery.database is not service.database
@@ -90,8 +96,8 @@ def _materialize_candidate(
 ) -> UUID:
     """Shared adapter implementation; callers and SQL independently gate use.
 
-    The public path invokes this only for HTML. XML/PDF remain blocked by
-    planning and the existing database guard pending their required acceptance.
+    The public path remains restricted to the registered authored fixture
+    adapters. Database guards independently check the original source binding.
     """
     if isinstance(service.database, ServiceDatabase) or type(service.token) is not str:
         raise AuthorizationDenied()

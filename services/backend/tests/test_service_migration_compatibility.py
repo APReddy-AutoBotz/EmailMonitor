@@ -17,7 +17,6 @@ from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
-from emailmonitor.organizations.database import digest
 from restore_exercise import ADMIN, RUNTIME, RestoreRefused, capture, require_ci
 from service_restore_catalog import CATALOG_QUERIES
 from sqlalchemy import Connection, Engine, create_engine, text
@@ -25,8 +24,10 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.exc import DBAPIError
 from test_source_foundation import policy_body
 
+from emailmonitor.organizations.database import digest
+
 ROOT = Path(__file__).resolve().parents[3]
-HEAD = "0025_staged_bound_reuse"
+HEAD = "0026_bound_reuse"
 FILTER_PREVIOUS = "0015_service_plan_cache"
 SERVICE_PREVIOUS = "0014_service_authority"
 PREVIOUS = "0013_provider_journey"

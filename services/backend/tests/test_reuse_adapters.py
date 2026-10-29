@@ -1,16 +1,17 @@
-"""Source-owned classification is closed and does not enable adapters."""
+"""Source-owned classification is closed and never grants authority."""
 
 from unittest.mock import MagicMock
 from uuid import UUID
 
 import pytest
+from fastapi import HTTPException
+from test_job_contracts import request_body
+
 from emailmonitor.associations.reuse_adapters import retained_adapter, retained_plan
 from emailmonitor.config import Settings
 from emailmonitor.discovery.planning import plan_input
 from emailmonitor.jobs.ledger import Ledger
 from emailmonitor.jobs.models import JobRequest
-from fastapi import HTTPException
-from test_job_contracts import request_body
 
 
 @pytest.mark.parametrize(
@@ -26,7 +27,7 @@ from test_job_contracts import request_body
         ("https://other.example/article-a.pdf", None),
     ],
 )
-def test_registered_adapter_classification_never_enables_bound_routes(
+def test_registered_adapter_classification_is_not_an_authority_decision(
     url: str, expected: str | None
 ) -> None:
     request = JobRequest.model_validate(
@@ -42,8 +43,10 @@ def test_registered_adapter_classification_never_enables_bound_routes(
     if candidate is not None:
         assert candidate.article_url == url and candidate.source_id == "synthetic-publisher"
         assert candidate.fresh_since.isoformat() == "2000-01-01T00:00:00+00:00"
-    if expected != "html":
+    if expected is None:
         assert plan_input(request).reason == "retained_reuse_unavailable"
+    else:
+        assert plan_input(request).reason == "retained_reuse_authored"
 
 
 @pytest.mark.parametrize("failure", ["fresh", "other_source", "filter", "pdf_disabled"])
@@ -70,7 +73,7 @@ def test_classification_refuses_unselected_or_out_of_scope(failure: str) -> None
         "https://synthetic.publisher.example/provider-doi.xml",
     ],
 )
-def test_public_creation_still_refuses_staged_non_html_before_writes(url: str) -> None:
+def test_public_creation_refuses_non_html_without_explicit_fixture_mode(url: str) -> None:
     request = JobRequest.model_validate(
         {
             **request_body(),
@@ -81,7 +84,7 @@ def test_public_creation_still_refuses_staged_non_html_before_writes(url: str) -
     database, connection = MagicMock(), MagicMock()
     database.tenant.return_value.__enter__.return_value = (connection, MagicMock())
     with pytest.raises(HTTPException) as denied:
-        Ledger(database, "synthetic", Settings(environment="test", fixture_mode=True)).create(
+        Ledger(database, "synthetic", Settings(environment="test", fixture_mode=False)).create(
             UUID(int=1), request, "staged-reuse-key"
         )
     assert denied.value.status_code == 409

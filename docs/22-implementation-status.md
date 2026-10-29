@@ -714,20 +714,6 @@ Normal/fresh backend, frontend and eight actual SQL cases passed; genuine hosted
 acceptance remains incomplete after a preceding outcome-keyboard failure. See
 [scope and acceptance](80-contextual-contact-suppression.md). No runtime authority
 or migration change is included.
-## Retained reuse preparation — local, incomplete
+## Retained reuse — local candidate, acceptance pending
 
-The explicit reuse request still refuses before job creation. A local preparation
-candidate constructs an independent unaccepted review draft using existing target
-and source checks and rechecks visibility, policy and expiry before return. The
-draft planning path is connected in code but blocked by API and database refusals;
-the new preparation is tested only with controlled fakes. Current worker delegation
-does not permit reading another job's source batch. SQL/lifecycle/concurrency proof,
-connected results/export and genuine hosted validation remain pending. See
-[reuse decisions](82-evidence-date-reuse-decisions.md).
-
-A local planning/materialization candidate stages exact authored HTML under the
-requesting user's current scope and initializes a separate target review. Migration
-0022 proposes source-current fencing and bounded dependent cleanup, but keeps all
-reuse links disabled. Its SQL, retention, cleanup, concurrency and service-role
-behavior have not been executed against PostgreSQL. The API also refuses creation;
-no visibility-only fence is accepted as a substitute for physical purge.
+Explicit fixture-only reuse records the original source observation and selected freshness cutoff while giving the target job independent review. Current source, tenant, policy and lifecycle checks remain required; unsupported or missing retained input cannot fall back to acquisition. Migrations 0022–0025 have been applied to a fresh disposable PostgreSQL instance; source-bound XML/PDF admission proposed in migration 0026 and the connected service, broker, installed-browser, populated upgrade and restore paths still require acceptance. The candidate is not a live-source or production capability. See [reuse decisions](82-evidence-date-reuse-decisions.md).

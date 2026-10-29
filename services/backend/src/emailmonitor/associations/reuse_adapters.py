@@ -30,9 +30,8 @@ class RetainedPlan:
 def retained_adapter(request: JobRequest) -> Adapter | None:
     """Classify registered direct inputs only; no SQL, fetch or capability grant.
 
-    XML/PDF classifications describe potential retained profiles. Their actual
-    planning and database writes remain refused until their full authority and
-    lifecycle path has been implemented and verified.
+    Classification does not replace the current policy, original-item,
+    retention, source-binding and database authorization checks.
     """
     value = request.input
     if (
@@ -52,7 +51,7 @@ def retained_adapter(request: JobRequest) -> Adapter | None:
 
 
 def retained_plan(request: JobRequest) -> RetainedPlan | None:
-    """Stage a selected adapter without publishing or activating it."""
+    """Describe a selected authored adapter without granting access."""
     adapter = retained_adapter(request)
     if adapter is None or request.reuse is None or not isinstance(request.input, URLInput):
         return None

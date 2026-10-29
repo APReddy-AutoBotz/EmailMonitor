@@ -81,6 +81,39 @@ def test_non_html_reuse_stays_refused_until_original_binding_is_supported() -> N
     assert "a.observation->'binding'=jsonb_build_object(" in existing
 
 
+def test_bound_reuse_migration_preserves_existing_guard_except_bound_adapter() -> None:
+    enabled = (VERSIONS / "0026_bound_reuse.sql").read_text()
+    old_guard = function(SQL, "guard_retained_reuse")
+    new_guard = function(enabled, "guard_retained_reuse")
+    original_urls = """OR NEW.article_url NOT IN ('https://synthetic.publisher.example/article-a.html',
+   'https://synthetic.publisher.example/article-b.html',
+   'https://synthetic.publisher.example/no-contact.html')"""
+    bounded_urls = """OR NOT COALESCE(((source.observation->>'route'='html' AND NEW.article_url IN
+   ('https://synthetic.publisher.example/article-a.html',
+    'https://synthetic.publisher.example/article-b.html',
+    'https://synthetic.publisher.example/no-contact.html'))
+  OR (source.observation->>'route' IN ('pdf','article_xml') AND
+   emailmonitor.retained_reuse_bound_source(NEW.organization_id,source.job_id,b.id,NEW.article_url))),false)"""
+    assert new_guard.count(bounded_urls) == 1
+    assert (
+        new_guard.replace(bounded_urls, original_urls).replace(
+            "source.observation->>'route' NOT IN ('html','pdf','article_xml')",
+            "source.observation->>'route'<>'html'",
+        )
+        == old_guard
+    )
+    assert not re.search(r"\bGRANT\s", enabled, re.I)
+    assert "0026_bound_reuse" in enabled
+    path = VERSIONS / "0026_bound_reuse.py"
+    spec = importlib.util.spec_from_file_location("reuse_bound_enable", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert module.down_revision == "0025_staged_bound_reuse"
+    with pytest.raises(RuntimeError, match="forward repair or a controlled restore"):
+        module.downgrade()
+
+
 def test_bound_source_migration_only_narrows_the_existing_release_fence() -> None:
     source = (VERSIONS / "0024_bound_reuse_proof.sql").read_text()
     original = function(SQL, "retained_reuse_current")

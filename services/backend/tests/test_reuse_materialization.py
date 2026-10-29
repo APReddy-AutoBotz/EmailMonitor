@@ -7,6 +7,10 @@ from unittest.mock import MagicMock
 from uuid import UUID
 
 import pytest
+from fastapi import HTTPException
+from test_durable_jobs import SETTINGS
+from test_job_contracts import request_body
+
 from emailmonitor.administration.admission import Admission
 from emailmonitor.associations import reuse_materialization as module
 from emailmonitor.associations.service import initial_bundle
@@ -15,9 +19,6 @@ from emailmonitor.extraction.html import parse_article
 from emailmonitor.jobs.ledger import Ledger
 from emailmonitor.jobs.models import canonical
 from emailmonitor.organizations.database import AuthorizationDenied
-from fastapi import HTTPException
-from test_durable_jobs import SETTINGS
-from test_job_contracts import request_body
 
 ORG, SOURCE, TARGET, BATCH = (UUID(int=i) for i in range(1, 5))
 URL = "https://synthetic.publisher.example/article-a.html"
@@ -179,7 +180,7 @@ def test_other_routes_are_not_silently_acquired(monkeypatch: pytest.MonkeyPatch)
         ("article_xml", "https://synthetic.publisher.example/article-xml.xml"),
     ],
 )
-def test_staged_shared_selector_preserves_public_refusal(
+def test_bound_public_selector_preserves_adapter_and_refuses_mismatch(
     monkeypatch: pytest.MonkeyPatch, adapter: str, url: str
 ) -> None:
     service, connection, state = setup(monkeypatch)
@@ -214,15 +215,11 @@ def test_staged_shared_selector_preserves_public_refusal(
         return result
 
     connection.execute.side_effect = execute
-    with pytest.raises(HTTPException):
-        module.materialize_draft(service, ORG, TARGET, url)
-    assert state["inserted"] == []
     with pytest.raises(AuthorizationDenied):
         module._materialize_candidate(service, ORG, TARGET, url, "html")
     assert state["inserted"] == []
-    # Controlled fakes test selection only. Actual SQL still rejects these
-    # routes, and no real materialization or authority proof is implied.
-    assert module._materialize_candidate(service, ORG, TARGET, url, adapter) == BATCH  # type: ignore[arg-type]
+    # Controlled fakes test selection only, not SQL or authority.
+    assert module.materialize_draft(service, ORG, TARGET, url) == BATCH
     selection = next(
         call
         for call in connection.execute.call_args_list
