@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiScope } from './client'
 import type { Context } from './ui'
 import { Wizard } from './views'
+import { SourcePlanSummary } from './sourcePlanSummary'
 
 // Exercise real form handlers without adding a DOM/browser dependency.
 const hooks = vi.hoisted(() => ({ values: [] as unknown[], index: 0 }))
@@ -54,7 +55,7 @@ function setup(canAcquire = true, option = 'allow_browser') {
   const requestReuse = (checked: boolean) => {
     elements(render()).find(element => element.props['aria-label'] === 'Request retained observation reuse')!.props.onChange!({ target: { checked } }); render()
   }
-  return { checkbox, toggle, submit, hasPlan, launch, launchDisabled, write, context, chooseSource, changeDate, requestReuse }
+  return { checkbox, toggle, submit, hasPlan, launch, launchDisabled, write, context, chooseSource, changeDate, requestReuse, render }
 }
 beforeEach(() => { hooks.values = []; hooks.index = 0; vi.restoreAllMocks() })
 
@@ -194,6 +195,22 @@ it('does not navigate from a completed launch response after source or session i
 
 
 describe('publication date request ownership', () => {
+  it('connects the returned draft and refusal to the summary and clears it when input changes', async () => {
+    const form = setup()
+    const request = { input: { type: 'keyword', source_id: 'synthetic-publisher' }, filters: { publication_date_type: 'online', publication_from: '2026-01-15' } }
+    vi.mocked(form.context.scope.request).mockResolvedValue({ id: '00000000-0000-0000-0000-000000000002', state: 'draft', row_version: 1, request })
+    const refusal = { plan: { classification: 'unsupported', reason: 'fixture_filters_unavailable' }, persisted: false }
+    form.write.mockImplementation(async path => path === '/jobs' ? { id: '00000000-0000-0000-0000-000000000002' } : refusal)
+    form.changeDate('Publication date from', '2026-01-15')
+    form.changeDate('Publication date type', 'online')
+    await form.submit()
+    const summary = elements(form.render()).find(element => element.type === SourcePlanSummary)
+    expect(summary?.props).toMatchObject({ plan: refusal, job: { request } })
+    expect(form.launchDisabled()).toBe(true)
+    form.changeDate('Publication date type', 'issue')
+    expect(form.hasPlan()).toBe(false)
+    expect(form.write.mock.calls.some(([path]) => path.endsWith('/start'))).toBe(false)
+  })
   it('preserves the explicit date type, clears old plans and changes request identity', async () => {
     const form = setup()
     await form.submit(); expect(form.hasPlan()).toBe(true)
