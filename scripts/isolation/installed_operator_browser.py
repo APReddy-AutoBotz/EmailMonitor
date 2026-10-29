@@ -544,8 +544,10 @@ async def main() -> None:
                 await activate(page, page.get_by_role("button", name="Save review", exact=True))
                 await page.get_by_role("dialog").wait_for(state="hidden")
                 checkpoint("export_preview")
+                export_checkpoint("navigate", None)
                 await activate(page, page.get_by_role("button", name="Exports", exact=True))
                 for index, format_name in enumerate(("xlsx", "csv")):
+                    export_checkpoint("format", format_name)
                     await select_index(page, page.get_by_label(re.compile(r"^Format")), index)
                     if format_name == "csv":
                         outcomes = page.get_by_role(
@@ -555,31 +557,41 @@ async def main() -> None:
                         await focus(page, outcomes)
                         await page.keyboard.press("Space")
                         await expect(outcomes).not_to_be_checked()
+                    export_checkpoint("preview_activate", format_name)
                     await activate(
                         page,
                         page.get_by_role(
                             "button", name="Preview eligible export counts", exact=True
                         ),
                     )
+                    export_checkpoint("preview_wait", format_name)
                     await page.get_by_role("region", name="Current export preview").wait_for()
+                    export_checkpoint("create", format_name)
                     await activate(
                         page,
                         page.get_by_role("button", name="Create asynchronous export", exact=True),
                     )
                     row = page.get_by_role("row").filter(has_text=" · " + format_name)
+                    export_checkpoint("row_wait", format_name)
                     await row.wait_for()
+                    export_checkpoint("ready_wait", format_name)
                     async with asyncio.timeout(30):
                         while not await row.get_by_role(
                             "button", name="Download", exact=True
                         ).is_enabled():
                             await asyncio.sleep(0.4)
+                            export_checkpoint("refresh", format_name)
                             await activate(
                                 page,
                                 page.get_by_role("button", name="Refresh current view", exact=True),
                             )
+                            export_checkpoint("ready_wait", format_name)
                     download_seen.clear()
+                    export_checkpoint("download_activate", format_name)
                     await activate(page, row.get_by_role("button", name="Download", exact=True))
+                    export_checkpoint("download_wait", format_name)
                     await asyncio.wait_for(download_seen.wait(), timeout=5)
+                export_checkpoint("verify", None)
                 await channel.request({"kind": "control", "action": "wait_exports"})
                 checkpoint("url_plan")
                 await activate(page, page.get_by_role("button", name="New extraction", exact=True))
@@ -609,6 +621,77 @@ async def main() -> None:
                 await expect(
                     outcomes.get_by_role("row").nth(1).locator("td:nth-child(2), td:nth-child(3)")
                 ).to_have_text(["no contact", "no contact"])
+                if setup.get("retained_reuse") is True:
+                    checkpoint("reuse_plan")
+                    await activate(
+                        page, page.get_by_role("button", name="New extraction", exact=True)
+                    )
+                    await activate(page, page.get_by_role("button", name="URL", exact=True))
+                    await type_text(
+                        page,
+                        page.get_by_label("Search-results or article URL", exact=True),
+                        "https://synthetic.publisher.example/article-a.html",
+                    )
+                    reuse_checkbox = page.get_by_label(
+                        "Request retained observation reuse", exact=True
+                    )
+                    await focus(page, reuse_checkbox)
+                    await page.keyboard.press("Space")
+                    await expect(reuse_checkbox).to_be_checked()
+                    cutoff = page.get_by_label("Reuse freshness cutoff UTC", exact=True)
+                    await focus(page, cutoff)
+                    # Native datetime controls have locale-dependent keyboard segments;
+                    # Playwright's native input action emits the normal input/change events.
+                    await cutoff.fill("2000-01-01T00:00")
+                    await activate(
+                        page,
+                        page.get_by_role("button", name="Create and validate plan", exact=True),
+                    )
+                    await page.get_by_role("region", name="Server source plan").wait_for()
+                    await activate(
+                        page, page.get_by_role("button", name="Launch extraction", exact=True)
+                    )
+                    checkpoint("reuse_worker")
+                    async with asyncio.timeout(30):
+                        await page.get_by_text("completed", exact=True).wait_for(
+                            state="visible", timeout=30000
+                        )
+                    checkpoint("reuse_results")
+                    target_outcomes = page.get_by_role(
+                        "table", name="Current-authorized article outcomes"
+                    )
+                    await target_outcomes.get_by_text("Reused observation", exact=False).wait_for()
+                    await expect(
+                        target_outcomes.get_by_role("row").nth(1).locator("td:nth-child(2)")
+                    ).to_have_text("needs review")
+                    checkpoint("reuse_review")
+                    await activate(
+                        page,
+                        page.get_by_role("button", name="Review queue for this job", exact=True),
+                    )
+                    await page.get_by_role(
+                        "button", name="Evidence and review", exact=True
+                    ).first.wait_for()
+                    checkpoint("reuse_export")
+                    await activate(
+                        page,
+                        page.get_by_role(
+                            "button", name="View accepted results for this selection", exact=True
+                        ),
+                    )
+                    await activate(
+                        page, page.get_by_role("button", name="Export this selection", exact=True)
+                    )
+                    checkpoint("reuse_preview")
+                    await activate(
+                        page,
+                        page.get_by_role(
+                            "button", name="Preview eligible export counts", exact=True
+                        ),
+                    )
+                    preview = page.get_by_role("region", name="Current export preview")
+                    await preview.wait_for()
+                    await preview.get_by_text(re.compile(r"^0 contacts; ")).wait_for()
             checkpoint("readonly_role")
             organization = page.get_by_role("combobox", name="Active organization", exact=True)
             values = await organization.locator("option").evaluate_all(

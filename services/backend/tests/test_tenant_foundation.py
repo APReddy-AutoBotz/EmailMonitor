@@ -52,12 +52,12 @@ class FixtureExchange:
 
 @dataclass
 class Scenario:
-    foundation: Foundation
-    private_key: str
-    exchange: FixtureExchange
+    foundation: Foundation = field(repr=False)
+    private_key: str = field(repr=False)
+    exchange: FixtureExchange = field(repr=False)
     organizations: tuple[UUID, UUID]
     identities: dict[str, UUID]
-    admin_url: str
+    admin_url: str = field(repr=False)
 
     def client(self) -> APIClient:
         return APIClient(

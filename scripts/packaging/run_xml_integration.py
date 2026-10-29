@@ -25,6 +25,7 @@ CONSUMER_SECONDS = {
     "application": 1200,
     "application-backend": 1200,
     "application-outcome-sql": 1200,
+    "application-capacity-sql": 1200,
     "transport": 900,
     "installed": 900,
 }
@@ -32,6 +33,7 @@ WRAPPER_SECONDS = {
     "application": 1200,
     "application-backend": 1200,
     "application-outcome-sql": 1200,
+    "application-capacity-sql": 1200,
     "transport": 1200,
     "installed": 1200,
 }
@@ -39,6 +41,7 @@ MODES = {
     "application": ("bash", "scripts/check_tenant_foundation.sh"),
     "application-backend": ("bash", "scripts/check_tenant_foundation.sh", "ci-backend"),
     "application-outcome-sql": ("bash", "scripts/check_tenant_foundation.sh", "ci-outcome-sql"),
+    "application-capacity-sql": ("bash", "scripts/check_tenant_foundation.sh", "ci-capacity-sql"),
     "transport": ("bash", "scripts/packaging/check_xml_transport.sh"),
     "installed": ("bash", "scripts/packaging/check_xml_installed.sh"),
 }
@@ -462,7 +465,7 @@ def main() -> None:
     # for setup/final runner overhead. Workload headroom is a separate risk.
     signal.alarm(WRAPPER_SECONDS[mode])
     try:
-        if mode in {"application-backend", "installed"}:
+        if mode in {"application-backend", "application-capacity-sql", "installed"}:
             from backend_outcome import reported
 
             reported(lambda environment: execute(mode, environment), dict(os.environ))

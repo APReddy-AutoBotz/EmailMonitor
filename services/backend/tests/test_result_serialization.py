@@ -146,6 +146,127 @@ def test_contacts_only_is_plain_csv() -> None:
     assert artifact.body.startswith(b'"Association ID"')
 
 
+def test_reuse_provenance_exports_without_changing_legacy_rows() -> None:
+    from emailmonitor.results.render import contact_rows, outcome_rows
+
+    original = snapshot()
+    assert "Observation origin" not in contact_rows(original)[0]
+    assert "Observation origin" not in outcome_rows(original)[0]
+    original_contact = original.contacts[0]
+    reused_contact = Contact.model_validate(
+        {
+            **original_contact.model_dump(),
+            "observation_origin": "reused",
+            "observed_at": NOW - timedelta(hours=1),
+        }
+    )
+    original_outcome = original.article_outcomes[0]
+    reused_outcome = ArticleOutcome.model_validate(
+        {
+            **original_outcome.model_dump(),
+            "observation_origin": "reused",
+            "observed_at": NOW - timedelta(hours=1),
+        }
+    )
+    updated = original.model_copy(
+        update={"contacts": (reused_contact,), "article_outcomes": (reused_outcome,)}
+    )
+    contacts = contact_rows(updated)
+    outcomes = outcome_rows(updated)
+    assert contacts[1][contacts[0].index("Observation origin")] == "Reused"
+    assert contacts[1][contacts[0].index("Observed at")] == (NOW - timedelta(hours=1)).isoformat()
+    assert contacts[1][contacts[0].index("Observation age at snapshot (seconds)")] == "3600"
+    assert outcomes[1][outcomes[0].index("Observation origin")] == "Reused"
+    assert (
+        outcomes[1][outcomes[0].index("Original observation time")]
+        == (NOW - timedelta(hours=1)).isoformat()
+    )
+    assert outcomes[1][outcomes[0].index("Observation age at snapshot (seconds)")] == "3600"
+    assert "observation_origin" not in original_contact.model_dump(mode="json")
+    assert "observation_origin" not in original_outcome.model_dump(mode="json")
+    assert "observed_at" not in original_outcome.model_dump(mode="json")
+
+
+def test_reused_outcome_requires_original_aware_time() -> None:
+    original = snapshot().article_outcomes[0].model_dump()
+    with pytest.raises(ValidationError):
+        ArticleOutcome.model_validate({**original, "observation_origin": "reused"})
+    with pytest.raises(ValidationError):
+        ArticleOutcome.model_validate(
+            {**original, "observation_origin": "reused", "observed_at": NOW.replace(tzinfo=None)}
+        )
+
+
+def test_reused_outcome_schema_and_runtime_refuse_incomplete_provenance() -> None:
+    import json
+    from pathlib import Path
+
+    import jsonschema
+
+    schema = json.loads(
+        (Path(__file__).resolve().parents[3] / "contracts/result-outcomes.schema.json").read_text()
+    )
+    original = snapshot().article_outcomes[0].model_dump(mode="json")
+    valid = {**original, "observation_origin": "reused", "observed_at": NOW.isoformat()}
+    schema_value = {"items": [valid], "next_cursor": None}
+    jsonschema.validate(schema_value, schema, format_checker=jsonschema.FormatChecker())
+    assert ArticleOutcome.model_validate_json(json.dumps(valid)).observation_origin == "reused"
+    del valid["observed_at"]
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate({"items": [valid], "next_cursor": None}, schema)
+    with pytest.raises(ValidationError):
+        ArticleOutcome.model_validate_json(json.dumps(valid))
+
+
+def test_reused_future_time_does_not_invent_export_age() -> None:
+    from emailmonitor.results.render import contact_rows
+
+    original = snapshot()
+    reused = Contact.model_validate(
+        {
+            **original.contacts[0].model_dump(),
+            "observation_origin": "reused",
+            "observed_at": NOW + timedelta(seconds=1),
+        }
+    )
+    rows = contact_rows(original.model_copy(update={"contacts": (reused,)}))
+    assert rows[1][rows[0].index("Observation age at snapshot (seconds)")] == ""
+
+
+def test_reuse_provenance_is_in_actual_csv_and_xlsx_bytes() -> None:
+    for format in ("csv", "xlsx"):
+        original = snapshot(format=format)
+        reused_contact = Contact.model_validate(
+            {
+                **original.contacts[0].model_dump(),
+                "observation_origin": "reused",
+                "observed_at": NOW - timedelta(hours=1),
+            }
+        )
+        reused_outcome = ArticleOutcome.model_validate(
+            {
+                **original.article_outcomes[0].model_dump(),
+                "observation_origin": "reused",
+                "observed_at": NOW - timedelta(hours=1),
+            }
+        )
+        updated = original.model_copy(
+            update={"contacts": (reused_contact,), "article_outcomes": (reused_outcome,)}
+        )
+        artifact = render(updated)
+        with ZipFile(io.BytesIO(artifact.body)) as archive:
+            if format == "csv":
+                contacts = archive.read("contacts.csv").decode()
+                outcomes = archive.read("article-outcomes.csv").decode()
+            else:
+                contacts = archive.read("xl/worksheets/sheet1.xml").decode()
+                outcomes = archive.read("xl/worksheets/sheet2.xml").decode()
+        assert "Observation origin" in contacts and "Reused" in contacts and "3600" in contacts
+        assert (
+            "Original observation time" in outcomes and "Reused" in outcomes and "3600" in outcomes
+        )
+
+
 @pytest.mark.parametrize(
     "value", ["=1+1", '＝HYPERLINK("https://example.org")', '<f>bad</f> & "text"', "研究者"]
 )

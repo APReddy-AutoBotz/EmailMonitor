@@ -1,0 +1,296 @@
+"""Static migration contracts; no database or concurrency acceptance is implied."""
+
+import ast
+import importlib.util
+import re
+from pathlib import Path
+
+import pytest
+import sqlparse
+
+ROOT = Path(__file__).resolve().parents[3]
+VERSIONS = ROOT / "services/backend/migrations/versions"
+SQL = (VERSIONS / "0022_retained_reuse.sql").read_text()
+
+
+def test_0023_packaging_companion_matches_unchanged_inline_operations() -> None:
+    source = ast.parse((VERSIONS / "0023_enable_retained_reuse.py").read_text())
+    upgrade = next(
+        node for node in source.body if isinstance(node, ast.FunctionDef) and node.name == "upgrade"
+    )
+    expected = []
+    for expression in upgrade.body:
+        assert isinstance(expression, ast.Expr) and isinstance(expression.value, ast.Call)
+        call = expression.value
+        assert isinstance(call.func, ast.Attribute) and call.func.attr == "execute"
+        assert isinstance(call.func.value, ast.Name) and call.func.value.id == "op"
+        assert len(call.args) == 1
+        value = ast.literal_eval(call.args[0])
+        assert isinstance(value, str)
+        expected.append(value.strip().rstrip(";"))
+    companion = sqlparse.format(
+        (VERSIONS / "0023_enable_retained_reuse.sql").read_text(), strip_comments=True
+    )
+    actual = [statement.strip().rstrip(";") for statement in sqlparse.split(companion)]
+    assert len(expected) == len(actual) == 4 and actual == expected
+
+
+def test_enabling_migration_is_narrow_and_forward_only() -> None:
+    path = VERSIONS / "0023_enable_retained_reuse.py"
+    source = path.read_text()
+    assert 'down_revision = "0022_retained_reuse"' in source
+    assert "DROP CONSTRAINT retained_reuse_disabled" in source
+    assert "0023_enable_retained_reuse" in source
+    assert not re.search(r"\bGRANT\s", source, re.I)
+    spec = importlib.util.spec_from_file_location("reuse_enable_migration", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    with pytest.raises(RuntimeError, match="forward repair or a controlled restore"):
+        module.downgrade()
+
+
+def function(source: str, name: str) -> str:
+    match = re.search(
+        r"CREATE (?:OR REPLACE )?FUNCTION emailmonitor\." + name + r"\([^\n]*\).*?\$\$;",
+        source,
+        re.S,
+    )
+    assert match is not None
+    return match.group().replace("CREATE FUNCTION ", "CREATE OR REPLACE FUNCTION ", 1)
+
+
+def test_existing_lifecycle_predicates_are_retained_and_narrowed() -> None:
+    for name, prior in (
+        ("privacy_job_allowed", "0011_lifecycle.sql"),
+        ("privacy_job_state", "0014_service_authority.sql"),
+    ):
+        original = function((VERSIONS / prior).read_text(), name)
+        updated = function(SQL, name)
+        assert (
+            updated.replace(" AND emailmonitor.retained_reuse_current(p_org,p_job)\n", "")
+            == original
+        )
+
+
+def test_lineage_is_same_tenant_immutable_and_disabled_by_default() -> None:
+    assert "FOREIGN KEY(organization_id,reused_from_job,article_url)" in SQL
+    assert "FOREIGN KEY(organization_id,reused_source_batch)" in SQL
+    assert "reused_from_job<>job_id" in SQL
+    assert "source.reused_from_job IS NOT NULL" in SQL
+    assert "prior.reused_from_job IS NOT NULL" in SQL
+    assert "OLD.reused_from_job IS NOT NULL" in SQL
+    assert "source.observation IS DISTINCT FROM NEW.observation" in SQL
+    assert "source.source_digest<>NEW.source_digest" in SQL
+    assert "d.checkpoint->'articles' IS DISTINCT FROM jsonb_build_array(NEW.article_url)" in SQL
+    assert "NEW.observed_at:=source.observed_at" in SQL
+    assert "NEW.expires_at:=LEAST(source.expires_at,b.expires_at)" in SQL
+    assert "emailmonitor.privacy_excerpt_allowed" in SQL
+    assert "retained_reuse_disabled CHECK" in SQL
+    assert (
+        "reused_from_job IS NULL AND reused_source_revision IS NULL AND reused_source_batch IS NULL"
+        in SQL
+    )
+    assert not re.search(r"\bGRANT\s", SQL, re.I)
+
+
+def test_non_html_reuse_stays_refused_until_original_binding_is_supported() -> None:
+    guard = function(SQL, "guard_retained_reuse")
+    assert "source.observation->>'route'<>'html'" in guard
+    existing = (VERSIONS / "0018_authored_pdf.sql").read_text()
+    assert "j.state<>'running' OR NEW.observation->>'content_digest'" in existing
+    assert "'organization',NEW.organization_id,'job',NEW.job_id" in existing
+    assert "'organization',NEW.organization_id::text,'job',NEW.job_id::text" in existing
+    assert "a.observation->'binding'=jsonb_build_object(" in existing
+
+
+def test_bound_reuse_migration_preserves_existing_guard_except_bound_adapter() -> None:
+    enabled = (VERSIONS / "0026_bound_reuse.sql").read_text()
+    old_guard = function(SQL, "guard_retained_reuse")
+    new_guard = function(enabled, "guard_retained_reuse")
+    original_urls = """OR NEW.article_url NOT IN ('https://synthetic.publisher.example/article-a.html',
+   'https://synthetic.publisher.example/article-b.html',
+   'https://synthetic.publisher.example/no-contact.html')"""
+    bounded_urls = """OR NOT COALESCE(((source.observation->>'route'='html' AND NEW.article_url IN
+   ('https://synthetic.publisher.example/article-a.html',
+    'https://synthetic.publisher.example/article-b.html',
+    'https://synthetic.publisher.example/no-contact.html'))
+  OR (source.observation->>'route' IN ('pdf','article_xml') AND
+   emailmonitor.retained_reuse_bound_source(NEW.organization_id,source.job_id,b.id,NEW.article_url))),false)"""
+    assert new_guard.count(bounded_urls) == 1
+    assert (
+        new_guard.replace(bounded_urls, original_urls).replace(
+            "source.observation->>'route' NOT IN ('html','pdf','article_xml')",
+            "source.observation->>'route'<>'html'",
+        )
+        == old_guard
+    )
+    assert not re.search(r"\bGRANT\s", enabled, re.I)
+    assert "0026_bound_reuse" in enabled
+    path = VERSIONS / "0026_bound_reuse.py"
+    spec = importlib.util.spec_from_file_location("reuse_bound_enable", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert module.down_revision == "0025_staged_bound_reuse"
+    with pytest.raises(RuntimeError, match="forward repair or a controlled restore"):
+        module.downgrade()
+
+
+def test_bound_source_migration_only_narrows_the_existing_release_fence() -> None:
+    source = (VERSIONS / "0024_bound_reuse_proof.sql").read_text()
+    original = function(SQL, "retained_reuse_current")
+    narrowed = function(source, "retained_reuse_current")
+    added = (
+        "    AND CASE WHEN t.observation->>'route' IN ('pdf','article_xml')\n"
+        "     THEN emailmonitor.retained_reuse_bound_source(p_org,s.job_id,b.id,s.article_url)\n"
+        "     ELSE true END\n"
+    )
+    assert narrowed.replace(added, "") == original
+    proof = source.split("CREATE FUNCTION emailmonitor.retained_reuse_bound_source(", 1)[1]
+    for predicate in (
+        "i.organization_id=a.organization_id",
+        "i.job_id=a.job_id",
+        "i.id::text=a.observation->'binding'->>'item'",
+        "i.batch_id=b.id",
+        "i.inherited_job_id IS NULL",
+        "a.reused_from_job IS NULL",
+        "a.source_digest=a.observation->>'content_digest'",
+        "a.observation->>'acquisition_digest'=a.source_digest",
+        "a.observation->'provider'->>'source_id'=a.source_id",
+        "a.observation->'binding'=jsonb_build_object(",
+        "a.expires_at>clock_timestamp()",
+        "b.expires_at>clock_timestamp()",
+    ):
+        assert predicate in proof
+    assert "REVOKE ALL ON FUNCTION emailmonitor.retained_reuse_bound_source" in source
+    assert not re.search(r"\bGRANT\s", source, re.I)
+    assert "guard_article_observation" not in source
+    assert "guard_retained_reuse" not in source
+    assert "0024_bound_reuse_proof" in source
+    assert len(sqlparse.split(source)) == 6
+
+
+def test_staged_bound_adapter_keeps_ordinary_guards_and_does_not_enable_routes() -> None:
+    staged = (VERSIONS / "0025_staged_bound_reuse.sql").read_text()
+    prior_guard = (VERSIONS / "0019_retained_paper_identity.sql").read_text()
+    prior_binding = (VERSIONS / "0018_authored_pdf.sql").read_text()
+
+    def extract(source: str, name: str) -> str:
+        match = re.search(
+            r"CREATE OR REPLACE FUNCTION emailmonitor\." + name + r"\(.*?\$function\$\s*;",
+            source,
+            re.S,
+        )
+        assert match is not None
+        return match.group()
+
+    guard = extract(staged, "guard_article_observation")
+    guard = guard.replace(" reuse_bound boolean:=false;", "")
+    guard, count = re.subn(
+        r" -- BEGIN staged bound-reuse-only checks\.\n.*?"
+        r" -- END staged bound-reuse-only checks\.\n",
+        "",
+        guard,
+        flags=re.S,
+    )
+    assert count == 1
+    guard = guard.replace("(j.state<>'running' AND NOT reuse_bound)", "j.state<>'running'")
+    guard, count = re.subn(
+        r" OR \(NOT reuse_bound AND (NEW\.observation->'binding' IS DISTINCT FROM "
+        r"jsonb_build_object\(\n.*?'discovery_revision',NEW\.discovery_revision\))\)",
+        r" OR \1",
+        guard,
+        flags=re.S,
+    )
+    assert count == 2
+    assert guard == extract(prior_guard, "guard_article_observation")
+    assert "original.observation=NEW.observation" in staged
+    assert "original.source_digest=NEW.source_digest" in staged
+    assert "emailmonitor.association_parent_fence" in staged
+    assert "emailmonitor.retained_reuse_bound_source" in staged
+    assert "emailmonitor.human_work_tenant_allowed" in staged
+    added = """
+ OR (a.reused_from_job IS NOT NULL
+  AND emailmonitor.retained_reuse_current(p_org,a.job_id)
+  AND emailmonitor.retained_reuse_bound_source(p_org,a.reused_from_job,
+   a.reused_source_batch,a.article_url))"""
+    binding = extract(staged, "retained_article_binding")
+    assert binding.replace(added, "") == extract(prior_binding, "retained_article_binding")
+    assert "guard_retained_reuse" not in staged.split("SET ROLE", 1)[1]
+    assert not re.search(r"\bGRANT\s", staged, re.I)
+    assert len(sqlparse.split(staged)) == 5
+
+
+def test_source_privacy_fence_does_not_treat_policy_revocation_as_expiry() -> None:
+    source = function(SQL, "retained_reuse_current")
+    assert "emailmonitor.privacy_job_state(p_org,s.job_id)" in source
+    assert "emailmonitor.publication_batch_state" not in source
+    assert "t.expires_at>clock_timestamp()" in source
+
+
+def test_cleanup_is_bounded_and_source_cannot_be_reported_purged_first() -> None:
+    purge = function(SQL, "lifecycle_purge")
+    assert "a.reused_from_job=marker.job_id ORDER BY a.job_id LIMIT 10" in purge
+    assert purge.index("lifecycle_purge_job(p_org,item.job_id)") < purge.index(
+        "lifecycle_purge_job(p_org,marker.job_id)"
+    )
+    assert "RETURN emailmonitor.lifecycle_receipt(p_org,p_id)" in purge
+    assert "ORDER BY CASE WHEN EXISTS" in purge
+    assert "lifecycle.fenced" in purge and "lifecycle.purged" in purge
+
+
+def test_result_provenance_is_added_only_for_reused_observations() -> None:
+    contact = function(SQL, "result_contact_document")
+    outcome = function(SQL, "result_outcome_document")
+    assert "CASE WHEN obs.reused_from_job IS NOT NULL" in contact
+    assert "jsonb_build_object('observation_origin','reused') ELSE '{}'::jsonb END" in contact
+    assert "CASE WHEN obs.reused_from_job IS NOT NULL" in outcome
+    assert "'observation_origin','reused','observed_at',obs.observed_at" in outcome
+    publication = function(SQL, "publication_outcome_state")
+    projection = (
+        "CASE WHEN obs.reused_from_job IS NOT NULL THEN "
+        "jsonb_build_object('observation_origin','reused','observed_at',obs.observed_at) "
+        "ELSE '{}'::jsonb END"
+    )
+    assert projection in outcome and projection in publication
+    assert "emailmonitor.publication_job_state(p_org,p_job)" in publication
+
+
+def test_start_refuses_reuse_without_current_materialized_input() -> None:
+    start = function(SQL, "execution_start")
+    assert "j.request ? 'reuse' AND NOT EXISTS" in start
+    assert "a.reused_from_job IS NOT NULL" in start
+    assert "emailmonitor.retained_reuse_current(p_org,p_job)" in start
+
+
+def test_unsupported_reuse_continuation_refuses_before_creating_child() -> None:
+    retry = function(SQL, "execution_retry")
+    assert "emailmonitor.execution_control_fence(p_org,p_job)" in retry
+    assert "j.request ? 'reuse'" in retry
+    assert retry.index("EXECUTION_RETRY_DENIED") < retry.index("execution_retry_pre_entitlement")
+
+
+def test_reuse_audit_requires_current_human_job_and_link() -> None:
+    audit = function(SQL, "work_audit")
+    assert "p_action='extraction.retained_reused'" in audit
+    assert "emailmonitor.human_work_tenant_allowed(p_org)" in audit
+    assert "emailmonitor.job_write_allowed(p_org,p_resource)" in audit
+    assert "a.reused_from_job IS NOT NULL" in audit
+    assert "emailmonitor.retained_reuse_current(p_org,p_resource)" in audit
+
+
+def test_migration_is_forward_only_and_sql_statements_are_closed() -> None:
+    path = VERSIONS / "0022_retained_reuse.py"
+    spec = importlib.util.spec_from_file_location("reuse_migration_contract", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert module.revision == "0022_retained_reuse"
+    assert module.down_revision == "0021_review_unlink"
+    with pytest.raises(RuntimeError, match="forward repair"):
+        module.downgrade()
+    statements = sqlparse.split(SQL)
+    assert statements[0].endswith("SET ROLE emailmonitor_owner;")
+    assert statements[-1] == "RESET ROLE;"
+    assert "'0022_retained_reuse'" in SQL

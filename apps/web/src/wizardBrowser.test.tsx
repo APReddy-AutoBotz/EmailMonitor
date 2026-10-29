@@ -51,9 +51,48 @@ function setup(canAcquire = true, option = 'allow_browser') {
   const changeDate = (label: string, value: string) => {
     elements(render()).find(element => element.props['aria-label'] === label && element.props.onChange)!.props.onChange!({ target: { checked: false, value } }); render()
   }
-  return { checkbox, toggle, submit, hasPlan, launch, launchDisabled, write, context, chooseSource, changeDate }
+  const requestReuse = (checked: boolean) => {
+    elements(render()).find(element => element.props['aria-label'] === 'Request retained observation reuse')!.props.onChange!({ target: { checked } }); render()
+  }
+  return { checkbox, toggle, submit, hasPlan, launch, launchDisabled, write, context, chooseSource, changeDate, requestReuse }
 }
 beforeEach(() => { hooks.values = []; hooks.index = 0; vi.restoreAllMocks() })
+
+describe('retained reuse request is explicit and fail-closed', () => {
+  it('omits reuse by default and carries an explicit cutoff without silently launching', async () => {
+    const form = setup()
+    await form.submit()
+    const first = form.write.mock.calls.find(([path]) => path === '/jobs')![1] as Record<string, unknown>
+    expect(first).not.toHaveProperty('reuse')
+    form.requestReuse(true)
+    expect(form.hasPlan()).toBe(false)
+    form.changeDate('Reuse freshness cutoff UTC', '2026-10-01T13:00')
+    form.write.mockImplementation(async path => { if (path === '/jobs') throw new Error('Retained observation reuse is not yet available'); return {} })
+    await expect(form.submit()).rejects.toThrow('Retained observation reuse is not yet available')
+    const creates = form.write.mock.calls.filter(([path]) => path === '/jobs')
+    expect(creates[1][1]).toMatchObject({ reuse: { mode: 'verified_retained', fresh_since: '2026-10-01T13:00:00Z' } })
+    expect(creates[1][3]).not.toBe(creates[0][3])
+    expect(form.hasPlan()).toBe(false)
+    expect(form.write.mock.calls.some(([path]) => path.endsWith('/start'))).toBe(false)
+  })
+  it('rejects a cutoff-free explicit request before creating a job', async () => {
+    const form = setup()
+    form.requestReuse(true)
+    await expect(form.submit()).rejects.toThrow('Choose a complete UTC freshness cutoff')
+    expect(form.write).not.toHaveBeenCalled()
+  })
+  it('rejects a late fresh plan after reuse is selected', async () => {
+    const form = setup()
+    let release!: (value: { classification: string }) => void
+    form.write.mockImplementation(async path => path === '/jobs' ? { id: '00000000-0000-0000-0000-000000000002' } : new Promise(resolve => { release = resolve }))
+    const pending = form.submit()
+    await vi.waitFor(() => expect(release).toBeTypeOf('function'))
+    form.requestReuse(true)
+    release({ classification: 'article' }); await pending
+    expect(form.hasPlan()).toBe(false)
+    expect(form.context.openJob).not.toHaveBeenCalled()
+  })
+})
 
 describe.each(['allow_browser', 'allow_pdf'])('explicit synthetic %s job opt-in', option => {
   it('starts unchecked and sends false by default, then true only after opt-in', async () => {

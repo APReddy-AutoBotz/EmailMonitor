@@ -33,7 +33,11 @@ from installed_operator_relay import application
 from installed_operator_stage import InstalledStage, report_stage
 from operator_ui_protocol import asset_manifest
 from run_installed_operator import run_installed
-from service_artifacts import collect_service, tracked_service_sources, verify_service_archive
+from service_artifacts import (
+    collect_service,
+    tracked_service_sources,
+    verify_service_archive,
+)
 from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.engine import make_url
 from test_admission_broker import close_owned
@@ -390,7 +394,30 @@ def test_required_installed_https_operator_journey(
                 primary.add_note("Fixed installed stage reporting failed")
 
 
-def installed_journey(case: Scenario, tmp_path: Path, stage: InstalledStage) -> None:
+def test_required_installed_retained_reuse_journey(
+    installed_scenario: Scenario, tmp_path: Path
+) -> None:
+    stage = InstalledStage()
+    primary: BaseException | None = None
+    try:
+        installed_journey(installed_scenario, tmp_path, stage, retained_reuse=True)
+    except BaseException as error:
+        primary = error
+        stage.fail()
+        raise
+    finally:
+        if os.environ.get("EM_INSTALLED_STAGE_REPORT") == "true":
+            try:
+                report_stage(stage, Path(os.environ["GITHUB_OUTPUT"]), "reuse_stage")
+            except Exception:
+                if primary is None:
+                    raise
+                primary.add_note("Fixed installed reuse stage reporting failed")
+
+
+def installed_journey(
+    case: Scenario, tmp_path: Path, stage: InstalledStage, *, retained_reuse: bool = False
+) -> None:
     stage.enter("package")
     installed, assets, package_sha = installed_package(tmp_path)
     org, other = case.organizations
@@ -636,6 +663,8 @@ def installed_journey(case: Scenario, tmp_path: Path, stage: InstalledStage) -> 
                         "initial_organization": str(org),
                         "other_organization": str(other),
                     }
+                    if retained_reuse:
+                        setup["retained_reuse"] = True
                     stage.enter("browser_execution_and_owned_cleanup")
                     evidence = run_installed(
                         application(origin, identity.origin, identity.ca, assets, downloads),
@@ -655,13 +684,10 @@ def installed_journey(case: Scenario, tmp_path: Path, stage: InstalledStage) -> 
                         identity.authorizations == identity.exchanges == 2
                         and identity.refusals == 0
                     )
-                    assert (
-                        scalar(
-                            "SELECT count(*) FROM emailmonitor.execution_effects WHERE "
-                            "organization_id=:org"
-                        )
-                        == 5
-                    )
+                    assert scalar(
+                        "SELECT count(*) FROM emailmonitor.execution_effects WHERE "
+                        "organization_id=:org"
+                    ) == (6 if retained_reuse else 5)
                     assert (
                         scalar(
                             "SELECT count(*) FROM emailmonitor.association_reviews WHERE "
@@ -669,13 +695,10 @@ def installed_journey(case: Scenario, tmp_path: Path, stage: InstalledStage) -> 
                         )
                         == 1
                     )
-                    assert (
-                        scalar(
-                            "SELECT count(*) FROM emailmonitor.service_delegations WHERE "
-                            "organization_id=:org AND revoked_at IS NULL"
-                        )
-                        == 8
-                    )
+                    assert scalar(
+                        "SELECT count(*) FROM emailmonitor.service_delegations WHERE "
+                        "organization_id=:org AND revoked_at IS NULL"
+                    ) == (10 if retained_reuse else 8)
                     assert (
                         scalar(
                             "SELECT count(*) FROM emailmonitor.sessions WHERE "
@@ -698,6 +721,16 @@ def installed_journey(case: Scenario, tmp_path: Path, stage: InstalledStage) -> 
                         == 1
                     )
                     assert len(downloads) == 2
+                    if retained_reuse:
+                        assert (
+                            scalar(
+                                "SELECT count(*) FROM emailmonitor.article_observations a "
+                                "JOIN emailmonitor.jobs j ON j.organization_id=a.organization_id "
+                                "AND j.id=a.job_id WHERE a.organization_id=:org "
+                                "AND a.reused_from_job IS NOT NULL AND j.state='completed'"
+                            )
+                            == 1
+                        )
                     with ZipFile(io.BytesIO(downloads[0])) as archive_file:
                         assert b"example.org" in archive_file.read("xl/worksheets/sheet1.xml")
                     assert b"example.org" in downloads[1] and not downloads[1].startswith(b"PK")

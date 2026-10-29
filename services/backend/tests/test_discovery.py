@@ -107,6 +107,34 @@ def test_filters_are_not_silently_ignored() -> None:
     assert plan_input(JobRequest.model_validate(body)).reason == "fixture_filters_unavailable"
 
 
+@pytest.mark.parametrize(
+    "input_value",
+    [
+        {
+            "type": "keyword",
+            "source_id": "synthetic-publisher",
+            "original_query": "Myocardial Infarction",
+        },
+        {"type": "url", "url": ORIGIN + "/article-a.html"},
+    ],
+)
+def test_explicit_reuse_does_not_silently_start_fresh_acquisition(
+    input_value: dict[str, str],
+) -> None:
+    body = {
+        **request_body(),
+        "input": input_value,
+        "reuse": {"mode": "verified_retained", "fresh_since": "2026-10-01T13:00:00Z"},
+    }
+    plan = plan_input(JobRequest.model_validate(body))
+    if input_value["type"] == "url":
+        assert plan.classification == "article"
+        assert plan.reason == "retained_reuse_authored" and plan.start_url == input_value["url"]
+    else:
+        assert plan.classification == "unsupported"
+        assert plan.reason == "retained_reuse_unavailable" and plan.start_url is None
+
+
 @pytest.mark.parametrize("date_type", ["published", "online", "issue"])
 @pytest.mark.parametrize(
     "input_value",

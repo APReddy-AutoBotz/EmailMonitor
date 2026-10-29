@@ -124,13 +124,60 @@ def test_installed_html_steps_remain_identical_under_separate_branch() -> None:
     )
     xml = ast.unparse(ast.Module(body=branch.body, type_ignores=[]))
     html = ast.unparse(ast.Module(body=branch.orelse, type_ignores=[]))
-    # Frozen AST of the original HTML steps, ignoring indentation/formatting.
+
+    class RemoveExplicitReuse(ast.NodeTransformer):
+        count = 0
+
+        def visit_If(self, node: ast.If) -> ast.AST | None:
+            if ast.unparse(node.test) == "setup.get('retained_reuse') is True":
+                self.count += 1
+                reuse = ast.unparse(ast.Module(body=node.body, type_ignores=[]))
+                assert not node.orelse
+                assert "Request retained observation reuse" in reuse
+                assert "Reused observation" in reuse and "needs review" in reuse
+                assert "Preview eligible export counts" in reuse
+                assert "asyncio.timeout(30)" in reuse
+                return None
+            return self.generic_visit(node)
+
+    # Keep the frozen original HTML AST intact after excluding the one explicit
+    # opt-in reuse journey; it cannot silently alter the legacy HTML steps.
+    remover = RemoveExplicitReuse()
+    original_html = remover.visit(ast.Module(body=branch.orelse, type_ignores=[]))
+    assert remover.count == 1
+
+    class RemoveFixedExportObservations(ast.NodeTransformer):
+        def __init__(self) -> None:
+            self.calls: list[str] = []
+
+        def visit_Expr(self, node: ast.Expr) -> ast.AST | None:
+            if (
+                isinstance(node.value, ast.Call)
+                and isinstance(node.value.func, ast.Name)
+                and node.value.func.id == "export_checkpoint"
+            ):
+                self.calls.append(ast.unparse(node.value))
+                return None
+            return self.generic_visit(node)
+
+    observed = RemoveFixedExportObservations()
+    original_html = observed.visit(original_html)
+    assert observed.calls == [
+        "export_checkpoint('navigate', None)",
+        "export_checkpoint('format', format_name)",
+        "export_checkpoint('preview_activate', format_name)",
+        "export_checkpoint('preview_wait', format_name)",
+        "export_checkpoint('create', format_name)",
+        "export_checkpoint('row_wait', format_name)",
+        "export_checkpoint('ready_wait', format_name)",
+        "export_checkpoint('refresh', format_name)",
+        "export_checkpoint('ready_wait', format_name)",
+        "export_checkpoint('download_activate', format_name)",
+        "export_checkpoint('download_wait', format_name)",
+        "export_checkpoint('verify', None)",
+    ]
     assert (
-        hashlib.sha256(
-            ast.dump(
-                ast.Module(body=branch.orelse, type_ignores=[]), include_attributes=False
-            ).encode()
-        ).hexdigest()
+        hashlib.sha256(ast.dump(original_html, include_attributes=False).encode()).hexdigest()
         == "853426f42fc71fb1408bd2262909afe14429f813ebe3e6ecca7ead61a713f30b"
     )
     assert "xml_journey" in xml
@@ -141,6 +188,89 @@ def test_installed_html_steps_remain_identical_under_separate_branch() -> None:
     assert "await login()" in html
     assert "actual_callback" in source and "foreign_tenant_job_denied" in source
     assert '"cookies" in setup' in source and "add_cookies" not in source
+
+
+def test_installed_reuse_checkpoints_are_fixed_and_scoped_to_opt_in() -> None:
+    from operator_ui_protocol import DiagnosticFrame
+
+    tree = ast.parse((ROOT / "scripts/isolation/installed_operator_browser.py").read_text())
+    branches = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.If)
+        and ast.unparse(node.test) == "setup.get('retained_reuse') is True"
+    ]
+    assert len(branches) == 1
+    calls = sorted(
+        (
+            node
+            for node in ast.walk(branches[0])
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "checkpoint"
+        ),
+        key=lambda node: node.lineno,
+    )
+    stages = [ast.literal_eval(node.args[0]) for node in calls]
+    assert stages == [
+        "reuse_plan",
+        "reuse_worker",
+        "reuse_results",
+        "reuse_review",
+        "reuse_export",
+        "reuse_preview",
+    ]
+    for stage in stages:
+        frame = DiagnosticFrame.model_validate(
+            {"kind": "failure", "stage": stage, "error": "TimeoutError"}
+        )
+        assert frame.stage == stage and frame.reason == "unknown"
+    with pytest.raises(ValueError):
+        DiagnosticFrame.model_validate(
+            {"kind": "failure", "stage": "reuse_private_value", "error": "TimeoutError"}
+        )
+
+
+def test_installed_reuse_checkbox_is_toggled_and_verified_before_cutoff() -> None:
+    tree = ast.parse((ROOT / "scripts/isolation/installed_operator_browser.py").read_text())
+    branch = next(
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.If)
+        and ast.unparse(node.test) == "setup.get('retained_reuse') is True"
+    )
+    body = ast.unparse(ast.Module(body=branch.body, type_ignores=[]))
+    focused = body.index("await focus(page, reuse_checkbox)")
+    toggled = body.index("await page.keyboard.press('Space')", focused)
+    verified = body.index("await expect(reuse_checkbox).to_be_checked()", toggled)
+    cutoff = body.index("Reuse freshness cutoff UTC", verified)
+    assert focused < toggled < verified < cutoff
+
+
+def test_installed_reuse_result_uses_the_observation_table() -> None:
+    tree = ast.parse((ROOT / "scripts/isolation/installed_operator_browser.py").read_text())
+    branch = next(
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.If)
+        and ast.unparse(node.test) == "setup.get('retained_reuse') is True"
+    )
+    assignments = [
+        node
+        for node in ast.walk(branch)
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name) and target.id == "target_outcomes"
+            for target in node.targets
+        )
+    ]
+    assert len(assignments) == 1
+    assert ast.unparse(assignments[0].value) == (
+        "page.get_by_role('table', name='Current-authorized article outcomes')"
+    )
+    body = ast.unparse(ast.Module(body=branch.body, type_ignores=[]))
+    assert "target_outcomes.get_by_text('Reused observation', exact=False)" in body
+    assert "to_have_text('needs review')" in body
 
 
 def test_installed_pdf_evidence_view_matches_actual_authored_association(

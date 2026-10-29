@@ -58,8 +58,25 @@ class ServiceCase:
 
 
 @pytest.fixture
-def service_case(scenario: Scenario) -> Iterator[ServiceCase]:
-    progress, job = planned(scenario)
+def service_case(scenario: Scenario, request: pytest.FixtureRequest) -> Iterator[ServiceCase]:
+    route = getattr(request, "param", "html")
+    if route == "pdf":
+        from test_pdf_pipeline_tenant import planned_pdf
+
+        progress, job = planned_pdf(scenario, "article-a.pdf")
+    elif route == "article_xml":
+        from test_xml_pipeline_tenant import planned_xml
+
+        progress, job = planned_xml(scenario)
+    elif route == "provider":
+        from emailmonitor.sources import provider_documents as catalog
+        from test_provider_journey_tenant import planned_provider
+
+        progress, job = planned_provider(scenario, url=catalog.DOI_URL)
+    elif route == "html":
+        progress, job = planned(scenario)
+    else:
+        raise ValueError("Unknown authored service fixture route")
     org = scenario.organizations[0]
     progress.start(org, job, progress.snapshot(org, job).revision)
     admin = create_engine(scenario.admin_url)

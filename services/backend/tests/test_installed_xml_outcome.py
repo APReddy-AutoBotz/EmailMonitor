@@ -64,6 +64,7 @@ def test_xml_reporting_retains_guard_and_budgets() -> None:
     workflow = (ROOT / ".github/workflows/service-runtime.yml").read_text()
     assert "steps.installed-xml-test.outputs.backend_outcome" in workflow
     assert "steps.installed-xml-test.outputs.xml_check" in workflow
+    assert "steps.installed-xml-test.outputs.xml_worker_failure" in workflow
     assert 'EM_REQUIRE_XML_INTEGRATION: "synthetic-test-only"' in workflow
 
 
@@ -113,6 +114,94 @@ def test_first_failed_case_survives_later_reports(
     progress.pytest_runtest_logreport(SimpleNamespace(outcome="passed", when="call"))
     progress.pytest_runtest_logreport(SimpleNamespace(outcome="failed", when="teardown"))
     assert output.read_text() == expected
+
+
+@pytest.mark.parametrize("stage", ["keyword_worker", "url_worker"])
+def test_worker_failure_detail_is_closed_and_preserves_first_exception(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stage: str
+) -> None:
+    import guest_outcome as guest
+    from operator_ui_protocol import DiagnosticFrame, LoginTimingTrace
+
+    output = tmp_path / "output"
+    monkeypatch.setenv("EM_XML_CASE_OUTCOME_REPORT", "true")
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
+    progress = XmlProgress()
+    progress.pytest_runtest_logstart("synthetic", None)
+    original = TimeoutError("private synthetic value")
+
+    @guest.observed_guest
+    def failed() -> None:
+        guest.guest_stage("conversation")
+        guest.guest_frame(
+            DiagnosticFrame(
+                kind="failure",
+                stage=stage,
+                error="TimeoutError",
+                reason="installed_login_deadline",
+                installed_login_phase="callback_document",
+                installed_callback_delivery="asset_verified",
+                installed_login_timing=LoginTimingTrace(
+                    total_ms=10000, phase_ms=7000, callback_fulfilled_ms=9500
+                ),
+            )
+        )
+        raise original
+
+    with pytest.raises(TimeoutError) as caught:
+        failed()
+    assert caught.value is original
+    progress.pytest_runtest_logreport(SimpleNamespace(outcome="failed", when="call"))
+    assert output.read_text().splitlines() == [
+        f"xml_failure=case_1-call-host_conversation-phase_{stage}-export_unavailable",
+        "xml_worker_failure=error_TimeoutError-reason_installed_login_deadline-"
+        "login_callback_document-callback_asset_verified",
+        "xml_login_timing=total_10000-phase_7000-fulfilled_9500",
+    ]
+    progress.pytest_runtest_logstart("later", None)
+    progress.pytest_runtest_logreport(SimpleNamespace(outcome="failed", when="call"))
+    assert len(output.read_text().splitlines()) == 3
+    assert "private" not in output.read_text()
+
+
+def test_callback_timing_revalidates_bounds_and_refuses_other_phases(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import guest_outcome as guest
+    from operator_ui_protocol import LoginTimingTrace
+    from pydantic import ValidationError
+
+    trace = guest.Trace()
+    trace.login = "initial_session"
+    trace.login_timing = LoginTimingTrace(total_ms=1, phase_ms=1, callback_fulfilled_ms=None)
+    monkeypatch.setattr(guest, "_case_trace", trace)
+    assert guest.case_login_timing() == "unavailable"
+    trace.login = "callback_document"
+    assert guest.case_login_timing() == "total_1-phase_1-fulfilled_none"
+    trace.login_timing = LoginTimingTrace.model_construct(
+        total_ms=100000, phase_ms=1, callback_fulfilled_ms=None
+    )
+    with pytest.raises(ValidationError):
+        guest.case_login_timing()
+
+
+def test_invalid_worker_detail_does_not_replace_original_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import guest_outcome as guest
+
+    output = tmp_path / "output"
+    monkeypatch.setenv("EM_XML_CASE_OUTCOME_REPORT", "true")
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
+    progress = XmlProgress()
+    progress.pytest_runtest_logstart("synthetic", None)
+    trace = guest.Trace()
+    trace.stage, trace.phase, trace.error = "conversation", "keyword_worker", "private\ninjected"
+    monkeypatch.setattr(guest, "_case_trace", trace)
+    report = SimpleNamespace(outcome="failed", when="call")
+    progress.pytest_runtest_logreport(report)
+    assert report.outcome == "failed"
+    assert not output.exists()
 
 
 def test_owned_csv_snapshot_is_value_free_and_retains_first_failure(

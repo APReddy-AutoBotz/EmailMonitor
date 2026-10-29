@@ -210,3 +210,14 @@ def test_runtime_metadata_api_is_read_only_current_bound_and_review_independent(
         assert response.json() == before.model_dump(mode="json")
         assert c.get(url.replace(str(org), str(scenario.organizations[1]))).status_code == 404
         assert c.get(url.replace(str(batch), str(uuid4()))).status_code == 404
+        precision = c.get(url + "/precision")
+        assert precision.status_code == 200
+        assert precision.json()["metadata"] == response.json()
+        assert precision.json()["date_precisions"]
+        assert (
+            c.get(
+                (url + "/precision").replace(str(org), str(scenario.organizations[1]))
+            ).status_code
+            == 404
+        )
+        assert c.get((url + "/precision").replace(str(batch), str(uuid4()))).status_code == 404

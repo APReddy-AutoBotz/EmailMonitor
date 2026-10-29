@@ -232,6 +232,15 @@ ON CONFLICT DO NOTHING
             hashlib.sha256(key.encode()).hexdigest(),
         )
         with self.database.tenant(self.token, organization, Capability.ACQUIRE_SOURCE) as (c, ctx):
+            if request.reuse is not None:
+                from emailmonitor.discovery.planning import plan_input
+
+                if (
+                    self.settings.environment != "test"
+                    or not self.settings.fixture_mode
+                    or plan_input(request).reason != "retained_reuse_authored"
+                ):
+                    raise HTTPException(409, "Retained observation reuse is not yet available")
             # Serialize the same actor/key without retaining the raw key.
             lock = int(
                 hashlib.sha256(

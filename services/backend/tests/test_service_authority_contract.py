@@ -221,11 +221,29 @@ def test_work_audit_closed_actions_cover_every_existing_literal_call_site() -> N
         "discovery.page_committed",
         "discovery.delivery.received",
         "extraction.observation_committed",
+        "extraction.retained_reused",
     }
     migration = (backend / "migrations/versions/0014_service_authority.sql").read_text()
-    function = migration.split("CREATE FUNCTION emailmonitor.work_audit(", 1)[1].split(
+    original = migration.split("CREATE FUNCTION emailmonitor.work_audit(", 1)[1].split(
         "END $$;", 1
     )[0]
+    reuse_migration = (backend / "migrations/versions/0022_retained_reuse.sql").read_text()
+    function = reuse_migration.split("CREATE OR REPLACE FUNCTION emailmonitor.work_audit(", 1)[
+        1
+    ].split("END $$;", 1)[0]
+    reuse_guard = (
+        " IF p_action='extraction.retained_reused' AND (\n"
+        " NOT COALESCE(emailmonitor.human_work_tenant_allowed(p_org),false)\n"
+        " OR NOT COALESCE(emailmonitor.job_write_allowed(p_org,p_resource),false)\n"
+        " OR NOT EXISTS(SELECT 1 FROM emailmonitor.article_observations a\n"
+        " WHERE a.organization_id=p_org AND a.job_id=p_resource AND "
+        "a.reused_from_job IS NOT NULL)\n"
+        " OR NOT emailmonitor.retained_reuse_current(p_org,p_resource)) THEN\n"
+        " RAISE EXCEPTION 'SERVICE_AUTHORITY_DENIED' USING ERRCODE='EM017'; END IF;\n"
+    )
+    added_action = ",'extraction.retained_reused'"
+    assert function.count(reuse_guard) == function.count(added_action) == 1
+    assert function.replace(reuse_guard, "").replace(added_action, "") == original
     allowlists = re.findall(r"p_action(?: IS NULL OR p_action)? NOT IN \(([^)]+)\)", function)
     assert len(allowlists) == 2
     assert set(re.findall(r"'([^']+)'", allowlists[0])) == actions

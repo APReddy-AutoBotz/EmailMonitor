@@ -12,9 +12,11 @@ from operator_ui_protocol import (
     STAGES,
     DiagnosticFrame,
     FocusExhaustion,
+    InstalledCallbackDelivery,
     InstalledExportStep,
     InstalledLoginPhase,
     KeyboardAttemptTrace,
+    LoginTimingTrace,
 )
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 
@@ -43,6 +45,8 @@ class Trace:
         self.reason = "unknown"
         self.error = "none"
         self.login = "none"
+        self.callback: InstalledCallbackDelivery | None = None
+        self.login_timing: LoginTimingTrace | None = None
         self.outcome = "none"
         self.focus: FocusExhaustion | str | None = None
         self.cleanup: set[str] = set()
@@ -70,6 +74,11 @@ class Trace:
             raise ValueError("Exact owned cleanup kinds required")
         if self.login not in ("none", *get_args(InstalledLoginPhase)):
             raise ValueError("Closed installed login phase required")
+        if self.callback is not None and (
+            self.callback not in get_args(InstalledCallbackDelivery)
+            or self.login != "callback_document"
+        ):
+            raise ValueError("Closed callback delivery category required")
         if self.outcome not in ("none", *OUTCOME_PHASES):
             raise ValueError("Closed outcome phase required")
         focus = "none"
@@ -120,10 +129,11 @@ class Trace:
             if self.phase != "export_preview":
                 raise ValueError("Export step requires its exact failure phase")
             export = "-export_" + export_step.phase + "." + (export_step.format or "none")
+        callback = "-callback_" + self.callback if self.callback is not None else ""
         return (
             f"{stage}-phase_{self.phase}-error_{self.error}-reason_{self.reason}-cleanup_{cleanup}"
             f"-login_{self.login}"
-            f"-outcome_{self.outcome}-focus_{focus}{attempt}{export}"
+            f"-outcome_{self.outcome}-focus_{focus}{attempt}{export}{callback}"
         )
 
 
@@ -225,6 +235,34 @@ def case_categories() -> tuple[str, str]:
     return _case_trace.failure or _case_trace.stage, _case_trace.phase
 
 
+def case_worker_failure_details() -> tuple[str, str, str, str]:
+    if _case_trace is None:
+        return "unavailable", "unavailable", "unavailable", "unavailable"
+    _case_trace.label()  # Revalidate every closed category before export.
+    if _case_trace.phase not in {"keyword_worker", "url_worker"}:
+        raise ValueError("Worker failure detail requires its exact phase")
+    return (
+        _case_trace.error,
+        _case_trace.reason,
+        _case_trace.login,
+        _case_trace.callback or "none",
+    )
+
+
+def case_login_timing() -> str:
+    """Export only bounded timing already captured for callback navigation."""
+    if _case_trace is None:
+        return "unavailable"
+    _case_trace.label()
+    if _case_trace.login != "callback_document" or _case_trace.login_timing is None:
+        return "unavailable"
+    value = LoginTimingTrace.model_validate(_case_trace.login_timing.model_dump())
+    fulfilled = (
+        str(value.callback_fulfilled_ms) if value.callback_fulfilled_ms is not None else "none"
+    )
+    return f"total_{value.total_ms}-phase_{value.phase_ms}-fulfilled_{fulfilled}"
+
+
 def case_export_category() -> str:
     if _case_trace is None or _case_trace.export is None:
         return "unavailable"
@@ -263,6 +301,8 @@ def guest_frame(frame: DiagnosticFrame) -> None:
         if fixed.kind == "failure":
             trace.reason, trace.error = fixed.reason, fixed.error or "none"
             trace.login = fixed.installed_login_phase or "none"
+            trace.callback = fixed.installed_callback_delivery
+            trace.login_timing = fixed.installed_login_timing
             trace.outcome = fixed.outcome_phase or "none"
             trace.focus = fixed.focus_exhaustion
             trace.export = fixed.installed_export_step

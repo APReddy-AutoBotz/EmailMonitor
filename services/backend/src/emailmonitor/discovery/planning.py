@@ -25,10 +25,27 @@ class InputPlan:
     api_fallback: str = "unavailable_not_attempted"
 
 
+def staged_bound_reuse_input(request: JobRequest) -> InputPlan:
+    """Describe a registered XML/PDF retained input without enabling it."""
+    from emailmonitor.associations.reuse_adapters import retained_plan
+
+    candidate = retained_plan(request)
+    if candidate is not None and candidate.adapter in {"pdf", "article_xml"}:
+        return InputPlan("article", "retained_reuse_staged", candidate.article_url)
+    return InputPlan("unsupported", "retained_reuse_unavailable")
+
+
 def plan_input(request: JobRequest) -> InputPlan:
     from emailmonitor.sources import provider_documents as provider
 
     value = request.input
+    if request.reuse is not None:
+        from emailmonitor.associations.reuse_adapters import retained_plan
+
+        candidate = retained_plan(request)
+        if candidate is not None:
+            return InputPlan("article", "retained_reuse_authored", candidate.article_url)
+        return InputPlan("unsupported", "retained_reuse_unavailable")
     if any(request.filters.model_dump(exclude_none=True).values()):
         return InputPlan("unsupported", "fixture_filters_unavailable")
     if isinstance(value, KeywordInput):

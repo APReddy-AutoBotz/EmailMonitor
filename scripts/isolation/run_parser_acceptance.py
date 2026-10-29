@@ -126,27 +126,50 @@ def run(command: list[str], *, expected_oom: bool = False) -> dict[str, object]:
         docker("rm", "--force", identifier)
 
 
+def report_stage(stage: str) -> None:
+    """Emit only fixed source-owned phases; reporting cannot mask test failures."""
+    if stage not in {"build", "parser", "oom", "complete"}:
+        return
+    output = os.environ.get("GITHUB_OUTPUT")
+    if os.environ.get("EM_PARSER_STAGE_REPORT") != "true" or not output:
+        return
+    try:
+        with Path(output).open("a", encoding="utf-8") as stream:
+            stream.write("parser_stage=" + stage + "\n")
+    except OSError:
+        pass
+
+
+def execute(root: Path) -> None:
+    stage = "build"
+    try:
+        docker(
+            "build",
+            "--file",
+            str(root / "scripts/isolation/Dockerfile.parser"),
+            "--tag",
+            IMAGE,
+            str(root),
+            timeout=600,
+        )
+        stage = "parser"
+        run(["python", "/app/parser_acceptance.py"])
+        # The same network-none memory limit remains an actual mandatory test.
+        stage = "oom"
+        evidence = run(
+            ["python", "-c", "chunks=[]\nwhile True: chunks.append(bytearray(8 * 1024 * 1024))"],
+            expected_oom=True,
+        )
+        print(json.dumps({"diagnostic": "parser-memory-limit", **evidence}))
+        stage = "complete"
+    finally:
+        report_stage(stage)
+
+
 def main() -> None:
     if os.environ.get("GITHUB_ACTIONS") != "true":
         raise RuntimeError("Reviewed disposable CI environment required")
-    root = Path(__file__).resolve().parents[2]
-    docker(
-        "build",
-        "--file",
-        str(root / "scripts/isolation/Dockerfile.parser"),
-        "--tag",
-        IMAGE,
-        str(root),
-        timeout=600,
-    )
-    run(["python", "/app/parser_acceptance.py"])
-    # Ordinary synthetic memory exhaustion proves the configured limit actually
-    # terminates just this disposable process. No host limit/security is changed.
-    evidence = run(
-        ["python", "-c", "chunks=[]\nwhile True: chunks.append(bytearray(8 * 1024 * 1024))"],
-        expected_oom=True,
-    )
-    print(json.dumps({"diagnostic": "parser-memory-limit", **evidence}))
+    execute(Path(__file__).resolve().parents[2])
 
 
 if __name__ == "__main__":

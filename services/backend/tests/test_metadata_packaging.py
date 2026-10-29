@@ -11,10 +11,20 @@ from typing import Any
 
 import pytest
 
-from artifacts import API_FILES, PackagingRefused, archive, collect, materialize
+from artifacts import API_FILES, PackagingRefused, archive, collect, materialize, migration_head
 from run_acceptance import LABEL, OwnedBuilds, require_ci, runtime_versions, validate_container
 
 ROOT = Path(__file__).resolve().parents[3]
+
+
+def test_actual_migration_chain_has_matching_packaging_companions() -> None:
+    versions = ROOT / "services/backend/migrations/versions"
+    files = {
+        "migrations/migrations/versions/" + path.name: path.read_bytes()
+        for path in versions.iterdir()
+        if path.suffix in {".py", ".sql"} and path.name[:4].isdigit()
+    }
+    assert migration_head(files) == "0026_bound_reuse"
 
 
 @pytest.fixture

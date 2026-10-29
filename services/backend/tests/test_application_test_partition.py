@@ -13,7 +13,7 @@ import application_test_partition as partition
 import pytest
 
 OTHER = "tests/test_other.py::test_other"
-FULL = [*partition.RESERVED_SQL, OTHER]
+FULL = [*partition.RESERVED_SQL, *partition.CAPACITY_EXTRA, OTHER]
 TREE = "a" * 40
 CONFIG = "b" * 64
 
@@ -22,7 +22,7 @@ def completed(profile: str) -> partition.PartitionProof:
     proof = partition.PartitionProof(profile)
     proof.discovered = proof.full = FULL.copy()
     proof.assigned = partition.partitions(FULL)
-    proof.deselected = proof.assigned[proof.other].copy()
+    proof.deselected = proof.excluded.copy()
     proof.collection_complete = True
     proof.reports = Counter(
         (node, phase, "passed")
@@ -36,6 +36,7 @@ def receipts() -> dict[str, str]:
     return {
         "BACKEND_RESULT": "success",
         "OUTCOME_SQL_RESULT": "success",
+        "CAPACITY_SQL_RESULT": "success",
         "STATIC_RESULT": "success",
         **{
             profile.upper() + "_RECEIPT": json.dumps(completed(profile).receipt(0, TREE, CONFIG))
@@ -75,13 +76,51 @@ def test_each_reserved_sql_node_is_required_exactly_once(node: str, mutation: st
         partition.partitions(nodes)
 
 
+def test_measured_sql_move_is_explicit_and_preserves_unique_membership() -> None:
+    moved = partition.MEASURED_SQL
+    assert len(moved) == len(set(moved)) == 45
+    assert sum("/test_association_tenant.py::" in node for node in moved) == 30
+    assert sum("/test_retained_paper_identity_tenant.py::" in node for node in moved) == 15
+    assert not set(moved) & set(
+        (
+            *partition.RETAINED_SQL,
+            *partition.PDF_ACCEPTANCE,
+            *partition.SERVICE_SQL,
+            *partition.TIMING_SQL,
+        )
+    )
+    assigned = partition.partitions(FULL)
+    assert all(assigned["capacity_sql"].count(node) == 1 for node in moved)
+    assert not set(moved) & set(assigned["backend"])
+
+
+def test_each_new_capacity_node_is_required_once_and_refuses_collision() -> None:
+    assert len(partition.CAPACITY_EXTRA) == len(set(partition.CAPACITY_EXTRA)) == 120
+    assert not set(partition.CAPACITY_EXTRA) & set(partition.RESERVED_SQL)
+    for node in partition.CAPACITY_EXTRA:
+        for mutation in ("missing", "renamed", "duplicate"):
+            nodes = FULL.copy()
+            if mutation == "missing":
+                nodes.remove(node)
+            elif mutation == "renamed":
+                nodes[nodes.index(node)] = node + "[renamed]"
+            else:
+                nodes.append(node)
+            with pytest.raises(partition.PartitionRefused):
+                partition.partitions(nodes)
+
+
 def test_new_tests_are_never_omitted_from_exact_disjoint_multiset_union() -> None:
     nodes = [*FULL, "services/backend/tests/test_new.py::test_new[variant]"]
     result = partition.partitions(nodes)
-    assert result["outcome_sql"] == list(partition.RESERVED_SQL)
+    assert result["outcome_sql"] == [
+        n for n in partition.RESERVED_SQL if n not in partition.CAPACITY_SQL
+    ]
+    assert result["capacity_sql"] == list(partition.CAPACITY_SQL)
     assert result["backend"] == [OTHER, nodes[-1]]
-    assert not Counter(result["backend"]) & Counter(result["outcome_sql"])
-    assert Counter(result["backend"]) + Counter(result["outcome_sql"]) == Counter(nodes)
+    counts = [Counter(result[p]) for p in partition.PROFILES]
+    assert all(not counts[i] & counts[j] for i in range(3) for j in range(i + 1, 3))
+    assert sum(counts, Counter()) == Counter(nodes)
     assert partition.manifest(nodes) == partition.manifest(list(reversed(nodes)))
     assert partition.manifest(nodes) != partition.manifest([*nodes, OTHER])
 
@@ -162,7 +201,7 @@ def test_join_accepts_only_complete_bound_receipts(
     partition.join(environment)
     decoded = partition.decode_receipt(environment[profile.upper() + "_RECEIPT"], profile)
     assert decoded["executed"] == decoded[profile]
-    assert decoded["deselected"] == decoded["outcome_sql" if profile == "backend" else "backend"]
+    assert decoded["deselected"] == decoded["excluded_" + profile]
 
 
 @pytest.mark.parametrize(
@@ -230,12 +269,51 @@ def test_join_rejects_incomplete_mismatched_or_malformed_receipts(
 
 @pytest.mark.parametrize("node", partition.RESERVED_SQL)
 def test_receipt_cannot_replace_any_reserved_node_with_same_count(node: str) -> None:
-    value = completed("outcome_sql").receipt(0, TREE, CONFIG)
-    changed = list(partition.RESERVED_SQL)
+    profile = "capacity_sql" if node in partition.CAPACITY_SQL else "outcome_sql"
+    proof = completed(profile)
+    value = proof.receipt(0, TREE, CONFIG)
+    changed = proof.assigned[profile].copy()
     changed[changed.index(node)] = OTHER
-    value["outcome_sql"] = value["executed"] = partition.manifest(changed)
+    value[profile] = value["executed"] = partition.manifest(changed)
     with pytest.raises(partition.PartitionRefused, match="application_receipt_refused"):
-        partition.decode_receipt(json.dumps(value), "outcome_sql")
+        partition.decode_receipt(json.dumps(value), profile)
+
+
+def test_third_receipt_cannot_replace_any_capacity_node_with_same_count() -> None:
+    for node in partition.CAPACITY_SQL:
+        proof = completed("capacity_sql")
+        value = proof.receipt(0, TREE, CONFIG)
+        changed = proof.assigned["capacity_sql"].copy()
+        changed[changed.index(node)] = OTHER
+        value["capacity_sql"] = value["executed"] = partition.manifest(changed)
+        with pytest.raises(partition.PartitionRefused, match="application_receipt_refused"):
+            partition.decode_receipt(json.dumps(value), "capacity_sql")
+
+
+@pytest.mark.parametrize(
+    "mutation", ["missing", "source", "config", "skipped", "deselected", "swapped"]
+)
+def test_join_rejects_bad_third_receipt(monkeypatch: pytest.MonkeyPatch, mutation: str) -> None:
+    environment = receipts()
+    monkeypatch.setattr(partition, "source_tree", lambda: TREE)
+    monkeypatch.setattr(partition, "configuration", lambda: CONFIG)
+    value = json.loads(environment["CAPACITY_SQL_RECEIPT"])
+    if mutation == "source":
+        value["source_tree"] = "c" * 40
+    elif mutation == "config":
+        value["config"] = "d" * 64
+    elif mutation == "skipped":
+        value["skipped"] = 1
+    elif mutation == "deselected":
+        value["deselected"]["sha256"] = "e" * 64
+    raw = json.dumps(value)
+    if mutation == "missing":
+        raw = ""
+    elif mutation == "swapped":
+        raw = environment["BACKEND_RECEIPT"]
+    environment["CAPACITY_SQL_RECEIPT"] = raw
+    with pytest.raises((partition.PartitionRefused, ValueError)):
+        partition.join(environment)
 
 
 @pytest.mark.parametrize("changed", ["source_tree", "configuration"])
@@ -275,7 +353,7 @@ def test_actual_pytest_lifecycle_enforces_assigned_nodes_and_zero_skips(
         "fail": "assert False",
     }.get(mutation, "assert True")
     functions: dict[str, dict[str, list[str]]] = {}
-    for node in partition.RESERVED_SQL:
+    for node in (*partition.RESERVED_SQL, *partition.CAPACITY_EXTRA):
         filename, function = node.split("::", 1)
         name, _, variant = function.partition("[")
         functions.setdefault(filename, {}).setdefault(name, [])

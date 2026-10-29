@@ -1,0 +1,80 @@
+{
+  "view_version": "article-metadata-precision-v1",
+  "metadata": {
+    "view_version": "article-metadata-v1",
+    "scope": "article",
+    "organization_id": "00000000-0000-0000-0000-000000000001",
+    "batch_id": "00000000-0000-0000-0000-00000000002c",
+    "source_url": "https://synthetic.publisher.example/article-a.html",
+    "content_digest": "a776106710399f4aa596f42430b5a5283b0d0ea8efafd55460ef2c83782884df",
+    "parser_version": "synthetic-html-v1",
+    "observation_route": "html",
+    "preferred_metadata": {
+      "title": "Synthetic myocardial infarction study A",
+      "journal": "Example Research Journal",
+      "publication_date": "2026-01-15",
+      "doi": "10.9999/synthetic.article-a"
+    },
+    "facts": [
+      {
+        "field": "title",
+        "value": "Synthetic myocardial infarction study A",
+        "date_type": "unspecified",
+        "evidence": {
+          "locator": "root/html[1]/head[1]/meta[2]",
+          "excerpt": "Synthetic myocardial infarction study A",
+          "kind": "structured_metadata"
+        }
+      },
+      {
+        "field": "doi",
+        "value": "10.9999/synthetic.article-a",
+        "date_type": "unspecified",
+        "evidence": {
+          "locator": "root/html[1]/head[1]/meta[3]",
+          "excerpt": "10.9999/synthetic.article-a",
+          "kind": "structured_metadata"
+        }
+      },
+      {
+        "field": "title",
+        "value": "Synthetic myocardial infarction study A",
+        "date_type": "unspecified",
+        "evidence": {
+          "locator": "root/html[1]/body[1]/main[1]/h1[1]",
+          "excerpt": "Synthetic myocardial infarction study A",
+          "kind": "article_dom"
+        }
+      },
+      {
+        "field": "journal",
+        "value": "Example Research Journal",
+        "date_type": "unspecified",
+        "evidence": {
+          "locator": "root/html[1]/body[1]/main[1]/p[1]",
+          "excerpt": "Example Research Journal",
+          "kind": "article_dom"
+        }
+      },
+      {
+        "field": "publication_date",
+        "value": "2026-01-15",
+        "date_type": "published",
+        "evidence": {
+          "locator": "root/html[1]/body[1]/main[1]/time[1]",
+          "excerpt": "2026-01-15",
+          "kind": "article_dom"
+        }
+      }
+    ],
+    "fact_availability": "recorded",
+    "multiple_value_fields": [],
+    "date_interpretation": "retained_text_and_recorded_type_only"
+  },
+  "date_precisions": [
+    {
+      "fact_index": 4,
+      "precision": "day"
+    }
+  ]
+}

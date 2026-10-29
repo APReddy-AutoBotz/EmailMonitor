@@ -1,7 +1,7 @@
 """Controlled-fake metadata tests; these do not execute installed acceptance."""
 
 from pathlib import Path
-from typing import cast
+from typing import Literal, cast
 
 import pytest
 import test_installed_operator_acceptance as acceptance
@@ -82,3 +82,57 @@ def test_success_metadata_and_default_no_output(
     monkeypatch.setenv("EM_INSTALLED_STAGE_REPORT", "true")
     acceptance.test_required_installed_https_operator_journey(None, tmp_path)  # type: ignore[arg-type]
     assert output.read_text() == "stage=complete\n"
+
+
+@pytest.mark.parametrize("fails", [False, True])
+def test_reuse_stage_reports_separately_and_preserves_original_failure(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, fails: bool
+) -> None:
+    original = TimeoutError("private sentinel")
+
+    def journey(*args: object, **kwargs: object) -> None:
+        assert kwargs == {"retained_reuse": True}
+        stage = cast(InstalledStage, args[2])
+        stage.enter("browser_execution_and_owned_cleanup" if fails else "complete")
+        if fails:
+            raise original
+
+    monkeypatch.setattr(acceptance, "installed_journey", journey)
+    monkeypatch.setenv("EM_INSTALLED_STAGE_REPORT", "true")
+    output = tmp_path / "output"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
+    if fails:
+        with pytest.raises(TimeoutError) as caught:
+            acceptance.test_required_installed_retained_reuse_journey(None, tmp_path)  # type: ignore[arg-type]
+        assert caught.value is original
+        assert output.read_text() == "reuse_stage=browser_execution_and_owned_cleanup\n"
+    else:
+        acceptance.test_required_installed_retained_reuse_journey(None, tmp_path)  # type: ignore[arg-type]
+        assert output.read_text() == "reuse_stage=complete\n"
+
+
+def test_reuse_reporting_error_does_not_replace_original(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    original = RuntimeError("original")
+
+    def failing(*args: object, **kwargs: object) -> None:
+        raise original
+
+    monkeypatch.setattr(acceptance, "installed_journey", failing)
+    monkeypatch.setenv("EM_INSTALLED_STAGE_REPORT", "true")
+    monkeypatch.setenv("GITHUB_OUTPUT", str(tmp_path / "absent" / "output"))
+    with pytest.raises(RuntimeError) as caught:
+        acceptance.test_required_installed_retained_reuse_journey(None, tmp_path)  # type: ignore[arg-type]
+    assert caught.value is original
+    assert original.__notes__ == ["Fixed installed reuse stage reporting failed"]
+
+
+def test_output_key_is_closed(tmp_path: Path) -> None:
+    with pytest.raises(ValueError):
+        report_stage(
+            InstalledStage(),
+            tmp_path / "output",
+            cast(Literal["stage", "reuse_stage"], "other\ninjected"),
+        )
+    assert not (tmp_path / "output").exists()

@@ -2,11 +2,12 @@
 
 import hashlib
 import json
-from datetime import date
+import re
+from datetime import UTC, date, datetime
 from typing import Annotated, Literal
 from urllib.parse import urlsplit
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class StrictModel(BaseModel):
@@ -100,12 +101,37 @@ class Options(StrictModel):
         return value
 
 
+class RetainedReuseChoice(StrictModel):
+    mode: Literal["verified_retained"]
+    fresh_since: AwareDatetime
+
+    @field_validator("fresh_since", mode="before")
+    @classmethod
+    def explicit_timestamp(cls, value: object) -> object:
+        if isinstance(value, datetime):
+            if value.tzinfo is None or value.utcoffset() is None:
+                raise ValueError("An explicit offset is required")
+            return value
+        if not isinstance(value, str) or not re.fullmatch(
+            r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,6})?(?:Z|[+-][0-9]{2}:[0-9]{2})",
+            value,
+        ):
+            raise ValueError("A full timestamp with an explicit offset is required")
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+    @field_validator("fresh_since")
+    @classmethod
+    def utc_timestamp(cls, value: datetime) -> datetime:
+        return value.astimezone(UTC)
+
+
 class JobRequest(StrictModel):
     schema_version: Literal["1.0"]
     input: Annotated[KeywordInput | URLInput, Field(discriminator="type")]
     purpose: str = Field(min_length=1, max_length=200)
     options: Options
     filters: Filters = Field(default_factory=Filters)
+    reuse: RetainedReuseChoice | None = None
 
 
 TERMINAL = frozenset({"cancelled", "completed", "completed_partial", "failed"})

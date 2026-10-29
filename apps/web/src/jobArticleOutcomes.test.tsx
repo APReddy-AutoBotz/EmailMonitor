@@ -57,6 +57,14 @@ describe('job-scoped article outcomes', () => {
     expect(render(success())).toContain('Not inherited')
     expect(render(success([{ ...row, inherited_job_id: 'prior-synthetic-job' }]))).toContain('Inherited from job prior-synthetic-job')
   })
+  it('identifies a reused observation and its original time without inventing lineage', () => {
+    expect(render(success())).not.toContain('Reused observation')
+    const html = render(success([{ ...row, observation_origin: 'reused', observed_at: '2026-10-01T13:00:00Z' }]))
+    expect(html).toContain('Reused observation')
+    const table = html.match(/<table><caption>Current-authorized article outcomes<\/caption>.*?<\/table>/s)?.[0]
+    expect(table).toContain('Reused observation')
+    expect(html).toContain('2026-10-01T13:00:00Z')
+  })
   it('escapes source content rather than rendering or navigating to it', () => {
     const html = render(success([{ ...row, source_url: '<script>alert(1)</script>', reason: '<img src=x>' }]))
     expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;')

@@ -38,4 +38,18 @@ describe('current retained article metadata', () => {
     expect(html).toContain('PDF page 1')
     expect(html).toContain('full cropbox not glyph bbox')
   })
+  it('ties a supplied date precision to its retained citation without claiming source support', () => {
+    const html = render({ loading: false, data: { ...data, facts: [{ field: 'publication_date', value: '2024-02-29', date_type: 'published', evidence: { locator: 'article/time', excerpt: '2024-02-29' } }], date_precisions: [{ fact_index: 0, precision: 'day' }] } })
+    expect(html).toContain('2024-02-29')
+    expect(html).toContain('Retained text precision: day')
+    expect(html).toContain('not source filter support')
+    expect(html).toContain('do not establish a source-declared publication type')
+  })
+  it('keeps missing or duplicate precision annotations unavailable', () => {
+    const repeated = [{ fact_index: 0, precision: 'day' as const }, { fact_index: 0, precision: 'month' as const }]
+    expect(render({ loading: false, data: { ...data, date_precisions: repeated } })).toContain('Retained text precision: unavailable')
+    expect(render({ loading: false, data })).toContain('Retained text precision: unavailable')
+    const invalid = [{ fact_index: 0, precision: 'unexpected' }] as unknown as ArticleMetadata['date_precisions']
+    expect(render({ loading: false, data: { ...data, date_precisions: invalid } })).toContain('Retained text precision: unavailable')
+  })
 })

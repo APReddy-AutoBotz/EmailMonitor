@@ -26,10 +26,11 @@ from sqlalchemy.exc import DBAPIError
 from test_source_foundation import policy_body
 
 ROOT = Path(__file__).resolve().parents[3]
-HEAD = "0021_review_unlink"
+HEAD = "0026_bound_reuse"
 FILTER_PREVIOUS = "0015_service_plan_cache"
 SERVICE_PREVIOUS = "0014_service_authority"
 PREVIOUS = "0013_provider_journey"
+REUSE_DISABLED = "0022_retained_reuse"
 AUTHORITY_TABLES = ("service_principals", "service_delegations", "service_audit")
 HISTORY_TABLES = (
     "organizations",
@@ -119,7 +120,7 @@ class OwnedDatabase:
             raise RuntimeError("Disposable migration database ownership mismatch")
 
     def migrate(self, revision: str) -> None:
-        assert revision in (PREVIOUS, SERVICE_PREVIOUS, FILTER_PREVIOUS, HEAD)
+        assert revision in (PREVIOUS, SERVICE_PREVIOUS, FILTER_PREVIOUS, REUSE_DISABLED, HEAD)
         with self.admin.connect() as c:
             self.verify(c)
         result = subprocess.run(
@@ -380,6 +381,46 @@ procost,prorows,proconfig,proargnames FROM pg_proc WHERE oid IN (
     )
 
 
+def test_actual_0022_disabled_constraint_rejects_lineage(migration_pair: MigrationPair) -> None:
+    """Inspect the installed 0022 constraint and exercise its exact expression in PostgreSQL."""
+    with owned_database(migration_pair.fresh.admin) as baseline:
+        baseline.migrate(REUSE_DISABLED)
+        database = engine(baseline.url)
+        try:
+            with database.begin() as c:
+                definition: str = c.execute(
+                    text(
+                        "SELECT pg_get_constraintdef(oid) FROM pg_constraint "
+                        "WHERE conrelid='emailmonitor.article_observations'::regclass "
+                        "AND conname='retained_reuse_disabled'"
+                    )
+                ).scalar_one()
+                for column in ("reused_from_job", "reused_source_revision", "reused_source_batch"):
+                    assert column + " IS NULL" in definition
+                assert definition.startswith("CHECK (")
+                c.exec_driver_sql(
+                    "CREATE TEMP TABLE retained_reuse_constraint_probe "
+                    "(reused_from_job uuid,reused_source_revision bigint,reused_source_batch uuid, "
+                    "CONSTRAINT probe " + definition + ")"
+                )
+                c.execute(text("INSERT INTO retained_reuse_constraint_probe DEFAULT VALUES"))
+                with pytest.raises(DBAPIError) as denied:
+                    with c.begin_nested():
+                        c.execute(
+                            text(
+                                "INSERT INTO retained_reuse_constraint_probe "
+                                "(reused_from_job,reused_source_revision,reused_source_batch) "
+                                "VALUES(:job,1,:batch)"
+                            ),
+                            {"job": uuid4(), "batch": uuid4()},
+                        )
+                original = denied.value.orig
+                assert original is not None and original.args and isinstance(original.args[0], dict)
+                assert original.args[0].get("C") == "23514"
+        finally:
+            database.dispose()
+
+
 @pytest.fixture(scope="module")
 def migration_pair() -> Iterator[MigrationPair]:
     if os.environ.get("EM_REQUIRE_SYNTHETIC_RESTORE") != "true":
@@ -580,6 +621,7 @@ def test_actual_fresh_and_populated_upgrade_schema_acl_rls_equivalence(
         (FILTER_PREVIOUS,),
         ("0019_retained_paper_identity",),
         ("0020_retained_source_selection",),
+        ("0021_review_unlink",),
         ("9999_unsupported",),
         (HEAD, PREVIOUS),
     ],

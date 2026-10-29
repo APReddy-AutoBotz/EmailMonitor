@@ -212,7 +212,11 @@ def url_assertions() -> Any:
         and any(isinstance(target, ast.Name) and target.id == "outcomes" for target in node.targets)
     )
     assertions = nodes[start:]
-    assert len(assertions) == 3
+    # The separately opted-in reuse journey follows the unchanged URL checks;
+    # it is outside this helper's extracted two-assertion scope.
+    assert len(assertions) == 4 and isinstance(assertions[3], ast.If)
+    assert ast.unparse(assertions[3].test) == "setup.get('retained_reuse') is True"
+    assertions = assertions[:3]
     assert sum(isinstance(node, ast.Await) for line in assertions for node in ast.walk(line)) == 2
     # Preserve the original assertion timeout defaults. Restricting columns is
     # the sole selector change; do not broaden the expected state to a count.

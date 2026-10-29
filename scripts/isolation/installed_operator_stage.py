@@ -38,9 +38,15 @@ class InstalledStage:
             self.failure = self.current
 
 
-def report_stage(stage: InstalledStage, destination: Path) -> None:
+def report_stage(
+    stage: InstalledStage, destination: Path, key: Literal["stage", "reuse_stage"] = "stage"
+) -> None:
     value = stage.failure if stage.failure is not None else stage.current
-    if type(value) is not str or value not in get_args(Stage):
+    if (
+        type(value) is not str
+        or value not in get_args(Stage)
+        or key not in ("stage", "reuse_stage")
+    ):
         raise ValueError("Closed installed stage required")
     with destination.open("a", encoding="utf-8") as output:
-        output.write("stage=" + value + "\n")
+        output.write(key + "=" + value + "\n")
