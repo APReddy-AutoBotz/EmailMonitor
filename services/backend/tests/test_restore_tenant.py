@@ -5,14 +5,20 @@ import os
 import time
 from dataclasses import replace
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
+from emailmonitor.associations.reuse_materialization import materialize_draft
+from emailmonitor.associations.service import Associations
+from emailmonitor.discovery.service import Discovery
 from emailmonitor.jobs.broker import create_worker
 from emailmonitor.jobs.ledger import Ledger
+from emailmonitor.jobs.models import JobRequest
 from emailmonitor.lifecycle.models import DeletionRequest, SuppressionCreate
 from emailmonitor.lifecycle.service import Lifecycle
 from emailmonitor.organizations.database import AuthorizationDenied, Database
 from emailmonitor.organizations.roles import Capability
+from emailmonitor.progress.service import Progress
 from emailmonitor.results.models import Filters
 from emailmonitor.results.service import Results
 from restore_exercise import (
@@ -25,6 +31,8 @@ from restore_exercise import (
 )
 from sqlalchemy import create_engine, text
 from test_durable_jobs import SETTINGS, snapshot
+from test_job_contracts import request_body
+from test_progress_tenant import drain
 from test_real_broker_jobs import config, deliveries, wait_for, worker
 from test_results_tenant import prepared, ready
 from test_tenant_foundation import Scenario
@@ -45,6 +53,28 @@ def test_actual_restore_replays_current_privacy_before_runtime_and_rebuilds_brok
         identities={**scenario.identities, "owner": scenario.identities["owner_b"]},
     )
     results_b, job_b = prepared(other, "article-b.html")
+    # Include target-owned reused evidence and independent review state in
+    # the existing two-tenant populated restore exercise.
+    source_url = "https://synthetic.publisher.example/article-b.html"
+    associations_b = Associations(results_b.database, results_b.token, SETTINGS)
+    request = JobRequest.model_validate(
+        {
+            **request_body(),
+            "input": {"type": "url", "url": source_url},
+            "reuse": {"mode": "verified_retained", "fresh_since": "2000-01-01T00:00:00Z"},
+        }
+    )
+    reuse_job = Ledger(results_b.database, results_b.token, SETTINGS).create(
+        org_b, request, str(uuid4())
+    )
+    Discovery(results_b.database, results_b.token, SETTINGS).plan(org_b, reuse_job, 1)
+    source_batch = materialize_draft(associations_b, org_b, reuse_job, source_url)
+    reuse_progress = Progress(results_b.database, results_b.token, SETTINGS)
+    reuse_progress.start(org_b, reuse_job, reuse_progress.snapshot(org_b, reuse_job).revision)
+    drain(reuse_progress, org_b, reuse_job)
+    reuse_filters = Filters(job_id=reuse_job, states=("needs_review",))
+    reuse_before = results_b.contacts(org_b, reuse_filters).items
+    assert reuse_before and all(item.observation_origin == "reused" for item in reuse_before)
     export_a, export_b = ready(results_a, org_a, job_a), ready(results_b, org_b, job_b)
     expected_hash = hashlib.sha256(results_b.download(org_b, export_b).body).hexdigest()
     life_a = Lifecycle(results_a.database, results_a.token, SETTINGS)
@@ -104,6 +134,11 @@ def test_actual_restore_replays_current_privacy_before_runtime_and_rebuilds_brok
             a.contacts(org_b, Filters())
         assert hashlib.sha256(b.download(org_b, export_b).body).hexdigest() == expected_hash
         assert b.contacts(org_b, Filters(job_id=job_b)).items
+        reuse_after = b.contacts(org_b, reuse_filters).items
+        assert [(item.association_id, item.revision, item.state) for item in reuse_after] == [
+            (item.association_id, item.revision, item.state) for item in reuse_before
+        ]
+        assert all(item.observation_origin == "reused" for item in reuse_after)
         protected = (
             "article_observations",
             "association_batches",
@@ -167,6 +202,15 @@ def test_actual_restore_replays_current_privacy_before_runtime_and_rebuilds_brok
                 {"org": org_a, "payload": '{"raw_address":"mira@example.org"}'},
             ).scalar_one()
         with target.target.connect() as c:
+            lineage = c.execute(
+                text(
+                    "SELECT reused_from_job,reused_source_batch "
+                    "FROM emailmonitor.article_observations "
+                    "WHERE organization_id=:org AND job_id=:job"
+                ),
+                {"org": org_b, "job": reuse_job},
+            ).one()
+            assert lineage.reused_from_job == job_b and lineage.reused_source_batch == source_batch
             assert (
                 c.execute(
                     text(
@@ -228,7 +272,6 @@ def test_actual_restore_replays_current_privacy_before_runtime_and_rebuilds_brok
         # A post-backup review is unsupported business history and must quarantine
         # a stale archive even when job/accounting anchors have not changed.
         from emailmonitor.associations.models import Review
-        from emailmonitor.associations.service import Associations
 
         contact = results_b.contacts(org_b, Filters(job_id=job_b)).items[0]
         Associations(results_b.database, results_b.token, SETTINGS).review(

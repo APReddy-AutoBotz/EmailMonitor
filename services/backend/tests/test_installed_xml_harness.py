@@ -200,6 +200,22 @@ def test_installed_reuse_checkpoints_are_fixed_and_scoped_to_opt_in() -> None:
         )
 
 
+def test_installed_reuse_checkbox_is_toggled_and_verified_before_cutoff() -> None:
+    tree = ast.parse((ROOT / "scripts/isolation/installed_operator_browser.py").read_text())
+    branch = next(
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.If)
+        and ast.unparse(node.test) == "setup.get('retained_reuse') is True"
+    )
+    body = ast.unparse(ast.Module(body=branch.body, type_ignores=[]))
+    focused = body.index("await focus(page, reuse_checkbox)")
+    toggled = body.index("await page.keyboard.press('Space')", focused)
+    verified = body.index("await expect(reuse_checkbox).to_be_checked()", toggled)
+    cutoff = body.index("Reuse freshness cutoff UTC", verified)
+    assert focused < toggled < verified < cutoff
+
+
 def test_installed_pdf_evidence_view_matches_actual_authored_association(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

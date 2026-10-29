@@ -620,9 +620,12 @@ async def main() -> None:
                         page.get_by_label("Search-results or article URL", exact=True),
                         "https://synthetic.publisher.example/article-a.html",
                     )
-                    await activate(
-                        page, page.get_by_label("Request retained observation reuse", exact=True)
+                    reuse_checkbox = page.get_by_label(
+                        "Request retained observation reuse", exact=True
                     )
+                    await focus(page, reuse_checkbox)
+                    await page.keyboard.press("Space")
+                    await expect(reuse_checkbox).to_be_checked()
                     cutoff = page.get_by_label("Reuse freshness cutoff UTC", exact=True)
                     await focus(page, cutoff)
                     # Native datetime controls have locale-dependent keyboard segments;
