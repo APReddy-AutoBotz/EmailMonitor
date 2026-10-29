@@ -12,6 +12,21 @@ VERSIONS = ROOT / "services/backend/migrations/versions"
 SQL = (VERSIONS / "0022_retained_reuse.sql").read_text()
 
 
+def test_enabling_migration_is_narrow_and_forward_only() -> None:
+    path = VERSIONS / "0023_enable_retained_reuse.py"
+    source = path.read_text()
+    assert 'down_revision = "0022_retained_reuse"' in source
+    assert "DROP CONSTRAINT retained_reuse_disabled" in source
+    assert "0023_enable_retained_reuse" in source
+    assert not re.search(r"\bGRANT\s", source, re.I)
+    spec = importlib.util.spec_from_file_location("reuse_enable_migration", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    with pytest.raises(RuntimeError, match="forward repair or a controlled restore"):
+        module.downgrade()
+
+
 def function(source: str, name: str) -> str:
     match = re.search(
         r"CREATE (?:OR REPLACE )?FUNCTION emailmonitor\." + name + r"\([^\n]+\).*?\$\$;",

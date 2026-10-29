@@ -1,4 +1,4 @@
-"""Proposed draft-time reuse materialization; not yet exposed or enabled."""
+"""Human-scoped draft-time reuse materialization for authored fixtures."""
 
 import json
 from uuid import UUID
@@ -19,11 +19,10 @@ from emailmonitor.runtime.database import ServiceDatabase
 def materialize_draft(service: Associations, org: UUID, target_job: UUID, url: str) -> UUID:
     """Stage one exact authored HTML observation for an opted-in draft job.
 
-    The planning route references this candidate, but API creation and the
-    migration's hard constraint refuse reuse. Neither refusal may be lifted
-    until SQL fences, real concurrency, retention and export acceptance pass.
-    The source is selected under the human caller's existing tenant scope; no
-    cross-job worker authorization is granted by this function.
+    Only explicitly opted-in authored fixture jobs reach this path. The source
+    is selected under the human caller's existing tenant scope; no cross-job
+    worker authorization is granted by this function. Hosted service, broker
+    and installed acceptance are still required before release.
     """
     if isinstance(service.database, ServiceDatabase) or type(service.token) is not str:
         raise AuthorizationDenied()

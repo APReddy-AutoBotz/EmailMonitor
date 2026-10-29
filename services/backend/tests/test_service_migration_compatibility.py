@@ -26,7 +26,7 @@ from sqlalchemy.exc import DBAPIError
 from test_source_foundation import policy_body
 
 ROOT = Path(__file__).resolve().parents[3]
-HEAD = "0022_retained_reuse"
+HEAD = "0023_enable_retained_reuse"
 FILTER_PREVIOUS = "0015_service_plan_cache"
 SERVICE_PREVIOUS = "0014_service_authority"
 PREVIOUS = "0013_provider_journey"

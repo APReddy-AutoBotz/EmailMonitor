@@ -1,4 +1,4 @@
-"""Transaction-local preparation only; execution and persistence remain unavailable."""
+"""Transaction-local preparation of a source-bound reuse proposal."""
 
 import hashlib
 import json
@@ -48,11 +48,10 @@ def prepare_reuse(
 ) -> PreparedReuse:
     """Build an unaccepted target review draft under existing current-work fences.
 
-    The human-only draft materializer calls this inside its transaction, but
-    reuse remains disabled by the API and database. Locks expire with that
-    transaction; later reads and exports require their own current fences.
-    Lock ordering, live SQL, revocation/deletion races and persistence have
-    not yet been validated against PostgreSQL.
+    The human-only draft materializer calls this inside its transaction. Locks
+    expire with that transaction; later reads and exports require their own
+    current fences. Synthetic SQL tests exercise specific lock and lifecycle
+    cases, not every possible interleaving or the hosted service path.
     """
     target = Ledger._lock(c, org, target_job)
     request = JobRequest.model_validate(target["request"])

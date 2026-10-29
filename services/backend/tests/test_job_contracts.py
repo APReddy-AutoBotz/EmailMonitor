@@ -120,6 +120,28 @@ def test_unavailable_reuse_does_not_override_authorization_refusal() -> None:
         )
 
 
+@pytest.mark.parametrize("environment", ["test", "production"])
+def test_supported_reuse_refuses_without_synthetic_fixture_mode(environment: str) -> None:
+    from fastapi import HTTPException
+
+    from emailmonitor.config import Settings
+
+    database, connection = MagicMock(), MagicMock()
+    database.tenant.return_value.__enter__.return_value = (connection, MagicMock())
+    request = JobRequest.model_validate(
+        {
+            **request_body(),
+            "input": {"type": "url", "url": "https://synthetic.publisher.example/article-a.html"},
+            "reuse": {"mode": "verified_retained", "fresh_since": "2026-10-01T13:00:00Z"},
+        }
+    )
+    settings = Settings.model_validate({"environment": environment, "fixture_mode": False})
+    with pytest.raises(HTTPException) as error:
+        Ledger(database, "synthetic", settings).create(UUID(int=1), request, "synthetic-key")
+    assert error.value.status_code == 409
+    connection.execute.assert_not_called()
+
+
 def test_unconfirmed_query_change_is_rejected() -> None:
     body = request_body()
     body["input"] = {
