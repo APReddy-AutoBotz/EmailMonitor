@@ -724,3 +724,9 @@ worker delegation does not permit reading another job's source batch. Durable
 lineage, a narrowly authorized worker path, lifecycle/concurrency proof, connected
 results/export and genuine hosted validation remain pending. See
 [reuse decisions](82-evidence-date-reuse-decisions.md).
+
+An unexposed draft-time materializer explores staging exact authored HTML under
+the requesting user's current scope and lets the existing association derivation
+initialize a separate target review. It cannot execute with the current schema.
+Physical removal of source-linked target copies on source deletion or expiry is
+not implemented; no visibility-only fence is accepted as a substitute for purge.

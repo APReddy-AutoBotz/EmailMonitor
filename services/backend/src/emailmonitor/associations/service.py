@@ -44,6 +44,21 @@ LINKS = {
 }
 
 
+def initial_bundle(
+    settings: Settings,
+    org: UUID,
+    job: UUID,
+    observed: ArticleObservation | RetainedPdf | RetainedXml,
+    reused_from: UUID | None,
+) -> Bundle:
+    """Rebuild job-local review for reuse without transferring prior decisions."""
+    if reused_from is None:
+        return map_observation(settings, org, observed)
+    from emailmonitor.associations.reuse_draft import independent_review_draft
+
+    return independent_review_draft(settings, org, org, reused_from, job, observed)
+
+
 def translate(error: DBAPIError) -> NoReturn:
     """Only our exact denial/conflict SQLSTATEs are translated, never other SQL failures."""
     original = error.orig
@@ -147,7 +162,9 @@ article_url=:url FOR SHARE
             )
             if observed.route == "browser_dom":
                 self.extraction._scope(c, org, job, url, browser=True)
-            bundle = map_observation(self.settings, org, observed)
+            bundle = initial_bundle(
+                self.settings, org, job, observed, source.get("reused_from_job")
+            )
             payload = bundle.model_dump_json()
             if len(payload.encode()) > 131072:
                 raise ValueError("Retained association scope exceeds the bounded record ceiling")
