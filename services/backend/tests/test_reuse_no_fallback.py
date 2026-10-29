@@ -5,13 +5,15 @@ from unittest.mock import MagicMock
 from uuid import UUID
 
 import pytest
+from test_job_contracts import request_body
+
 from emailmonitor.discovery.service import Discovery
 from emailmonitor.discovery.state import DiscoveryState
+from emailmonitor.fetching.safety import IsolationUnavailable
 from emailmonitor.jobs.models import JobRequest
 from emailmonitor.organizations.database import AuthorizationDenied
 from emailmonitor.progress.binding import Lease
 from emailmonitor.progress.service import Progress, Work
-from test_job_contracts import request_body
 
 ORG, JOB, ITEM, TOKEN = (UUID(int=value) for value in range(1, 5))
 URL = "https://synthetic.publisher.example/article-a.html"
@@ -102,12 +104,65 @@ def test_missing_provider_reuse_refuses_before_transport() -> None:
     journey.progress.finish.assert_not_called()
 
 
+@pytest.mark.parametrize("case", ["fresh", "missing", "unbound", "wrong_url", "discover", "valid"])
+def test_default_worker_provider_reuse_never_enables_transport(case: str) -> None:
+    from emailmonitor.sources.provider_documents import DOI_URL, PII_URL
+
+    progress = MagicMock()
+    body = {
+        **request_body(),
+        "input": {"type": "url", "url": PII_URL if case == "wrong_url" else DOI_URL},
+        "reuse": {"mode": "verified_retained", "fresh_since": "2026-10-01T00:00:00Z"},
+    }
+    if case == "fresh":
+        del body["reuse"]
+    progress.discovery.read_for_work.return_value = (
+        {
+            "revision": 1,
+            "checkpoint": DiscoveryState(
+                status="completed",
+                reason="single_article",
+                articles=[DOI_URL],
+                discovery_complete=True,
+                completeness="single_article",
+            ).model_dump(),
+        },
+        JobRequest.model_validate(body),
+    )
+    existing = {
+        "article_url": DOI_URL,
+        "revision": 1,
+        "reused_from_job": UUID(int=6),
+        "reused_source_batch": UUID(int=7),
+    }
+    if case == "unbound":
+        existing["reused_source_batch"] = None
+    progress.extraction.read.return_value = [] if case == "missing" else [existing]
+    progress.associations.derive.return_value = UUID(int=5)
+    progress.finish.return_value = "needs_review"
+    work = Work(
+        Lease(ORG, JOB, ITEM, TOKEN, 1, 1),
+        "discover" if case == "discover" else "article",
+        DOI_URL,
+        1,
+    )
+    if case == "valid":
+        assert Progress.process_fixture(progress, work) == "needs_review"
+    else:
+        with pytest.raises(IsolationUnavailable if case == "fresh" else AuthorizationDenied):
+            Progress.process_fixture(progress, work)
+        progress.associations.derive.assert_not_called()
+        progress.finish.assert_not_called()
+    progress.extraction.fixture.assert_not_called()
+
+
 @pytest.mark.parametrize("existing", [False, True])
 def test_missing_or_unresolved_tooltip_reuse_never_runs_browser(existing: bool) -> None:
+    from test_associations import SETTINGS
+
     from emailmonitor.extraction.fixture import article_bytes
     from emailmonitor.extraction.html import parse_article
     from emailmonitor.progress.tooltip import TOOLTIP_URL, TooltipJourney
-    from test_associations import SETTINGS
 
     progress, dispatch = MagicMock(), MagicMock()
     progress.extraction.prepare.return_value = {"reuse_requested": True, "revision": 1}

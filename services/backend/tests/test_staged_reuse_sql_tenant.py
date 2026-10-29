@@ -19,7 +19,7 @@ from test_job_contracts import request_body
 from test_pdf_pipeline_tenant import planned_pdf
 from test_progress_tenant import claim
 from test_provider_journey import registry, xml_bytes
-from test_provider_journey_tenant import NoDispatch, planned_provider
+from test_provider_journey_tenant import planned_provider
 from test_results_tenant import ready
 from test_source_foundation import source_path
 from test_tenant_foundation import ORIGIN, Scenario
@@ -44,7 +44,7 @@ from emailmonitor.lifecycle.service import Lifecycle
 from emailmonitor.organizations.database import AuthorizationDenied, Database, TenantContext
 from emailmonitor.organizations.roles import Capability
 from emailmonitor.progress.binding import bound
-from emailmonitor.progress.provider import ProviderJourney
+from emailmonitor.progress.execution import ExecutionDispatcher
 from emailmonitor.progress.service import Progress
 from emailmonitor.results.models import Filters
 from emailmonitor.results.service import Results
@@ -63,6 +63,29 @@ def source_target(scenario: Scenario, route: str) -> tuple[Progress, UUID, UUID,
     )
     org = scenario.organizations[0]
     progress.start(org, source, progress.snapshot(org, source).revision)
+    batch, url = finish_source(progress, org, source, route)
+    target = uuid4()
+    body = {
+        **request_body(),
+        "input": {"type": "url", "url": url},
+        "reuse": {"mode": "verified_retained", "fresh_since": "2000-01-01T00:00:00Z"},
+    }
+    if route == "pdf":
+        body["options"]["allow_pdf"] = True
+    with progress.database.tenant(progress.token, org, Capability.ACQUIRE_SOURCE) as (c, ctx):
+        assert isinstance(ctx, TenantContext)
+        c.execute(
+            text(
+                "INSERT INTO emailmonitor.jobs (organization_id,id,created_by,kind,request,state) "
+                "VALUES(:org,:job,:actor,'extraction',CAST(:body AS jsonb),'draft')"
+            ),
+            {"org": org, "job": target, "actor": ctx.identity_id, "body": json.dumps(body)},
+        )
+    return progress, source, target, batch, url
+
+
+def finish_source(progress: Progress, org: UUID, source: UUID, route: str) -> tuple[UUID, str]:
+    """Commit authored source facts through SQL; this is not parser-isolation proof."""
     work = claim(progress, org, source)
     with bound(work.lease):
         if route == "pdf":
@@ -90,25 +113,7 @@ def source_target(scenario: Scenario, route: str) -> tuple[Progress, UUID, UUID,
         progress.finish(work, batch)
     expected_route = "article_xml" if route == "provider" else route
     assert progress.associations.detail(org, batch).observation_route == expected_route
-
-    target = uuid4()
-    body = {
-        **request_body(),
-        "input": {"type": "url", "url": work.url},
-        "reuse": {"mode": "verified_retained", "fresh_since": "2000-01-01T00:00:00Z"},
-    }
-    if route == "pdf":
-        body["options"]["allow_pdf"] = True
-    with progress.database.tenant(progress.token, org, Capability.ACQUIRE_SOURCE) as (c, ctx):
-        assert isinstance(ctx, TenantContext)
-        c.execute(
-            text(
-                "INSERT INTO emailmonitor.jobs (organization_id,id,created_by,kind,request,state) "
-                "VALUES(:org,:job,:actor,'extraction',CAST(:body AS jsonb),'draft')"
-            ),
-            {"org": org, "job": target, "actor": ctx.identity_id, "body": json.dumps(body)},
-        )
-    return progress, source, target, batch, work.url
+    return batch, work.url
 
 
 @pytest.mark.parametrize("route", ["pdf", "article_xml", "provider"])
@@ -368,11 +373,7 @@ def test_public_bound_reuse_review_export_and_source_deletion(
     monkeypatch.setattr(progress.extraction, "fixture", no_acquisition)
     progress.start(org, target, progress.snapshot(org, target).revision)
     work = claim(progress, org, target)
-    outcome = (
-        ProviderJourney(progress, NoDispatch()).process(work)
-        if route == "provider"
-        else progress.process_fixture(work)
-    )
+    outcome = ExecutionDispatcher(progress).process(work)
     assert outcome == "needs_review"
     target_batch = progress.items(org, target)[0].batch_id
     assert target_batch is not None and target_batch != source_batch

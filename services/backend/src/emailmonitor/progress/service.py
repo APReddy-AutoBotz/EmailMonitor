@@ -385,11 +385,13 @@ SELECT emailmonitor.execution_finish(:org, :job, :item, :token, :batch, :failure
         from emailmonitor.fetching.safety import IsolationUnavailable
         from emailmonitor.sources.provider_documents import URLS
 
-        if work.url in URLS:
-            raise IsolationUnavailable("controlled_provider_dispatch_required")
         scope = work.lease
         with bound(scope):
             current, request = self.discovery.read_for_work(scope.organization, scope.job)
+            if work.url in URLS and request.reuse is None:
+                raise IsolationUnavailable("controlled_provider_dispatch_required")
+            if work.url in URLS and work.kind != "article":
+                raise AuthorizationDenied()
             state = DiscoveryState.model_validate(current["checkpoint"])
             if work.kind == "discover":
                 if work.url not in state.pages:
@@ -405,6 +407,19 @@ SELECT emailmonitor.execution_finish(:org, :job, :item, :token, :batch, :failure
                 ),
                 None,
             )
+            if work.url in URLS:
+                from emailmonitor.associations.reuse_adapters import retained_plan
+
+                retained = retained_plan(request)
+                if (
+                    retained is None
+                    or retained.adapter != "article_xml"
+                    or retained.article_url != work.url
+                    or existing is None
+                    or existing.get("reused_from_job") is None
+                    or existing.get("reused_source_batch") is None
+                ):
+                    raise AuthorizationDenied()
             if existing is None:
                 if request.reuse is not None:
                     raise AuthorizationDenied()
