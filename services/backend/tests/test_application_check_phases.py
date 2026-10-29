@@ -48,7 +48,11 @@ HOSTED = {
         ),
         *([EXPECTED[7]] if profile == "backend" else []),
     ]
-    for phase, profile in (("ci-backend", "backend"), ("ci-outcome-sql", "outcome_sql"))
+    for phase, profile in (
+        ("ci-backend", "backend"),
+        ("ci-outcome-sql", "outcome_sql"),
+        ("ci-capacity-sql", "capacity_sql"),
+    )
 }
 DATABASE_KEYS = (
     "EM_TEST_DATABASE_URL",
@@ -184,7 +188,7 @@ def workflow_jobs() -> dict[str, str]:
 def test_workflow_requires_complete_backend_and_static_frontend_jobs() -> None:
     workflow = (ROOT / ".github/workflows/application.yml").read_text()
     jobs = workflow_jobs()
-    assert set(jobs) == {"backend", "outcome_sql", "static", "scaffold"}
+    assert set(jobs) == {"backend", "outcome_sql", "capacity_sql", "static", "scaffold"}
     assert "continue-on-error" not in workflow
     assert "timeout-minutes: 25" in jobs["backend"]
     for required in (
@@ -234,9 +238,15 @@ def test_workflow_requires_complete_backend_and_static_frontend_jobs() -> None:
         "Execute offline scaffold and real tenant SQL/API checks",
         "Execute the complete retained outcome and article-filter SQL acceptance",
     ).replace("application-backend", "application-outcome-sql")
+    assert jobs["capacity_sql"] == jobs["backend"].replace(
+        "Execute offline scaffold and real tenant SQL/API checks",
+        "Execute the measured retained and reuse SQL acceptance",
+    ).replace("application-backend", "application-capacity-sql").replace(
+        "Backend outcome:", "Capacity outcome:"
+    ).replace("Backend detail:", "Capacity detail:")
     assert "partition_receipt: ${{ steps.tests.outputs.partition_receipt }}" in jobs["backend"]
     assert "id: tests" in jobs["backend"]
-    for job in ("backend", "outcome_sql", "static"):
+    for job in ("backend", "outcome_sql", "capacity_sql", "static"):
         assert "node-version: 24.19.0" in jobs[job]
         assert "pip install uv==0.12.23" in jobs[job]
         assert "npm install --global pnpm@11.25.0" in jobs[job]
@@ -251,18 +261,21 @@ def test_scaffold_join_accepts_only_three_explicit_successes(
 ) -> None:
     join = workflow_jobs()["scaffold"]
     assert "if: ${{ always() }}" in join
-    assert "needs: [backend, outcome_sql, static]" in join
+    assert "needs: [backend, outcome_sql, capacity_sql, static]" in join
     assert "timeout-minutes: 1" in join
     assert "BACKEND_RESULT: ${{ needs.backend.result }}" in join
     assert "OUTCOME_SQL_RESULT: ${{ needs.outcome_sql.result }}" in join
+    assert "CAPACITY_SQL_RESULT: ${{ needs.capacity_sql.result }}" in join
     assert "STATIC_RESULT: ${{ needs.static.result }}" in join
     assert "BACKEND_RECEIPT: ${{ needs.backend.outputs.partition_receipt }}" in join
     assert "OUTCOME_SQL_RECEIPT: ${{ needs.outcome_sql.outputs.partition_receipt }}" in join
+    assert "CAPACITY_SQL_RECEIPT: ${{ needs.capacity_sql.outputs.partition_receipt }}" in join
     assert "run: python3 scripts/packaging/application_test_partition.py join" in join
     assert "persist-credentials: false" in join
     environment = {
         "BACKEND_RESULT": backend,
         "OUTCOME_SQL_RESULT": outcome,
+        "CAPACITY_SQL_RESULT": "success",
         "STATIC_RESULT": static,
     }
     monkeypatch.setattr(
@@ -275,6 +288,19 @@ def test_scaffold_join_accepts_only_three_explicit_successes(
     else:
         with pytest.raises(partition.PartitionRefused, match="application_dependency_failed"):
             partition.join(environment)
+
+
+@pytest.mark.parametrize("capacity", ["failure", "cancelled", "skipped", ""])
+def test_scaffold_join_rejects_non_success_third_partition(capacity: str) -> None:
+    with pytest.raises(partition.PartitionRefused, match="application_dependency_failed"):
+        partition.join(
+            {
+                "BACKEND_RESULT": "success",
+                "OUTCOME_SQL_RESULT": "success",
+                "CAPACITY_SQL_RESULT": capacity,
+                "STATIC_RESULT": "success",
+            }
+        )
 
 
 @pytest.mark.parametrize(

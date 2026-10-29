@@ -935,7 +935,479 @@ RESERVED_SQL = (
     *TIMING_SQL,
     *MEASURED_SQL,
 )
-PROFILES = ("backend", "outcome_sql")
+# Measured real-CI cases moved to the third identical guarded SQL runner.
+CAPACITY_EXTRA = (
+    (
+        "services/backend/tests/test_service_reuse_broker.py::test_reused_observatio"
+        "n_survives_worker_crash_and_original_redelivery[html]"
+    ),
+    (
+        "services/backend/tests/test_service_reuse_broker.py::test_reused_observatio"
+        "n_survives_worker_crash_and_original_redelivery[pdf]"
+    ),
+    (
+        "services/backend/tests/test_service_reuse_broker.py::test_reused_observatio"
+        "n_survives_worker_crash_and_original_redelivery[article_xml]"
+    ),
+    (
+        "services/backend/tests/test_service_reuse_broker.py::test_reused_observatio"
+        "n_survives_worker_crash_and_original_redelivery[provider]"
+    ),
+    (
+        "services/backend/tests/test_service_reuse_tenant.py::test_service_worker_re"
+        "ads_only_its_target_and_never_acquires_fresh_bytes[html]"
+    ),
+    (
+        "services/backend/tests/test_service_reuse_tenant.py::test_service_worker_re"
+        "ads_only_its_target_and_never_acquires_fresh_bytes[pdf]"
+    ),
+    (
+        "services/backend/tests/test_service_reuse_tenant.py::test_service_worker_re"
+        "ads_only_its_target_and_never_acquires_fresh_bytes[article_xml]"
+    ),
+    (
+        "services/backend/tests/test_service_reuse_tenant.py::test_service_worker_re"
+        "ads_only_its_target_and_never_acquires_fresh_bytes[provider]"
+    ),
+    (
+        "services/backend/tests/test_staged_reuse_sql_tenant.py::test_bound_non_html"
+        "_copy_keeps_original_binding_and_replays[pdf]"
+    ),
+    (
+        "services/backend/tests/test_staged_reuse_sql_tenant.py::test_bound_non_html"
+        "_copy_keeps_original_binding_and_replays[article_xml]"
+    ),
+    (
+        "services/backend/tests/test_staged_reuse_sql_tenant.py::test_bound_non_html"
+        "_copy_keeps_original_binding_and_replays[provider]"
+    ),
+    (
+        "services/backend/tests/test_staged_reuse_sql_tenant.py::test_source_fence_s"
+        "erializes_item_read_with_deletion[pdf]"
+    ),
+    (
+        "services/backend/tests/test_staged_reuse_sql_tenant.py::test_source_fence_s"
+        "erializes_item_read_with_deletion[article_xml]"
+    ),
+    (
+        "services/backend/tests/test_staged_reuse_sql_tenant.py::test_source_fence_s"
+        "erializes_item_read_with_deletion[provider]"
+    ),
+    (
+        "services/backend/tests/test_staged_reuse_sql_tenant.py::test_bound_source_a"
+        "uthority_changes_refuse_before_copy[revoked_policy-pdf]"
+    ),
+    (
+        "services/backend/tests/test_staged_reuse_sql_tenant.py::test_bound_source_a"
+        "uthority_changes_refuse_before_copy[revoked_policy-article_xml]"
+    ),
+    (
+        "services/backend/tests/test_staged_reuse_sql_tenant.py::test_bound_source_a"
+        "uthority_changes_refuse_before_copy[revoked_policy-provider]"
+    ),
+    (
+        "services/backend/tests/test_staged_reuse_sql_tenant.py::test_bound_source_a"
+        "uthority_changes_refuse_before_copy[retention-pdf]"
+    ),
+    (
+        "services/backend/tests/test_staged_reuse_sql_tenant.py::test_bound_source_a"
+        "uthority_changes_refuse_before_copy[retention-article_xml]"
+    ),
+    (
+        "services/backend/tests/test_staged_reuse_sql_tenant.py::test_bound_source_a"
+        "uthority_changes_refuse_before_copy[retention-provider]"
+    ),
+    (
+        "services/backend/tests/test_staged_reuse_sql_tenant.py::test_bound_source_a"
+        "uthority_changes_refuse_before_copy[suppression-pdf]"
+    ),
+    (
+        "services/backend/tests/test_staged_reuse_sql_tenant.py::test_bound_source_a"
+        "uthority_changes_refuse_before_copy[suppression-article_xml]"
+    ),
+    (
+        "services/backend/tests/test_staged_reuse_sql_tenant.py::test_bound_source_a"
+        "uthority_changes_refuse_before_copy[suppression-provider]"
+    ),
+    (
+        "services/backend/tests/test_staged_reuse_sql_tenant.py::test_bound_source_a"
+        "uthority_changes_refuse_before_copy[deleted-pdf]"
+    ),
+    (
+        "services/backend/tests/test_staged_reuse_sql_tenant.py::test_bound_source_a"
+        "uthority_changes_refuse_before_copy[deleted-article_xml]"
+    ),
+    (
+        "services/backend/tests/test_staged_reuse_sql_tenant.py::test_bound_source_a"
+        "uthority_changes_refuse_before_copy[deleted-provider]"
+    ),
+    (
+        "services/backend/tests/test_staged_reuse_sql_tenant.py::test_bound_source_a"
+        "uthority_changes_refuse_before_copy[expired-pdf]"
+    ),
+    (
+        "services/backend/tests/test_staged_reuse_sql_tenant.py::test_bound_source_a"
+        "uthority_changes_refuse_before_copy[expired-article_xml]"
+    ),
+    (
+        "services/backend/tests/test_staged_reuse_sql_tenant.py::test_bound_source_a"
+        "uthority_changes_refuse_before_copy[expired-provider]"
+    ),
+    (
+        "services/backend/tests/test_staged_reuse_sql_tenant.py::test_bound_reuse_re"
+        "spects_user_cutoff[pdf]"
+    ),
+    (
+        "services/backend/tests/test_staged_reuse_sql_tenant.py::test_bound_reuse_re"
+        "spects_user_cutoff[article_xml]"
+    ),
+    (
+        "services/backend/tests/test_staged_reuse_sql_tenant.py::test_bound_reuse_re"
+        "spects_user_cutoff[provider]"
+    ),
+    (
+        "services/backend/tests/test_staged_reuse_sql_tenant.py::test_bound_reuse_ne"
+        "ver_resolves_foreign_tenant_batch[pdf]"
+    ),
+    (
+        "services/backend/tests/test_staged_reuse_sql_tenant.py::test_bound_reuse_ne"
+        "ver_resolves_foreign_tenant_batch[article_xml]"
+    ),
+    (
+        "services/backend/tests/test_staged_reuse_sql_tenant.py::test_bound_reuse_ne"
+        "ver_resolves_foreign_tenant_batch[provider]"
+    ),
+    (
+        "services/backend/tests/test_staged_reuse_sql_tenant.py::test_public_bound_r"
+        "euse_review_export_and_source_deletion[pdf]"
+    ),
+    (
+        "services/backend/tests/test_staged_reuse_sql_tenant.py::test_public_bound_r"
+        "euse_review_export_and_source_deletion[article_xml]"
+    ),
+    (
+        "services/backend/tests/test_staged_reuse_sql_tenant.py::test_public_bound_r"
+        "euse_review_export_and_source_deletion[provider]"
+    ),
+    (
+        "services/backend/tests/test_tenant_foundation.py::test_real_api_tenant_sele"
+        "ction_and_pool_reuse"
+    ),
+    (
+        "services/backend/tests/test_tenant_foundation.py::test_sql_rls_blocks_forge"
+        "d_tenant_and_contextless_writes"
+    ),
+    (
+        "services/backend/tests/test_tenant_foundation.py::test_roles_cannot_manage_"
+        "members[operator]"
+    ),
+    (
+        "services/backend/tests/test_tenant_foundation.py::test_roles_cannot_manage_"
+        "members[reviewer]"
+    ),
+    ("services/backend/tests/test_tenant_foundation.py::test_roles_cannot_manage_members[viewer]"),
+    (
+        "services/backend/tests/test_tenant_foundation.py::test_roles_cannot_manage_"
+        "members[data_steward]"
+    ),
+    (
+        "services/backend/tests/test_tenant_foundation.py::test_owner_transfer_guard"
+        "_and_atomic_transfer"
+    ),
+    ("services/backend/tests/test_tenant_foundation.py::test_admin_cannot_assign_or_change_owner"),
+    (
+        "services/backend/tests/test_tenant_foundation.py::test_revocation_stale_ses"
+        "sion_csrf_and_revision"
+    ),
+    (
+        "services/backend/tests/test_tenant_foundation.py::test_lifecycle_suspension"
+        "_recovery_and_terminal_state"
+    ),
+    (
+        "services/backend/tests/test_tenant_foundation.py::test_expired_revoked_and_"
+        "fabricated_session"
+    ),
+    ("services/backend/tests/test_tenant_foundation.py::test_runtime_rejects_owner_connection"),
+    ("services/backend/tests/test_tenant_foundation.py::test_force_rls_and_composite_keys"),
+    (
+        "services/backend/tests/test_tenant_foundation.py::test_oidc_browser_binding"
+        "_and_callback_replay"
+    ),
+    (
+        "services/backend/tests/test_tenant_foundation.py::test_test_provider_cannot"
+        "_activate_in_production"
+    ),
+    (
+        "services/backend/tests/test_tenant_foundation.py::test_registered_membershi"
+        "p_addition_is_tenant_scoped"
+    ),
+    (
+        "services/backend/tests/test_tenant_foundation.py::test_concurrent_last_owne"
+        "r_removal_is_serialized"
+    ),
+    (
+        "services/backend/tests/test_tenant_foundation.py::test_database_runtime_is_"
+        "direct_login_and_revision_body_is_strict"
+    ),
+    (
+        "services/backend/tests/test_tenant_foundation.py::test_authentication_and_r"
+        "untime_privileges_are_separate"
+    ),
+    (
+        "services/backend/tests/test_tooltip_execution_tenant.py::test_real_upgrade_"
+        "crash_replay_one_effect_current_revision"
+    ),
+    (
+        "services/backend/tests/test_tooltip_execution_tenant.py::test_real_optout_o"
+        "r_uncomposed_remains_truthful[False-True]"
+    ),
+    (
+        "services/backend/tests/test_tooltip_execution_tenant.py::test_real_optout_o"
+        "r_uncomposed_remains_truthful[True-False]"
+    ),
+    (
+        "services/backend/tests/test_tooltip_execution_tenant.py::test_real_missing_"
+        "browser_policy_keeps_static_without_effect"
+    ),
+    (
+        "services/backend/tests/test_tooltip_execution_tenant.py::test_real_current_"
+        "fences_before_dispatch_and_before_commit[token-False]"
+    ),
+    (
+        "services/backend/tests/test_tooltip_execution_tenant.py::test_real_current_"
+        "fences_before_dispatch_and_before_commit[token-True]"
+    ),
+    (
+        "services/backend/tests/test_tooltip_execution_tenant.py::test_real_current_"
+        "fences_before_dispatch_and_before_commit[generation-False]"
+    ),
+    (
+        "services/backend/tests/test_tooltip_execution_tenant.py::test_real_current_"
+        "fences_before_dispatch_and_before_commit[generation-True]"
+    ),
+    (
+        "services/backend/tests/test_tooltip_execution_tenant.py::test_real_current_"
+        "fences_before_dispatch_and_before_commit[pause-False]"
+    ),
+    (
+        "services/backend/tests/test_tooltip_execution_tenant.py::test_real_current_"
+        "fences_before_dispatch_and_before_commit[pause-True]"
+    ),
+    (
+        "services/backend/tests/test_tooltip_execution_tenant.py::test_real_current_"
+        "fences_before_dispatch_and_before_commit[cancel-False]"
+    ),
+    (
+        "services/backend/tests/test_tooltip_execution_tenant.py::test_real_current_"
+        "fences_before_dispatch_and_before_commit[cancel-True]"
+    ),
+    (
+        "services/backend/tests/test_tooltip_execution_tenant.py::test_real_current_"
+        "fences_before_dispatch_and_before_commit[policy-False]"
+    ),
+    (
+        "services/backend/tests/test_tooltip_execution_tenant.py::test_real_current_"
+        "fences_before_dispatch_and_before_commit[policy-True]"
+    ),
+    (
+        "services/backend/tests/test_tooltip_execution_tenant.py::test_real_current_"
+        "fences_before_dispatch_and_before_commit[deletion-False]"
+    ),
+    (
+        "services/backend/tests/test_tooltip_execution_tenant.py::test_real_current_"
+        "fences_before_dispatch_and_before_commit[deletion-True]"
+    ),
+    (
+        "services/backend/tests/test_tooltip_execution_tenant.py::test_real_current_"
+        "fences_before_dispatch_and_before_commit[expiry-False]"
+    ),
+    (
+        "services/backend/tests/test_tooltip_execution_tenant.py::test_real_current_"
+        "fences_before_dispatch_and_before_commit[expiry-True]"
+    ),
+    (
+        "services/backend/tests/test_tooltip_execution_tenant.py::test_real_current_"
+        "fences_before_dispatch_and_before_commit[tenant-False]"
+    ),
+    (
+        "services/backend/tests/test_tooltip_execution_tenant.py::test_real_current_"
+        "fences_before_dispatch_and_before_commit[lease_deletion_generation-True]"
+    ),
+    (
+        "services/backend/tests/test_tooltip_execution_tenant.py::test_real_stale_di"
+        "scovery_revision_refused"
+    ),
+    (
+        "services/backend/tests/test_tooltip_execution_tenant.py::test_real_browser_"
+        "provenance_failure_keeps_static_and_no_effect"
+    ),
+    (
+        "services/backend/tests/test_tooltip_execution_tenant.py::test_real_callback"
+        "_cancel_blocks_derive_and_replay"
+    ),
+    (
+        "services/backend/tests/test_tooltip_execution_tenant.py::test_real_retained"
+        "_browser_expiry_refuses_recovery_without_dispatch[contact_deadline]"
+    ),
+    (
+        "services/backend/tests/test_tooltip_execution_tenant.py::test_real_retained"
+        "_browser_expiry_refuses_recovery_without_dispatch[excerpt_deadline]"
+    ),
+    (
+        "services/backend/tests/test_admission_tenant.py::test_real_running_job_admi"
+        "ssion_and_one_settlement_each"
+    ),
+    (
+        "services/backend/tests/test_admission_tenant.py::test_real_two_tenant_round"
+        "_robin_under_shared_pool_contention"
+    ),
+    (
+        "services/backend/tests/test_admission_tenant.py::test_real_quota_reduction_"
+        "stops_remaining_units_without_recharging"
+    ),
+    (
+        "services/backend/tests/test_admission_tenant.py::test_real_active_reservati"
+        "on_survives_temporary_full_quota_and_cancel_releases"
+    ),
+    (
+        "services/backend/tests/test_admission_tenant.py::test_real_export_reduction"
+        "_hides_download_and_keeps_private_artifact"
+    ),
+    (
+        "services/backend/tests/test_admission_tenant.py::test_real_current_export_d"
+        "isable_closes_claim_and_reconciliation"
+    ),
+    (
+        "services/backend/tests/test_admission_tenant.py::test_real_source_attempt_s"
+        "pacing_backoff_and_idempotent_admission"
+    ),
+    (
+        "services/backend/tests/test_admission_tenant.py::test_real_current_network_"
+        "entitlement_refusal_does_not_count_attempt"
+    ),
+    (
+        "services/backend/tests/test_admission_tenant.py::test_real_captured_job_lim"
+        "its_do_not_expand_on_upgrade"
+    ),
+    (
+        "services/backend/tests/test_admission_tenant.py::test_real_concurrent_claim"
+        "s_never_oversubscribe_tenant_or_recharge"
+    ),
+    (
+        "services/backend/tests/test_admission_tenant.py::test_real_contended_source"
+        "_grant_and_backoff_use_post_lock_time"
+    ),
+    (
+        "services/backend/tests/test_admission_tenant.py::test_real_source_success_r"
+        "equires_its_live_active_current_lease[expired]"
+    ),
+    (
+        "services/backend/tests/test_admission_tenant.py::test_real_source_success_r"
+        "equires_its_live_active_current_lease[cleanup_finished]"
+    ),
+    (
+        "services/backend/tests/test_admission_tenant.py::test_real_source_success_r"
+        "equires_its_live_active_current_lease[failure_finished]"
+    ),
+    (
+        "services/backend/tests/test_admission_tenant.py::test_real_source_success_r"
+        "equires_its_live_active_current_lease[response_finished]"
+    ),
+    (
+        "services/backend/tests/test_admission_tenant.py::test_real_source_success_r"
+        "equires_its_live_active_current_lease[wrong_nonce]"
+    ),
+    (
+        "services/backend/tests/test_admission_tenant.py::test_real_source_success_r"
+        "equires_its_live_active_current_lease[waiting]"
+    ),
+    (
+        "services/backend/tests/test_admission_tenant.py::test_real_draft_parse_cann"
+        "ot_commit_after_lease_expiry_and_slot_reuse"
+    ),
+    (
+        "services/backend/tests/test_admission_tenant.py::test_real_discovery_only_p"
+        "olicy_admits_fixture_io_without_contact_extraction"
+    ),
+    (
+        "services/backend/tests/test_progress_tenant.py::test_real_unknown_total_act"
+        "ual_counters_partial_dynamic_and_replay"
+    ),
+    (
+        "services/backend/tests/test_progress_tenant.py::test_real_all_no_contact_co"
+        "mpletes_without_accepted_contacts"
+    ),
+    (
+        "services/backend/tests/test_progress_tenant.py::test_real_cap_partial_never"
+        "_claims_known_denominator"
+    ),
+    (
+        "services/backend/tests/test_progress_tenant.py::test_real_pause_generation_"
+        "resume_checkpoint_old_lease_denied"
+    ),
+    (
+        "services/backend/tests/test_progress_tenant.py::test_real_cancel_retains_pe"
+        "rmitted_source_but_fences_uncommitted_effect"
+    ),
+    (
+        "services/backend/tests/test_progress_tenant.py::test_real_exhausted_last_at"
+        "tempt_pause_settles_and_retry_is_new_lineage"
+    ),
+    (
+        "services/backend/tests/test_progress_tenant.py::test_real_started_writes_ne"
+        "ed_current_lease_and_runtime_tables_are_read_only"
+    ),
+    (
+        "services/backend/tests/test_progress_tenant.py::test_real_revision_conflict"
+        "_does_not_start_or_reopen_terminal"
+    ),
+    (
+        "services/backend/tests/test_progress_tenant.py::test_real_mixed_exhausted_a"
+        "nd_running_job_does_not_terminalize_live_work"
+    ),
+    (
+        "services/backend/tests/test_progress_tenant.py::test_real_atomic_review_eve"
+        "nt_is_metadata_only_and_replayed_after_completion"
+    ),
+    (
+        "services/backend/tests/test_progress_tenant.py::test_real_page_committed_be"
+        "fore_effect_pause_resumes_without_refetch"
+    ),
+    (
+        "services/backend/tests/test_progress_tenant.py::test_real_catalog_guard_pre"
+        "serves_live_work_and_item_scope"
+    ),
+    (
+        "services/backend/tests/test_progress_tenant.py::test_real_identifier_api_cs"
+        "rf_and_authorized_sse_replay"
+    ),
+    (
+        "services/backend/tests/test_progress_tenant.py::test_real_stream_rechecks_s"
+        "ource_before_each_cached_frame"
+    ),
+    (
+        "services/backend/tests/test_progress_tenant.py::test_real_failed_pagination"
+        "_retry_inherits_committed_articles_without_new_effects"
+    ),
+    (
+        "services/backend/tests/test_progress_tenant.py::test_real_review_rejection_"
+        "does_not_turn_processing_into_failure"
+    ),
+    (
+        "services/backend/tests/test_progress_tenant.py::test_real_source_ceiling_is"
+        "_partial_and_not_a_false_percentage"
+    ),
+    (
+        "services/backend/tests/test_progress_tenant.py::test_real_reconciliation_re"
+        "opens_confirmed_unleased_pending_only"
+    ),
+    (
+        "services/backend/tests/test_progress_tenant.py::test_real_cancel_after_page"
+        "_checkpoint_terminalizes_frontier_and_reconcile_is_inert"
+    ),
+)
+CAPACITY_SQL = (*MEASURED_SQL, *CAPACITY_EXTRA)
+PROFILES = ("backend", "outcome_sql", "capacity_sql")
 ARGUMENTS = (
     "-c",
     "services/backend/pyproject.toml",
@@ -953,7 +1425,7 @@ OVERRIDES = (
     "PYTEST_DISABLE_PLUGIN_AUTOLOAD",
     "PYTHONPATH",
 )
-COMMON = ("source_tree", "config", "full", "backend", "outcome_sql")
+COMMON = ("source_tree", "config", "full", *PROFILES, *("excluded_" + p for p in PROFILES))
 
 
 class PartitionRefused(RuntimeError):
@@ -982,12 +1454,21 @@ def partitions(nodes: Sequence[str]) -> dict[str, list[str]]:
         )
     ):
         raise PartitionRefused("application_collection_refused")
+    if len(set(CAPACITY_SQL)) != len(CAPACITY_SQL) or any(full[node] != 1 for node in CAPACITY_SQL):
+        raise PartitionRefused("application_collection_refused")
+    capacity = set(CAPACITY_SQL)
+    reserved = set(RESERVED_SQL)
     result = {
-        "backend": [node for node in nodes if node not in RESERVED_SQL],
-        "outcome_sql": [node for node in nodes if node in RESERVED_SQL],
+        "backend": [node for node in nodes if node not in reserved and node not in capacity],
+        "outcome_sql": [node for node in nodes if node in reserved and node not in capacity],
+        "capacity_sql": [node for node in nodes if node in capacity],
     }
-    backend, outcome = (Counter(result[key]) for key in PROFILES)
-    if not backend or backend & outcome or backend + outcome != full:
+    counts = [Counter(result[key]) for key in PROFILES]
+    if (
+        any(not count for count in counts)
+        or any(counts[i] & counts[j] for i in range(len(counts)) for j in range(i + 1, len(counts)))
+        or sum(counts, Counter()) != full
+    ):
         raise PartitionRefused("application_partition_refused")
     return result
 
@@ -1064,15 +1545,20 @@ class PartitionProof:
             not self.assigned
             or Counter(item.nodeid for item in session.items)
             != Counter(self.assigned[self.profile])
-            or Counter(self.deselected) != Counter(self.assigned[self.other])
+            or Counter(self.deselected) != Counter(self.excluded)
             or Counter(self.discovered) != Counter(self.full)
         ):
             raise PartitionRefused("application_selection_changed")
         self.collection_complete = True
 
     @property
-    def other(self) -> str:
-        return "outcome_sql" if self.profile == "backend" else "backend"
+    def excluded(self) -> list[str]:
+        return [
+            node
+            for profile in PROFILES
+            if profile != self.profile
+            for node in self.assigned[profile]
+        ]
 
     def pytest_runtest_logreport(self, report: pytest.TestReport) -> None:
         self.reports[report.nodeid, report.when, report.outcome] += 1
@@ -1094,6 +1580,17 @@ class PartitionProof:
             "config": config,
             "full": manifest(self.full),
             **{profile: manifest(self.assigned[profile]) for profile in PROFILES},
+            **{
+                "excluded_" + profile: manifest(
+                    [
+                        node
+                        for other in PROFILES
+                        if other != profile
+                        for node in self.assigned[other]
+                    ]
+                )
+                for profile in PROFILES
+            },
             "executed": manifest(self.assigned[self.profile]),
             "deselected": manifest(self.deselected),
             "skipped": 0,
@@ -1115,7 +1612,7 @@ def run(profile: str, environment: Mapping[str, str]) -> dict[str, Any]:
 
     path = environment.get(KEY)
     diagnostics: list[Any] = [Progress(Path(path))] if path else []
-    if profile == "backend":
+    if profile in {"backend", "capacity_sql"}:
         try:
             from backend_detail import KEY as DETAIL_KEY
             from backend_detail import Detail, owned_path
@@ -1159,7 +1656,7 @@ def decode_receipt(raw: str, profile: str) -> dict[str, Any]:
             rf"[a-f0-9]{{{length}}}", value[key]
         ):
             raise PartitionRefused("application_receipt_refused")
-    for key in ("full", *PROFILES, "executed", "deselected"):
+    for key in ("full", *PROFILES, *("excluded_" + p for p in PROFILES), "executed", "deselected"):
         entry = value[key]
         if (
             not isinstance(entry, dict)
@@ -1170,12 +1667,18 @@ def decode_receipt(raw: str, profile: str) -> dict[str, Any]:
             or not re.fullmatch(r"[a-f0-9]{64}", entry["sha256"])
         ):
             raise PartitionRefused("application_receipt_refused")
-    other = "outcome_sql" if profile == "backend" else "backend"
+    outcome_expected = [node for node in RESERVED_SQL if node not in CAPACITY_SQL]
     if (
-        value["outcome_sql"] != manifest(RESERVED_SQL)
-        or value["full"]["count"] != value["backend"]["count"] + value["outcome_sql"]["count"]
+        value["outcome_sql"] != manifest(outcome_expected)
+        or value["capacity_sql"] != manifest(CAPACITY_SQL)
+        or value["excluded_backend"] != manifest((*RESERVED_SQL, *CAPACITY_EXTRA))
+        or value["full"]["count"] != sum(value[p]["count"] for p in PROFILES)
+        or any(
+            value["excluded_" + p]["count"] != value["full"]["count"] - value[p]["count"]
+            for p in PROFILES
+        )
         or value["executed"] != value[profile]
-        or value["deselected"] != value[other]
+        or value["deselected"] != value["excluded_" + profile]
     ):
         raise PartitionRefused("application_receipt_refused")
     return value
@@ -1184,15 +1687,17 @@ def decode_receipt(raw: str, profile: str) -> dict[str, Any]:
 def join(environment: Mapping[str, str]) -> None:
     if any(
         environment.get(key) != "success"
-        for key in ("BACKEND_RESULT", "OUTCOME_SQL_RESULT", "STATIC_RESULT")
+        for key in ("BACKEND_RESULT", "OUTCOME_SQL_RESULT", "CAPACITY_SQL_RESULT", "STATIC_RESULT")
     ):
         raise PartitionRefused("application_dependency_failed")
-    backend = decode_receipt(environment.get("BACKEND_RECEIPT", ""), "backend")
-    outcome = decode_receipt(environment.get("OUTCOME_SQL_RECEIPT", ""), "outcome_sql")
+    receipts = [
+        decode_receipt(environment.get(profile.upper() + "_RECEIPT", ""), profile)
+        for profile in PROFILES
+    ]
     if (
-        any(backend[key] != outcome[key] for key in COMMON)
-        or backend["source_tree"] != source_tree()
-        or backend["config"] != configuration()
+        any(any(receipt[key] != receipts[0][key] for key in COMMON) for receipt in receipts[1:])
+        or receipts[0]["source_tree"] != source_tree()
+        or receipts[0]["config"] != configuration()
     ):
         raise PartitionRefused("application_receipts_differ")
 
