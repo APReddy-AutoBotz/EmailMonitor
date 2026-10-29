@@ -81,6 +81,9 @@ jobs:
       - name: "Backend outcome: ${{ steps.tests.outputs.backend_outcome || 'unavailable' }}"
         if: ${{ !cancelled() && steps.tests.outcome != 'skipped' }}
         run: ':'
+      - name: "Backend detail: ${{ steps.tests.outputs.backend_detail || 'unavailable' }}"
+        if: ${{ !cancelled() && steps.tests.outcome != 'skipped' }}
+        run: ':'
 
   outcome_sql:
     runs-on: ubuntu-24.04

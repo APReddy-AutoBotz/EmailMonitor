@@ -213,11 +213,23 @@ def test_workflow_requires_complete_backend_and_static_frontend_jobs() -> None:
         "        if: ${{ !cancelled() && steps.tests.outcome != 'skipped' }}\n"
         "        run: ':'\n"
     )
+    detail_step = (
+        '      - name: "Backend detail: ${{ steps.tests.outputs.backend_detail '
+        "|| 'unavailable' }}\"\n"
+        "        if: ${{ !cancelled() && steps.tests.outcome != 'skipped' }}\n"
+        "        run: ':'\n"
+    )
     assert jobs["backend"].count(diagnostic_environment) == 1
     assert jobs["backend"].count(diagnostic_step) == 1
+    assert jobs["backend"].count(detail_step) == 1
     assert "backend_outcome" not in jobs["outcome_sql"]
     assert "EM_BACKEND_OUTCOME_REPORT" not in jobs["outcome_sql"]
-    execution = jobs["backend"].replace(diagnostic_environment, "").replace(diagnostic_step, "")
+    execution = (
+        jobs["backend"]
+        .replace(diagnostic_environment, "")
+        .replace(diagnostic_step, "")
+        .replace(detail_step, "")
+    )
     assert jobs["outcome_sql"] == execution.replace(
         "Execute offline scaffold and real tenant SQL/API checks",
         "Execute the complete retained outcome and article-filter SQL acceptance",

@@ -295,8 +295,19 @@ def test_new_composer_preserves_original_one_shot_guest_parser_and_gates(
             b"        if: ${{ !cancelled() && steps.tests.outcome != 'skipped' }}\n"
             b"        run: ':'\n"
         )
+        detail_step = (
+            b'      - name: "Backend detail: ${{ steps.tests.outputs.backend_detail '
+            b"|| 'unavailable' }}\"\n"
+            b"        if: ${{ !cancelled() && steps.tests.outcome != 'skipped' }}\n"
+            b"        run: ':'\n"
+        )
         assert content.count(diagnostic_environment) == content.count(diagnostic_step) == 1
-        content = content.replace(diagnostic_environment, b"").replace(diagnostic_step, b"")
+        assert content.count(detail_step) == 1
+        content = (
+            content.replace(diagnostic_environment, b"")
+            .replace(diagnostic_step, b"")
+            .replace(detail_step, b"")
+        )
         outputs = (
             b"    outputs:\n      partition_receipt: ${{ steps.tests.outputs.partition_receipt }}\n"
         )

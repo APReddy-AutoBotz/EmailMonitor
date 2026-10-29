@@ -120,6 +120,7 @@ def reported(action: Callable[[Mapping[str, str]], None], environment: Mapping[s
         return
     with tempfile.TemporaryDirectory(prefix="em-backend-outcome-") as directory:
         path = Path(directory) / "progress.json"
+        detail_path = Path(directory) / "detail.json"
         category, code, primary = "normal", 0, None
         try:
             timing: WrapperTiming | None = WrapperTiming()
@@ -127,7 +128,13 @@ def reported(action: Callable[[Mapping[str, str]], None], environment: Mapping[s
             timing = None
         token = _wrapper_timing.set(timing)
         try:
-            action({**environment, KEY: str(path)})
+            try:
+                from backend_detail import KEY as DETAIL_KEY
+
+                detail_environment = {DETAIL_KEY: str(detail_path)}
+            except Exception:
+                detail_environment = {}
+            action({**environment, KEY: str(path), **detail_environment})
         except BaseException as error:
             primary = error
             category = getattr(error, "outcome_category", "wrapper_failure")
@@ -151,6 +158,12 @@ def reported(action: Callable[[Mapping[str, str]], None], environment: Mapping[s
                         pass  # Diagnostic failure cannot change acceptance.
                 with Path(environment["GITHUB_OUTPUT"]).open("a", encoding="ascii") as output:
                     output.write("backend_outcome=" + label + "\n")
+                    try:
+                        from backend_detail import label as detail_label
+
+                        output.write("backend_detail=" + detail_label(detail_path) + "\n")
+                    except Exception:
+                        pass  # Missing detail never changes the original outcome.
             except Exception:
                 if primary is None:
                     raise

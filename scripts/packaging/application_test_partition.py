@@ -925,7 +925,17 @@ def run(profile: str, environment: Mapping[str, str]) -> dict[str, Any]:
     from backend_outcome import KEY, Progress
 
     path = environment.get(KEY)
-    diagnostics = [Progress(Path(path))] if path else []
+    diagnostics: list[Any] = [Progress(Path(path))] if path else []
+    if profile == "backend":
+        try:
+            from backend_detail import KEY as DETAIL_KEY
+            from backend_detail import Detail, owned_path
+
+            detail_path = owned_path(path, environment.get(DETAIL_KEY))
+            if detail_path is not None:
+                diagnostics.append(Detail(detail_path))
+        except Exception:
+            pass  # Diagnostic installation cannot alter acceptance.
     code = pytest.main(list(ARGUMENTS), plugins=[proof, *diagnostics])
     if source_tree() != tree or configuration() != config:
         raise PartitionRefused("application_source_changed")
