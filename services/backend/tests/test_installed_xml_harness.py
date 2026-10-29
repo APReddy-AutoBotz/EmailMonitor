@@ -145,6 +145,37 @@ def test_installed_html_steps_remain_identical_under_separate_branch() -> None:
     remover = RemoveExplicitReuse()
     original_html = remover.visit(ast.Module(body=branch.orelse, type_ignores=[]))
     assert remover.count == 1
+
+    class RemoveFixedExportObservations(ast.NodeTransformer):
+        def __init__(self) -> None:
+            self.calls: list[str] = []
+
+        def visit_Expr(self, node: ast.Expr) -> ast.AST | None:
+            if (
+                isinstance(node.value, ast.Call)
+                and isinstance(node.value.func, ast.Name)
+                and node.value.func.id == "export_checkpoint"
+            ):
+                self.calls.append(ast.unparse(node.value))
+                return None
+            return self.generic_visit(node)
+
+    observed = RemoveFixedExportObservations()
+    original_html = observed.visit(original_html)
+    assert observed.calls == [
+        "export_checkpoint('navigate', None)",
+        "export_checkpoint('format', format_name)",
+        "export_checkpoint('preview_activate', format_name)",
+        "export_checkpoint('preview_wait', format_name)",
+        "export_checkpoint('create', format_name)",
+        "export_checkpoint('row_wait', format_name)",
+        "export_checkpoint('ready_wait', format_name)",
+        "export_checkpoint('refresh', format_name)",
+        "export_checkpoint('ready_wait', format_name)",
+        "export_checkpoint('download_activate', format_name)",
+        "export_checkpoint('download_wait', format_name)",
+        "export_checkpoint('verify', None)",
+    ]
     assert (
         hashlib.sha256(ast.dump(original_html, include_attributes=False).encode()).hexdigest()
         == "853426f42fc71fb1408bd2262909afe14429f813ebe3e6ecca7ead61a713f30b"
