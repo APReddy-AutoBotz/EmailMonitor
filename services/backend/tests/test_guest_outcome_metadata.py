@@ -266,6 +266,33 @@ def test_invalid_login_phase_cannot_enter_metadata(output: Path) -> None:
 
 
 @pytest.mark.parametrize(
+    "phase",
+    [
+        "reuse_plan",
+        "reuse_worker",
+        "reuse_results",
+        "reuse_review",
+        "reuse_export",
+        "reuse_preview",
+    ],
+)
+def test_reuse_phase_preserves_original_timeout(output: Path, phase: str) -> None:
+    original = TimeoutError("private synthetic sentinel")
+
+    @trace.observed_guest
+    def failed() -> None:
+        trace.guest_stage("conversation")
+        trace.guest_frame(DiagnosticFrame(kind="failure", stage=phase, error="TimeoutError"))
+        raise original
+
+    with pytest.raises(TimeoutError) as caught:
+        failed()
+    assert caught.value is original
+    assert "phase_" + phase + "-error_TimeoutError" in output.read_text()
+    assert "private" not in output.read_text()
+
+
+@pytest.mark.parametrize(
     "delivery", ["not_requested", "request_received", "asset_verified", "fulfilled"]
 )
 def test_callback_delivery_metadata_preserves_timeout_and_is_allowlisted(

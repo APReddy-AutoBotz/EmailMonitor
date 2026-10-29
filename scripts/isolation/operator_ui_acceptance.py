@@ -815,9 +815,19 @@ async def authored_outcome_paging(
     await page.route(quality_pattern, quality)
     try:
         checkpoint("outcomes_authored_load")
+        readiness = AuthoredOutcomeReplayReadiness(organization, job)
+        observe(readiness, None, None)
         await activate(page, page.get_by_role("button", name="Refresh current view", exact=True))
         region = page.get_by_role("region", name="Article outcomes", exact=True)
         table = region.get_by_role("table", name="Current-authorized article outcomes", exact=True)
+        # Refresh remounts the job and restarts its event stream. The first
+        # visible page may still be replaced by the terminal replay.
+        async with asyncio.timeout(5):
+            _, rendered = await wait_outcome_replay(page, readiness, changed, timeout=5)
+            await expect(table).to_be_visible()
+        await rendered.dispose()
+        observe(None, None, None)
+        readiness = None
         seen = []
         heading = region.get_by_role("heading", name="Article outcomes", exact=True)
         for number in range(6):

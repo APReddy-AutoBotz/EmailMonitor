@@ -25,12 +25,15 @@ def test_presence_activation_requires_replay_render_not_just_visible_table() -> 
     marker = next(
         node for node in calls if ast.unparse(node) == "checkpoint('outcomes_presence_keyboard')"
     )
+    denied = next(
+        node for node in calls if ast.unparse(node) == "checkpoint('outcomes_page_denied')"
+    )
     readiness = [
         node
         for node in calls
         if isinstance(node.func, ast.Name)
         and node.func.id == "wait_outcome_replay"
-        and node.lineno < marker.lineno
+        and denied.lineno < node.lineno < marker.lineno
     ]
     assert len(readiness) == 1, "the initial visible table can precede terminal replay"
     call = readiness[0]
@@ -42,6 +45,42 @@ def test_presence_activation_requires_replay_render_not_just_visible_table() -> 
         node for node in calls if ast.unparse(node) == "checkpoint('outcomes_presence_keyboard')"
     )
     assert call.lineno < marker.lineno
+
+
+def test_initial_pagination_waits_for_its_own_replay_render() -> None:
+    function = ast.parse(inspect.getsource(authored_outcome_paging)).body[0]
+    calls = [node for node in ast.walk(function) if isinstance(node, ast.Call)]
+    start = next(
+        node for node in calls if ast.unparse(node) == "checkpoint('outcomes_authored_load')"
+    )
+    first = next(node for node in calls if ast.unparse(node) == "checkpoint('outcomes_next_rows')")
+    readiness = [
+        node
+        for node in calls
+        if start.lineno < node.lineno < first.lineno
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "wait_outcome_replay"
+    ]
+    assert len(readiness) == 1, "the initial table may precede its terminal replay"
+    assert any(
+        keyword.arg == "timeout" and ast.literal_eval(keyword.value) == 5
+        for keyword in readiness[0].keywords
+    )
+    observes = [
+        node
+        for node in calls
+        if start.lineno < node.lineno < first.lineno
+        and ast.unparse(node) == "observe(readiness, None, None)"
+    ]
+    refresh = next(
+        node
+        for node in calls
+        if start.lineno < node.lineno < first.lineno
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "activate"
+        and "Refresh current view" in ast.unparse(node)
+    )
+    assert len(observes) == 1 and observes[0].lineno < refresh.lineno < readiness[0].lineno
 
 
 ORG = "00000000-0000-4000-8000-000000000011"

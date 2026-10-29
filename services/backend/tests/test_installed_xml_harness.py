@@ -159,6 +159,47 @@ def test_installed_html_steps_remain_identical_under_separate_branch() -> None:
     assert '"cookies" in setup' in source and "add_cookies" not in source
 
 
+def test_installed_reuse_checkpoints_are_fixed_and_scoped_to_opt_in() -> None:
+    from operator_ui_protocol import DiagnosticFrame
+
+    tree = ast.parse((ROOT / "scripts/isolation/installed_operator_browser.py").read_text())
+    branches = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.If)
+        and ast.unparse(node.test) == "setup.get('retained_reuse') is True"
+    ]
+    assert len(branches) == 1
+    calls = sorted(
+        (
+            node
+            for node in ast.walk(branches[0])
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "checkpoint"
+        ),
+        key=lambda node: node.lineno,
+    )
+    stages = [ast.literal_eval(node.args[0]) for node in calls]
+    assert stages == [
+        "reuse_plan",
+        "reuse_worker",
+        "reuse_results",
+        "reuse_review",
+        "reuse_export",
+        "reuse_preview",
+    ]
+    for stage in stages:
+        frame = DiagnosticFrame.model_validate(
+            {"kind": "failure", "stage": stage, "error": "TimeoutError"}
+        )
+        assert frame.stage == stage and frame.reason == "unknown"
+    with pytest.raises(ValueError):
+        DiagnosticFrame.model_validate(
+            {"kind": "failure", "stage": "reuse_private_value", "error": "TimeoutError"}
+        )
+
+
 def test_installed_pdf_evidence_view_matches_actual_authored_association(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -610,6 +610,7 @@ async def main() -> None:
                     outcomes.get_by_role("row").nth(1).locator("td:nth-child(2), td:nth-child(3)")
                 ).to_have_text(["no contact", "no contact"])
                 if setup.get("retained_reuse") is True:
+                    checkpoint("reuse_plan")
                     await activate(
                         page, page.get_by_role("button", name="New extraction", exact=True)
                     )
@@ -635,11 +636,12 @@ async def main() -> None:
                     await activate(
                         page, page.get_by_role("button", name="Launch extraction", exact=True)
                     )
-                    checkpoint("url_worker")
+                    checkpoint("reuse_worker")
                     async with asyncio.timeout(30):
                         await page.get_by_text("completed", exact=True).wait_for(
                             state="visible", timeout=30000
                         )
+                    checkpoint("reuse_results")
                     target_outcomes = page.get_by_role(
                         "table", name="Actual article outcomes and failures"
                     )
@@ -647,6 +649,7 @@ async def main() -> None:
                     await expect(
                         target_outcomes.get_by_role("row").nth(1).locator("td:nth-child(2)")
                     ).to_have_text("needs review")
+                    checkpoint("reuse_review")
                     await activate(
                         page,
                         page.get_by_role("button", name="Review queue for this job", exact=True),
@@ -654,6 +657,7 @@ async def main() -> None:
                     await page.get_by_role(
                         "button", name="Evidence and review", exact=True
                     ).first.wait_for()
+                    checkpoint("reuse_export")
                     await activate(
                         page,
                         page.get_by_role(
@@ -663,6 +667,7 @@ async def main() -> None:
                     await activate(
                         page, page.get_by_role("button", name="Export this selection", exact=True)
                     )
+                    checkpoint("reuse_preview")
                     await activate(
                         page,
                         page.get_by_role(
