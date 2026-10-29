@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 're
 import { ArticlePresenceFilter, ArticlePresenceHelp, articleSelectionParams } from './retainedArticleFilters'
 import type { ArticleOutcomePresence, Outcome, Page } from './models'
 import { CurrentObservationQuality } from './observationQuality'
+import { reuseAge } from './reuseAge'
 import { Empty, Status, Time, useResource, type Context } from './ui'
 
 // The caller keys this pager by organization and job. Each request owns its
@@ -53,6 +54,7 @@ function ArticleOutcomePage({ context: c, job, path, page, heading, hasPrevious,
           <td>{item.reason.replaceAll('_', ' ')}</td>
           <td>{item.completed_at ? <Time value={item.completed_at} zone={c.zone} /> : 'Completion time not recorded'}</td>
           <td>{item.observation_status ? <Status value={item.observation_status} /> : 'Observation status unavailable'}<br />
+            {item.observation_origin === 'reused' && <>Reused observation · originally observed {item.observed_at ? <><Time value={item.observed_at} zone={c.zone} /> · {reuseAge(item.observed_at)}</> : 'time unavailable'}<br /></>}
             {item.batch_id ? <button onClick={event => setSelected({ outcome: item, opener: event.currentTarget })}>Inspect article observation</button> : <span>No retained observation batch</span>}</td>
           <td>{item.inherited_job_id ? <>Inherited from job {item.inherited_job_id}</> : 'Not inherited'}</td>
         </tr>)}</tbody>

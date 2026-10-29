@@ -22,6 +22,8 @@ def test_rebuilds_from_authored_observation_with_independent_unaccepted_reviews(
     assert first == replay and first.associations[0].id != second.associations[0].id
     assert first.associations[0].id != original.associations[0].id
     assert first.associations[0].state == "needs_review" and first.associations[0].revision == 1
+    assert first.associations[0].evidence_strength == original.associations[0].evidence_strength
+    assert first.associations[0].reason == original.associations[0].reason
     assert first.authors == original.authors and first.candidates == original.candidates
     assert first.evidence == original.evidence and first.content_digest == original.content_digest
     assert first.associations[0].author_id == original.associations[0].author_id

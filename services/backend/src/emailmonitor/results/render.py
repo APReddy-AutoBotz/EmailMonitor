@@ -62,6 +62,7 @@ def csv_bytes(rows: list[list[str]]) -> bytes:
 
 
 def contact_rows(snapshot: ExportSnapshot) -> list[list[str]]:
+    include_reuse = any(contact.observation_origin == "reused" for contact in snapshot.contacts)
     rows = [
         [
             "Association ID",
@@ -113,6 +114,16 @@ def contact_rows(snapshot: ExportSnapshot) -> list[list[str]]:
                 contact.outreach_eligibility,
             ]
         )
+    if include_reuse:
+        rows[0].extend(["Observation origin", "Observation age at snapshot (seconds)"])
+        for row, contact in zip(rows[1:], snapshot.contacts, strict=True):
+            age = (snapshot.created_at - contact.observed_at).total_seconds()
+            row.extend(
+                [
+                    "Reused" if contact.observation_origin == "reused" else "Not recorded",
+                    str(int(age)) if contact.observation_origin == "reused" and age >= 0 else "",
+                ]
+            )
     excluded = set()
     if "affiliations" not in snapshot.optional_contact_fields:
         excluded.add(6)
@@ -122,6 +133,7 @@ def contact_rows(snapshot: ExportSnapshot) -> list[list[str]]:
 
 
 def outcome_rows(snapshot: ExportSnapshot) -> list[list[str]]:
+    include_reuse = any(item.observation_origin == "reused" for item in snapshot.article_outcomes)
     rows = [
         [
             "Job ID",
@@ -153,6 +165,27 @@ def outcome_rows(snapshot: ExportSnapshot) -> list[list[str]]:
         ]
         for item in snapshot.article_outcomes
     )
+    if include_reuse:
+        rows[0].extend(
+            [
+                "Observation origin",
+                "Original observation time",
+                "Observation age at snapshot (seconds)",
+            ]
+        )
+        for row, item in zip(rows[1:], snapshot.article_outcomes, strict=True):
+            age = (
+                (snapshot.created_at - item.observed_at).total_seconds()
+                if item.observed_at is not None
+                else -1
+            )
+            row.extend(
+                [
+                    "Reused" if item.observation_origin == "reused" else "Not recorded",
+                    item.observed_at.isoformat() if item.observed_at is not None else "",
+                    str(int(age)) if item.observation_origin == "reused" and age >= 0 else "",
+                ]
+            )
     return rows
 
 

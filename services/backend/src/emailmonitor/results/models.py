@@ -113,6 +113,9 @@ class Contact(Record):
     policy_version: int = Field(ge=1)
     title: str | None = Field(default=None, max_length=1000)
     observed_at: datetime
+    observation_origin: Literal["reused"] | None = Field(
+        default=None, exclude_if=lambda v: v is None
+    )
     syntax_status: Literal["valid", "invalid", "unsupported"]
     technical_status: Literal["not_checked"] = "not_checked"
     delivery_status: Literal["unverified"] = "unverified"
@@ -151,8 +154,20 @@ class ArticleOutcome(Record):
     observation_status: (
         Literal["observed", "no_contact", "requires_browser", "partial", "unsupported"] | None
     )
+    observation_origin: Literal["reused"] | None = Field(
+        default=None, exclude_if=lambda v: v is None
+    )
+    observed_at: datetime | None = Field(default=None, exclude_if=lambda v: v is None)
     technical_status: Literal["not_checked"] = "not_checked"
     outreach_eligibility: Literal["not_assessed"] = "not_assessed"
+
+    @model_validator(mode="after")
+    def reuse_provenance(self) -> "ArticleOutcome":
+        if (self.observation_origin is None) != (self.observed_at is None):
+            raise ValueError("Reused outcome requires its original observation time")
+        if self.observed_at is not None and self.observed_at.utcoffset() is None:
+            raise ValueError("Original observation time requires an offset")
+        return self
 
 
 class EvidenceView(Record):

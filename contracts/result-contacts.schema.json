@@ -211,6 +211,19 @@
           "default": "not_assessed",
           "title": "Outreach Eligibility",
           "type": "string"
+        },
+        "observation_origin": {
+          "anyOf": [
+            {
+              "const": "reused",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Observation Origin"
         }
       },
       "required": [

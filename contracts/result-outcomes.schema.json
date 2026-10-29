@@ -113,6 +113,32 @@
           "default": "not_assessed",
           "title": "Outreach Eligibility",
           "type": "string"
+        },
+        "observation_origin": {
+          "anyOf": [
+            {
+              "const": "reused",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Observation Origin"
+        },
+        "observed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Original Observation Time"
         }
       },
       "required": [
@@ -128,7 +154,34 @@
         "observation_status"
       ],
       "title": "ArticleOutcome",
-      "type": "object"
+      "type": "object",
+      "oneOf": [
+        {
+          "properties": {
+            "observation_origin": {
+              "type": "null"
+            },
+            "observed_at": {
+              "type": "null"
+            }
+          }
+        },
+        {
+          "required": [
+            "observation_origin",
+            "observed_at"
+          ],
+          "properties": {
+            "observation_origin": {
+              "const": "reused"
+            },
+            "observed_at": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        }
+      ]
     }
   },
   "additionalProperties": false,

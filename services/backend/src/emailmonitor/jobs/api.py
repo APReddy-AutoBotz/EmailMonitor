@@ -115,9 +115,22 @@ WHERE organization_id=:org AND job_id=:job ORDER BY id LIMIT 100"""),
     ) -> dict[str, object]:
         if not settings.fixture_mode:
             raise HTTPException(409, "Synthetic fixture planning requires explicit test mode")
-        return Discovery(database, csrf(request), settings).plan(
+        session = csrf(request)
+        planned = Discovery(database, session, settings).plan(
             organization_id, job_id, body.expected_revision
         )
+        plan_data = planned.get("plan")
+        if isinstance(plan_data, dict) and plan_data.get("reason") == "retained_reuse_authored":
+            from emailmonitor.associations.reuse_materialization import materialize_draft
+            from emailmonitor.associations.service import Associations
+
+            url = plan_data.get("start_url")
+            if not isinstance(url, str):
+                raise HTTPException(409, "Retained reuse plan unavailable")
+            materialize_draft(
+                Associations(database, session, settings), organization_id, job_id, url
+            )
+        return planned
 
     @router.post("/organizations/{organization_id}/jobs/{job_id}/discover-fixture-page")
     def discover_page(

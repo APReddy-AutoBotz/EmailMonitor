@@ -13,17 +13,20 @@ from emailmonitor.jobs.ledger import Ledger
 from emailmonitor.jobs.models import JobRequest, URLInput
 from emailmonitor.organizations.database import AuthorizationDenied
 from emailmonitor.organizations.roles import Capability
+from emailmonitor.runtime.database import ServiceDatabase
 
 
 def materialize_draft(service: Associations, org: UUID, target_job: UUID, url: str) -> UUID:
     """Stage one exact authored HTML observation for an opted-in draft job.
 
-    This local candidate is unreachable from any route and depends on an
-    unimplemented database lineage migration. It must not be enabled until SQL
-    fences, real concurrency, retention and export acceptance have passed.
+    The planning route references this candidate, but API creation and the
+    migration's hard constraint refuse reuse. Neither refusal may be lifted
+    until SQL fences, real concurrency, retention and export acceptance pass.
     The source is selected under the human caller's existing tenant scope; no
     cross-job worker authorization is granted by this function.
     """
+    if isinstance(service.database, ServiceDatabase) or type(service.token) is not str:
+        raise AuthorizationDenied()
     if url not in {
         "https://synthetic.publisher.example/article-a.html",
         "https://synthetic.publisher.example/article-b.html",
@@ -116,4 +119,5 @@ VALUES(:org,:job,:url,:generation,:deletion,:source,:policy,:discovery,:digest,
                 },
             )
             service._lock(c, org, selected)
+            service.discovery._audit(c, org, target_job, "extraction.retained_reused")
             return selected

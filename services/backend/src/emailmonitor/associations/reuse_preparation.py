@@ -48,11 +48,11 @@ def prepare_reuse(
 ) -> PreparedReuse:
     """Build an unaccepted target review draft under existing current-work fences.
 
-    This is not called by any route or worker. Its locks expire with the caller's
-    transaction; a future persistence implementation must commit within that
-    transaction and revalidate source and target on every later read/export.
-    Current SQL still refuses a cross-job target batch. Lock ordering, live SQL
-    behavior, revocation/deletion races and persistence are not yet validated.
+    The human-only draft materializer calls this inside its transaction, but
+    reuse remains disabled by the API and database. Locks expire with that
+    transaction; later reads and exports require their own current fences.
+    Lock ordering, live SQL, revocation/deletion races and persistence have
+    not yet been validated against PostgreSQL.
     """
     target = Ledger._lock(c, org, target_job)
     request = JobRequest.model_validate(target["request"])

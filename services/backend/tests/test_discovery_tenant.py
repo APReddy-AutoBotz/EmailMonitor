@@ -110,6 +110,24 @@ def test_real_reuse_refusal_creates_no_job_or_idempotency_receipt(scenario: Scen
     assert cast(dict[str, object], result["checkpoint"])["status"] == "pending"
 
 
+def test_real_work_read_keeps_request_private_and_preserves_tenant_fence(
+    scenario: Scenario,
+) -> None:
+    discovery, job = begin(scenario)
+    org, other = scenario.organizations
+    checkpoint, request = discovery.read_for_work(org, job)
+    assert checkpoint == discovery.read(org, job)
+    assert request.reuse is None
+    assert "work_request" not in checkpoint
+    with scenario.client() as c:
+        scenario.login(c, "owner_b")
+        foreign = Discovery(discovery.database, str(c.cookies[COOKIE]), SETTINGS)
+        with pytest.raises(AuthorizationDenied):
+            foreign.read_for_work(other, job)
+        with pytest.raises(AuthorizationDenied):
+            foreign.read_for_work(org, job)
+
+
 def test_real_checkpoint_restart_replay_and_no_contact_or_usage(scenario: Scenario) -> None:
     discovery, job = begin(scenario)
     org = scenario.organizations[0]

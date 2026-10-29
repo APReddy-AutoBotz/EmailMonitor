@@ -163,6 +163,18 @@ def test_policy_change_during_preparation_is_refused(monkeypatch: pytest.MonkeyP
         prepare_reuse(connection, service, ORG, TARGET, URL, BATCH)
 
 
+def test_no_contact_observation_stays_no_contact(monkeypatch: pytest.MonkeyPatch) -> None:
+    connection, service, row = setup(monkeypatch)
+    url = ORIGIN + "no-contact.html"
+    source = parse_article(SETTINGS, url, article_bytes("no-contact.html"))
+    row["article_url"] = url
+    row["source_digest"] = source.acquisition_digest
+    row["observation"] = source.model_dump(mode="json")
+    result = prepare_reuse(connection, service, ORG, TARGET, url, BATCH)
+    assert result.bundle.observation_status == "no_contact"
+    assert result.bundle.candidates == () and result.bundle.associations == ()
+
+
 @pytest.mark.parametrize("route", ["pdf", "xml"])
 def test_bound_source_documents_keep_original_job_binding(
     monkeypatch: pytest.MonkeyPatch, route: str

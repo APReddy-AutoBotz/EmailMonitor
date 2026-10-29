@@ -46,7 +46,5 @@ def independent_review_draft(
             str(association["id"]),
         )
         if association["state"] == "accepted":
-            association.update(
-                state="needs_review", evidence_strength="ambiguous", reason="structural_hint"
-            )
+            association["state"] = "needs_review"
     return Bundle.model_validate(document)

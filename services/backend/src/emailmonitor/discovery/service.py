@@ -415,3 +415,22 @@ WHERE organization_id=:org AND job_id=:job"""),
             if row is None:
                 raise AuthorizationDenied()
             return dict(row)
+
+    def read_for_work(self, org: UUID, job: UUID) -> tuple[dict[str, object], JobRequest]:
+        """Read the immutable request with the existing current-authorized checkpoint."""
+        with self._tenant(org, Capability.READ_ORGANIZATION) as (c, _):
+            row = (
+                c.execute(
+                    text("""SELECT d.*,j.request AS work_request FROM emailmonitor.discovery d
+JOIN emailmonitor.jobs j ON j.organization_id=d.organization_id AND j.id=d.job_id
+WHERE d.organization_id=:org AND d.job_id=:job"""),
+                    {"org": org, "job": job},
+                )
+                .mappings()
+                .first()
+            )
+            if row is None:
+                raise AuthorizationDenied()
+            value = dict(row)
+            request = JobRequest.model_validate(value.pop("work_request"))
+            return value, request

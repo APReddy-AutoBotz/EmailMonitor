@@ -24,6 +24,7 @@ def setup(monkeypatch: pytest.MonkeyPatch) -> tuple[MagicMock, MagicMock, dict[s
     service, connection = MagicMock(), MagicMock()
     service._lock = MagicMock()
     service.settings = SETTINGS
+    service.token = "synthetic-session"
     service.discovery._tenant.return_value = nullcontext((connection, object()))
     service.extraction._scope.return_value = {"revision": 1}
     monkeypatch.setattr(module.Admission, "fixture", lambda *_: nullcontext())
@@ -67,13 +68,16 @@ def setup(monkeypatch: pytest.MonkeyPatch) -> tuple[MagicMock, MagicMock, dict[s
 
 
 def test_stages_exact_source_lineage_and_rechecks_source(monkeypatch: pytest.MonkeyPatch) -> None:
-    service, _, state = setup(monkeypatch)
+    service, connection, state = setup(monkeypatch)
     assert module.materialize_draft(service, ORG, TARGET, URL) == BATCH
     inserted = state["inserted"]
     assert isinstance(inserted, list) and len(inserted) == 1
     assert inserted[0]["job"] == TARGET and inserted[0]["source_job"] == SOURCE
     assert inserted[0]["source_revision"] == 1 and inserted[0]["source_batch"] == BATCH
     service._lock.assert_called_once()
+    service.discovery._audit.assert_called_once_with(
+        connection, ORG, TARGET, "extraction.retained_reused"
+    )
 
 
 def test_replay_keeps_original_source_even_if_newer_source_appears(
@@ -88,6 +92,7 @@ def test_replay_keeps_original_source_even_if_newer_source_appears(
     state["selected"] = UUID(int=99)
     assert module.materialize_draft(service, ORG, TARGET, URL) == BATCH
     assert state["inserted"] == []
+    service.discovery._audit.assert_not_called()
     assert not any(
         "SELECT b.id FROM" in str(call.args[0]) for call in connection.execute.call_args_list
     )
@@ -111,6 +116,16 @@ def test_missing_explicit_choice_is_refused(monkeypatch: pytest.MonkeyPatch) -> 
     with pytest.raises(AuthorizationDenied):
         module.materialize_draft(service, ORG, TARGET, URL)
     assert state["inserted"] == []
+
+
+def test_service_authority_is_refused_before_source_selection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service, connection, _ = setup(monkeypatch)
+    service.token = object()
+    with pytest.raises(AuthorizationDenied):
+        module.materialize_draft(service, ORG, TARGET, URL)
+    connection.execute.assert_not_called()
 
 
 def test_other_routes_are_not_silently_acquired(monkeypatch: pytest.MonkeyPatch) -> None:
