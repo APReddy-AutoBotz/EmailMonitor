@@ -106,7 +106,8 @@ def test_real_reuse_refusal_creates_no_job_or_idempotency_receipt(scenario: Scen
     job = ledger.create(org, fresh, key)
     assert ledger.create(org, fresh, key) == job
     result = Discovery(ledger.database, ledger.token, SETTINGS).plan(org, job, 1)
-    assert result["persisted"] is True
+    assert result["job_id"] == job
+    assert cast(dict[str, object], result["checkpoint"])["status"] == "pending"
 
 
 def test_real_checkpoint_restart_replay_and_no_contact_or_usage(scenario: Scenario) -> None:
