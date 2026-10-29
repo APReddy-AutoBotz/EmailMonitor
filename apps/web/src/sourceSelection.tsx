@@ -33,5 +33,7 @@ export class PlanInputGeneration {
     if (signature !== this.signature) { this.signature = signature; this.generation += 1 }
     return this.generation
   }
+  // A new request supersedes an older response even when its inputs are unchanged.
+  begin(): number { this.generation += 1; return this.generation }
   current(value: number): boolean { return value === this.generation }
 }

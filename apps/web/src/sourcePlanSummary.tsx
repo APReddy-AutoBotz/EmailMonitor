@@ -30,26 +30,35 @@ const authors: Record<string, string> = {
 }
 const mapped = (values: Record<string, string>, value: unknown): string =>
   typeof value === 'string' && Object.hasOwn(values, value) ? values[value]! : 'Unavailable'
+const planDetail = (plan: Record<string, unknown>): Record<string, unknown> | undefined =>
+  plan.plan === undefined ? plan : record(plan.plan)
+
+export function launchableSourcePlan(plan: Record<string, unknown>): boolean {
+  const value = planDetail(plan)?.classification
+  return plan.persisted !== false && (value === 'article' || value === 'search_results')
+}
 
 /** Display only returned plan fields and the immutable request returned with the job. */
 export function SourcePlanSummary({ plan, job }: { plan: Record<string, unknown>; job: Job }) {
-  const detail = record(plan.plan) ?? plan
+  const detail = planDetail(plan)
   const request = record(job.request)
   const input = record(request?.input)
   const options = record(request?.options)
   const filters = record(request?.filters)
   const reuse = record(request?.reuse)
-  const status = mapped(classification, detail.classification)
-  const reason = typeof detail.reason === 'string' && Object.hasOwn(reasons, detail.reason)
+  const checkpoint = record(plan.checkpoint)
+  const status = mapped(classification, detail?.classification)
+  const reason = typeof detail?.reason === 'string' && Object.hasOwn(reasons, detail.reason)
     ? reasons[detail.reason] : 'The server did not provide a recognized explanation. See the technical plan details.'
   const source = text(plan.source_id ?? input?.source_id)
   const hasDates = filters && (filters.publication_from !== undefined || filters.publication_to !== undefined)
   return <>
     <p><strong>{status}.</strong> {reason}</p>
-    <dl aria-label="Plan summary">
+    <dl aria-label="Plan summary" className="plan-summary">
       <div><dt>Source identity</dt><dd>{source}</dd></div>
-      <div><dt>Original query</dt><dd>{text(detail.original_query)}</dd></div>
-      <div><dt>Effective query</dt><dd>{text(detail.effective_query)}</dd></div>
+      <div><dt>Planned start URL</dt><dd>{text(detail?.start_url)}</dd></div>
+      <div><dt>Original query</dt><dd>{text(detail?.original_query)}</dd></div>
+      <div><dt>Effective query</dt><dd>{text(detail?.effective_query)}</dd></div>
       <div><dt>Requested article limit</dt><dd>{count(options?.max_articles)}</dd></div>
       <div><dt>Effective article cap</dt><dd>{count(plan.max_articles)}</dd></div>
       <div><dt>Maximum result pages</dt><dd>{count(plan.max_pages)}</dd></div>
@@ -57,10 +66,13 @@ export function SourcePlanSummary({ plan, job }: { plan: Record<string, unknown>
       <div><dt>Browser work</dt><dd>{flag(options?.allow_browser)}</dd></div>
       <div><dt>Authored PDF fixtures</dt><dd>{flag(options?.allow_pdf)}</dd></div>
       <div><dt>Policy version at planning</dt><dd>{count(plan.policy_version)}</dd></div>
+      <div><dt>Source-reported total at planning</dt><dd>{count(checkpoint?.reported_total)}</dd></div>
+      <div><dt>Article URLs listed at planning</dt><dd>{Array.isArray(checkpoint?.articles) && checkpoint.articles.every(value => typeof value === 'string') ? count(checkpoint.articles.length) : 'Unavailable'}</dd></div>
     </dl>
     {hasDates ? <p>Requested publication date: {text(filters.publication_date_type)}; from {text(filters.publication_from)} to {text(filters.publication_to)} (inclusive where supplied). A request is not proof that the source applied the filter.</p> : null}
     {reuse ? <p>Retained reuse: {text(reuse.mode)}; fresh since {text(reuse.fresh_since)}. Eligibility is checked by the server.</p> : null}
-    <p>Estimated units and cost are unavailable. A matching input is not permission to acquire it; current source policy, capabilities, retention and server limits still apply at launch and execution.</p>
+    {plan.persisted === false ? <p>The server did not persist this plan. It cannot be launched; revise the input and create a new plan.</p> : null}
+    <p>Listed URLs are not verified completed articles. Source-reported totals and discovered URLs are different; this is a planning snapshot. Estimated units and cost are unavailable. A matching input is not permission to acquire it; current source policy, capabilities, retention and server limits still apply at launch and execution.</p>
     <details><summary>Technical plan details</summary><pre>{JSON.stringify(plan, null, 2)}</pre></details>
   </>
 }

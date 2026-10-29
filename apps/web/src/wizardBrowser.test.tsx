@@ -59,6 +59,58 @@ function setup(canAcquire = true, option = 'allow_browser') {
 }
 beforeEach(() => { hooks.values = []; hooks.index = 0; vi.restoreAllMocks() })
 
+describe('repeated plan requests', () => {
+  it('keeps malformed or unpersisted supported-looking plans from enabling launch', async () => {
+    const form = setup()
+    for (const response of [{ plan: { classification: ['article'] } }, { plan: null, classification: 'article' }, { plan: { classification: 'article' }, persisted: false }]) {
+      form.write.mockImplementation(async path => path === '/jobs' ? { id: '00000000-0000-0000-0000-000000000002' } : response)
+      await form.submit()
+      expect(form.launchDisabled()).toBe(true)
+    }
+    expect(form.write.mock.calls.some(([path]) => path.endsWith('/start'))).toBe(false)
+  })
+  it('opens the returned draft without starting extraction', async () => {
+    const form = setup()
+    await form.submit()
+    elements(form.render()).find(element => element.type === 'button' && element.props.children === 'Open draft job')!.props.onClick!()
+    expect(form.context.openJob).toHaveBeenCalledWith('00000000-0000-0000-0000-000000000002')
+    expect(form.write.mock.calls.some(([path]) => path.endsWith('/start'))).toBe(false)
+  })
+  it('clears the previous plan before a repeat request that fails', async () => {
+    const form = setup()
+    await form.submit()
+    expect(form.hasPlan()).toBe(true)
+    form.write.mockImplementation(async path => {
+      if (path === '/jobs') return { id: '00000000-0000-0000-0000-000000000002' }
+      throw new Error('Synthetic plan refusal')
+    })
+    await expect(form.submit()).rejects.toThrow('Synthetic plan refusal')
+    expect(form.hasPlan()).toBe(false)
+    expect(form.write.mock.calls.some(([path]) => path.endsWith('/start'))).toBe(false)
+    const creates = form.write.mock.calls.filter(([path]) => path === '/jobs')
+    expect(creates[0][3]).toBe(creates[1][3])
+  })
+  it('rejects a late earlier response even when repeated inputs are identical', async () => {
+    const form = setup()
+    let release!: (value: { classification: string }) => void
+    let plans = 0
+    form.write.mockImplementation(async path => {
+      if (path === '/jobs') return { id: '00000000-0000-0000-0000-000000000002' }
+      plans += 1
+      return plans === 1 ? new Promise(resolve => { release = resolve }) : { classification: 'unsupported' }
+    })
+    const first = form.submit()
+    await vi.waitFor(() => expect(release).toBeTypeOf('function'))
+    await form.submit()
+    expect(form.hasPlan()).toBe(true)
+    expect(form.launchDisabled()).toBe(true)
+    release({ classification: 'article' })
+    await first
+    expect(form.launchDisabled()).toBe(true)
+    expect(form.write.mock.calls.some(([path]) => path.endsWith('/start'))).toBe(false)
+  })
+})
+
 describe('retained reuse request is explicit and fail-closed', () => {
   it('omits reuse by default and carries an explicit cutoff without silently launching', async () => {
     const form = setup()

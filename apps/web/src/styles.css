@@ -54,6 +54,7 @@ td button { font-size: .82rem; margin: .2rem 0; }
 pre { font-size: .78rem; white-space: pre-wrap; overflow-wrap: anywhere; background: #f0f5f1; padding: .9rem; border-radius: .4rem; }
 blockquote { margin: 1rem 0; border-left: 4px solid #87ad9c; padding: .75rem 1rem; background: #f0f6f2; white-space: pre-wrap; overflow-wrap: anywhere; }
 dl { display: flex; flex-wrap: wrap; gap: 1rem; } dl > div { min-width: 150px; } dt { color: #5d7066; } dd { margin: .2rem 0; font-weight: 600; }
+.plan-summary > div { max-width: 100%; } .plan-summary dd { overflow-wrap: anywhere; }
 dialog { max-width: min(850px, 95vw); max-height: 90vh; overflow: auto; border: 1px solid #738e7e; border-radius: .75rem; padding: 1.7rem; color: #17342f; }
 dialog::backdrop { background: rgb(9 32 25 / 55%); }.close { float: right; }.danger { border-color: #ad4b41; color: #862c23; }
 progress { width: 100%; accent-color: #13745f; } footer { padding: 1.2rem 2rem; border-top: 1px solid #d0ddd5; font-size: .8rem; color: #55695f; }
