@@ -68,12 +68,15 @@ FOR SHARE OF a
 # The retained XML/PDF binding identifies the *original* execution item. Never
 # replace it with the target item or infer it from a parser result. This query
 # runs only for bound adapters and uses the same human-scoped transaction.
+# Its caller first holds the existing execution-read fence on the source job.
+# Runtime has SELECT, not row-lock privileges, on execution_items; job writers
+# serialize through the conflicting job fence and lifecycle purge also requires
+# a prior source tombstone and the already-held source batch lock.
 _SOURCE_ITEM = text("""
 SELECT id FROM emailmonitor.execution_items
 WHERE organization_id=:org AND job_id=:job AND id=:item AND input_url=:url
  AND work_kind='article' AND inherited_job_id IS NULL AND inherited_item_id IS NULL
  AND batch_id=:batch AND state IN ('succeeded','needs_review','no_contact')
-FOR SHARE NOWAIT
 """)
 
 
@@ -166,6 +169,13 @@ def prepare_reuse(
     ):
         raise AuthorizationDenied()
     if isinstance(observed, (RetainedPdf, RetainedXml)):
+        # This existing security-definer operation rechecks current execution
+        # authority and holds the source job, policy and session locks until the
+        # transaction ends. It does not grant runtime writes to execution_items.
+        c.execute(
+            text("SELECT emailmonitor.execution_read_fence(:org,:job)"),
+            {"org": org, "job": first["job_id"]},
+        )
         item_params = {
             "org": org,
             "job": first["job_id"],

@@ -6,14 +6,15 @@ from unittest.mock import MagicMock
 from uuid import UUID
 
 import pytest
+from test_associations import ORG, ORIGIN, SETTINGS
+from test_job_contracts import request_body
+
 from emailmonitor.associations.reuse_preparation import prepare_reuse
 from emailmonitor.extraction.fixture import article_bytes
 from emailmonitor.extraction.html import parse_article
 from emailmonitor.jobs.ledger import Ledger
 from emailmonitor.jobs.models import canonical
 from emailmonitor.organizations.database import AuthorizationDenied
-from test_associations import ORG, ORIGIN, SETTINGS
-from test_job_contracts import request_body
 
 SOURCE, TARGET, BATCH = UUID(int=2), UUID(int=3), UUID(int=4)
 NOW = datetime(2026, 10, 2, tzinfo=UTC)
@@ -207,10 +208,11 @@ def test_no_contact_observation_stays_no_contact(monkeypatch: pytest.MonkeyPatch
 def test_bound_source_documents_keep_original_job_binding(
     monkeypatch: pytest.MonkeyPatch, route: str
 ) -> None:
-    from emailmonitor.extraction.pdf_retained import PdfBinding, RetainedPdf, retain_pdf
-    from emailmonitor.extraction.xml_retained import RetainedXml
     from test_pdf_extraction import parse as parse_pdf
     from test_xml_pipeline import retained as retained_xml
+
+    from emailmonitor.extraction.pdf_retained import PdfBinding, RetainedPdf, retain_pdf
+    from emailmonitor.extraction.xml_retained import RetainedXml
 
     connection, service, row = setup(monkeypatch)
     source: RetainedPdf | RetainedXml
@@ -245,6 +247,15 @@ def test_bound_source_documents_keep_original_job_binding(
     assert prepared.evidence.source_item == source.binding.item
     assert prepared.evidence.document == canonical(source.model_dump(mode="json"))
     assert all(a.state != "accepted" for a in prepared.bundle.associations)
+    statements = [str(call.args[0]) for call in connection.execute.call_args_list]
+    fence = [index for index, sql in enumerate(statements) if "execution_read_fence" in sql]
+    reads = [
+        index
+        for index, sql in enumerate(statements)
+        if "SELECT id FROM emailmonitor.execution_items" in sql
+    ]
+    assert len(fence) == 1 and len(reads) == 2 and fence[0] < reads[0] < reads[1]
+    assert all("FOR SHARE" not in statements[index] for index in reads)
     raw = source.model_dump(mode="json")
     raw["binding"]["job"] = str(UUID(int=77))
     row["observation"] = raw
@@ -252,15 +263,58 @@ def test_bound_source_documents_keep_original_job_binding(
         prepare_reuse(connection, service, ORG, TARGET, source.url, BATCH)
 
 
+def test_bound_source_execution_fence_refusal_stops_before_item_read(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from test_pdf_extraction import parse as parse_pdf
+
+    from emailmonitor.extraction.pdf_retained import PdfBinding, retain_pdf
+
+    connection, service, row = setup(monkeypatch)
+    source = retain_pdf(
+        parse_pdf("article-a.pdf"),
+        PdfBinding(
+            organization=ORG,
+            job=SOURCE,
+            item=UUID(int=3),
+            generation=1,
+            deletion_generation=1,
+            policy_version=1,
+            discovery_revision=1,
+        ),
+        permit_excerpts=True,
+    )
+    row.update(
+        article_url=source.url,
+        source_digest=source.content_digest,
+        observation=source.model_dump(mode="json"),
+    )
+    original = connection.execute.side_effect
+
+    def execute(statement: object, *args: object) -> MagicMock:
+        if "execution_read_fence" in str(statement):
+            raise AuthorizationDenied()
+        return cast(MagicMock, original(statement, *args))
+
+    connection.execute.side_effect = execute
+    with pytest.raises(AuthorizationDenied):
+        prepare_reuse(connection, service, ORG, TARGET, source.url, BATCH)
+    assert not any(
+        "SELECT id FROM emailmonitor.execution_items" in str(call.args[0])
+        for call in connection.execute.call_args_list
+    )
+
+
 @pytest.mark.parametrize("route", ["pdf", "xml"])
 @pytest.mark.parametrize("failure", ["wrong_item", "missing_item", "late_item", "wrong_digest"])
 def test_bound_source_requires_exact_completed_original_item(
     monkeypatch: pytest.MonkeyPatch, route: str, failure: str
 ) -> None:
-    from emailmonitor.extraction.pdf_retained import PdfBinding, RetainedPdf, retain_pdf
-    from emailmonitor.extraction.xml_retained import RetainedXml
     from test_pdf_extraction import parse as parse_pdf
     from test_xml_pipeline import retained as retained_xml
+
+    from emailmonitor.extraction.pdf_retained import PdfBinding, RetainedPdf, retain_pdf
+    from emailmonitor.extraction.xml_retained import RetainedXml
 
     connection, service, row = setup(monkeypatch)
     source: RetainedPdf | RetainedXml
