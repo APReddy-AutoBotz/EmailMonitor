@@ -107,6 +107,16 @@ jobs:
           EM_TEST_BROKER_CONTAINER: ${{ job.services.rabbitmq.id }}
           PYTHONPATH: services/backend/src:services/backend/tests:tests:scripts/isolation:scripts/packaging
         run: uv run --project services/backend pytest services/backend/tests/test_service_runtime_broker.py -v --tb=short
+      - name: Focused retained reuse service and redelivery evidence
+        id: reuse-diagnostic
+        timeout-minutes: 5
+        env:
+          EM_TEST_BROKER_CONTAINER: ${{ job.services.rabbitmq.id }}
+          PYTHONPATH: services/backend/src:services/backend/tests:tests:scripts/isolation:scripts/packaging
+        run: uv run --project services/backend python scripts/packaging/reuse_service_diagnostic.py
+      - name: "Retained reuse case evidence: ${{ steps.reuse-diagnostic.outputs.reuse_diagnostic || 'unavailable' }}"
+        if: ${{ !cancelled() && steps.reuse-diagnostic.outcome != 'skipped' }}
+        run: ':'
       - name: Installed service API and independent worker operator acceptance
         id: installed-operator-test
         if: ${{ !cancelled() && steps.service-prerequisites.outcome == 'success' && steps.service-web.outcome == 'success' }}
