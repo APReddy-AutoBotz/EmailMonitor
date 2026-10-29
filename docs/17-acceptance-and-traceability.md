@@ -587,4 +587,6 @@ CSV/XLSX membership, and source-deletion cleanup for the declared authored
 routes. Their host-parser setup does not prove parser isolation. Guarded
 `test_service_reuse_tenant.py`, `test_service_reuse_broker.py`, installed browser
 and populated restore acceptance require their real infrastructure and must not
-be counted from local skips.
+be counted from local skips. The CI-only migration baseline also applies 0022
+in an owned database and probes its installed disabled-link check expression;
+that probe is not a substitute for the prior full 0022 runtime refusal receipt.

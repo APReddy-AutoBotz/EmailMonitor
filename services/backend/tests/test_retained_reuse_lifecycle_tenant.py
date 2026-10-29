@@ -93,7 +93,6 @@ def target_request_for_sql_guard_test(
 @pytest.mark.parametrize(
     "mutation",
     [
-        "valid_but_disabled",
         "same_job",
         "wrong_batch",
         "stale_revision",
@@ -107,17 +106,6 @@ def test_actual_runtime_lineage_forgery_refuses_before_any_target_copy(
 ) -> None:
     service, source_job, batch = prepared(scenario)
     org = scenario.organizations[0]
-    if mutation == "valid_but_disabled":
-        with service.database.tenant(service.token, org, Capability.READ_ORGANIZATION) as (c, _):
-            disabled: bool = c.execute(
-                text(
-                    "SELECT EXISTS(SELECT 1 FROM pg_constraint "
-                    "WHERE conrelid='emailmonitor.article_observations'::regclass "
-                    "AND conname='retained_reuse_disabled')"
-                )
-            ).scalar_one()
-        if not disabled:
-            pytest.skip("The disabled-link baseline applies to migration 0022 only")
     foreign_job, foreign_batch = uuid4(), uuid4()
     if mutation == "cross_tenant":
         identities = dict(scenario.identities)
@@ -196,7 +184,7 @@ VALUES(:org,:job,:url,:generation,:deletion,:source,:policy,:discovery,:digest,
         and isinstance(original.args[0], dict)
     ):
         code = original.args[0].get("C")
-    assert code == ("23514" if mutation == "valid_but_disabled" else "EM009")
+    assert code == "EM009"
     with service.database.tenant(service.token, org, Capability.READ_ORGANIZATION) as (c, _):
         assert (
             c.execute(
@@ -209,6 +197,13 @@ VALUES(:org,:job,:url,:generation,:deletion,:source,:policy,:discovery,:digest,
             == 0
         )
     assert service.detail(org, batch).associations
+
+
+def test_actual_enabled_html_lineage_is_materialized_after_baseline(scenario: Scenario) -> None:
+    service, _, batch = prepared(scenario)
+    org = scenario.organizations[0]
+    target = target_request_for_sql_guard_test(service, org)
+    assert materialize_draft(service, org, target, URL) == batch
 
 
 def test_actual_source_delete_serializes_with_preparation(scenario: Scenario) -> None:
