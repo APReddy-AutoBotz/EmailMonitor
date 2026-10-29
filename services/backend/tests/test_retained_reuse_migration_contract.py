@@ -1,5 +1,6 @@
 """Static migration contracts; no database or concurrency acceptance is implied."""
 
+import ast
 import importlib.util
 import re
 from pathlib import Path
@@ -10,6 +11,28 @@ import sqlparse
 ROOT = Path(__file__).resolve().parents[3]
 VERSIONS = ROOT / "services/backend/migrations/versions"
 SQL = (VERSIONS / "0022_retained_reuse.sql").read_text()
+
+
+def test_0023_packaging_companion_matches_unchanged_inline_operations() -> None:
+    source = ast.parse((VERSIONS / "0023_enable_retained_reuse.py").read_text())
+    upgrade = next(
+        node for node in source.body if isinstance(node, ast.FunctionDef) and node.name == "upgrade"
+    )
+    expected = []
+    for expression in upgrade.body:
+        assert isinstance(expression, ast.Expr) and isinstance(expression.value, ast.Call)
+        call = expression.value
+        assert isinstance(call.func, ast.Attribute) and call.func.attr == "execute"
+        assert isinstance(call.func.value, ast.Name) and call.func.value.id == "op"
+        assert len(call.args) == 1
+        value = ast.literal_eval(call.args[0])
+        assert isinstance(value, str)
+        expected.append(value.strip().rstrip(";"))
+    companion = sqlparse.format(
+        (VERSIONS / "0023_enable_retained_reuse.sql").read_text(), strip_comments=True
+    )
+    actual = [statement.strip().rstrip(";") for statement in sqlparse.split(companion)]
+    assert len(expected) == len(actual) == 4 and actual == expected
 
 
 def test_enabling_migration_is_narrow_and_forward_only() -> None:

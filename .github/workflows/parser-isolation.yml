@@ -22,4 +22,10 @@ jobs:
         with:
           persist-credentials: false
       - name: Actual network-none and bounded-memory parser checks
+        id: parser-test
+        env:
+          EM_PARSER_STAGE_REPORT: "true"
         run: python3 scripts/isolation/run_parser_acceptance.py
+      - name: "Parser stage: ${{ steps.parser-test.outputs.parser_stage || 'unavailable' }}"
+        if: ${{ !cancelled() && steps.parser-test.outcome != 'skipped' }}
+        run: ':'
