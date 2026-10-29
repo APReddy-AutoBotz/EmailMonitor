@@ -172,6 +172,65 @@ def test_other_routes_are_not_silently_acquired(monkeypatch: pytest.MonkeyPatch)
     connection.execute.assert_not_called()
 
 
+@pytest.mark.parametrize(
+    "adapter,url",
+    [
+        ("pdf", "https://synthetic.publisher.example/article-a.pdf"),
+        ("article_xml", "https://synthetic.publisher.example/article-xml.xml"),
+    ],
+)
+def test_staged_shared_selector_preserves_public_refusal(
+    monkeypatch: pytest.MonkeyPatch, adapter: str, url: str
+) -> None:
+    service, connection, state = setup(monkeypatch)
+    request = {
+        **request_body(),
+        "input": {"type": "url", "url": url},
+        "reuse": {"mode": "verified_retained", "fresh_since": "2026-10-01T00:00:00Z"},
+    }
+    target = {"state": "draft", "request": request, "generation": 1, "deletion_generation": 1}
+    monkeypatch.setattr(Ledger, "_lock", lambda *_: target)
+    raw = {"route": adapter, "url": url}
+    lineage = SimpleNamespace(
+        source_job_id=SOURCE,
+        source_revision=1,
+        source_id="synthetic-publisher",
+        source_policy_version=1,
+    )
+    evidence = SimpleNamespace(source_job=SOURCE, source_digest="a" * 64, document=canonical(raw))
+    monkeypatch.setattr(
+        module, "prepare_reuse", lambda *_: SimpleNamespace(lineage=lineage, evidence=evidence)
+    )
+    original = connection.execute.side_effect
+
+    def execute(statement: object, parameters: dict[str, object] | None = None) -> MagicMock:
+        result = cast(MagicMock, original(statement, parameters))
+        if "SELECT a.organization_id" in str(statement):
+            result.mappings.return_value.one.return_value = {
+                "source_digest": "a" * 64,
+                "job_id": SOURCE,
+                "observation": raw,
+            }
+        return result
+
+    connection.execute.side_effect = execute
+    with pytest.raises(HTTPException):
+        module.materialize_draft(service, ORG, TARGET, url)
+    assert state["inserted"] == []
+    with pytest.raises(AuthorizationDenied):
+        module._materialize_candidate(service, ORG, TARGET, url, "html")
+    assert state["inserted"] == []
+    # Controlled fakes test selection only. Actual SQL still rejects these
+    # routes, and no real materialization or authority proof is implied.
+    assert module._materialize_candidate(service, ORG, TARGET, url, adapter) == BATCH  # type: ignore[arg-type]
+    selection = next(
+        call
+        for call in connection.execute.call_args_list
+        if "SELECT b.id FROM" in str(call.args[0])
+    )
+    assert selection.args[1]["route"] == adapter
+
+
 def test_target_review_starts_unaccepted_without_changing_legacy_mapping() -> None:
     observed = parse_article(SETTINGS, URL, article_bytes("article-a.html"))
     ordinary = initial_bundle(SETTINGS, ORG, TARGET, observed, None)

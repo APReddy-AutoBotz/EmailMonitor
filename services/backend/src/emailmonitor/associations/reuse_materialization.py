@@ -7,7 +7,7 @@ from fastapi import HTTPException
 from sqlalchemy import text
 
 from emailmonitor.administration.admission import Admission
-from emailmonitor.associations.reuse_adapters import HTML_URLS, retained_adapter
+from emailmonitor.associations.reuse_adapters import HTML_URLS, Adapter, retained_adapter
 from emailmonitor.associations.reuse_preparation import _SOURCE, prepare_reuse
 from emailmonitor.associations.service import Associations
 from emailmonitor.jobs.ledger import Ledger
@@ -29,17 +29,29 @@ def materialize_draft(service: Associations, org: UUID, target_job: UUID, url: s
         raise AuthorizationDenied()
     if url not in HTML_URLS:
         raise HTTPException(409, "Retained reuse is unavailable for this source route")
+    return _materialize_candidate(service, org, target_job, url, "html")
+
+
+def _materialize_candidate(
+    service: Associations, org: UUID, target_job: UUID, url: str, adapter: Adapter
+) -> UUID:
+    """Shared adapter implementation; callers and SQL independently gate use.
+
+    The public path invokes this only for HTML. XML/PDF remain blocked by
+    planning and the existing database guard pending their required acceptance.
+    """
+    if isinstance(service.database, ServiceDatabase) or type(service.token) is not str:
+        raise AuthorizationDenied()
     with Admission(service.database, service.token, service.settings).fixture(org, target_job, url):
         with service.discovery._tenant(org, Capability.ACQUIRE_SOURCE) as (c, _):
             target = Ledger._lock(c, org, target_job)
             request = JobRequest.model_validate(target["request"])
-            adapter = retained_adapter(request)
             if (
                 request.reuse is None
                 or not isinstance(request.input, URLInput)
                 or request.input.url != url
                 or target["state"] != "draft"
-                or adapter != "html"
+                or retained_adapter(request) != adapter
             ):
                 raise AuthorizationDenied()
             existing = (
