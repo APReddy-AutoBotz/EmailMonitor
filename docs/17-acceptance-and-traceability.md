@@ -577,3 +577,14 @@ Installed XML failure localization uses `test_installed_xml_outcome.py` and
 and unchanged success/failure/signal/deadline propagation. These owned synthetic
 tests do not substitute for genuine installed XML execution or close historical
 aggregate timing failures.
+
+Retained observation reuse candidate: FR-019/020/023/024/025 map to the
+[source-bound reuse decisions](82-evidence-date-reuse-decisions.md),
+`test_staged_reuse_sql_tenant.py`, `test_reuse_preparation.py`, and
+`test_reuse_no_fallback.py`. Synthetic SQL tests cover original binding,
+independent review, explicit freshness, tenant and lifecycle refusals,
+CSV/XLSX membership, and source-deletion cleanup for the declared authored
+routes. Their host-parser setup does not prove parser isolation. Guarded
+`test_service_reuse_tenant.py`, `test_service_reuse_broker.py`, installed browser
+and populated restore acceptance require their real infrastructure and must not
+be counted from local skips.
