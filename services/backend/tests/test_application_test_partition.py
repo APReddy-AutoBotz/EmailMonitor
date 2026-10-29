@@ -75,6 +75,24 @@ def test_each_reserved_sql_node_is_required_exactly_once(node: str, mutation: st
         partition.partitions(nodes)
 
 
+def test_measured_sql_move_is_explicit_and_preserves_unique_membership() -> None:
+    moved = partition.MEASURED_SQL
+    assert len(moved) == len(set(moved)) == 45
+    assert sum("/test_association_tenant.py::" in node for node in moved) == 30
+    assert sum("/test_retained_paper_identity_tenant.py::" in node for node in moved) == 15
+    assert not set(moved) & set(
+        (
+            *partition.RETAINED_SQL,
+            *partition.PDF_ACCEPTANCE,
+            *partition.SERVICE_SQL,
+            *partition.TIMING_SQL,
+        )
+    )
+    assigned = partition.partitions(FULL)
+    assert all(assigned["outcome_sql"].count(node) == 1 for node in moved)
+    assert not set(moved) & set(assigned["backend"])
+
+
 def test_new_tests_are_never_omitted_from_exact_disjoint_multiset_union() -> None:
     nodes = [*FULL, "services/backend/tests/test_new.py::test_new[variant]"]
     result = partition.partitions(nodes)

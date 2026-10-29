@@ -233,6 +233,20 @@ def case_categories() -> tuple[str, str]:
     return _case_trace.failure or _case_trace.stage, _case_trace.phase
 
 
+def case_worker_failure_details() -> tuple[str, str, str, str]:
+    if _case_trace is None:
+        return "unavailable", "unavailable", "unavailable", "unavailable"
+    _case_trace.label()  # Revalidate every closed category before export.
+    if _case_trace.phase not in {"keyword_worker", "url_worker"}:
+        raise ValueError("Worker failure detail requires its exact phase")
+    return (
+        _case_trace.error,
+        _case_trace.reason,
+        _case_trace.login,
+        _case_trace.callback or "none",
+    )
+
+
 def case_export_category() -> str:
     if _case_trace is None or _case_trace.export is None:
         return "unavailable"

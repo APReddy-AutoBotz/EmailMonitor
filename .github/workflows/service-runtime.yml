@@ -145,3 +145,6 @@ jobs:
       - name: "Installed XML first failure: ${{ steps.installed-xml-test.outputs.xml_failure || 'unavailable' }}"
         if: ${{ !cancelled() && steps.installed-xml-test.outcome != 'skipped' }}
         run: ':'
+      - name: "Installed XML worker failure: ${{ steps.installed-xml-test.outputs.xml_worker_failure || 'unavailable' }}"
+        if: ${{ !cancelled() && steps.installed-xml-test.outcome != 'skipped' }}
+        run: ':'

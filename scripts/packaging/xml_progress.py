@@ -39,6 +39,14 @@ class XmlProgress(Progress):
                 label += "-snapshot_" + snapshot
             with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="ascii") as output:
                 output.write("xml_failure=" + label + "\n")
+                if host == "conversation" and phase in {"keyword_worker", "url_worker"}:
+                    error, reason, login, callback = (
+                        module.case_worker_failure_details() if module else ("unavailable",) * 4
+                    )
+                    output.write(
+                        "xml_worker_failure="
+                        f"error_{error}-reason_{reason}-login_{login}-callback_{callback}\n"
+                    )
         except Exception:
             # The original failing pytest report and exit remain authoritative.
             # Absent metadata is explicitly unavailable, never a success label.
