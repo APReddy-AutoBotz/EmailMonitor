@@ -714,3 +714,13 @@ Normal/fresh backend, frontend and eight actual SQL cases passed; genuine hosted
 acceptance remains incomplete after a preceding outcome-keyboard failure. See
 [scope and acceptance](80-contextual-contact-suppression.md). No runtime authority
 or migration change is included.
+## Retained reuse preparation — local, incomplete
+
+The explicit reuse request still refuses before job creation. A local preparation
+candidate constructs an independent unaccepted review draft using existing target
+and source checks and rechecks visibility, policy and expiry before return. It is
+not wired to execution or storage and is tested only with controlled fakes. Current
+worker delegation does not permit reading another job's source batch. Durable
+lineage, a narrowly authorized worker path, lifecycle/concurrency proof, connected
+results/export and genuine hosted validation remain pending. See
+[reuse decisions](82-evidence-date-reuse-decisions.md).
