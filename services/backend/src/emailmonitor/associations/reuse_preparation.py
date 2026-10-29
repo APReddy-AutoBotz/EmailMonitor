@@ -80,6 +80,14 @@ WHERE organization_id=:org AND job_id=:job AND id=:item AND input_url=:url
 """)
 
 
+def _source_execution_fence(c: Connection, org: UUID, source_job: UUID) -> None:
+    """Hold the existing authority and source-job read fence through the transaction."""
+    c.execute(
+        text("SELECT emailmonitor.execution_read_fence(:org,:job)"),
+        {"org": org, "job": source_job},
+    )
+
+
 def _provider_matches_current_catalog(
     c: Connection, org: UUID, source: str, version: int, observed: RetainedXml
 ) -> bool:
@@ -172,10 +180,7 @@ def prepare_reuse(
         # This existing security-definer operation rechecks current execution
         # authority and holds the source job, policy and session locks until the
         # transaction ends. It does not grant runtime writes to execution_items.
-        c.execute(
-            text("SELECT emailmonitor.execution_read_fence(:org,:job)"),
-            {"org": org, "job": first["job_id"]},
-        )
+        _source_execution_fence(c, org, first["job_id"])
         item_params = {
             "org": org,
             "job": first["job_id"],

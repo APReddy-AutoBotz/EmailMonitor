@@ -334,7 +334,11 @@ WHERE batch.organization_id=:org AND batch.id=:batch
                 # An XML/PDF payload remains bound to its original item. The
                 # normal RLS read and both batch fences establish current human
                 # visibility; target-only workers gain no source-job grant.
-                from emailmonitor.associations.reuse_preparation import _SOURCE, _SOURCE_ITEM
+                from emailmonitor.associations.reuse_preparation import (
+                    _SOURCE,
+                    _SOURCE_ITEM,
+                    _source_execution_fence,
+                )
 
                 source_batch = row["reused_source_batch"]
                 if source_batch is None or row["reused_source_revision"] is None:
@@ -362,6 +366,7 @@ WHERE batch.organization_id=:org AND batch.id=:batch
                     raise AuthorizationDenied() from None
                 if observed.binding.discovery_revision != origin["discovery_revision"]:
                     raise AuthorizationDenied()
+                _source_execution_fence(c, org, origin["job_id"])
                 item_query = _SOURCE_ITEM
                 item_params = {
                     "org": org,

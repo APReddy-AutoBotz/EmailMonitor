@@ -5,15 +5,16 @@ from unittest.mock import MagicMock
 from uuid import UUID
 
 import pytest
+from test_durable_jobs import SETTINGS
+from test_pdf_extraction import parse as parse_pdf
+from test_xml_pipeline import retained as retained_xml
+
 from emailmonitor.associations.quality import project_quality
 from emailmonitor.associations.reuse_draft import independent_review_draft
 from emailmonitor.associations.service import Associations
 from emailmonitor.extraction.pdf_retained import PdfBinding, RetainedPdf, retain_pdf
 from emailmonitor.extraction.xml_retained import RetainedXml
 from emailmonitor.organizations.database import AuthorizationDenied
-from test_durable_jobs import SETTINGS
-from test_pdf_extraction import parse as parse_pdf
-from test_xml_pipeline import retained as retained_xml
 
 ORG, SOURCE, TARGET, SOURCE_BATCH, TARGET_BATCH, ITEM = (UUID(int=i) for i in range(1, 7))
 
@@ -90,6 +91,9 @@ def setup(route: str, failure: str = "") -> tuple[MagicMock, MagicMock]:
             result.mappings.return_value.first.return_value = row
         elif "SELECT id FROM emailmonitor.execution_items" in sql:
             result.scalar_one_or_none.return_value = None if failure == "missing_item" else ITEM
+        elif "execution_read_fence" in sql:
+            if failure == "source_fence":
+                raise AuthorizationDenied()
         else:
             raise AssertionError("Unexpected source-view query")
         return result
@@ -100,7 +104,7 @@ def setup(route: str, failure: str = "") -> tuple[MagicMock, MagicMock]:
 
 @pytest.mark.parametrize("route", ["xml", "pdf"])
 def test_reused_quality_keeps_original_parser_binding(route: str) -> None:
-    service, _ = setup(route)
+    service, connection = setup(route)
     quality = Associations._observation_view(service, ORG, TARGET_BATCH, project_quality)
     assert quality.observation_route == ("article_xml" if route == "xml" else "pdf")
     assert quality.batch_id == TARGET_BATCH
@@ -109,12 +113,28 @@ def test_reused_quality_keeps_original_parser_binding(route: str) -> None:
         TARGET_BATCH,
         SOURCE_BATCH,
     ]
+    sql = [str(call.args[0]) for call in connection.execute.call_args_list]
+    fences = [index for index, statement in enumerate(sql) if "execution_read_fence" in statement]
+    reads = [
+        index
+        for index, statement in enumerate(sql)
+        if "SELECT id FROM emailmonitor.execution_items" in statement
+    ]
+    assert len(fences) == 1 and len(reads) == 2 and fences[0] < reads[0] < reads[1]
 
 
 @pytest.mark.parametrize("route", ["xml", "pdf"])
 @pytest.mark.parametrize(
     "failure",
-    ["wrong_job", "wrong_digest", "changed_origin", "missing_item", "chain", "wrong_discovery"],
+    [
+        "wrong_job",
+        "wrong_digest",
+        "changed_origin",
+        "missing_item",
+        "chain",
+        "wrong_discovery",
+        "source_fence",
+    ],
 )
 def test_reused_quality_refuses_unproved_original(route: str, failure: str) -> None:
     service, _ = setup(route, failure)
