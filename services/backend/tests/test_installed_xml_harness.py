@@ -216,6 +216,32 @@ def test_installed_reuse_checkbox_is_toggled_and_verified_before_cutoff() -> Non
     assert focused < toggled < verified < cutoff
 
 
+def test_installed_reuse_result_uses_the_observation_table() -> None:
+    tree = ast.parse((ROOT / "scripts/isolation/installed_operator_browser.py").read_text())
+    branch = next(
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.If)
+        and ast.unparse(node.test) == "setup.get('retained_reuse') is True"
+    )
+    assignments = [
+        node
+        for node in ast.walk(branch)
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name) and target.id == "target_outcomes"
+            for target in node.targets
+        )
+    ]
+    assert len(assignments) == 1
+    assert ast.unparse(assignments[0].value) == (
+        "page.get_by_role('table', name='Current-authorized article outcomes')"
+    )
+    body = ast.unparse(ast.Module(body=branch.body, type_ignores=[]))
+    assert "target_outcomes.get_by_text('Reused observation', exact=False)" in body
+    assert "to_have_text('needs review')" in body
+
+
 def test_installed_pdf_evidence_view_matches_actual_authored_association(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -61,6 +61,8 @@ describe('job-scoped article outcomes', () => {
     expect(render(success())).not.toContain('Reused observation')
     const html = render(success([{ ...row, observation_origin: 'reused', observed_at: '2026-10-01T13:00:00Z' }]))
     expect(html).toContain('Reused observation')
+    const table = html.match(/<table><caption>Current-authorized article outcomes<\/caption>.*?<\/table>/s)?.[0]
+    expect(table).toContain('Reused observation')
     expect(html).toContain('2026-10-01T13:00:00Z')
   })
   it('escapes source content rather than rendering or navigating to it', () => {

@@ -646,7 +646,7 @@ async def main() -> None:
                         )
                     checkpoint("reuse_results")
                     target_outcomes = page.get_by_role(
-                        "table", name="Actual article outcomes and failures"
+                        "table", name="Current-authorized article outcomes"
                     )
                     await target_outcomes.get_by_text("Reused observation", exact=False).wait_for()
                     await expect(
