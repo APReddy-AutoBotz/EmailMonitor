@@ -4,6 +4,11 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
+from emailmonitor.organizations.roles import Capability
+from emailmonitor.progress.service import Progress
+from emailmonitor.runtime.authority import ServiceProcess, ServiceWork
+from emailmonitor.runtime.service_publisher import publish_service_once
+from emailmonitor.runtime.worker import ServiceRuntimeConfig, broker_application
 from sqlalchemy import text
 from test_admission_broker import close_owned
 from test_durable_jobs import SETTINGS
@@ -17,12 +22,6 @@ from test_service_runtime_broker import installed_worker
 from test_service_runtime_broker import publisher_config as publisher_config
 from test_tenant_foundation import scenario as scenario
 
-from emailmonitor.organizations.roles import Capability
-from emailmonitor.progress.service import Progress
-from emailmonitor.runtime.authority import ServiceProcess, ServiceWork
-from emailmonitor.runtime.service_publisher import publish_service_once
-from emailmonitor.runtime.worker import ServiceRuntimeConfig, broker_application
-
 
 @pytest.mark.parametrize("service_case", ["html", "pdf", "article_xml", "provider"], indirect=True)
 def test_reused_observation_survives_worker_crash_and_original_redelivery(
@@ -33,7 +32,7 @@ def test_reused_observation_survives_worker_crash_and_original_redelivery(
 ) -> None:
     case, config = service_case, publisher_config
     org = case.scope.organization
-    route = request.node.callspec.params["service_case"]  # type: ignore[attr-defined]
+    route = request.node.callspec.params["service_case"]
     target, source_batch = prepare_service_reuse(case, route)
     with case.progress.database.tenant(case.progress.token, org, Capability.ACQUIRE_SOURCE) as (
         c,

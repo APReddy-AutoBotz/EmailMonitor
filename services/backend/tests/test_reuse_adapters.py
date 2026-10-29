@@ -4,14 +4,13 @@ from unittest.mock import MagicMock
 from uuid import UUID
 
 import pytest
-from fastapi import HTTPException
-from test_job_contracts import request_body
-
 from emailmonitor.associations.reuse_adapters import retained_adapter, retained_plan
 from emailmonitor.config import Settings
 from emailmonitor.discovery.planning import plan_input
 from emailmonitor.jobs.ledger import Ledger
 from emailmonitor.jobs.models import JobRequest
+from fastapi import HTTPException
+from test_job_contracts import request_body
 
 
 @pytest.mark.parametrize(

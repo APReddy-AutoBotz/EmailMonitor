@@ -8,6 +8,12 @@ from datetime import datetime
 from uuid import UUID, uuid4
 
 import pytest
+from emailmonitor.organizations.database import AuthorizationDenied, Database, TenantContext, digest
+from emailmonitor.organizations.roles import Capability
+from emailmonitor.progress.binding import bound
+from emailmonitor.progress.service import Progress
+from emailmonitor.runtime.authority import ServiceProcess, ServiceWork
+from emailmonitor.runtime.database import ServiceDatabase
 from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import DBAPIError
@@ -15,13 +21,6 @@ from test_durable_jobs import SETTINGS
 from test_progress_tenant import claim, drain, planned
 from test_tenant_foundation import Scenario
 from test_tenant_foundation import scenario as scenario
-
-from emailmonitor.organizations.database import AuthorizationDenied, Database, TenantContext, digest
-from emailmonitor.organizations.roles import Capability
-from emailmonitor.progress.binding import bound
-from emailmonitor.progress.service import Progress
-from emailmonitor.runtime.authority import ServiceProcess, ServiceWork
-from emailmonitor.runtime.database import ServiceDatabase
 
 
 def require_service_sql_ci(environment: dict[str, str]) -> None:
@@ -70,9 +69,8 @@ def service_case(scenario: Scenario, request: pytest.FixtureRequest) -> Iterator
 
         progress, job = planned_xml(scenario)
     elif route == "provider":
-        from test_provider_journey_tenant import planned_provider
-
         from emailmonitor.sources import provider_documents as catalog
+        from test_provider_journey_tenant import planned_provider
 
         progress, job = planned_provider(scenario, url=catalog.DOI_URL)
     elif route == "html":
@@ -772,10 +770,9 @@ def test_reference_service_unsupported_provider_start_rolls_back_atomically(
     scenario: Scenario,
     route: str,
 ) -> None:
+    from emailmonitor.runtime.delegation import ServiceBinding, ServiceBindings
     from test_pdf_pipeline_tenant import planned_pdf
     from test_provider_journey_tenant import planned_provider
-
-    from emailmonitor.runtime.delegation import ServiceBinding, ServiceBindings
 
     progress, job = (
         planned_pdf(scenario, "article-a.pdf") if route == "pdf" else planned_provider(scenario)

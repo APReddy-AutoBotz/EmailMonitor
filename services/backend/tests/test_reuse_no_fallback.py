@@ -5,8 +5,6 @@ from unittest.mock import MagicMock
 from uuid import UUID
 
 import pytest
-from test_job_contracts import request_body
-
 from emailmonitor.discovery.service import Discovery
 from emailmonitor.discovery.state import DiscoveryState
 from emailmonitor.fetching.safety import IsolationUnavailable
@@ -14,6 +12,7 @@ from emailmonitor.jobs.models import JobRequest
 from emailmonitor.organizations.database import AuthorizationDenied
 from emailmonitor.progress.binding import Lease
 from emailmonitor.progress.service import Progress, Work
+from test_job_contracts import request_body
 
 ORG, JOB, ITEM, TOKEN = (UUID(int=value) for value in range(1, 5))
 URL = "https://synthetic.publisher.example/article-a.html"
@@ -158,11 +157,10 @@ def test_default_worker_provider_reuse_never_enables_transport(case: str) -> Non
 
 @pytest.mark.parametrize("existing", [False, True])
 def test_missing_or_unresolved_tooltip_reuse_never_runs_browser(existing: bool) -> None:
-    from test_associations import SETTINGS
-
     from emailmonitor.extraction.fixture import article_bytes
     from emailmonitor.extraction.html import parse_article
     from emailmonitor.progress.tooltip import TOOLTIP_URL, TooltipJourney
+    from test_associations import SETTINGS
 
     progress, dispatch = MagicMock(), MagicMock()
     progress.extraction.prepare.return_value = {"reuse_requested": True, "revision": 1}

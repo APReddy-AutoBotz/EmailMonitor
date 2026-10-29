@@ -5,16 +5,15 @@ from unittest.mock import MagicMock
 from uuid import UUID
 
 import pytest
-from test_durable_jobs import SETTINGS
-from test_pdf_extraction import parse as parse_pdf
-from test_xml_pipeline import retained as retained_xml
-
 from emailmonitor.associations.quality import project_quality
 from emailmonitor.associations.reuse_draft import independent_review_draft
 from emailmonitor.associations.service import Associations
 from emailmonitor.extraction.pdf_retained import PdfBinding, RetainedPdf, retain_pdf
 from emailmonitor.extraction.xml_retained import RetainedXml
 from emailmonitor.organizations.database import AuthorizationDenied
+from test_durable_jobs import SETTINGS
+from test_pdf_extraction import parse as parse_pdf
+from test_xml_pipeline import retained as retained_xml
 
 ORG, SOURCE, TARGET, SOURCE_BATCH, TARGET_BATCH, ITEM = (UUID(int=i) for i in range(1, 7))
 

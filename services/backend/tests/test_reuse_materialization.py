@@ -7,10 +7,6 @@ from unittest.mock import MagicMock
 from uuid import UUID
 
 import pytest
-from fastapi import HTTPException
-from test_durable_jobs import SETTINGS
-from test_job_contracts import request_body
-
 from emailmonitor.administration.admission import Admission
 from emailmonitor.associations import reuse_materialization as module
 from emailmonitor.associations.service import initial_bundle
@@ -19,6 +15,9 @@ from emailmonitor.extraction.html import parse_article
 from emailmonitor.jobs.ledger import Ledger
 from emailmonitor.jobs.models import canonical
 from emailmonitor.organizations.database import AuthorizationDenied
+from fastapi import HTTPException
+from test_durable_jobs import SETTINGS
+from test_job_contracts import request_body
 
 ORG, SOURCE, TARGET, BATCH = (UUID(int=i) for i in range(1, 5))
 URL = "https://synthetic.publisher.example/article-a.html"

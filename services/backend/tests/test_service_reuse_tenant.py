@@ -7,16 +7,6 @@ roles or synthetic state. Local collection/skips are not service acceptance.
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import text
-from test_association_tenant import URL
-from test_durable_jobs import SETTINGS
-from test_job_contracts import request_body
-from test_progress_tenant import claim, drain
-from test_service_authority_tenant import ServiceCase
-from test_service_authority_tenant import _service_ci_guard as _service_ci_guard
-from test_service_authority_tenant import service_case as service_case
-from test_tenant_foundation import scenario as scenario
-
 from emailmonitor.associations.reuse_materialization import materialize_draft
 from emailmonitor.associations.service import Associations
 from emailmonitor.discovery.service import Discovery
@@ -27,6 +17,15 @@ from emailmonitor.organizations.roles import Capability
 from emailmonitor.progress.execution import ExecutionDispatcher
 from emailmonitor.progress.service import Progress
 from emailmonitor.runtime.authority import ServiceWork
+from sqlalchemy import text
+from test_association_tenant import URL
+from test_durable_jobs import SETTINGS
+from test_job_contracts import request_body
+from test_progress_tenant import claim, drain
+from test_service_authority_tenant import ServiceCase
+from test_service_authority_tenant import _service_ci_guard as _service_ci_guard
+from test_service_authority_tenant import service_case as service_case
+from test_tenant_foundation import scenario as scenario
 
 
 def prepare_service_reuse(case: ServiceCase, route: str = "html") -> tuple[UUID, UUID]:
@@ -78,7 +77,7 @@ def test_service_worker_reads_only_its_target_and_never_acquires_fresh_bytes(
 ) -> None:
     case = service_case
     org, source = case.scope.organization, case.scope.resource
-    route = request.node.callspec.params["service_case"]  # type: ignore[attr-defined]
+    route = request.node.callspec.params["service_case"]
     target, source_batch = prepare_service_reuse(case, route)
     human = Associations(case.progress.database, case.progress.token, SETTINGS)
     owner = Progress(human.database, human.token, SETTINGS)

@@ -6,15 +6,14 @@ from unittest.mock import MagicMock
 from uuid import UUID
 
 import pytest
-from test_associations import ORG, ORIGIN, SETTINGS
-from test_job_contracts import request_body
-
 from emailmonitor.associations.reuse_preparation import prepare_reuse
 from emailmonitor.extraction.fixture import article_bytes
 from emailmonitor.extraction.html import parse_article
 from emailmonitor.jobs.ledger import Ledger
 from emailmonitor.jobs.models import canonical
 from emailmonitor.organizations.database import AuthorizationDenied
+from test_associations import ORG, ORIGIN, SETTINGS
+from test_job_contracts import request_body
 
 SOURCE, TARGET, BATCH = UUID(int=2), UUID(int=3), UUID(int=4)
 NOW = datetime(2026, 10, 2, tzinfo=UTC)
@@ -208,11 +207,10 @@ def test_no_contact_observation_stays_no_contact(monkeypatch: pytest.MonkeyPatch
 def test_bound_source_documents_keep_original_job_binding(
     monkeypatch: pytest.MonkeyPatch, route: str
 ) -> None:
-    from test_pdf_extraction import parse as parse_pdf
-    from test_xml_pipeline import retained as retained_xml
-
     from emailmonitor.extraction.pdf_retained import PdfBinding, RetainedPdf, retain_pdf
     from emailmonitor.extraction.xml_retained import RetainedXml
+    from test_pdf_extraction import parse as parse_pdf
+    from test_xml_pipeline import retained as retained_xml
 
     connection, service, row = setup(monkeypatch)
     source: RetainedPdf | RetainedXml
@@ -266,9 +264,8 @@ def test_bound_source_documents_keep_original_job_binding(
 def test_bound_source_execution_fence_refusal_stops_before_item_read(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from test_pdf_extraction import parse as parse_pdf
-
     from emailmonitor.extraction.pdf_retained import PdfBinding, retain_pdf
+    from test_pdf_extraction import parse as parse_pdf
 
     connection, service, row = setup(monkeypatch)
     source = retain_pdf(
@@ -310,11 +307,10 @@ def test_bound_source_execution_fence_refusal_stops_before_item_read(
 def test_bound_source_requires_exact_completed_original_item(
     monkeypatch: pytest.MonkeyPatch, route: str, failure: str
 ) -> None:
-    from test_pdf_extraction import parse as parse_pdf
-    from test_xml_pipeline import retained as retained_xml
-
     from emailmonitor.extraction.pdf_retained import PdfBinding, RetainedPdf, retain_pdf
     from emailmonitor.extraction.xml_retained import RetainedXml
+    from test_pdf_extraction import parse as parse_pdf
+    from test_xml_pipeline import retained as retained_xml
 
     connection, service, row = setup(monkeypatch)
     source: RetainedPdf | RetainedXml

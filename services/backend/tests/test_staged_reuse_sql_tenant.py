@@ -10,22 +10,6 @@ from uuid import UUID, uuid4
 from zipfile import ZipFile
 
 import pytest
-from fastapi import HTTPException
-from sqlalchemy import create_engine, text
-from sqlalchemy.exc import DBAPIError
-from test_association_tenant import client as fixture_client
-from test_durable_jobs import SETTINGS
-from test_job_contracts import request_body
-from test_pdf_pipeline_tenant import planned_pdf
-from test_progress_tenant import claim
-from test_provider_journey import registry, xml_bytes
-from test_provider_journey_tenant import planned_provider
-from test_results_tenant import ready
-from test_source_foundation import source_path
-from test_tenant_foundation import ORIGIN, Scenario
-from test_tenant_foundation import scenario as scenario
-from test_xml_pipeline_tenant import mutate_authority, planned_xml
-
 from emailmonitor.associations.models import Review
 from emailmonitor.associations.reuse_materialization import _stage_bound_reuse, materialize_draft
 from emailmonitor.associations.reuse_preparation import prepare_reuse
@@ -49,6 +33,21 @@ from emailmonitor.progress.service import Progress
 from emailmonitor.results.models import Filters
 from emailmonitor.results.service import Results
 from emailmonitor.sources import provider_documents as catalog
+from fastapi import HTTPException
+from sqlalchemy import create_engine, text
+from sqlalchemy.exc import DBAPIError
+from test_association_tenant import client as fixture_client
+from test_durable_jobs import SETTINGS
+from test_job_contracts import request_body
+from test_pdf_pipeline_tenant import planned_pdf
+from test_progress_tenant import claim
+from test_provider_journey import registry, xml_bytes
+from test_provider_journey_tenant import planned_provider
+from test_results_tenant import ready
+from test_source_foundation import source_path
+from test_tenant_foundation import ORIGIN, Scenario
+from test_tenant_foundation import scenario as scenario
+from test_xml_pipeline_tenant import mutate_authority, planned_xml
 
 
 def source_target(scenario: Scenario, route: str) -> tuple[Progress, UUID, UUID, UUID, str]:
@@ -71,7 +70,9 @@ def source_target(scenario: Scenario, route: str) -> tuple[Progress, UUID, UUID,
         "reuse": {"mode": "verified_retained", "fresh_since": "2000-01-01T00:00:00Z"},
     }
     if route == "pdf":
-        body["options"]["allow_pdf"] = True
+        options = body["options"]
+        assert isinstance(options, dict)
+        options["allow_pdf"] = True
     with progress.database.tenant(progress.token, org, Capability.ACQUIRE_SOURCE) as (c, ctx):
         assert isinstance(ctx, TenantContext)
         c.execute(
@@ -129,7 +130,7 @@ def test_bound_non_html_copy_keeps_original_binding_and_replays(
         _stage_bound_reuse(discovery, progress.associations, org, target, 1)
     assert stale.value.status_code == 409
     with progress.database.tenant(progress.token, org, Capability.READ_ORGANIZATION) as (c, _):
-        revision = c.execute(
+        revision: int = c.execute(
             text(
                 "SELECT row_version FROM emailmonitor.jobs WHERE organization_id=:org AND id=:job"
             ),
@@ -281,7 +282,9 @@ def test_bound_reuse_respects_user_cutoff(scenario: Scenario, route: str) -> Non
         },
     }
     if route == "pdf":
-        body["options"]["allow_pdf"] = True
+        options = body["options"]
+        assert isinstance(options, dict)
+        options["allow_pdf"] = True
     ledger = Ledger(progress.database, progress.token, SETTINGS)
     target = ledger.create(org, JobRequest.model_validate(body), str(uuid4()))
     Discovery(progress.database, progress.token, SETTINGS).plan(org, target, 1)
@@ -350,7 +353,9 @@ def test_public_bound_reuse_review_export_and_source_deletion(
         "reuse": {"mode": "verified_retained", "fresh_since": "2000-01-01T00:00:00Z"},
     }
     if route == "pdf":
-        body["options"]["allow_pdf"] = True
+        options = body["options"]
+        assert isinstance(options, dict)
+        options["allow_pdf"] = True
     with fixture_client(scenario) as client:
         csrf = scenario.login(client, "owner")
         headers = {"Origin": ORIGIN, "X-CSRF-Token": csrf, "Idempotency-Key": str(uuid4())}
