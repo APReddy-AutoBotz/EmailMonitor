@@ -398,11 +398,21 @@ def test_required_installed_retained_reuse_journey(
     installed_scenario: Scenario, tmp_path: Path
 ) -> None:
     stage = InstalledStage()
+    primary: BaseException | None = None
     try:
         installed_journey(installed_scenario, tmp_path, stage, retained_reuse=True)
-    except BaseException:
+    except BaseException as error:
+        primary = error
         stage.fail()
         raise
+    finally:
+        if os.environ.get("EM_INSTALLED_STAGE_REPORT") == "true":
+            try:
+                report_stage(stage, Path(os.environ["GITHUB_OUTPUT"]), "reuse_stage")
+            except Exception:
+                if primary is None:
+                    raise
+                primary.add_note("Fixed installed reuse stage reporting failed")
 
 
 def installed_journey(

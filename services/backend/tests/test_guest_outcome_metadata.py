@@ -265,6 +265,46 @@ def test_invalid_login_phase_cannot_enter_metadata(output: Path) -> None:
         value.label()
 
 
+@pytest.mark.parametrize(
+    "delivery", ["not_requested", "request_received", "asset_verified", "fulfilled"]
+)
+def test_callback_delivery_metadata_preserves_timeout_and_is_allowlisted(
+    output: Path, delivery: str
+) -> None:
+    original = TimeoutError("private synthetic session sentinel")
+
+    @trace.observed_guest
+    def failed() -> None:
+        trace.guest_stage("conversation")
+        frame = DiagnosticFrame.model_validate(
+            {
+                "kind": "failure",
+                "stage": "keyword_worker",
+                "error": "TimeoutError",
+                "reason": "installed_login_deadline",
+                "installed_login_phase": "callback_document",
+                "installed_callback_delivery": delivery,
+            }
+        )
+        trace.guest_frame(frame)
+        raise original
+
+    with pytest.raises(TimeoutError) as caught:
+        failed()
+    assert caught.value is original
+    assert output.read_text().strip().endswith("-callback_" + delivery)
+    assert "private" not in output.read_text()
+    value = trace.Trace()
+    value.login = "callback_document"
+    value.callback = "private@example.invalid"  # type: ignore[assignment]
+    with pytest.raises(ValueError, match="Closed callback delivery"):
+        value.label()
+    value.callback = "fulfilled"
+    value.login = "none"
+    with pytest.raises(ValueError, match="Closed callback delivery"):
+        value.label()
+
+
 @pytest.mark.parametrize("phase", OUTCOME_PHASES)
 def test_fixed_outcome_and_focus_preserve_failure(output: Path, phase: OutcomePhase) -> None:
     original = RuntimeError("Control not reachable by keyboard")

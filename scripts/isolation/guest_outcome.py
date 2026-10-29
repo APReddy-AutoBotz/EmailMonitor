@@ -12,6 +12,7 @@ from operator_ui_protocol import (
     STAGES,
     DiagnosticFrame,
     FocusExhaustion,
+    InstalledCallbackDelivery,
     InstalledExportStep,
     InstalledLoginPhase,
     KeyboardAttemptTrace,
@@ -43,6 +44,7 @@ class Trace:
         self.reason = "unknown"
         self.error = "none"
         self.login = "none"
+        self.callback: InstalledCallbackDelivery | None = None
         self.outcome = "none"
         self.focus: FocusExhaustion | str | None = None
         self.cleanup: set[str] = set()
@@ -70,6 +72,11 @@ class Trace:
             raise ValueError("Exact owned cleanup kinds required")
         if self.login not in ("none", *get_args(InstalledLoginPhase)):
             raise ValueError("Closed installed login phase required")
+        if self.callback is not None and (
+            self.callback not in get_args(InstalledCallbackDelivery)
+            or self.login != "callback_document"
+        ):
+            raise ValueError("Closed callback delivery category required")
         if self.outcome not in ("none", *OUTCOME_PHASES):
             raise ValueError("Closed outcome phase required")
         focus = "none"
@@ -120,10 +127,11 @@ class Trace:
             if self.phase != "export_preview":
                 raise ValueError("Export step requires its exact failure phase")
             export = "-export_" + export_step.phase + "." + (export_step.format or "none")
+        callback = "-callback_" + self.callback if self.callback is not None else ""
         return (
             f"{stage}-phase_{self.phase}-error_{self.error}-reason_{self.reason}-cleanup_{cleanup}"
             f"-login_{self.login}"
-            f"-outcome_{self.outcome}-focus_{focus}{attempt}{export}"
+            f"-outcome_{self.outcome}-focus_{focus}{attempt}{export}{callback}"
         )
 
 
@@ -263,6 +271,7 @@ def guest_frame(frame: DiagnosticFrame) -> None:
         if fixed.kind == "failure":
             trace.reason, trace.error = fixed.reason, fixed.error or "none"
             trace.login = fixed.installed_login_phase or "none"
+            trace.callback = fixed.installed_callback_delivery
             trace.outcome = fixed.outcome_phase or "none"
             trace.focus = fixed.focus_exhaustion
             trace.export = fixed.installed_export_step

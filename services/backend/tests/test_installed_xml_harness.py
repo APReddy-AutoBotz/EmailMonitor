@@ -124,13 +124,29 @@ def test_installed_html_steps_remain_identical_under_separate_branch() -> None:
     )
     xml = ast.unparse(ast.Module(body=branch.body, type_ignores=[]))
     html = ast.unparse(ast.Module(body=branch.orelse, type_ignores=[]))
-    # Frozen AST of the original HTML steps, ignoring indentation/formatting.
+
+    class RemoveExplicitReuse(ast.NodeTransformer):
+        count = 0
+
+        def visit_If(self, node: ast.If) -> ast.AST | None:
+            if ast.unparse(node.test) == "setup.get('retained_reuse') is True":
+                self.count += 1
+                reuse = ast.unparse(ast.Module(body=node.body, type_ignores=[]))
+                assert not node.orelse
+                assert "Request retained observation reuse" in reuse
+                assert "Reused observation" in reuse and "needs review" in reuse
+                assert "Preview eligible export counts" in reuse
+                assert "asyncio.timeout(30)" in reuse
+                return None
+            return self.generic_visit(node)
+
+    # Keep the frozen original HTML AST intact after excluding the one explicit
+    # opt-in reuse journey; it cannot silently alter the legacy HTML steps.
+    remover = RemoveExplicitReuse()
+    original_html = remover.visit(ast.Module(body=branch.orelse, type_ignores=[]))
+    assert remover.count == 1
     assert (
-        hashlib.sha256(
-            ast.dump(
-                ast.Module(body=branch.orelse, type_ignores=[]), include_attributes=False
-            ).encode()
-        ).hexdigest()
+        hashlib.sha256(ast.dump(original_html, include_attributes=False).encode()).hexdigest()
         == "853426f42fc71fb1408bd2262909afe14429f813ebe3e6ecca7ead61a713f30b"
     )
     assert "xml_journey" in xml
