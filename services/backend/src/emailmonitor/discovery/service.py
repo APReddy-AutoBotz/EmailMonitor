@@ -15,7 +15,7 @@ from sqlalchemy.exc import DBAPIError
 
 from emailmonitor.administration.models import Entitlements, effective_article_cap
 from emailmonitor.config import Settings
-from emailmonitor.discovery.planning import ARTICLE_PATHS, plan_input
+from emailmonitor.discovery.planning import ARTICLE_PATHS, plan_input, staged_bound_reuse_input
 from emailmonitor.discovery.search import SearchPage
 from emailmonitor.discovery.state import DiscoveryState, advance
 from emailmonitor.fetching.fixture import HOSTS, require_fixture
@@ -27,6 +27,7 @@ from emailmonitor.organizations.roles import Capability
 from emailmonitor.progress.binding import allowed as execution_allowed
 from emailmonitor.progress.binding import matches as execution_matches
 from emailmonitor.runtime.access import WorkAuthority, WorkContext, WorkDatabase
+from emailmonitor.runtime.database import ServiceDatabase
 from emailmonitor.sources import provider_documents as provider
 from emailmonitor.sources.access import current_policy, policy_decision
 from emailmonitor.sources.policy import Evaluation, Operation, PolicyProposal
@@ -120,6 +121,17 @@ WHERE organization_id=:org AND job_id=:job FOR UPDATE"""),
         return dict(row)
 
     def plan(self, org: UUID, job: UUID, expected_revision: int) -> dict[str, object]:
+        return self._plan(org, job, expected_revision, staged_bound=False)
+
+    def _plan_bound_reuse(self, org: UUID, job: UUID, expected_revision: int) -> dict[str, object]:
+        """Internal staged plan; public API and SQL still refuse bound reuse."""
+        if isinstance(self.database, ServiceDatabase) or type(self.token) is not str:
+            raise AuthorizationDenied()
+        return self._plan(org, job, expected_revision, staged_bound=True)
+
+    def _plan(
+        self, org: UUID, job: UUID, expected_revision: int, *, staged_bound: bool
+    ) -> dict[str, object]:
         with self._tenant(org, Capability.ACQUIRE_SOURCE) as (c, _):
             parent = Ledger._lock(c, org, job)
             if parent["kind"] != "extraction" or parent["state"] != "draft":
@@ -127,7 +139,7 @@ WHERE organization_id=:org AND job_id=:job FOR UPDATE"""),
             if parent["row_version"] != expected_revision:
                 raise HTTPException(409, "Job revision conflict")
             request = JobRequest.model_validate(parent["request"])
-            plan = plan_input(request)
+            plan = staged_bound_reuse_input(request) if staged_bound else plan_input(request)
             if plan.start_url is None:
                 return {
                     "plan": asdict(plan),

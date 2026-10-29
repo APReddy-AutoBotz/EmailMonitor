@@ -7,9 +7,17 @@ from fastapi import HTTPException
 from sqlalchemy import text
 
 from emailmonitor.administration.admission import Admission
-from emailmonitor.associations.reuse_adapters import HTML_URLS, Adapter, retained_adapter
+from emailmonitor.associations.reuse_adapters import (
+    HTML_URLS,
+    PDF_URLS,
+    XML_URLS,
+    Adapter,
+    retained_plan,
+)
 from emailmonitor.associations.reuse_preparation import _SOURCE, prepare_reuse
 from emailmonitor.associations.service import Associations
+from emailmonitor.discovery.service import Discovery
+from emailmonitor.discovery.state import DiscoveryState
 from emailmonitor.jobs.ledger import Ledger
 from emailmonitor.jobs.models import JobRequest, URLInput, canonical
 from emailmonitor.organizations.database import AuthorizationDenied
@@ -32,6 +40,51 @@ def materialize_draft(service: Associations, org: UUID, target_job: UUID, url: s
     return _materialize_candidate(service, org, target_job, url, "html")
 
 
+def _stage_bound_reuse(
+    discovery: Discovery, service: Associations, org: UUID, job: UUID, revision: int
+) -> tuple[dict[str, object], UUID]:
+    """Connect staged planning and bound materialization without exposing a route.
+
+    A failed materialization never starts fresh acquisition. The existing SQL
+    start fence requires a current copied observation, and the database still
+    refuses non-HTML links until its independent acceptance gates are complete.
+    """
+    if (
+        discovery.database is not service.database
+        or type(discovery.token) is not str
+        or discovery.token != service.token
+        or discovery.settings != service.settings
+        or isinstance(service.database, ServiceDatabase)
+    ):
+        raise AuthorizationDenied()
+    planned = discovery._plan_bound_reuse(org, job, revision)
+    plan = planned.get("plan")
+    if not isinstance(plan, dict) or (
+        plan.get("classification") != "article" or plan.get("reason") != "retained_reuse_staged"
+    ):
+        raise HTTPException(409, "Retained reuse is unavailable for this source route")
+    url = plan.get("start_url")
+    if not isinstance(url, str):
+        raise AuthorizationDenied()
+    adapter: Adapter
+    if url in PDF_URLS:
+        adapter = "pdf"
+    elif url in XML_URLS:
+        adapter = "article_xml"
+    else:
+        raise AuthorizationDenied()
+    checkpoint = DiscoveryState.model_validate(planned.get("checkpoint"))
+    if (
+        checkpoint.status != "completed"
+        or checkpoint.reason != "single_article"
+        or not checkpoint.discovery_complete
+        or checkpoint.articles != [url]
+    ):
+        raise AuthorizationDenied()
+    source_batch = _materialize_candidate(service, org, job, url, adapter)
+    return planned, source_batch
+
+
 def _materialize_candidate(
     service: Associations, org: UUID, target_job: UUID, url: str, adapter: Adapter
 ) -> UUID:
@@ -46,12 +99,15 @@ def _materialize_candidate(
         with service.discovery._tenant(org, Capability.ACQUIRE_SOURCE) as (c, _):
             target = Ledger._lock(c, org, target_job)
             request = JobRequest.model_validate(target["request"])
+            plan = retained_plan(request)
             if (
-                request.reuse is None
+                plan is None
+                or request.reuse is None
                 or not isinstance(request.input, URLInput)
                 or request.input.url != url
                 or target["state"] != "draft"
-                or retained_adapter(request) != adapter
+                or plan.adapter != adapter
+                or plan.article_url != url
             ):
                 raise AuthorizationDenied()
             existing = (
@@ -86,7 +142,7 @@ ORDER BY a.observed_at DESC,b.id ASC LIMIT 1
                         "org": org,
                         "target": target_job,
                         "url": url,
-                        "cutoff": request.reuse.fresh_since,
+                        "cutoff": plan.fresh_since,
                         "route": adapter,
                     },
                 ).scalar_one_or_none()

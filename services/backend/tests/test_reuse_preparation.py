@@ -43,7 +43,11 @@ def setup(monkeypatch: pytest.MonkeyPatch) -> tuple[MagicMock, MagicMock, dict[s
         **request_body(),
         "reuse": {"mode": "verified_retained", "fresh_since": "2026-10-01T00:00:00Z"},
     }
-    monkeypatch.setattr(Ledger, "_lock", lambda *_: {"request": request})
+    monkeypatch.setattr(
+        Ledger,
+        "_lock",
+        lambda *_: {"request": {**request, "input": {"type": "url", "url": row["article_url"]}}},
+    )
     service, connection = MagicMock(), MagicMock()
     service._lock = MagicMock()
     service.settings = SETTINGS
@@ -171,6 +175,22 @@ def test_policy_change_during_preparation_is_refused(monkeypatch: pytest.MonkeyP
         prepare_reuse(connection, service, ORG, TARGET, URL, BATCH)
 
 
+@pytest.mark.parametrize("when", ["initial", "release"])
+def test_source_authority_refusal_is_not_converted_to_reuse(
+    monkeypatch: pytest.MonkeyPatch, when: str
+) -> None:
+    connection, service, _ = setup(monkeypatch)
+    service._lock.side_effect = (
+        AuthorizationDenied() if when == "initial" else [None, AuthorizationDenied()]
+    )
+    with pytest.raises(AuthorizationDenied):
+        prepare_reuse(connection, service, ORG, TARGET, URL, BATCH)
+    assert all(
+        str(call.args[0]).lstrip().startswith("SELECT")
+        for call in connection.execute.call_args_list
+    )
+
+
 def test_no_contact_observation_stays_no_contact(monkeypatch: pytest.MonkeyPatch) -> None:
     connection, service, row = setup(monkeypatch)
     url = ORIGIN + "no-contact.html"
@@ -296,6 +316,15 @@ def test_controlled_xml_keeps_and_checks_original_provider_provenance(
 
     connection, service, row = setup(monkeypatch)
     original = retained(registry()[0])
+    monkeypatch.setattr(
+        "emailmonitor.associations.reuse_preparation.current_policy",
+        lambda *_: {
+            "version": 1,
+            "support": {
+                "provider_documents": [item.model_dump(mode="json") for item in registry()]
+            },
+        },
+    )
     source = original.model_copy(
         update={"binding": original.binding.model_copy(update={"organization": ORG})}
     )
@@ -308,6 +337,41 @@ def test_controlled_xml_keeps_and_checks_original_provider_provenance(
     assert isinstance(document["provider"], dict)
     document["provider"]["source_id"] = "different-source"
     row["observation"] = document
+    with pytest.raises(AuthorizationDenied):
+        prepare_reuse(connection, service, ORG, TARGET, source.url, BATCH)
+
+
+@pytest.mark.parametrize("failure", ["different_digest", "missing", "wrong_version", "late_change"])
+def test_controlled_xml_requires_current_registered_source(
+    monkeypatch: pytest.MonkeyPatch, failure: str
+) -> None:
+    from test_provider_journey import registry, retained
+
+    connection, service, row = setup(monkeypatch)
+    entries = registry()
+    original = retained(entries[0])
+    source = original.model_copy(
+        update={"binding": original.binding.model_copy(update={"organization": ORG})}
+    )
+    row["article_url"] = source.url
+    row["source_digest"] = source.acquisition_digest
+    row["observation"] = source.model_dump(mode="json")
+    reads = 0
+
+    def policy(*_: object) -> dict[str, object]:
+        nonlocal reads
+        reads += 1
+        documents = [item.model_dump(mode="json") for item in entries]
+        if failure == "missing":
+            documents = [documents[1]]
+        if failure == "different_digest" or (failure == "late_change" and reads == 2):
+            documents[0]["content_digest"] = "a" * 64
+        return {
+            "version": 2 if failure == "wrong_version" else 1,
+            "support": {"provider_documents": documents},
+        }
+
+    monkeypatch.setattr("emailmonitor.associations.reuse_preparation.current_policy", policy)
     with pytest.raises(AuthorizationDenied):
         prepare_reuse(connection, service, ORG, TARGET, source.url, BATCH)
 

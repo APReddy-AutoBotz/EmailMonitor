@@ -1,5 +1,7 @@
 """Closed source-owned retained adapters; classification is not authority."""
 
+from dataclasses import dataclass
+from datetime import datetime
 from typing import Literal
 
 from emailmonitor.extraction.pdf_fixture import DIGESTS as PDF_DIGESTS
@@ -13,6 +15,16 @@ HTML_URLS = frozenset(
 PDF_URLS = frozenset(f"{ORIGIN}/{name}" for name in PDF_DIGESTS)
 XML_URLS = frozenset({f"{ORIGIN}/article-xml.xml", *ARTICLE_URLS})
 type Adapter = Literal["html", "pdf", "article_xml"]
+
+
+@dataclass(frozen=True, slots=True)
+class RetainedPlan:
+    """A closed request description, never an authority or acquisition grant."""
+
+    adapter: Adapter
+    source_id: str
+    article_url: str
+    fresh_since: datetime
 
 
 def retained_adapter(request: JobRequest) -> Adapter | None:
@@ -37,3 +49,16 @@ def retained_adapter(request: JobRequest) -> Adapter | None:
     if value.url in XML_URLS:
         return "article_xml"
     return None
+
+
+def retained_plan(request: JobRequest) -> RetainedPlan | None:
+    """Stage a selected adapter without publishing or activating it."""
+    adapter = retained_adapter(request)
+    if adapter is None or request.reuse is None or not isinstance(request.input, URLInput):
+        return None
+    return RetainedPlan(
+        adapter=adapter,
+        source_id=request.input.source_id or "synthetic-publisher",
+        article_url=request.input.url,
+        fresh_since=request.reuse.fresh_since,
+    )

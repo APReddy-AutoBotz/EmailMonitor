@@ -6,18 +6,23 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from uuid import UUID
 
+from fastapi import HTTPException
 from sqlalchemy import Connection, text
 
 from emailmonitor.associations.models import Bundle
+from emailmonitor.associations.reuse_adapters import retained_plan
 from emailmonitor.associations.reuse_draft import independent_review_draft
 from emailmonitor.associations.reuse_lineage import ReuseLineageDraft
 from emailmonitor.associations.service import Associations
 from emailmonitor.extraction.html import ArticleObservation
 from emailmonitor.extraction.pdf_retained import RetainedPdf
 from emailmonitor.extraction.xml_retained import RetainedXml
+from emailmonitor.fetching.safety import FetchDenied
 from emailmonitor.jobs.ledger import Ledger
 from emailmonitor.jobs.models import JobRequest, canonical
 from emailmonitor.organizations.database import AuthorizationDenied
+from emailmonitor.sources import provider_documents
+from emailmonitor.sources.access import current_policy
 
 
 @dataclass(frozen=True)
@@ -72,6 +77,33 @@ FOR SHARE NOWAIT
 """)
 
 
+def _provider_matches_current_catalog(
+    c: Connection, org: UUID, source: str, version: int, observed: RetainedXml
+) -> bool:
+    """Recheck the current retained-provider record; this never opens a transport."""
+    if observed.provider is None:
+        return True
+    try:
+        policy = current_policy(c, org, source)
+        if policy.get("version") != version:
+            return False
+        registry = provider_documents.documents(policy.get("support"), source)
+        found = [entry for entry in registry if entry.source_url == observed.url]
+        if len(found) != 1:
+            return False
+        original = found[0]
+        return bool(
+            observed.provider.source_id == source
+            and observed.requested_identifier == original.identifier
+            and observed.content_digest == original.content_digest
+            and observed.source_profile == original.source_profile
+            and observed.provider.transport_url == original.request.url
+            and observed.provider.request_fingerprint == original.request.fingerprint
+        )
+    except (HTTPException, FetchDenied, ValueError):
+        return False
+
+
 def prepare_reuse(
     c: Connection, service: Associations, org: UUID, target_job: UUID, url: str, source_batch: UUID
 ) -> PreparedReuse:
@@ -84,7 +116,8 @@ def prepare_reuse(
     """
     target = Ledger._lock(c, org, target_job)
     request = JobRequest.model_validate(target["request"])
-    if request.reuse is None:
+    plan = retained_plan(request)
+    if request.reuse is None or plan is None or plan.article_url != url:
         raise AuthorizationDenied()
     target_scope = service.extraction._scope(c, org, target_job, url, browser=False)
     service._lock(c, org, source_batch)
@@ -97,8 +130,10 @@ def prepare_reuse(
         or first["source_parent_job"] is not None
     ):
         raise AuthorizationDenied()
-    if first["source_id"] != target_scope["source_id"] or first["policy_version"] != int(
-        str(target_scope["policy_version"])
+    if (
+        first["source_id"] != plan.source_id
+        or first["source_id"] != target_scope["source_id"]
+        or first["policy_version"] != int(str(target_scope["policy_version"]))
     ):
         raise AuthorizationDenied()
     raw = first["observation"]
@@ -115,7 +150,7 @@ def prepare_reuse(
         )
     except ValueError:
         raise AuthorizationDenied() from None
-    if observed.url != url:
+    if observed.url != url or observed.route != plan.adapter:
         raise AuthorizationDenied()
     if observed.status not in {"observed", "no_contact"}:
         # Partial, unsupported and unresolved observations cannot establish a
@@ -140,11 +175,10 @@ def prepare_reuse(
         }
         if c.execute(_SOURCE_ITEM, item_params).scalar_one_or_none() != observed.binding.item:
             raise AuthorizationDenied()
-        if isinstance(observed, RetainedXml) and observed.provider is not None:
-            if observed.provider.source_id != first["source_id"]:
-                raise AuthorizationDenied()
-    if observed.route == "browser_dom":
-        service.extraction._scope(c, org, target_job, url, browser=True)
+        if isinstance(observed, RetainedXml) and not _provider_matches_current_catalog(
+            c, org, plan.source_id, int(str(first["policy_version"])), observed
+        ):
+            raise AuthorizationDenied()
     acquisition = (
         first["source_digest"] if isinstance(observed, RetainedPdf) else observed.acquisition_digest
     )
@@ -185,12 +219,14 @@ def prepare_reuse(
         c.execute(_SOURCE_ITEM, item_params).scalar_one_or_none() != observed.binding.item
     ):
         raise AuthorizationDenied()
-    final_scope = service.extraction._scope(
-        c, org, target_job, url, browser=observed.route == "browser_dom"
-    )
+    final_scope = service.extraction._scope(c, org, target_job, url, browser=False)
     if (
         final_scope["source_id"] != first["source_id"]
         or int(str(final_scope["policy_version"])) != first["policy_version"]
+    ):
+        raise AuthorizationDenied()
+    if isinstance(observed, RetainedXml) and not _provider_matches_current_catalog(
+        c, org, plan.source_id, int(str(first["policy_version"])), observed
     ):
         raise AuthorizationDenied()
     final_time: datetime = c.execute(text("SELECT clock_timestamp()")).scalar_one()
