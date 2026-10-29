@@ -304,7 +304,8 @@ VALUES(:org,:batch,:candidate,:ordinal,:raw)
             # The old definer lock alone is not a privacy/suppression read grant.
             query = text("""
 SELECT source.observation,source.job_id,source.generation,source.policy_version,
-source.deletion_generation FROM emailmonitor.association_batches batch
+source.deletion_generation,source.source_digest,source.article_url,source.reused_from_job,
+source.reused_source_revision,source.reused_source_batch FROM emailmonitor.association_batches batch
 JOIN emailmonitor.article_observations source
 ON source.organization_id=batch.organization_id AND source.job_id=batch.job_id
 AND source.article_url=batch.article_url AND source.revision=batch.source_revision
@@ -316,18 +317,74 @@ WHERE batch.organization_id=:org AND batch.id=:batch
             row = c.execute(query, parameters).mappings().first()
             if row is None:
                 raise AuthorizationDenied()
+            origin_query = None
+            origin_params = None
+            origin = None
+            item_query = None
+            item_params = None
+            binding = SourceBinding(
+                row["job_id"], row["generation"], row["policy_version"], row["deletion_generation"]
+            )
+            document = row["observation"]
+            if (
+                row["reused_from_job"] is not None
+                and isinstance(document, dict)
+                and document.get("route") in {"pdf", "article_xml"}
+            ):
+                # An XML/PDF payload remains bound to its original item. The
+                # normal RLS read and both batch fences establish current human
+                # visibility; target-only workers gain no source-job grant.
+                from emailmonitor.associations.reuse_preparation import _SOURCE, _SOURCE_ITEM
+
+                source_batch = row["reused_source_batch"]
+                if source_batch is None or row["reused_source_revision"] is None:
+                    raise AuthorizationDenied()
+                self._lock(c, org, source_batch)
+                origin_query = _SOURCE
+                origin_params = {"org": org, "batch": source_batch, "url": row["article_url"]}
+                origin = c.execute(origin_query, origin_params).mappings().first()
+                if (
+                    origin is None
+                    or origin["job_id"] != row["reused_from_job"]
+                    or origin["source_parent_job"] is not None
+                    or origin["revision"] != row["reused_source_revision"]
+                    or origin["source_digest"] != row["source_digest"]
+                    or origin["observation"] != document
+                ):
+                    raise AuthorizationDenied()
+                try:
+                    observed = (
+                        RetainedPdf.model_validate_json(json.dumps(document))
+                        if document["route"] == "pdf"
+                        else RetainedXml.model_validate_json(json.dumps(document))
+                    )
+                except ValueError:
+                    raise AuthorizationDenied() from None
+                if observed.binding.discovery_revision != origin["discovery_revision"]:
+                    raise AuthorizationDenied()
+                item_query = _SOURCE_ITEM
+                item_params = {
+                    "org": org,
+                    "job": origin["job_id"],
+                    "item": observed.binding.item,
+                    "url": row["article_url"],
+                    "batch": source_batch,
+                }
+                if c.execute(item_query, item_params).scalar_one_or_none() != observed.binding.item:
+                    raise AuthorizationDenied()
+                binding = SourceBinding(
+                    origin["job_id"],
+                    origin["generation"],
+                    origin["policy_version"],
+                    origin["deletion_generation"],
+                )
             try:
                 result = project(
                     org,
                     batch,
                     bundle,
-                    row["observation"],
-                    SourceBinding(
-                        row["job_id"],
-                        row["generation"],
-                        row["policy_version"],
-                        row["deletion_generation"],
-                    ),
+                    document,
+                    binding,
                 )
             except ValueError:
                 raise AuthorizationDenied() from None
@@ -335,6 +392,13 @@ WHERE batch.organization_id=:org AND batch.id=:batch
             # Recheck current row visibility at release (including retention time).
             if c.execute(query, parameters).mappings().first() != row:
                 raise AuthorizationDenied()
+            if origin_query is not None and origin_params is not None and origin is not None:
+                self._lock(c, org, row["reused_source_batch"])
+                if c.execute(origin_query, origin_params).mappings().first() != origin:
+                    raise AuthorizationDenied()
+                assert item_query is not None and item_params is not None
+                if c.execute(item_query, item_params).scalar_one_or_none() != item_params["item"]:
+                    raise AuthorizationDenied()
             return result
 
     def batches(self, org: UUID, job: UUID) -> list[dict[str, object]]:

@@ -5,15 +5,6 @@ from uuid import UUID, uuid4
 
 import pytest
 from api_client import APIClient
-from fastapi import HTTPException
-from sqlalchemy import text
-from test_discovery import page
-from test_durable_jobs import SETTINGS, approved, snapshot
-from test_job_contracts import request_body
-from test_source_foundation import policy_body, source_path
-from test_tenant_foundation import ORIGIN, Scenario
-from test_tenant_foundation import scenario as scenario
-
 from emailmonitor.api import create_app
 from emailmonitor.discovery.fixture import step_fixture
 from emailmonitor.discovery.service import Discovery
@@ -23,6 +14,14 @@ from emailmonitor.jobs.ledger import Ledger
 from emailmonitor.jobs.models import JobRequest
 from emailmonitor.organizations.database import AuthorizationDenied
 from emailmonitor.organizations.roles import Capability
+from fastapi import HTTPException
+from sqlalchemy import text
+from test_discovery import page
+from test_durable_jobs import SETTINGS, approved, snapshot
+from test_job_contracts import request_body
+from test_source_foundation import policy_body, source_path
+from test_tenant_foundation import ORIGIN, Scenario
+from test_tenant_foundation import scenario as scenario
 
 
 def begin(s: Scenario, *, articles: int = 500, pages: int = 100) -> tuple[Discovery, UUID]:
@@ -86,11 +85,11 @@ def test_real_reuse_refusal_creates_no_job_or_idempotency_receipt(scenario: Scen
 
     def counts() -> tuple[int, int]:
         with ledger.database.tenant(ledger.token, org, Capability.ACQUIRE_SOURCE) as (c, _):
-            jobs = c.execute(
+            jobs: int = c.execute(
                 text("SELECT count(*) FROM emailmonitor.jobs WHERE organization_id=:org"),
                 {"org": org},
             ).scalar_one()
-            keys = c.execute(
+            keys: int = c.execute(
                 text(
                     "SELECT count(*) FROM emailmonitor.job_idempotency WHERE organization_id=:org"
                 ),

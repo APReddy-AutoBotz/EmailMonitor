@@ -2,19 +2,22 @@
 
 from contextlib import nullcontext
 from types import SimpleNamespace
+from typing import cast
 from unittest.mock import MagicMock
 from uuid import UUID
 
 import pytest
-from fastapi import HTTPException
-from test_durable_jobs import SETTINGS
-from test_job_contracts import request_body
-
+from emailmonitor.administration.admission import Admission
 from emailmonitor.associations import reuse_materialization as module
 from emailmonitor.associations.service import initial_bundle
 from emailmonitor.extraction.fixture import article_bytes
 from emailmonitor.extraction.html import parse_article
+from emailmonitor.jobs.ledger import Ledger
+from emailmonitor.jobs.models import canonical
 from emailmonitor.organizations.database import AuthorizationDenied
+from fastapi import HTTPException
+from test_durable_jobs import SETTINGS
+from test_job_contracts import request_body
 
 ORG, SOURCE, TARGET, BATCH = (UUID(int=i) for i in range(1, 5))
 URL = "https://synthetic.publisher.example/article-a.html"
@@ -27,21 +30,28 @@ def setup(monkeypatch: pytest.MonkeyPatch) -> tuple[MagicMock, MagicMock, dict[s
     service.token = "synthetic-session"
     service.discovery._tenant.return_value = nullcontext((connection, object()))
     service.extraction._scope.return_value = {"revision": 1}
-    monkeypatch.setattr(module.Admission, "fixture", lambda *_: nullcontext())
+    monkeypatch.setattr(Admission, "fixture", lambda *_: nullcontext())
     request = {
         **request_body(),
         "input": {"type": "url", "url": URL},
         "reuse": {"mode": "verified_retained", "fresh_since": "2026-10-01T00:00:00Z"},
     }
     target = {"state": "draft", "request": request, "generation": 1, "deletion_generation": 1}
-    monkeypatch.setattr(module.Ledger, "_lock", lambda *_: target)
+    monkeypatch.setattr(Ledger, "_lock", lambda *_: target)
     lineage = SimpleNamespace(
         source_job_id=SOURCE,
         source_revision=1,
         source_id="synthetic-publisher",
         source_policy_version=1,
     )
-    monkeypatch.setattr(module, "prepare_reuse", lambda *_: SimpleNamespace(lineage=lineage))
+    evidence = SimpleNamespace(
+        source_job=SOURCE,
+        source_digest="a" * 64,
+        document=canonical({"route": "html", "url": URL}),
+    )
+    monkeypatch.setattr(
+        module, "prepare_reuse", lambda *_: SimpleNamespace(lineage=lineage, evidence=evidence)
+    )
     state: dict[str, object] = {"existing": None, "selected": BATCH, "inserted": []}
 
     def execute(statement: object, parameters: dict[str, object] | None = None) -> MagicMock:
@@ -54,6 +64,7 @@ def setup(monkeypatch: pytest.MonkeyPatch) -> tuple[MagicMock, MagicMock, dict[s
         elif "SELECT a.organization_id" in query:
             result.mappings.return_value.one.return_value = {
                 "source_digest": "a" * 64,
+                "job_id": SOURCE,
                 "observation": {"route": "html", "url": URL},
             }
         elif "INSERT INTO emailmonitor.article_observations" in query:
@@ -108,11 +119,30 @@ def test_no_eligible_source_never_falls_back_to_fresh_acquisition(
     assert error.value.status_code == 409 and state["inserted"] == []
 
 
+@pytest.mark.parametrize("field", ["source_digest", "observation", "job_id"])
+def test_changed_source_after_preparation_refuses_before_copy(
+    monkeypatch: pytest.MonkeyPatch, field: str
+) -> None:
+    service, connection, state = setup(monkeypatch)
+    original = connection.execute.side_effect
+
+    def execute(statement: object, parameters: dict[str, object] | None = None) -> MagicMock:
+        result = cast(MagicMock, original(statement, parameters))
+        if "SELECT a.organization_id" in str(statement):
+            row = result.mappings.return_value.one.return_value.copy()
+            row[field] = {"source_digest": "b" * 64, "observation": {}, "job_id": TARGET}[field]
+            result.mappings.return_value.one.return_value = row
+        return result
+
+    connection.execute.side_effect = execute
+    with pytest.raises(AuthorizationDenied):
+        module.materialize_draft(service, ORG, TARGET, URL)
+    assert state["inserted"] == []
+
+
 def test_missing_explicit_choice_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
     service, _, state = setup(monkeypatch)
-    monkeypatch.setattr(
-        module.Ledger, "_lock", lambda *_: {"state": "draft", "request": request_body()}
-    )
+    monkeypatch.setattr(Ledger, "_lock", lambda *_: {"state": "draft", "request": request_body()})
     with pytest.raises(AuthorizationDenied):
         module.materialize_draft(service, ORG, TARGET, URL)
     assert state["inserted"] == []

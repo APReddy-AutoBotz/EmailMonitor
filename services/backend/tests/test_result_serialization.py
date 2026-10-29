@@ -8,12 +8,11 @@ from xml.etree import ElementTree as ET
 from zipfile import ZipFile
 
 import pytest
-from pydantic import ValidationError
-from test_associations import ORG, html
-
 from emailmonitor.associations.models import Bundle
 from emailmonitor.results.models import ArticleOutcome, Contact, ExportSnapshot, Filters
 from emailmonitor.results.render import RenderDenied, render, safe_csv, worksheet
+from pydantic import ValidationError
+from test_associations import ORG, html
 
 NOW = datetime(2026, 10, 13, tzinfo=UTC)
 JOB = UUID("b0000000-0000-4000-8000-000000000001")
@@ -342,10 +341,9 @@ def test_snapshot_rejects_cross_tenant_rejected_and_unrequested_data() -> None:
 
 
 def test_reviewed_first_author_mapping_does_not_invent_correspondence_role() -> None:
+    from emailmonitor.associations.review import apply_review
     from test_association_review import request
     from test_associations import SETTINGS
-
-    from emailmonitor.associations.review import apply_review
 
     bundle = html("article-a.html")
     cited = tuple(

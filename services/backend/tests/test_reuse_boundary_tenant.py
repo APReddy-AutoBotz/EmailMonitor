@@ -4,6 +4,12 @@ from datetime import timedelta
 from uuid import uuid4
 
 import pytest
+from emailmonitor.associations.reuse_draft import independent_review_draft
+from emailmonitor.associations.reuse_lineage import ReuseLineageDraft
+from emailmonitor.extraction.html import ArticleObservation
+from emailmonitor.jobs.ledger import Ledger
+from emailmonitor.jobs.models import JobRequest
+from emailmonitor.organizations.roles import Capability
 from pydantic import ValidationError
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
@@ -12,13 +18,6 @@ from test_durable_jobs import SETTINGS
 from test_job_contracts import request_body
 from test_tenant_foundation import Scenario
 from test_tenant_foundation import scenario as scenario
-
-from emailmonitor.associations.reuse_draft import independent_review_draft
-from emailmonitor.associations.reuse_lineage import ReuseLineageDraft
-from emailmonitor.extraction.html import ArticleObservation
-from emailmonitor.jobs.ledger import Ledger
-from emailmonitor.jobs.models import JobRequest
-from emailmonitor.organizations.roles import Capability
 
 
 def test_real_cross_job_copy_refused_and_review_draft_is_independent(scenario: Scenario) -> None:

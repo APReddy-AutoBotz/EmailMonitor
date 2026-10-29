@@ -3,12 +3,11 @@
 from uuid import UUID
 
 import pytest
-from test_associations import ORG, ORIGIN, SETTINGS
-
 from emailmonitor.associations.mapping import map_observation
 from emailmonitor.associations.reuse_draft import independent_review_draft
 from emailmonitor.extraction.fixture import article_bytes
 from emailmonitor.extraction.html import parse_article
+from test_associations import ORG, ORIGIN, SETTINGS
 
 
 def test_rebuilds_from_authored_observation_with_independent_unaccepted_reviews() -> None:
@@ -45,10 +44,9 @@ def test_reuse_draft_is_tenant_scoped_and_rejects_same_job() -> None:
 
 
 def test_bound_pdf_and_xml_cannot_be_relabelled_to_a_different_source_job_or_tenant() -> None:
+    from emailmonitor.extraction.pdf_retained import PdfBinding, retain_pdf
     from test_pdf_extraction import parse as parse_pdf
     from test_xml_pipeline import retained as retained_xml
-
-    from emailmonitor.extraction.pdf_retained import PdfBinding, retain_pdf
 
     source_org, source_job, target = UUID(int=1), UUID(int=2), UUID(int=44)
     pdf = retain_pdf(

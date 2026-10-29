@@ -5,14 +5,13 @@ from unittest.mock import MagicMock
 from uuid import UUID
 
 import pytest
-from test_job_contracts import request_body
-
 from emailmonitor.discovery.service import Discovery
 from emailmonitor.discovery.state import DiscoveryState
 from emailmonitor.jobs.models import JobRequest
 from emailmonitor.organizations.database import AuthorizationDenied
 from emailmonitor.progress.binding import Lease
 from emailmonitor.progress.service import Progress, Work
+from test_job_contracts import request_body
 
 ORG, JOB, ITEM, TOKEN = (UUID(int=value) for value in range(1, 5))
 URL = "https://synthetic.publisher.example/article-a.html"
@@ -85,6 +84,46 @@ def test_existing_observation_is_used_without_fresh_fallback() -> None:
     work = Work(Lease(ORG, JOB, ITEM, TOKEN, 1, 1), "article", URL, 1)
     assert Progress.process_fixture(progress, work) == "needs_review"
     progress.extraction.fixture.assert_not_called()
+
+
+def test_missing_provider_reuse_refuses_before_transport() -> None:
+    from emailmonitor.progress.provider import ProviderJourney
+    from emailmonitor.sources.provider_documents import DOI_URL
+
+    journey = object.__new__(ProviderJourney)
+    journey.progress, journey.xml, journey.dispatch = MagicMock(), MagicMock(), MagicMock()
+    journey.xml.prepare.return_value = {"reuse_requested": True}
+    journey.progress.extraction.read.return_value = []
+    work = Work(Lease(ORG, JOB, ITEM, TOKEN, 1, 1), "article", DOI_URL, 1)
+    with pytest.raises(AuthorizationDenied):
+        journey.process(work)
+    journey.dispatch.acquire.assert_not_called()
+    journey.progress.associations.derive.assert_not_called()
+    journey.progress.finish.assert_not_called()
+
+
+@pytest.mark.parametrize("existing", [False, True])
+def test_missing_or_unresolved_tooltip_reuse_never_runs_browser(existing: bool) -> None:
+    from emailmonitor.extraction.fixture import article_bytes
+    from emailmonitor.extraction.html import parse_article
+    from emailmonitor.progress.tooltip import TOOLTIP_URL, TooltipJourney
+    from test_associations import SETTINGS
+
+    progress, dispatch = MagicMock(), MagicMock()
+    progress.extraction.prepare.return_value = {"reuse_requested": True, "revision": 1}
+    observation = parse_article(SETTINGS, TOOLTIP_URL, article_bytes("tooltip.html"))
+    assert observation.status == "requires_browser"
+    progress.extraction.read.return_value = (
+        [{"article_url": TOOLTIP_URL, "observation": observation.model_dump(mode="json")}]
+        if existing
+        else []
+    )
+    work = Work(Lease(ORG, JOB, ITEM, TOKEN, 1, 1), "article", TOOLTIP_URL, 1)
+    with pytest.raises(AuthorizationDenied):
+        TooltipJourney(progress, dispatch).process(work)
+    progress.extraction.fixture.assert_not_called()
+    dispatch.acquire.assert_not_called()
+    progress.associations.derive.assert_not_called()
 
 
 def test_default_fresh_work_still_acquires_without_a_separate_request_read() -> None:

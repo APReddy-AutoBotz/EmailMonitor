@@ -29,7 +29,7 @@ def test_enabling_migration_is_narrow_and_forward_only() -> None:
 
 def function(source: str, name: str) -> str:
     match = re.search(
-        r"CREATE (?:OR REPLACE )?FUNCTION emailmonitor\." + name + r"\([^\n]+\).*?\$\$;",
+        r"CREATE (?:OR REPLACE )?FUNCTION emailmonitor\." + name + r"\([^\n]*\).*?\$\$;",
         source,
         re.S,
     )
@@ -69,6 +69,101 @@ def test_lineage_is_same_tenant_immutable_and_disabled_by_default() -> None:
         in SQL
     )
     assert not re.search(r"\bGRANT\s", SQL, re.I)
+
+
+def test_non_html_reuse_stays_refused_until_original_binding_is_supported() -> None:
+    guard = function(SQL, "guard_retained_reuse")
+    assert "source.observation->>'route'<>'html'" in guard
+    existing = (VERSIONS / "0018_authored_pdf.sql").read_text()
+    assert "j.state<>'running' OR NEW.observation->>'content_digest'" in existing
+    assert "'organization',NEW.organization_id,'job',NEW.job_id" in existing
+    assert "'organization',NEW.organization_id::text,'job',NEW.job_id::text" in existing
+    assert "a.observation->'binding'=jsonb_build_object(" in existing
+
+
+def test_bound_source_migration_only_narrows_the_existing_release_fence() -> None:
+    source = (VERSIONS / "0024_bound_reuse_proof.sql").read_text()
+    original = function(SQL, "retained_reuse_current")
+    narrowed = function(source, "retained_reuse_current")
+    added = (
+        "    AND CASE WHEN t.observation->>'route' IN ('pdf','article_xml')\n"
+        "     THEN emailmonitor.retained_reuse_bound_source(p_org,s.job_id,b.id,s.article_url)\n"
+        "     ELSE true END\n"
+    )
+    assert narrowed.replace(added, "") == original
+    proof = source.split("CREATE FUNCTION emailmonitor.retained_reuse_bound_source(", 1)[1]
+    for predicate in (
+        "i.organization_id=a.organization_id",
+        "i.job_id=a.job_id",
+        "i.id::text=a.observation->'binding'->>'item'",
+        "i.batch_id=b.id",
+        "i.inherited_job_id IS NULL",
+        "a.reused_from_job IS NULL",
+        "a.source_digest=a.observation->>'content_digest'",
+        "a.observation->>'acquisition_digest'=a.source_digest",
+        "a.observation->'provider'->>'source_id'=a.source_id",
+        "a.observation->'binding'=jsonb_build_object(",
+        "a.expires_at>clock_timestamp()",
+        "b.expires_at>clock_timestamp()",
+    ):
+        assert predicate in proof
+    assert "REVOKE ALL ON FUNCTION emailmonitor.retained_reuse_bound_source" in source
+    assert not re.search(r"\bGRANT\s", source, re.I)
+    assert "guard_article_observation" not in source
+    assert "guard_retained_reuse" not in source
+    assert "0024_bound_reuse_proof" in source
+    assert len(sqlparse.split(source)) == 6
+
+
+def test_staged_bound_adapter_keeps_ordinary_guards_and_does_not_enable_routes() -> None:
+    staged = (VERSIONS / "0025_staged_bound_reuse.sql").read_text()
+    prior_guard = (VERSIONS / "0019_retained_paper_identity.sql").read_text()
+    prior_binding = (VERSIONS / "0018_authored_pdf.sql").read_text()
+
+    def extract(source: str, name: str) -> str:
+        match = re.search(
+            r"CREATE OR REPLACE FUNCTION emailmonitor\." + name + r"\(.*?\$function\$\s*;",
+            source,
+            re.S,
+        )
+        assert match is not None
+        return match.group()
+
+    guard = extract(staged, "guard_article_observation")
+    guard = guard.replace(" reuse_bound boolean:=false;", "")
+    guard, count = re.subn(
+        r" -- BEGIN staged bound-reuse-only checks\.\n.*?"
+        r" -- END staged bound-reuse-only checks\.\n",
+        "",
+        guard,
+        flags=re.S,
+    )
+    assert count == 1
+    guard = guard.replace("(j.state<>'running' AND NOT reuse_bound)", "j.state<>'running'")
+    guard, count = re.subn(
+        r" OR \(NOT reuse_bound AND (NEW\.observation->'binding' IS DISTINCT FROM "
+        r"jsonb_build_object\(\n.*?'discovery_revision',NEW\.discovery_revision\))\)",
+        r" OR \1",
+        guard,
+        flags=re.S,
+    )
+    assert count == 2
+    assert guard == extract(prior_guard, "guard_article_observation")
+    assert "original.observation=NEW.observation" in staged
+    assert "original.source_digest=NEW.source_digest" in staged
+    assert "emailmonitor.association_parent_fence" in staged
+    assert "emailmonitor.retained_reuse_bound_source" in staged
+    assert "emailmonitor.human_work_tenant_allowed" in staged
+    added = """
+ OR (a.reused_from_job IS NOT NULL
+  AND emailmonitor.retained_reuse_current(p_org,a.job_id)
+  AND emailmonitor.retained_reuse_bound_source(p_org,a.reused_from_job,
+   a.reused_source_batch,a.article_url))"""
+    binding = extract(staged, "retained_article_binding")
+    assert binding.replace(added, "") == extract(prior_binding, "retained_article_binding")
+    assert "guard_retained_reuse" not in staged.split("SET ROLE", 1)[1]
+    assert not re.search(r"\bGRANT\s", staged, re.I)
+    assert len(sqlparse.split(staged)) == 5
 
 
 def test_source_privacy_fence_does_not_treat_policy_revocation_as_expiry() -> None:

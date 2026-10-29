@@ -4,9 +4,8 @@ from datetime import UTC, datetime, timedelta, timezone
 from uuid import UUID
 
 import pytest
-from pydantic import ValidationError
-
 from emailmonitor.associations.reuse_lineage import ReuseLineageDraft
+from pydantic import ValidationError
 
 
 def fields() -> dict[str, object]:

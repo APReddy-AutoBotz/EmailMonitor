@@ -12,6 +12,7 @@ from emailmonitor.extraction.html import ArticleObservation
 from emailmonitor.fetching.safety import FetchDenied
 from emailmonitor.jobs.ledger import Ledger
 from emailmonitor.jobs.models import JobRequest
+from emailmonitor.organizations.database import AuthorizationDenied
 from emailmonitor.organizations.roles import Capability
 from emailmonitor.progress.binding import bound
 from emailmonitor.progress.service import Progress, Work
@@ -55,6 +56,8 @@ class TooltipJourney:
                 None,
             )
             if existing is None:
+                if context.get("reuse_requested") is True:
+                    raise AuthorizationDenied()
                 # Keep the truthful unresolved static receipt even if the isolated
                 # browser later refuses or crashes. Never derive a fallback success.
                 existing = extraction.fixture(
@@ -65,6 +68,10 @@ class TooltipJourney:
                 # Recovery still needs current browser permission; committed evidence
                 # avoids repeating I/O, not the current tenant/policy/lease fences.
                 extraction.prepare(lease.organization, lease.job, work.url, browser=True)
+            elif context.get("reuse_requested") is True:
+                # An unresolved retained observation is not permission to run
+                # the browser and silently replace the requested reuse.
+                raise AuthorizationDenied()
             elif self._allow_browser(work):
                 if previous.status != "requires_browser":
                     raise FetchDenied("controlled_tooltip_observation_denied")

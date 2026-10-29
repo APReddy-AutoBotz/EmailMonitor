@@ -10,7 +10,7 @@ from emailmonitor.administration.admission import Admission
 from emailmonitor.associations.reuse_preparation import _SOURCE, prepare_reuse
 from emailmonitor.associations.service import Associations
 from emailmonitor.jobs.ledger import Ledger
-from emailmonitor.jobs.models import JobRequest, URLInput
+from emailmonitor.jobs.models import JobRequest, URLInput, canonical
 from emailmonitor.organizations.database import AuthorizationDenied
 from emailmonitor.organizations.roles import Capability
 from emailmonitor.runtime.database import ServiceDatabase
@@ -57,7 +57,7 @@ def materialize_draft(service: Associations, org: UUID, target_job: UUID, url: s
             )
             if existing is not None and existing["reused_source_batch"] is None:
                 raise HTTPException(409, "Existing observation has different lineage")
-            selected = (
+            selected_value = (
                 existing["reused_source_batch"]
                 if existing is not None
                 else c.execute(
@@ -79,10 +79,17 @@ ORDER BY a.observed_at DESC,b.id ASC LIMIT 1
                     },
                 ).scalar_one_or_none()
             )
-            if selected is None:
+            if selected_value is None:
                 raise HTTPException(409, "No current retained observation meets the cutoff")
+            selected = UUID(str(selected_value))
             candidate = prepare_reuse(c, service, org, target_job, url, selected)
             row = c.execute(_SOURCE, {"org": org, "batch": selected, "url": url}).mappings().one()
+            if (
+                canonical(row["observation"]) != candidate.evidence.document
+                or row["source_digest"] != candidate.evidence.source_digest
+                or row["job_id"] != candidate.evidence.source_job
+            ):
+                raise AuthorizationDenied()
             if existing is not None:
                 if (
                     existing["reused_from_job"] != candidate.lineage.source_job_id

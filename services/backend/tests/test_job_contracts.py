@@ -7,14 +7,13 @@ from uuid import UUID, uuid4
 
 import jsonschema
 import pytest
-from pydantic import ValidationError
-from sqlalchemy import Connection
-from sqlalchemy.exc import DBAPIError
-
 from emailmonitor.jobs.broker import FixtureWorkerConfig
 from emailmonitor.jobs.ledger import Ledger, Work
 from emailmonitor.jobs.models import TERMINAL, TRANSITIONS, JobRequest, effect_key
 from emailmonitor.organizations.database import AuthorizationDenied
+from pydantic import ValidationError
+from sqlalchemy import Connection
+from sqlalchemy.exc import DBAPIError
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -81,10 +80,9 @@ def test_reuse_choice_requires_explicit_offset_and_valid_cutoff(choice: object) 
 
 
 def test_unavailable_reuse_refuses_after_authorization_before_job_writes() -> None:
-    from fastapi import HTTPException
-
     from emailmonitor.config import Settings
     from emailmonitor.organizations.roles import Capability
+    from fastapi import HTTPException
 
     database, connection = MagicMock(), MagicMock()
     database.tenant.return_value.__enter__.return_value = (connection, MagicMock())
@@ -122,9 +120,8 @@ def test_unavailable_reuse_does_not_override_authorization_refusal() -> None:
 
 @pytest.mark.parametrize("environment", ["test", "production"])
 def test_supported_reuse_refuses_without_synthetic_fixture_mode(environment: str) -> None:
-    from fastapi import HTTPException
-
     from emailmonitor.config import Settings
+    from fastapi import HTTPException
 
     database, connection = MagicMock(), MagicMock()
     database.tenant.return_value.__enter__.return_value = (connection, MagicMock())

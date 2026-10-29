@@ -3,9 +3,8 @@
 from typing import cast
 from uuid import UUID
 
-from test_tenant_foundation import FixtureExchange, Scenario
-
 from emailmonitor.identity.foundation import Foundation
+from test_tenant_foundation import FixtureExchange, Scenario
 
 
 def test_scenario_repr_omits_private_test_values() -> None:

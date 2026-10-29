@@ -68,7 +68,8 @@ class Extraction:
         ):
             raise AuthorizationDenied()
         proposal = PolicyProposal.model_validate(policy["policy"])
-        if JobRequest.model_validate(parent["request"]).purpose != proposal.purpose:
+        request = JobRequest.model_validate(parent["request"])
+        if request.purpose != proposal.purpose:
             raise AuthorizationDenied()
         if proposal.retention.contact_days <= 0:
             raise HTTPException(409, "Source does not permit observation retention")
@@ -83,7 +84,10 @@ class Extraction:
                 execution_mode="fixture",
             ),
         )
-        options = JobRequest.model_validate(parent["request"]).options
+        options = request.options
+        # Internal worker context only: an explicit retained-evidence choice
+        # must never silently turn into another source acquisition.
+        row["reuse_requested"] = request.reuse is not None
         if url.endswith(".pdf") and not options.allow_pdf:
             raise AuthorizationDenied()
         if browser and (

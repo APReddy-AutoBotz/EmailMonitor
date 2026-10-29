@@ -7,14 +7,6 @@ from dataclasses import replace
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import text
-from sqlalchemy.exc import DBAPIError
-from test_association_tenant import URL, prepared
-from test_durable_jobs import SETTINGS
-from test_job_contracts import request_body
-from test_tenant_foundation import Scenario
-from test_tenant_foundation import scenario as scenario
-
 from emailmonitor.administration.admission import Admission
 from emailmonitor.associations.reuse_materialization import materialize_draft
 from emailmonitor.associations.reuse_preparation import prepare_reuse
@@ -23,8 +15,15 @@ from emailmonitor.discovery.service import Discovery
 from emailmonitor.jobs.ledger import Ledger
 from emailmonitor.lifecycle.models import DeletionRequest
 from emailmonitor.lifecycle.service import Lifecycle
-from emailmonitor.organizations.database import AuthorizationDenied, Database
+from emailmonitor.organizations.database import AuthorizationDenied, Database, TenantContext
 from emailmonitor.organizations.roles import Capability
+from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
+from test_association_tenant import URL, prepared
+from test_durable_jobs import SETTINGS
+from test_job_contracts import request_body
+from test_tenant_foundation import Scenario
+from test_tenant_foundation import scenario as scenario
 
 
 def test_actual_reuse_schema_preserves_runtime_grants(scenario: Scenario) -> None:
@@ -40,7 +39,7 @@ def test_actual_reuse_schema_preserves_runtime_grants(scenario: Scenario) -> Non
             {"org": org, "job": job, "url": URL},
         ).one()
         assert tuple(row) == (None, None, None)
-        names = set(
+        names: set[str] = set(
             c.execute(
                 text(
                     "SELECT conname FROM pg_constraint "
@@ -75,9 +74,10 @@ def target_request_for_sql_guard_test(
         "input": {"type": "url", "url": url},
         "reuse": {"mode": "verified_retained", "fresh_since": fresh_since},
     }
-    # Exercise the runtime SQL boundary directly; the public API continues to
-    # refuse reuse and the hard disabled constraint remains present throughout.
+    # Exercise the runtime SQL boundary directly; this does not bypass any
+    # database predicate or provide a service identity.
     with service.database.tenant(service.token, org, Capability.ACQUIRE_SOURCE) as (c, ctx):
+        assert isinstance(ctx, TenantContext)
         c.execute(
             text(
                 "INSERT INTO emailmonitor.jobs (organization_id,id,created_by,kind,request,state) "
@@ -109,7 +109,7 @@ def test_actual_runtime_lineage_forgery_refuses_before_any_target_copy(
     org = scenario.organizations[0]
     if mutation == "valid_but_disabled":
         with service.database.tenant(service.token, org, Capability.READ_ORGANIZATION) as (c, _):
-            disabled = c.execute(
+            disabled: bool = c.execute(
                 text(
                     "SELECT EXISTS(SELECT 1 FROM pg_constraint "
                     "WHERE conrelid='emailmonitor.article_observations'::regclass "
@@ -144,7 +144,7 @@ def test_actual_runtime_lineage_forgery_refuses_before_any_target_copy(
             .one()
         )
         target_row = Ledger._lock(c, org, target)
-        checkpoint = c.execute(
+        checkpoint: int = c.execute(
             text(
                 "SELECT revision FROM emailmonitor.discovery "
                 "WHERE organization_id=:org AND job_id=:job"

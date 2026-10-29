@@ -7,6 +7,15 @@ roles or synthetic state. Local collection/skips are not service acceptance.
 from uuid import UUID, uuid4
 
 import pytest
+from emailmonitor.associations.reuse_materialization import materialize_draft
+from emailmonitor.associations.service import Associations
+from emailmonitor.discovery.service import Discovery
+from emailmonitor.jobs.ledger import Ledger
+from emailmonitor.jobs.models import JobRequest
+from emailmonitor.organizations.database import AuthorizationDenied
+from emailmonitor.organizations.roles import Capability
+from emailmonitor.progress.service import Progress
+from emailmonitor.runtime.authority import ServiceWork
 from sqlalchemy import text
 from test_association_tenant import URL
 from test_durable_jobs import SETTINGS
@@ -17,26 +26,13 @@ from test_service_authority_tenant import _service_ci_guard as _service_ci_guard
 from test_service_authority_tenant import service_case as service_case
 from test_tenant_foundation import scenario as scenario
 
-from emailmonitor.associations.reuse_materialization import materialize_draft
-from emailmonitor.associations.service import Associations
-from emailmonitor.discovery.service import Discovery
-from emailmonitor.jobs.ledger import Ledger
-from emailmonitor.jobs.models import JobRequest
-from emailmonitor.organizations.database import AuthorizationDenied
-from emailmonitor.organizations.roles import Capability
-from emailmonitor.progress.service import Progress
-from emailmonitor.runtime.authority import ServiceWork
 
-
-def test_service_worker_reads_only_its_target_and_never_acquires_fresh_bytes(
-    service_case: ServiceCase, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    case = service_case
+def prepare_service_reuse(case: ServiceCase) -> tuple[UUID, UUID]:
     org, source = case.scope.organization, case.scope.resource
     drain(case.progress, org, source)
     human = Associations(case.progress.database, case.progress.token, SETTINGS)
     with human.database.tenant(human.token, org, Capability.READ_ORGANIZATION) as (c, _):
-        source_batch = c.execute(
+        source_batch: UUID = c.execute(
             text(
                 "SELECT id FROM emailmonitor.association_batches "
                 "WHERE organization_id=:org AND job_id=:job AND article_url=:url"
@@ -62,6 +58,17 @@ def test_service_worker_reads_only_its_target_and_never_acquires_fresh_bytes(
             ),
             {"org": org, "principal": case.principal, "job": target},
         )
+    return target, source_batch
+
+
+def test_service_worker_reads_only_its_target_and_never_acquires_fresh_bytes(
+    service_case: ServiceCase, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    case = service_case
+    org, source = case.scope.organization, case.scope.resource
+    target, source_batch = prepare_service_reuse(case)
+    human = Associations(case.progress.database, case.progress.token, SETTINGS)
+    owner = Progress(human.database, human.token, SETTINGS)
     scope = ServiceWork(organization=org, resource=target, purpose="extraction", generation=1)
     worker = Progress(case.database, scope, SETTINGS)
     with case.database.tenant(scope, org, Capability.READ_ORGANIZATION) as (c, _):

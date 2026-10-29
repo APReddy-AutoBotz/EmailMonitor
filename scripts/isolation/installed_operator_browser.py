@@ -609,6 +609,69 @@ async def main() -> None:
                 await expect(
                     outcomes.get_by_role("row").nth(1).locator("td:nth-child(2), td:nth-child(3)")
                 ).to_have_text(["no contact", "no contact"])
+                if setup.get("retained_reuse") is True:
+                    await activate(
+                        page, page.get_by_role("button", name="New extraction", exact=True)
+                    )
+                    await activate(page, page.get_by_role("button", name="URL", exact=True))
+                    await type_text(
+                        page,
+                        page.get_by_label("Search-results or article URL", exact=True),
+                        "https://synthetic.publisher.example/article-a.html",
+                    )
+                    await activate(
+                        page, page.get_by_label("Request retained observation reuse", exact=True)
+                    )
+                    cutoff = page.get_by_label("Reuse freshness cutoff UTC", exact=True)
+                    await focus(page, cutoff)
+                    # Native datetime controls have locale-dependent keyboard segments;
+                    # Playwright's native input action emits the normal input/change events.
+                    await cutoff.fill("2000-01-01T00:00")
+                    await activate(
+                        page,
+                        page.get_by_role("button", name="Create and validate plan", exact=True),
+                    )
+                    await page.get_by_role("region", name="Server source plan").wait_for()
+                    await activate(
+                        page, page.get_by_role("button", name="Launch extraction", exact=True)
+                    )
+                    checkpoint("url_worker")
+                    async with asyncio.timeout(30):
+                        await page.get_by_text("completed", exact=True).wait_for(
+                            state="visible", timeout=30000
+                        )
+                    target_outcomes = page.get_by_role(
+                        "table", name="Actual article outcomes and failures"
+                    )
+                    await target_outcomes.get_by_text("Reused observation", exact=False).wait_for()
+                    await expect(
+                        target_outcomes.get_by_role("row").nth(1).locator("td:nth-child(2)")
+                    ).to_have_text("needs review")
+                    await activate(
+                        page,
+                        page.get_by_role("button", name="Review queue for this job", exact=True),
+                    )
+                    await page.get_by_role(
+                        "button", name="Evidence and review", exact=True
+                    ).first.wait_for()
+                    await activate(
+                        page,
+                        page.get_by_role(
+                            "button", name="View accepted results for this selection", exact=True
+                        ),
+                    )
+                    await activate(
+                        page, page.get_by_role("button", name="Export this selection", exact=True)
+                    )
+                    await activate(
+                        page,
+                        page.get_by_role(
+                            "button", name="Preview eligible export counts", exact=True
+                        ),
+                    )
+                    preview = page.get_by_role("region", name="Current export preview")
+                    await preview.wait_for()
+                    await preview.get_by_text(re.compile(r"^0 contacts; ")).wait_for()
             checkpoint("readonly_role")
             organization = page.get_by_role("combobox", name="Active organization", exact=True)
             values = await organization.locator("option").evaluate_all(

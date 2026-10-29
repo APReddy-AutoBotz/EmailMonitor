@@ -177,7 +177,7 @@ class ProviderJourney:
                 if work.url in DurableState.model_validate(row["checkpoint"]).pages:
                     return self.progress.finish(work)
             if work.kind == "article":
-                self.xml.prepare(lease.organization, lease.job, work.url)
+                context = self.xml.prepare(lease.organization, lease.job, work.url)
                 existing = next(
                     (
                         r
@@ -186,6 +186,8 @@ class ProviderJourney:
                     ),
                     None,
                 )
+                if existing is None and context.get("reuse_requested") is True:
+                    raise AuthorizationDenied()
             if existing is None:
                 boundary, registry = self.boundary(work)
                 acquired = self.dispatch.acquire(

@@ -30,13 +30,9 @@ def plan_input(request: JobRequest) -> InputPlan:
 
     value = request.input
     if request.reuse is not None:
-        if (
-            not isinstance(value, KeywordInput)
-            and not any(request.filters.model_dump(exclude_none=True).values())
-            and value.source_id in (None, "synthetic-publisher")
-            and value.url
-            in {ORIGIN + "/article-a.html", ORIGIN + "/article-b.html", ORIGIN + "/no-contact.html"}
-        ):
+        from emailmonitor.associations.reuse_adapters import retained_adapter
+
+        if retained_adapter(request) == "html" and not isinstance(value, KeywordInput):
             return InputPlan("article", "retained_reuse_authored", value.url)
         return InputPlan("unsupported", "retained_reuse_unavailable")
     if any(request.filters.model_dump(exclude_none=True).values()):

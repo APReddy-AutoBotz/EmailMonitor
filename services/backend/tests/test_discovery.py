@@ -4,9 +4,6 @@ import shlex
 from pathlib import Path
 
 import pytest
-from pydantic import ValidationError
-from test_job_contracts import request_body
-
 from emailmonitor.config import Settings
 from emailmonitor.discovery.fixture import fixture_bytes
 from emailmonitor.discovery.planning import ORIGIN, plan_input
@@ -14,6 +11,8 @@ from emailmonitor.discovery.search import SearchPage, parse_search
 from emailmonitor.discovery.state import DiscoveryState, advance
 from emailmonitor.fetching.safety import FetchDenied
 from emailmonitor.jobs.models import JobRequest
+from pydantic import ValidationError
+from test_job_contracts import request_body
 
 SETTINGS = Settings(environment="test", fixture_mode=True)
 ROOT = Path(__file__).resolve().parents[3]
@@ -275,7 +274,6 @@ def test_discovery_schemas_examples_and_runtime_output_parity() -> None:
     import json
 
     import jsonschema
-
     from emailmonitor.discovery.broker import DiscoveryEvent
 
     for name, model in (
@@ -329,7 +327,6 @@ def test_event_schema_matches_canonical_uuid_runtime_restriction(invalid: str) -
     import json
 
     import jsonschema
-
     from emailmonitor.discovery.broker import DiscoveryEvent
 
     body = json.loads((ROOT / "contracts/examples/discovery-event.json").read_text())
@@ -368,9 +365,8 @@ def test_only_exact_policy_sql_fence_is_classified_as_denial(
 ) -> None:
     import importlib
 
-    from sqlalchemy.exc import DBAPIError
-
     from emailmonitor.discovery.service import policy_fence_denied
+    from sqlalchemy.exc import DBAPIError
 
     original = importlib.import_module("pg8000.dbapi").ProgrammingError({"C": code, "M": message})
     error = DBAPIError(None, None, original, False)

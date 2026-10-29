@@ -15,9 +15,6 @@ import pytest
 from api_client import APIClient
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
-from sqlalchemy import create_engine, text
-from sqlalchemy.exc import SQLAlchemyError
-
 from emailmonitor.api import create_app
 from emailmonitor.config import Settings
 from emailmonitor.identity.foundation import COOKIE, Foundation
@@ -29,6 +26,8 @@ from emailmonitor.organizations.database import (
     digest,
 )
 from emailmonitor.organizations.roles import Capability
+from sqlalchemy import create_engine, text
+from sqlalchemy.exc import SQLAlchemyError
 
 ISSUER = "https://identity.example.test"
 ORIGIN = "https://app.example.test"

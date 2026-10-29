@@ -4,12 +4,12 @@ from unittest.mock import MagicMock
 from uuid import UUID
 
 import pytest
-from fastapi import HTTPException
-from test_durable_jobs import SETTINGS
-
 from emailmonitor.associations import reuse_materialization
 from emailmonitor.associations import service as associations
 from emailmonitor.jobs import api
+from fastapi import HTTPException
+from fastapi.routing import APIRoute
+from test_durable_jobs import SETTINGS
 
 ORG, JOB = UUID(int=1), UUID(int=2)
 URL = "https://synthetic.publisher.example/article-a.html"
@@ -33,7 +33,9 @@ def test_plan_route_materializes_only_explicit_reuse(
     monkeypatch.setattr(reuse_materialization, "materialize_draft", materialize)
     router = api.job_router(MagicMock(), lambda _: "token", lambda _: "session", SETTINGS)
     endpoint = next(
-        route.endpoint for route in router.routes if route.path.endswith("/{job_id}/plan")
+        route.endpoint
+        for route in router.routes
+        if isinstance(route, APIRoute) and route.path.endswith("/{job_id}/plan")
     )
     result = endpoint(MagicMock(), ORG, JOB, api.Revision(expected_revision=1))
     assert result == planned
@@ -54,7 +56,9 @@ def test_materialization_refusal_propagates_without_returning_fresh_plan(
     monkeypatch.setattr(reuse_materialization, "materialize_draft", MagicMock(side_effect=denied))
     router = api.job_router(MagicMock(), lambda _: "token", lambda _: "session", SETTINGS)
     endpoint = next(
-        route.endpoint for route in router.routes if route.path.endswith("/{job_id}/plan")
+        route.endpoint
+        for route in router.routes
+        if isinstance(route, APIRoute) and route.path.endswith("/{job_id}/plan")
     )
     with pytest.raises(HTTPException) as caught:
         endpoint(MagicMock(), ORG, JOB, api.Revision(expected_revision=1))

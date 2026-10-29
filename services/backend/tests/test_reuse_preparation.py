@@ -1,18 +1,19 @@
 """Owned synthetic preparation fakes; these do not exercise PostgreSQL or grants."""
 
 from datetime import UTC, datetime, timedelta
+from typing import cast
 from unittest.mock import MagicMock
 from uuid import UUID
 
 import pytest
-from test_associations import ORG, ORIGIN, SETTINGS
-from test_job_contracts import request_body
-
 from emailmonitor.associations.reuse_preparation import prepare_reuse
 from emailmonitor.extraction.fixture import article_bytes
 from emailmonitor.extraction.html import parse_article
 from emailmonitor.jobs.ledger import Ledger
+from emailmonitor.jobs.models import canonical
 from emailmonitor.organizations.database import AuthorizationDenied
+from test_associations import ORG, ORIGIN, SETTINGS
+from test_job_contracts import request_body
 
 SOURCE, TARGET, BATCH = UUID(int=2), UUID(int=3), UUID(int=4)
 NOW = datetime(2026, 10, 2, tzinfo=UTC)
@@ -36,6 +37,7 @@ def setup(monkeypatch: pytest.MonkeyPatch) -> tuple[MagicMock, MagicMock, dict[s
         "observed_at": NOW - timedelta(hours=1),
         "expires_at": NOW + timedelta(days=1),
         "batch_expires_at": NOW + timedelta(days=1),
+        "source_parent_job": None,
     }
     request = {
         **request_body(),
@@ -54,6 +56,8 @@ def setup(monkeypatch: pytest.MonkeyPatch) -> tuple[MagicMock, MagicMock, dict[s
         result = MagicMock()
         if "clock_timestamp()" in str(statement):
             result.scalar_one.return_value = NOW
+        elif "SELECT id FROM emailmonitor.execution_items" in str(statement):
+            result.scalar_one_or_none.return_value = UUID(int=3)
         else:
             result.mappings.return_value.first.return_value = row.copy()
         return result
@@ -71,6 +75,7 @@ def test_prepares_distinct_unaccepted_draft_and_deterministic_replay(
     assert first == second
     assert first.lineage.source_job_id == SOURCE and first.lineage.target_job_id == TARGET
     assert first.lineage.observed_at == row["observed_at"]
+    assert first.evidence.source_job == SOURCE and first.evidence.source_item is None
     assert first.bundle.associations[0].state == "needs_review"
     assert first.bundle.associations[0].revision == 1
     assert first.bundle.candidates[0].address.raw_address not in repr(first)
@@ -84,7 +89,8 @@ def test_prepares_distinct_unaccepted_draft_and_deterministic_replay(
 
 
 @pytest.mark.parametrize(
-    "kind", ["same_job", "wrong_tenant", "wrong_source", "stale", "expired", "url", "malformed"]
+    "kind",
+    ["same_job", "wrong_tenant", "wrong_source", "stale", "expired", "url", "malformed", "chain"],
 )
 def test_invalid_source_does_not_prepare(monkeypatch: pytest.MonkeyPatch, kind: str) -> None:
     connection, service, row = setup(monkeypatch)
@@ -100,6 +106,8 @@ def test_invalid_source_does_not_prepare(monkeypatch: pytest.MonkeyPatch, kind: 
         row["expires_at"] = NOW
     elif kind == "url":
         row["observation"] = {**row["observation"], "url": ORIGIN + "article-b.html"}  # type: ignore[dict-item]
+    elif kind == "chain":
+        row["source_parent_job"] = UUID(int=99)
     else:
         row["observation"] = {"route": "html"}
     with pytest.raises(AuthorizationDenied):
@@ -122,7 +130,7 @@ def test_late_visibility_change_is_refused(monkeypatch: pytest.MonkeyPatch) -> N
 
     def execute(statement: object, *args: object) -> MagicMock:
         nonlocal reads
-        result = original(statement, *args)
+        result = cast(MagicMock, original(statement, *args))
         if "clock_timestamp()" not in str(statement):
             reads += 1
             if reads == 2:
@@ -141,7 +149,7 @@ def test_expiry_during_preparation_is_refused(monkeypatch: pytest.MonkeyPatch) -
 
     def execute(statement: object, *args: object) -> MagicMock:
         nonlocal clocks
-        result = original(statement, *args)
+        result = cast(MagicMock, original(statement, *args))
         if "clock_timestamp()" in str(statement):
             clocks += 1
             if clocks == 2:
@@ -179,12 +187,13 @@ def test_no_contact_observation_stays_no_contact(monkeypatch: pytest.MonkeyPatch
 def test_bound_source_documents_keep_original_job_binding(
     monkeypatch: pytest.MonkeyPatch, route: str
 ) -> None:
+    from emailmonitor.extraction.pdf_retained import PdfBinding, RetainedPdf, retain_pdf
+    from emailmonitor.extraction.xml_retained import RetainedXml
     from test_pdf_extraction import parse as parse_pdf
     from test_xml_pipeline import retained as retained_xml
 
-    from emailmonitor.extraction.pdf_retained import PdfBinding, retain_pdf
-
     connection, service, row = setup(monkeypatch)
+    source: RetainedPdf | RetainedXml
     if route == "pdf":
         source = retain_pdf(
             parse_pdf("article-a.pdf"),
@@ -212,9 +221,113 @@ def test_bound_source_documents_keep_original_job_binding(
     prepared = prepare_reuse(connection, service, ORG, TARGET, source.url, BATCH)
     assert prepared.lineage.source_job_id == SOURCE
     assert prepared.lineage.content_digest == source.content_digest
+    assert prepared.evidence.source_job == SOURCE
+    assert prepared.evidence.source_item == source.binding.item
+    assert prepared.evidence.document == canonical(source.model_dump(mode="json"))
     assert all(a.state != "accepted" for a in prepared.bundle.associations)
     raw = source.model_dump(mode="json")
     raw["binding"]["job"] = str(UUID(int=77))
     row["observation"] = raw
+    with pytest.raises(AuthorizationDenied):
+        prepare_reuse(connection, service, ORG, TARGET, source.url, BATCH)
+
+
+@pytest.mark.parametrize("route", ["pdf", "xml"])
+@pytest.mark.parametrize("failure", ["wrong_item", "missing_item", "late_item", "wrong_digest"])
+def test_bound_source_requires_exact_completed_original_item(
+    monkeypatch: pytest.MonkeyPatch, route: str, failure: str
+) -> None:
+    from emailmonitor.extraction.pdf_retained import PdfBinding, RetainedPdf, retain_pdf
+    from emailmonitor.extraction.xml_retained import RetainedXml
+    from test_pdf_extraction import parse as parse_pdf
+    from test_xml_pipeline import retained as retained_xml
+
+    connection, service, row = setup(monkeypatch)
+    source: RetainedPdf | RetainedXml
+    if route == "pdf":
+        source = retain_pdf(
+            parse_pdf("article-a.pdf"),
+            PdfBinding(
+                organization=ORG,
+                job=SOURCE,
+                item=UUID(int=3),
+                generation=1,
+                deletion_generation=1,
+                policy_version=1,
+                discovery_revision=1,
+            ),
+            permit_excerpts=True,
+        )
+        row["source_digest"] = source.content_digest
+    else:
+        xml = retained_xml()
+        source = xml.model_copy(
+            update={"binding": xml.binding.model_copy(update={"organization": ORG})}
+        )
+        row["source_digest"] = source.acquisition_digest
+    row["article_url"] = source.url
+    row["observation"] = source.model_dump(mode="json")
+    if failure == "wrong_item":
+        row["observation"]["binding"]["item"] = str(UUID(int=99))  # type: ignore[index]
+    elif failure == "wrong_digest":
+        row["source_digest"] = "a" * 64
+    elif failure in {"missing_item", "late_item"}:
+        original = connection.execute.side_effect
+        seen = 0
+
+        def execute(statement: object, *args: object) -> MagicMock:
+            nonlocal seen
+            result = cast(MagicMock, original(statement, *args))
+            if "SELECT id FROM emailmonitor.execution_items" in str(statement):
+                seen += 1
+                if failure == "missing_item" or seen == 2:
+                    result.scalar_one_or_none.return_value = None
+            return result
+
+        connection.execute.side_effect = execute
+    with pytest.raises(AuthorizationDenied):
+        prepare_reuse(connection, service, ORG, TARGET, source.url, BATCH)
+
+
+def test_controlled_xml_keeps_and_checks_original_provider_provenance(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from test_provider_journey import registry, retained
+
+    connection, service, row = setup(monkeypatch)
+    original = retained(registry()[0])
+    source = original.model_copy(
+        update={"binding": original.binding.model_copy(update={"organization": ORG})}
+    )
+    row["article_url"] = source.url
+    row["source_digest"] = source.acquisition_digest
+    row["observation"] = source.model_dump(mode="json")
+    prepared = prepare_reuse(connection, service, ORG, TARGET, source.url, BATCH)
+    assert prepared.evidence.document == canonical(source.model_dump(mode="json"))
+    document = source.model_dump(mode="json")
+    assert isinstance(document["provider"], dict)
+    document["provider"]["source_id"] = "different-source"
+    row["observation"] = document
+    with pytest.raises(AuthorizationDenied):
+        prepare_reuse(connection, service, ORG, TARGET, source.url, BATCH)
+
+
+def test_partial_xml_remains_unavailable_without_fresh_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from test_xml_pipeline import retained
+
+    connection, service, row = setup(monkeypatch)
+    original = retained()
+    source = original.model_copy(
+        update={
+            "binding": original.binding.model_copy(update={"organization": ORG}),
+            "status": "partial",
+            "reasons": ["unsupported_affiliation"],
+        }
+    )
+    row["article_url"] = source.url
+    row["source_digest"] = source.acquisition_digest
+    row["observation"] = source.model_dump(mode="json")
     with pytest.raises(AuthorizationDenied):
         prepare_reuse(connection, service, ORG, TARGET, source.url, BATCH)

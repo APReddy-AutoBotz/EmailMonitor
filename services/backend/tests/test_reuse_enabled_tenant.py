@@ -4,6 +4,14 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
+from emailmonitor.associations.reuse_materialization import materialize_draft
+from emailmonitor.lifecycle.models import DeletionRequest, SuppressionCreate
+from emailmonitor.lifecycle.service import Lifecycle
+from emailmonitor.organizations.database import AuthorizationDenied
+from emailmonitor.organizations.roles import Capability
+from emailmonitor.progress.service import Progress
+from emailmonitor.results.models import Filters
+from emailmonitor.results.service import Results
 from fastapi import HTTPException
 from sqlalchemy import create_engine, text
 from test_association_tenant import URL, prepared, review_request
@@ -17,15 +25,6 @@ from test_retained_reuse_lifecycle_tenant import target_request_for_sql_guard_te
 from test_source_foundation import source_path
 from test_tenant_foundation import ORIGIN, Scenario
 from test_tenant_foundation import scenario as scenario
-
-from emailmonitor.associations.reuse_materialization import materialize_draft
-from emailmonitor.lifecycle.models import DeletionRequest, SuppressionCreate
-from emailmonitor.lifecycle.service import Lifecycle
-from emailmonitor.organizations.database import AuthorizationDenied
-from emailmonitor.organizations.roles import Capability
-from emailmonitor.progress.service import Progress
-from emailmonitor.results.models import Filters
-from emailmonitor.results.service import Results
 
 
 def test_actual_reuse_independent_review_replay_and_source_deletion(scenario: Scenario) -> None:
@@ -47,7 +46,7 @@ def test_actual_reuse_independent_review_replay_and_source_deletion(scenario: Sc
     assert service.detail(org, target_batch).associations[0].state == "needs_review"
     assert service.detail(org, source_batch).associations[0].state == "rejected"
     with service.database.tenant(service.token, org, Capability.READ_ORGANIZATION) as (c, _):
-        count = c.execute(
+        count: int = c.execute(
             text(
                 "SELECT count(*) FROM emailmonitor.audit_events WHERE organization_id=:org "
                 "AND resource_id=:job AND action='extraction.retained_reused'"
@@ -96,7 +95,7 @@ def test_actual_bounded_source_purge_resumes_after_ten_targets(scenario: Scenari
     admin = create_engine(scenario.admin_url, hide_parameters=True)
     try:
         with admin.connect() as c:
-            remaining = c.execute(
+            remaining: int = c.execute(
                 text(
                     "SELECT count(*) FROM emailmonitor.article_observations "
                     "WHERE organization_id=:org AND reused_from_job=:job"

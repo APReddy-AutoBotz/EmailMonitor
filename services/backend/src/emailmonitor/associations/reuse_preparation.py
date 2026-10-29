@@ -15,9 +15,25 @@ from emailmonitor.associations.service import Associations
 from emailmonitor.extraction.html import ArticleObservation
 from emailmonitor.extraction.pdf_retained import RetainedPdf
 from emailmonitor.extraction.xml_retained import RetainedXml
-from emailmonitor.jobs.ledger import Ledger, canonical
-from emailmonitor.jobs.models import JobRequest
+from emailmonitor.jobs.ledger import Ledger
+from emailmonitor.jobs.models import JobRequest, canonical
 from emailmonitor.organizations.database import AuthorizationDenied
+
+
+@dataclass(frozen=True)
+class OriginalRetainedEvidence:
+    """Exact source evidence, not a target authorization or a new parse.
+
+    XML/PDF retain the source execution item in their original parser binding.
+    HTML has no parser-bound item. The serialized document remains the original
+    JSON data; a later target scope must never rewrite that source binding.
+    """
+
+    route: str
+    source_job: UUID
+    source_item: UUID | None
+    source_digest: str
+    document: str = field(repr=False)
 
 
 @dataclass(frozen=True)
@@ -25,6 +41,7 @@ class PreparedReuse:
     """A proposal for the caller's current transaction, never a reusable grant."""
 
     lineage: ReuseLineageDraft = field(repr=False)
+    evidence: OriginalRetainedEvidence = field(repr=False)
     bundle: Bundle = field(repr=False)
     input_digest: str = field(repr=False)
 
@@ -32,7 +49,8 @@ class PreparedReuse:
 _SOURCE = text("""
 SELECT a.organization_id,a.job_id,a.article_url,a.revision,a.source_id,a.policy_version,
  a.generation,a.deletion_generation,a.discovery_revision,a.source_digest,a.observation,
- a.observed_at,a.expires_at,b.expires_at AS batch_expires_at
+ a.observed_at,a.expires_at,b.expires_at AS batch_expires_at,
+ a.reused_from_job AS source_parent_job
 FROM emailmonitor.association_batches b JOIN emailmonitor.article_observations a
  ON a.organization_id=b.organization_id AND a.job_id=b.job_id
  AND a.article_url=b.article_url AND a.revision=b.source_revision
@@ -40,6 +58,17 @@ FROM emailmonitor.association_batches b JOIN emailmonitor.article_observations a
  AND a.deletion_generation=b.deletion_generation
 WHERE b.organization_id=:org AND b.id=:batch AND a.article_url=:url
 FOR SHARE OF a
+""")
+
+# The retained XML/PDF binding identifies the *original* execution item. Never
+# replace it with the target item or infer it from a parser result. This query
+# runs only for bound adapters and uses the same human-scoped transaction.
+_SOURCE_ITEM = text("""
+SELECT id FROM emailmonitor.execution_items
+WHERE organization_id=:org AND job_id=:job AND id=:item AND input_url=:url
+ AND work_kind='article' AND inherited_job_id IS NULL AND inherited_item_id IS NULL
+ AND batch_id=:batch AND state IN ('succeeded','needs_review','no_contact')
+FOR SHARE NOWAIT
 """)
 
 
@@ -61,7 +90,12 @@ def prepare_reuse(
     service._lock(c, org, source_batch)
     params = {"org": org, "batch": source_batch, "url": url}
     first = c.execute(_SOURCE, params).mappings().first()
-    if first is None or first["organization_id"] != org or first["job_id"] == target_job:
+    if (
+        first is None
+        or first["organization_id"] != org
+        or first["job_id"] == target_job
+        or first["source_parent_job"] is not None
+    ):
         raise AuthorizationDenied()
     if first["source_id"] != target_scope["source_id"] or first["policy_version"] != int(
         str(target_scope["policy_version"])
@@ -83,6 +117,10 @@ def prepare_reuse(
         raise AuthorizationDenied() from None
     if observed.url != url:
         raise AuthorizationDenied()
+    if observed.status not in {"observed", "no_contact"}:
+        # Partial, unsupported and unresolved observations cannot establish a
+        # complete retained candidate or authorize a subsequent acquisition.
+        raise AuthorizationDenied()
     if isinstance(observed, (RetainedPdf, RetainedXml)) and (
         observed.binding.organization != org
         or observed.binding.job != first["job_id"]
@@ -92,11 +130,28 @@ def prepare_reuse(
         or observed.binding.discovery_revision != first["discovery_revision"]
     ):
         raise AuthorizationDenied()
+    if isinstance(observed, (RetainedPdf, RetainedXml)):
+        item_params = {
+            "org": org,
+            "job": first["job_id"],
+            "item": observed.binding.item,
+            "url": url,
+            "batch": source_batch,
+        }
+        if c.execute(_SOURCE_ITEM, item_params).scalar_one_or_none() != observed.binding.item:
+            raise AuthorizationDenied()
+        if isinstance(observed, RetainedXml) and observed.provider is not None:
+            if observed.provider.source_id != first["source_id"]:
+                raise AuthorizationDenied()
     if observed.route == "browser_dom":
         service.extraction._scope(c, org, target_job, url, browser=True)
     acquisition = (
         first["source_digest"] if isinstance(observed, RetainedPdf) else observed.acquisition_digest
     )
+    if acquisition != first["source_digest"] or (
+        isinstance(observed, RetainedPdf) and observed.content_digest != first["source_digest"]
+    ):
+        raise AuthorizationDenied()
     now: datetime = c.execute(text("SELECT clock_timestamp()")).scalar_one()
     try:
         lineage = ReuseLineageDraft.model_validate(
@@ -126,6 +181,10 @@ def prepare_reuse(
     service._lock(c, org, source_batch)
     if c.execute(_SOURCE, params).mappings().first() != first:
         raise AuthorizationDenied()
+    if isinstance(observed, (RetainedPdf, RetainedXml)) and (
+        c.execute(_SOURCE_ITEM, item_params).scalar_one_or_none() != observed.binding.item
+    ):
+        raise AuthorizationDenied()
     final_scope = service.extraction._scope(
         c, org, target_job, url, browser=observed.route == "browser_dom"
     )
@@ -142,7 +201,16 @@ def prepare_reuse(
     except ValueError:
         raise AuthorizationDenied() from None
     digest_value = lineage.model_dump(mode="json", exclude={"checked_at"})
+    evidence = OriginalRetainedEvidence(
+        route=observed.route,
+        source_job=lineage.source_job_id,
+        source_item=observed.binding.item
+        if isinstance(observed, (RetainedPdf, RetainedXml))
+        else None,
+        source_digest=first["source_digest"],
+        document=canonical(raw),
+    )
     digest = hashlib.sha256(
-        canonical([digest_value, bundle.model_dump(mode="json")]).encode("utf-8")
+        canonical([digest_value, evidence.document, bundle.model_dump(mode="json")]).encode("utf-8")
     ).hexdigest()
-    return PreparedReuse(lineage, bundle, digest)
+    return PreparedReuse(lineage, evidence, bundle, digest)
