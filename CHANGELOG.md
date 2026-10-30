@@ -492,3 +492,10 @@ Add a trusted Python-only executor factory to the normal claimed Celery path, re
   preserving separate evidence, authors and reviews; no live acquisition.
 - Forward-only migration 0019 adds a derived identity index and filtered export
   checks. Validation is in progress; no deployment or public release is claimed.
+
+## Unpublished source-filter contract candidate
+
+- Record explicit journal and article-type requests and refuse unsupported or
+  explicitly empty journal filters rather than broaden a search.
+- Exercise synthetic source-side filters and describe documented provider-native
+  ScienceDirect search terms offline; no source activation or entitlement is implied.

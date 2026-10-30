@@ -725,3 +725,13 @@ Review; replace the unconditional unobserved-date claim, and keep stale or
 malformed results unavailable. See [scope](84-contact-article-details.md).
 Local synthetic component checks are separate from pending installed-browser and
 exact-head hosted acceptance. No migration, grant, live source or deployment.
+
+## Source-filter contract — local candidate
+
+The wizard accepts explicit journal and article-type requests, which the existing
+fixture source refuses. An offline complete synthetic index exercises supported
+filter semantics; a separate inert ScienceDirect request description represents
+documented provider-native year and journal/book-title search terms without
+equating them to product filters. See [scope and limits](85-source-filter-contract.md).
+No publisher access, migration or authority change is included. Actual database,
+installed browser, hosted and source-specific acceptance remain pending.

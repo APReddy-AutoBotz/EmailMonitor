@@ -598,3 +598,10 @@ metadata path, date text and citations, selection ownership and fail-closed UI
 states with synthetic component fixtures. Installed keyboard/browser and exact-head
 hosted acceptance remain pending; these local tests do not prove source filtering
 or change the existing endpoint's authority.
+
+FR-004/006: the local [source-filter contract](85-source-filter-contract.md) maps to
+`test_synthetic_source_filter_contract.py`, `test_sciencedirect_filter_plan.py`,
+`test_discovery.py`, `test_reuse_adapters.py` and `wizardBrowser.test.tsx`.
+The offline fixture and inert provider-native request description do not enable
+source-side product filters or prove publisher entitlement. Real PostgreSQL,
+installed browser and exact-head hosted acceptance remain pending.
