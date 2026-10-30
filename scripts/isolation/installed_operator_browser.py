@@ -493,14 +493,67 @@ async def main() -> None:
                 checkpoint("keyword_plan")
                 await activate(page, page.get_by_role("button", name="New extraction", exact=True))
                 await type_text(
-                    page, page.get_by_label("Keyword", exact=True), "Myocardial Infarction"
+                    page,
+                    page.get_by_label("Keyword", exact=True),
+                    "Unsupported fixture topic",
                 )
                 await activate(
-                    page, page.get_by_role("button", name="Create and validate plan", exact=True)
+                    page,
+                    page.get_by_role("button", name="Create and validate plan", exact=True),
                 )
-                await page.get_by_role("region", name="Server source plan").wait_for()
+                summary = page.get_by_role("region", name="Server source plan")
+                await summary.wait_for()
+                await expect(summary).to_contain_text("Needs refinement")
+                await expect(summary).to_contain_text(
+                    "This fixture source does not support the requested topic."
+                )
+                await expect(summary).to_contain_text("The server did not persist this plan")
+                await expect(
+                    summary.get_by_role("button", name="Launch extraction", exact=True)
+                ).to_be_disabled()
+                await type_text(
+                    page,
+                    page.get_by_label("Keyword", exact=True),
+                    "Myocardial Infarction",
+                )
+                await expect(summary).to_have_count(0)
                 await activate(
-                    page, page.get_by_role("button", name="Launch extraction", exact=True)
+                    page,
+                    page.get_by_role("button", name="Create and validate plan", exact=True),
+                )
+                await summary.wait_for()
+                await expect(summary).to_contain_text("Search results")
+                await expect(
+                    summary.locator("dl > div").filter(has_text="Requested article limit")
+                ).to_contain_text("50")
+                await expect(
+                    summary.locator("dl > div").filter(has_text="Effective article cap")
+                ).to_contain_text("50")
+                await expect(
+                    summary.locator("dl > div").filter(has_text="Source-reported total at planning")
+                ).to_contain_text("Unavailable")
+                await expect(summary).to_contain_text("not permission to acquire it")
+                # Repeat the same request through the normal idempotent create/plan path.
+                async with page.expect_response(
+                    lambda response: (
+                        response.request.method == "POST" and response.url.endswith("/plan")
+                    )
+                ) as repeated_plan:
+                    await activate(
+                        page,
+                        page.get_by_role("button", name="Create and validate plan", exact=True),
+                    )
+                assert (await repeated_plan.value).status == 200
+                await (
+                    page.get_by_role("status")
+                    .filter(has_text="Server plan checked. Review it before launching.")
+                    .wait_for()
+                )
+                await summary.wait_for()
+                await expect(summary).to_contain_text("Search results")
+                await activate(
+                    page,
+                    page.get_by_role("button", name="Launch extraction", exact=True),
                 )
                 job = (
                     await page.get_by_role(
