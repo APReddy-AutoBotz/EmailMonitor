@@ -28,10 +28,11 @@ export function currentArticleSelection(
   blocked: boolean,
 ): selection is ArticleDetailsSelection {
   if (!selection || selection.scope !== scope || scope.closed || selection.generation !== generation
-    || blocked || contacts.loading || contacts.error || contacts.stale || !contacts.data) return false
+    || blocked || contacts.loading || contacts.error || contacts.stale || !contacts.data
+    || !Array.isArray(contacts.data.items)) return false
   const selected = selection.contact
   return selected.organization_id === scope.organization && contacts.data.items.some(row =>
-    row.organization_id === scope.organization && row.batch_id === selected.batch_id
+    row !== null && typeof row === 'object' && row.organization_id === scope.organization && row.batch_id === selected.batch_id
     && row.association_id === selected.association_id && row.revision === selected.revision)
 }
 

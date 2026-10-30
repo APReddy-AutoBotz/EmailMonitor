@@ -50,6 +50,12 @@ describe('selected article details authorization and ownership', () => {
     closed.close()
     expect(currentArticleSelection(selection, closed, 4, page, false)).toBe(false)
   })
+  it('fails closed for malformed current page entries', () => {
+    const malformed = { loading: false, data: { items: [null], next_cursor: null } } as unknown as Resource<Page<Contact>>
+    const missing = { loading: false, data: { items: null, next_cursor: null } } as unknown as Resource<Page<Contact>>
+    expect(currentArticleSelection(selected, owner, 4, malformed, false)).toBe(false)
+    expect(currentArticleSelection(selected, owner, 4, missing, false)).toBe(false)
+  })
   it('provides a focused, closable details region and makes no metadata claim while loading', () => {
     const html = renderToStaticMarkup(<ContactArticleDetails scope={owner} contact={contact} close={() => {}} restoreFocus={() => {}} />)
     expect(html).toContain('aria-label="Article details"')
