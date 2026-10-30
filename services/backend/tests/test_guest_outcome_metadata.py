@@ -11,6 +11,7 @@ from operator_ui_protocol import (
     FocusExhaustion,
     InstalledExportStep,
     InstalledLoginPhase,
+    LoginTimingTrace,
     OutcomePhase,
 )
 
@@ -82,6 +83,41 @@ def test_first_failure_survives_cleanup_and_later_success(output: Path) -> None:
         "guest_outcome=conversation-phase_evidence_review-error_AssertionError-"
         "reason_dialog_focus_restore-cleanup_both-login_none-outcome_none-focus_none"
     )
+
+
+def test_first_callback_timing_is_bounded_and_survives_later_success(output: Path) -> None:
+    original = TimeoutError("private synthetic detail")
+
+    @trace.observed_guest
+    def failed() -> None:
+        trace.guest_stage("conversation")
+        trace.guest_frame(
+            DiagnosticFrame(
+                kind="failure",
+                stage="keyword_worker",
+                error="TimeoutError",
+                reason="installed_login_deadline",
+                installed_login_phase="callback_document",
+                installed_callback_delivery="fulfilled",
+                installed_login_timing=LoginTimingTrace(
+                    total_ms=10000, phase_ms=7000, callback_fulfilled_ms=9500
+                ),
+            )
+        )
+        raise original
+
+    @trace.observed_guest
+    def success() -> None:
+        trace.guest_stage("complete")
+
+    with pytest.raises(TimeoutError) as caught:
+        failed()
+    assert caught.value is original
+    success()
+    lines = output.read_text().splitlines()
+    assert len(lines) == 4 and lines[0] == lines[2] and lines[1] == lines[3]
+    assert lines[1] == "guest_login_timing=total_10000-phase_7000-fulfilled_9500"
+    assert "private" not in output.read_text()
 
 
 @pytest.mark.parametrize(

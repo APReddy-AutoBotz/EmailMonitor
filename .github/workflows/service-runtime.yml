@@ -145,6 +145,9 @@ jobs:
       - name: "Installed guest outcome: ${{ steps.installed-operator-test.outputs.guest_outcome || 'unavailable' }}"
         if: ${{ !cancelled() && steps.installed-operator-test.outcome != 'skipped' }}
         run: ':'
+      - name: "Installed login timing: ${{ steps.installed-operator-test.outputs.guest_login_timing || 'unavailable' }}"
+        if: ${{ !cancelled() && steps.installed-operator-test.outcome != 'skipped' }}
+        run: ':'
       - name: Installed controlled XML service and curated parser acceptance
         id: installed-xml-test
         if: ${{ !cancelled() && steps.service-prerequisites.outcome == 'success' && steps.service-web.outcome == 'success' }}

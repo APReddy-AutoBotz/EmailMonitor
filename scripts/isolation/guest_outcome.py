@@ -138,7 +138,7 @@ class Trace:
 
 
 _current: ContextVar[Trace | None] = ContextVar("owned_guest_outcome", default=None)
-_first_failure: tuple[str, str] | None = None
+_first_failure: tuple[str, str, str] | None = None
 _case_trace: Trace | None = None
 
 
@@ -249,18 +249,22 @@ def case_worker_failure_details() -> tuple[str, str, str, str]:
     )
 
 
-def case_login_timing() -> str:
-    """Export only bounded timing already captured for callback navigation."""
-    if _case_trace is None:
+def _login_timing(trace: Trace | None) -> str:
+    if trace is None:
         return "unavailable"
-    _case_trace.label()
-    if _case_trace.login != "callback_document" or _case_trace.login_timing is None:
+    trace.label()
+    if trace.login != "callback_document" or trace.login_timing is None:
         return "unavailable"
-    value = LoginTimingTrace.model_validate(_case_trace.login_timing.model_dump())
+    value = LoginTimingTrace.model_validate(trace.login_timing.model_dump())
     fulfilled = (
         str(value.callback_fulfilled_ms) if value.callback_fulfilled_ms is not None else "none"
     )
     return f"total_{value.total_ms}-phase_{value.phase_ms}-fulfilled_{fulfilled}"
+
+
+def case_login_timing() -> str:
+    """Export only bounded timing already captured for callback navigation."""
+    return _login_timing(_case_trace)
 
 
 def case_export_category() -> str:
@@ -334,12 +338,16 @@ def observed_guest[**P, T](function: Callable[P, T]) -> Callable[P, T]:
                             _case_trace = trace
                     if os.environ.get("EM_GUEST_OUTCOME_REPORT") == "true":
                         target = os.environ["GITHUB_OUTPUT"]
+                        timing = _login_timing(trace)
                         if _first_failure is not None and _first_failure[0] == target:
                             label = _first_failure[1]
+                            timing = _first_failure[2]
                         elif trace.failure is not None:
-                            _first_failure = (target, label)
+                            _first_failure = (target, label, timing)
                         with Path(target).open("a", encoding="ascii") as output:
                             output.write("guest_outcome=" + label + "\n")
+                            if timing != "unavailable":
+                                output.write("guest_login_timing=" + timing + "\n")
                 except Exception:
                     if primary is None:
                         raise
