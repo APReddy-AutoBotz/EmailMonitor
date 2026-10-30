@@ -717,3 +717,11 @@ or migration change is included.
 ## Retained reuse — local candidate, acceptance pending
 
 Explicit fixture-only reuse records the original source observation and selected freshness cutoff while giving the target job independent review. Current source, tenant, policy and lifecycle checks remain required; unsupported or missing retained input cannot fall back to acquisition. Migrations 0024–0026 were also applied to a populated disposable PostgreSQL database with row counts, table ACLs/RLS and test-role attributes and memberships preserved. Source-bound XML/PDF admission, the connected service, broker, installed-browser and restore paths still require full exact-head acceptance. The candidate is not a live-source or production capability. See [reuse decisions](82-evidence-date-reuse-decisions.md).
+
+## Contact article details — local candidate
+
+Open currently authorized retained article metadata directly from Contacts and
+Review; replace the unconditional unobserved-date claim, and keep stale or
+malformed results unavailable. See [scope](84-contact-article-details.md).
+Local synthetic component checks are separate from pending installed-browser and
+exact-head hosted acceptance. No migration, grant, live source or deployment.

@@ -1,3 +1,10 @@
+## Contact article details — local candidate
+
+- Open current-authorized retained date text, journal, DOI and citations from a
+  selected contact without entering review; hide stale or malformed results.
+- Replace the unconditional unobserved-date label. No source filtering, new
+  authority or migration is introduced; hosted browser acceptance is pending.
+
 ## Retained observation reuse — local candidate, acceptance pending
 
 - Add explicitly selected, fixture-only retained reuse with source-bound XML/PDF support proposed in migration 0026, original-time provenance and independent target review. Unsupported inputs and production-mode requests refuse; no live acquisition is enabled.

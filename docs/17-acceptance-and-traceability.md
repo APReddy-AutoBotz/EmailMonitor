@@ -590,3 +590,11 @@ and populated restore acceptance require their real infrastructure and must not
 be counted from local skips. The CI-only migration baseline also applies 0022
 in an owned database and probes its installed disabled-link check expression;
 that probe is not a substitute for the prior full 0022 runtime refusal receipt.
+
+FR-010/017/023 and NFR-011: the local [contact article-details candidate](84-contact-article-details.md)
+maps to `contactArticleDetails.test.tsx`, `contactArticleDetailsFlow.test.tsx`,
+`contactArticleDetailsFocus.test.tsx` and `articleMetadata.test.tsx`. These exercise the existing current-authorized
+metadata path, date text and citations, selection ownership and fail-closed UI
+states with synthetic component fixtures. Installed keyboard/browser and exact-head
+hosted acceptance remain pending; these local tests do not prove source filtering
+or change the existing endpoint's authority.
