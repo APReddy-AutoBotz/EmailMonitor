@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiScope } from './client'
 import type { Context } from './ui'
 import { Wizard } from './views'
+import { SourcePlanSummary } from './sourcePlanSummary'
 
 // Exercise real form handlers without adding a DOM/browser dependency.
 const hooks = vi.hoisted(() => ({ values: [] as unknown[], index: 0 }))
@@ -54,9 +55,61 @@ function setup(canAcquire = true, option = 'allow_browser') {
   const requestReuse = (checked: boolean) => {
     elements(render()).find(element => element.props['aria-label'] === 'Request retained observation reuse')!.props.onChange!({ target: { checked } }); render()
   }
-  return { checkbox, toggle, submit, hasPlan, launch, launchDisabled, write, context, chooseSource, changeDate, requestReuse }
+  return { checkbox, toggle, submit, hasPlan, launch, launchDisabled, write, context, chooseSource, changeDate, requestReuse, render }
 }
 beforeEach(() => { hooks.values = []; hooks.index = 0; vi.restoreAllMocks() })
+
+describe('repeated plan requests', () => {
+  it('keeps malformed or unpersisted supported-looking plans from enabling launch', async () => {
+    const form = setup()
+    for (const response of [{ plan: { classification: ['article'] } }, { plan: null, classification: 'article' }, { plan: { classification: 'article' }, persisted: false }]) {
+      form.write.mockImplementation(async path => path === '/jobs' ? { id: '00000000-0000-0000-0000-000000000002' } : response)
+      await form.submit()
+      expect(form.launchDisabled()).toBe(true)
+    }
+    expect(form.write.mock.calls.some(([path]) => path.endsWith('/start'))).toBe(false)
+  })
+  it('opens the returned draft without starting extraction', async () => {
+    const form = setup()
+    await form.submit()
+    elements(form.render()).find(element => element.type === 'button' && element.props.children === 'Open draft job')!.props.onClick!()
+    expect(form.context.openJob).toHaveBeenCalledWith('00000000-0000-0000-0000-000000000002')
+    expect(form.write.mock.calls.some(([path]) => path.endsWith('/start'))).toBe(false)
+  })
+  it('clears the previous plan before a repeat request that fails', async () => {
+    const form = setup()
+    await form.submit()
+    expect(form.hasPlan()).toBe(true)
+    form.write.mockImplementation(async path => {
+      if (path === '/jobs') return { id: '00000000-0000-0000-0000-000000000002' }
+      throw new Error('Synthetic plan refusal')
+    })
+    await expect(form.submit()).rejects.toThrow('Synthetic plan refusal')
+    expect(form.hasPlan()).toBe(false)
+    expect(form.write.mock.calls.some(([path]) => path.endsWith('/start'))).toBe(false)
+    const creates = form.write.mock.calls.filter(([path]) => path === '/jobs')
+    expect(creates[0][3]).toBe(creates[1][3])
+  })
+  it('rejects a late earlier response even when repeated inputs are identical', async () => {
+    const form = setup()
+    let release!: (value: { classification: string }) => void
+    let plans = 0
+    form.write.mockImplementation(async path => {
+      if (path === '/jobs') return { id: '00000000-0000-0000-0000-000000000002' }
+      plans += 1
+      return plans === 1 ? new Promise(resolve => { release = resolve }) : { classification: 'unsupported' }
+    })
+    const first = form.submit()
+    await vi.waitFor(() => expect(release).toBeTypeOf('function'))
+    await form.submit()
+    expect(form.hasPlan()).toBe(true)
+    expect(form.launchDisabled()).toBe(true)
+    release({ classification: 'article' })
+    await first
+    expect(form.launchDisabled()).toBe(true)
+    expect(form.write.mock.calls.some(([path]) => path.endsWith('/start'))).toBe(false)
+  })
+})
 
 describe('retained reuse request is explicit and fail-closed', () => {
   it('omits reuse by default and carries an explicit cutoff without silently launching', async () => {
@@ -194,6 +247,22 @@ it('does not navigate from a completed launch response after source or session i
 
 
 describe('publication date request ownership', () => {
+  it('connects the returned draft and refusal to the summary and clears it when input changes', async () => {
+    const form = setup()
+    const request = { input: { type: 'keyword', source_id: 'synthetic-publisher' }, filters: { publication_date_type: 'online', publication_from: '2026-01-15' } }
+    vi.mocked(form.context.scope.request).mockResolvedValue({ id: '00000000-0000-0000-0000-000000000002', state: 'draft', row_version: 1, request })
+    const refusal = { plan: { classification: 'unsupported', reason: 'fixture_filters_unavailable' }, persisted: false }
+    form.write.mockImplementation(async path => path === '/jobs' ? { id: '00000000-0000-0000-0000-000000000002' } : refusal)
+    form.changeDate('Publication date from', '2026-01-15')
+    form.changeDate('Publication date type', 'online')
+    await form.submit()
+    const summary = elements(form.render()).find(element => element.type === SourcePlanSummary)
+    expect(summary?.props).toMatchObject({ plan: refusal, job: { request } })
+    expect(form.launchDisabled()).toBe(true)
+    form.changeDate('Publication date type', 'issue')
+    expect(form.hasPlan()).toBe(false)
+    expect(form.write.mock.calls.some(([path]) => path.endsWith('/start'))).toBe(false)
+  })
   it('preserves the explicit date type, clears old plans and changes request identity', async () => {
     const form = setup()
     await form.submit(); expect(form.hasPlan()).toBe(true)

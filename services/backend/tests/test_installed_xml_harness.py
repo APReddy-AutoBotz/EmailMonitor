@@ -140,8 +140,8 @@ def test_installed_html_steps_remain_identical_under_separate_branch() -> None:
                 return None
             return self.generic_visit(node)
 
-    # Keep the frozen original HTML AST intact after excluding the one explicit
-    # opt-in reuse journey; it cannot silently alter the legacy HTML steps.
+    # Keep the frozen original HTML AST intact after excluding only explicitly
+    # checked additions; they cannot silently alter the legacy HTML steps.
     remover = RemoveExplicitReuse()
     original_html = remover.visit(ast.Module(body=branch.orelse, type_ignores=[]))
     assert remover.count == 1
@@ -176,6 +176,32 @@ def test_installed_html_steps_remain_identical_under_separate_branch() -> None:
         "export_checkpoint('download_wait', format_name)",
         "export_checkpoint('verify', None)",
     ]
+
+    class RemovePreflightChecks(ast.NodeTransformer):
+        def __init__(self) -> None:
+            self.calls: list[str] = []
+
+        def visit_Expr(self, node: ast.Expr) -> ast.AST | None:
+            value = node.value
+            if (
+                isinstance(value, ast.Await)
+                and isinstance(value.value, ast.Call)
+                and isinstance(value.value.func, ast.Name)
+                and value.value.func.id
+                in {"assert_refused_preflight", "assert_supported_preflight"}
+            ):
+                self.calls.append(ast.unparse(value))
+                return None
+            return self.generic_visit(node)
+
+    preflight = RemovePreflightChecks()
+    original_html = preflight.visit(original_html)
+    assert preflight.calls == [
+        "await assert_refused_preflight(page, api, setup['initial_organization'])",
+        "await assert_supported_preflight(page)",
+    ]
+    assert html.index("await assert_refused_preflight(page,") < html.index("Myocardial Infarction")
+    assert html.index("await assert_supported_preflight(page)") < html.index("Launch extraction")
     assert (
         hashlib.sha256(ast.dump(original_html, include_attributes=False).encode()).hexdigest()
         == "853426f42fc71fb1408bd2262909afe14429f813ebe3e6ecca7ead61a713f30b"

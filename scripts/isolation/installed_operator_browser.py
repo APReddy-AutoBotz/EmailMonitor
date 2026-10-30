@@ -32,7 +32,7 @@ from operator_ui_protocol import (
     LoginTiming,
     failure_reason,
 )
-from playwright.async_api import Error, Request, Route, async_playwright, expect
+from playwright.async_api import Error, Page, Request, Route, async_playwright, expect
 
 if TYPE_CHECKING:
     import operator_ui_acceptance as keyboard_helpers
@@ -492,6 +492,7 @@ async def main() -> None:
                 await page.get_by_text("Current synthetic policy", exact=True).wait_for()
                 checkpoint("keyword_plan")
                 await activate(page, page.get_by_role("button", name="New extraction", exact=True))
+                await assert_refused_preflight(page, api, setup["initial_organization"])
                 await type_text(
                     page, page.get_by_label("Keyword", exact=True), "Myocardial Infarction"
                 )
@@ -499,6 +500,7 @@ async def main() -> None:
                     page, page.get_by_role("button", name="Create and validate plan", exact=True)
                 )
                 await page.get_by_role("region", name="Server source plan").wait_for()
+                await assert_supported_preflight(page)
                 await activate(
                     page, page.get_by_role("button", name="Launch extraction", exact=True)
                 )
@@ -844,6 +846,115 @@ async def main() -> None:
     finally:
         receiver.cancel()
         await asyncio.gather(receiver, return_exceptions=True)
+
+
+async def assert_refused_preflight(page: Page, api: str, organization: str) -> None:
+    """Exercise refinement without starting work; restore the empty keyword input."""
+    keyword = page.get_by_label("Keyword", exact=True)
+    await type_text(page, keyword, "Unsupported fixture topic")
+    pattern = api + "/api/v1/organizations/" + organization + "/jobs/*/plan"
+    held, release = asyncio.Event(), asyncio.Event()
+
+    async def hold_response(route: Route) -> None:
+        if route.request.method != "POST":
+            await route.fallback()
+            return
+        held.set()
+        await asyncio.wait_for(release.wait(), timeout=10)
+        await route.fallback()
+
+    await page.route(pattern, hold_response)
+    try:
+        async with page.expect_response(
+            lambda response: response.request.method == "POST" and response.url.endswith("/plan")
+        ) as stale_response:
+            await activate(
+                page, page.get_by_role("button", name="Create and validate plan", exact=True)
+            )
+            await asyncio.wait_for(held.wait(), timeout=10)
+            await type_text(page, keyword, "Changed fixture topic")
+            release.set()
+        assert (await stale_response.value).status == 200
+        await (
+            page.get_by_role("status")
+            .filter(has_text="Server plan checked. Review it before launching.")
+            .wait_for()
+        )
+        await expect(page.get_by_role("region", name="Server source plan")).to_have_count(0)
+    finally:
+        release.set()
+        await page.unroute(pattern, hold_response)
+
+    async def malformed_response(route: Route) -> None:
+        if route.request.method != "POST":
+            await route.fallback()
+            return
+        await route.fulfill(
+            status=200,
+            content_type="application/json",
+            body=json.dumps({"plan": {"classification": ["article"], "reason": "unknown"}}),
+        )
+
+    await page.route(pattern, malformed_response)
+    try:
+        await activate(
+            page, page.get_by_role("button", name="Create and validate plan", exact=True)
+        )
+        malformed = page.get_by_role("region", name="Server source plan")
+        await malformed.wait_for()
+        await expect(malformed).to_contain_text("Unavailable")
+        await expect(malformed).to_contain_text("did not provide a recognized explanation")
+        await expect(
+            malformed.get_by_role("button", name="Launch extraction", exact=True)
+        ).to_be_disabled()
+    finally:
+        await page.unroute(pattern, malformed_response)
+
+    await type_text(page, keyword, "Unsupported fixture topic")
+    await expect(page.get_by_role("region", name="Server source plan")).to_have_count(0)
+    await activate(page, page.get_by_role("button", name="Create and validate plan", exact=True))
+    summary = page.get_by_role("region", name="Server source plan")
+    await summary.wait_for()
+    await expect(summary).to_contain_text("Needs refinement")
+    await expect(summary).to_contain_text(
+        "This fixture source does not support the requested topic."
+    )
+    await expect(summary).to_contain_text("The server did not persist this plan")
+    await expect(
+        summary.get_by_role("button", name="Launch extraction", exact=True)
+    ).to_be_disabled()
+    await type_text(page, keyword, "")
+    await expect(summary).to_have_count(0)
+
+
+async def assert_supported_preflight(page: Page) -> None:
+    """Check and repeat the existing authored job's plan before the original launch."""
+    summary = page.get_by_role("region", name="Server source plan")
+    await expect(summary).to_contain_text("Search results")
+    await expect(
+        summary.locator("dl > div").filter(has_text="Requested article limit")
+    ).to_contain_text("50")
+    await expect(
+        summary.locator("dl > div").filter(has_text="Effective article cap")
+    ).to_contain_text("50")
+    await expect(
+        summary.locator("dl > div").filter(has_text="Source-reported total at planning")
+    ).to_contain_text("Unavailable")
+    await expect(summary).to_contain_text("not permission to acquire it")
+    async with page.expect_response(
+        lambda response: response.request.method == "POST" and response.url.endswith("/plan")
+    ) as repeated_plan:
+        await activate(
+            page, page.get_by_role("button", name="Create and validate plan", exact=True)
+        )
+    assert (await repeated_plan.value).status == 200
+    await (
+        page.get_by_role("status")
+        .filter(has_text="Server plan checked. Review it before launching.")
+        .wait_for()
+    )
+    await summary.wait_for()
+    await expect(summary).to_contain_text("Search results")
 
 
 if __name__ == "__main__":
