@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Literal
 
 from emailmonitor.extraction.pdf_fixture import DIGESTS as PDF_DIGESTS
-from emailmonitor.jobs.models import JobRequest, URLInput
+from emailmonitor.jobs.models import JobRequest, URLInput, has_requested_filters
 from emailmonitor.sources.provider_documents import ARTICLE_URLS
 
 ORIGIN = "https://synthetic.publisher.example"
@@ -38,7 +38,7 @@ def retained_adapter(request: JobRequest) -> Adapter | None:
         request.reuse is None
         or not isinstance(value, URLInput)
         or value.source_id not in (None, "synthetic-publisher")
-        or any(request.filters.model_dump(exclude_none=True).values())
+        or has_requested_filters(request.filters)
     ):
         return None
     if value.url in HTML_URLS:

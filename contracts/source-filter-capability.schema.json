@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.org/emailmonitor/schemas/source-filter-capability.schema.json",
+  "title": "Internal source-side filter capability declaration",
+  "description": "A declaration is not source authorization, registration, a production cursor, or permission to acquire data.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "version": {"const": "source-filter-capability-v1", "default": "source-filter-capability-v1"},
+    "date_types": {"type": "array", "maxItems": 3, "uniqueItems": true, "items": {"enum": ["published", "online", "issue"]}, "default": []},
+    "journal": {"enum": ["unsupported", "exact"], "default": "unsupported"},
+    "article_type": {"enum": ["unsupported", "exact_any"], "default": "unsupported"}
+  }
+}

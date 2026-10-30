@@ -1,0 +1,6 @@
+{
+  "version": "source-filter-capability-v1",
+  "date_types": ["published"],
+  "journal": "exact",
+  "article_type": "exact_any"
+}

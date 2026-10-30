@@ -97,6 +97,7 @@ def main() -> int:
         'url-job.json': 'job-request.schema.json',
         'contact-record.json': 'contact-record.schema.json',
         'source-policy.json': 'source-policy.schema.json',
+        'source-filter-capability.json': 'source-filter-capability.schema.json',
         'event.json': 'event.schema.json',
         'discovery-event.json': 'discovery-event.schema.json',
         'discovery-checkpoint.json': 'discovery-checkpoint.schema.json',

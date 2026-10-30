@@ -37,13 +37,16 @@ describe('readable source preflight', () => {
     expect(html).toContain('<summary>Technical plan details</summary>')
   })
   it('explains a refused filter and preserves explicit date type without claiming it was applied', () => {
-    const current = { ...job, request: { ...job.request, filters: { publication_date_type: 'online', publication_from: '2026-01-15' } } }
+    const current = { ...job, request: { ...job.request, filters: { publication_date_type: 'online', publication_from: '2026-01-15', journal: 'Synthetic Journal A', article_types: ['review', 'research'] } } }
     const html = render({ plan: { classification: 'unsupported', reason: 'fixture_filters_unavailable' }, persisted: false }, current)
     expect(html).toContain('Unsupported.')
     expect(html).toContain('cannot apply the requested filters')
     expect(html).toContain('The server did not persist this plan. It cannot be launched')
     expect(html).toContain('online; from 2026-01-15 to Unavailable')
     expect(html).toContain('not proof that the source applied the filter')
+    expect(html).toContain('Requested journal: Synthetic Journal A')
+    expect(html).toContain('Requested article types: review, research')
+    expect(html).toContain('requested filters, not proof that a source applied them')
     expect(html).toContain('<dt>Effective article cap</dt><dd>Unavailable</dd>')
   })
   it('explains unavailable reuse without implying fresh acquisition or eligibility', () => {

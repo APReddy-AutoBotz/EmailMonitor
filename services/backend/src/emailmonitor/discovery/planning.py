@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from emailmonitor.fetching.fixture import HOSTS
 from emailmonitor.fetching.safety import FetchDenied, classify_url
 from emailmonitor.jobs.models import JobRequest, KeywordInput
+from emailmonitor.sources.filter_capabilities import REGISTERED_FIXTURE_FILTERS, assess_filters
 
 ORIGIN = "https://synthetic.publisher.example"
 SEARCH_PATHS = frozenset({"/search-page-1.html", "/search-page-2.html"})
@@ -46,7 +47,7 @@ def plan_input(request: JobRequest) -> InputPlan:
         if candidate is not None:
             return InputPlan("article", "retained_reuse_authored", candidate.article_url)
         return InputPlan("unsupported", "retained_reuse_unavailable")
-    if any(request.filters.model_dump(exclude_none=True).values()):
+    if assess_filters(request.filters, REGISTERED_FIXTURE_FILTERS) != "none_requested":
         return InputPlan("unsupported", "fixture_filters_unavailable")
     if isinstance(value, KeywordInput):
         effective = value.effective_query or value.original_query

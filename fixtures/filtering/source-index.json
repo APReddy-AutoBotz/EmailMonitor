@@ -1,0 +1,12 @@
+{
+  "schema_version": "synthetic-filter-index-v1",
+  "query": "synthetic research",
+  "completeness": "authored_complete_index",
+  "records": [
+    {"id": "fixture-paper-01", "dates": [{"type": "published", "value": "2024-02-28"}], "journal": "Synthetic Journal A", "article_type": "research"},
+    {"id": "fixture-paper-02", "dates": [{"type": "published", "value": "2024-02-29"}], "journal": "Synthetic Journal A", "article_type": "review"},
+    {"id": "fixture-paper-03", "dates": [{"type": "published", "value": "2024-03-01"}], "journal": "Synthetic Journal B", "article_type": "research"},
+    {"id": "fixture-paper-04", "dates": [{"type": "published", "value": "2024-03-01"}], "journal": "Synthetic Journal A", "article_type": "research"},
+    {"id": "fixture-paper-05", "dates": [{"type": "published", "value": "2024-04-01"}], "journal": "Synthetic Journal A", "article_type": "commentary"}
+  ]
+}

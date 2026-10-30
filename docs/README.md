@@ -72,6 +72,7 @@ Versioning: documents use Git history; public API uses `/api/v1`; event/schema r
 
 - [78 — Retained article metadata in review](78-retained-article-metadata.md)
 - [84 — Retained article details from contact results](84-contact-article-details.md)
+- [85 — Source search filter contract](85-source-filter-contract.md)
 
 - [81 — Retained job timing](81-retained-job-timing.md)
 - [80 — Contextual contact suppression](80-contextual-contact-suppression.md)
