@@ -82,6 +82,12 @@ rejecting check. Fixed rejection-location categories distinguish the original
 fail-closed checks without changing their predicates, exception, or login budget;
 they do not contain authentication values. This failure remains unexplained.
 
+On the following head the parser workflow failed during its mandatory memory
+enforcement stage; the stage alone does not establish the failed operation or
+daemon state. A fixed-category receipt distinguishes the existing operation,
+observed memory state and owned cleanup, without changing the isolation limits,
+OOM assertions or error handling. The failure remains unexplained.
+
 The existing component tests are carried forward with added checks for unlink,
 malformed history, unpersisted plans and simultaneous workspace lifetimes. The
 older synthetic keyboard flows for saved draft, recorded history and selected

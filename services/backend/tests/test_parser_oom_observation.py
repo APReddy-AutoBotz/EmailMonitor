@@ -3,6 +3,7 @@
 import json
 import subprocess
 import time
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -59,8 +60,11 @@ def test_deadline_preserves_observed_fields(
     ],
 )
 def test_memory_proof_requires_all_actual_state_fields_and_cleans_up(
-    monkeypatch: pytest.MonkeyPatch, state: dict[str, object], accepted: bool
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, state: dict[str, object], accepted: bool
 ) -> None:
+    output = tmp_path / "output"
+    monkeypatch.setenv("EM_PARSER_STAGE_REPORT", "true")
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
     identifier = "a" * 64
     host = {
         "NetworkMode": "none",
@@ -102,3 +106,36 @@ def test_memory_proof_requires_all_actual_state_fields_and_cleans_up(
         with pytest.raises(RuntimeError, match="Actual memory enforcement not established"):
             parser.run(["synthetic"], expected_oom=True)
     assert operations == ["create", "inspect", "inspect", "rm"]
+    receipt = output.read_text().splitlines()
+    assert "parser_oom_phase=" + ("complete" if accepted else "verify") in receipt
+    assert receipt[-1] == "parser_oom_cleanup=complete"
+    assert sum(line.startswith("parser_oom_state=") for line in receipt) == 1
+
+
+def test_oom_report_refuses_values_and_does_not_mask_a_create_failure(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    output = tmp_path / "output"
+    monkeypatch.setenv("EM_PARSER_STAGE_REPORT", "true")
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
+    parser.report_oom("parser_oom_phase", "private-synthetic")
+    parser.report_oom("private-synthetic", "create")
+    assert not output.exists()
+    parser.report_oom_state(
+        {"Running": "private-synthetic", "OOMKilled": None, "ExitCode": "private-synthetic"}
+    )
+    assert output.read_text() == "parser_oom_state=unknown_unknown_unknown\n"
+    failure = RuntimeError("private synthetic exception")
+
+    def fail(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        raise failure
+
+    monkeypatch.setattr(parser, "docker", fail)
+    with pytest.raises(RuntimeError) as caught:
+        parser.run(["synthetic"], expected_oom=True)
+    assert caught.value is failure
+    assert output.read_text().splitlines()[-1] == "parser_oom_phase=create"
+    assert "private" not in output.read_text()
+    monkeypatch.setenv("GITHUB_OUTPUT", str(tmp_path))
+    parser.report_oom("parser_oom_phase", "create")
+    parser.report_oom_state({})
