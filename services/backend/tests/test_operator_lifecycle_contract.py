@@ -560,10 +560,84 @@ def test_authored_outcome_next_uses_existing_single_keyboard_trace() -> None:
         and node.value.func.id == "traced_activate"
         and "Next article outcome page" in ast.unparse(node)
     ]
-    assert len(calls) == 2  # This page loop plus the existing late-organization probe.
+    # The loop, first presence activation, and late-organization probe each
+    # retain their own passive trace of the same single keyboard activation.
+    assert len(calls) == 3
     loop = next(
         node
         for node in ast.walk(journey)
         if isinstance(node, ast.For) and ast.unparse(node.iter) == "range(6)"
     )
     assert sum(node in ast.walk(loop) for node in calls) == 1
+    presence = next(
+        node.lineno
+        for node in ast.walk(journey)
+        if isinstance(node, ast.Call)
+        and ast.unparse(node) == "checkpoint('outcomes_presence_keyboard')"
+    )
+    presence_end = next(
+        node.lineno
+        for node in ast.walk(journey)
+        if isinstance(node, ast.Call)
+        and "Page 2: 25 article outcomes" in ast.unparse(node)
+        and node.lineno > presence
+    )
+    assert sum(presence < node.lineno < presence_end for node in calls) == 1
+
+
+def test_job_deletion_failure_metadata_uses_only_fixed_local_phases() -> None:
+    import ast
+    from pathlib import Path
+    from typing import get_args
+
+    from operator_ui_protocol import JobDeletionPhase
+
+    source = Path(__file__).resolve().parents[3] / "scripts/isolation/operator_ui_acceptance.py"
+    module = ast.parse(source.read_text())
+    main = next(
+        node
+        for node in module.body
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "main"
+    )
+    phases: set[str] = set()
+    for node in ast.walk(main):
+        if isinstance(node, ast.Assign) and any(
+            isinstance(target, ast.Name) and target.id == "deletion_phase"
+            for target in node.targets
+        ):
+            phases.update(
+                value.value
+                for value in ast.walk(node.value)
+                if isinstance(value, ast.Constant) and isinstance(value.value, str)
+            )
+    assert phases == set(get_args(JobDeletionPhase))
+    assert '"job_deletion_phase": deletion_phase' in source.read_text()
+
+
+def test_suppression_failure_metadata_uses_only_fixed_local_phases() -> None:
+    import ast
+    from pathlib import Path
+    from typing import get_args
+
+    from operator_ui_protocol import ContactSuppressionPhase
+
+    source = Path(__file__).resolve().parents[3] / "scripts/isolation/operator_ui_acceptance.py"
+    module = ast.parse(source.read_text())
+    main = next(
+        node
+        for node in module.body
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "main"
+    )
+    phases: set[str] = set()
+    for node in ast.walk(main):
+        if isinstance(node, ast.Assign) and any(
+            isinstance(target, ast.Name) and target.id == "suppression_phase"
+            for target in node.targets
+        ):
+            phases.update(
+                value.value
+                for value in ast.walk(node.value)
+                if isinstance(value, ast.Constant) and isinstance(value.value, str)
+            )
+    assert phases == set(get_args(ContactSuppressionPhase))
+    assert '"contact_suppression_phase": suppression_phase' in source.read_text()

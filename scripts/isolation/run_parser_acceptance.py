@@ -9,6 +9,54 @@ from pathlib import Path
 IMAGE = "emailmonitor-parser-diagnostic:local"
 
 
+def report_oom(key: str, value: str) -> None:
+    """Report only closed, value-free diagnostic categories to the owned CI step."""
+    allowed = {
+        "parser_oom_phase": {
+            "create",
+            "identifier",
+            "config_inspect",
+            "config_check",
+            "attach",
+            "state_inspect",
+            "settle",
+            "verify",
+            "complete",
+        },
+        "parser_oom_cleanup": {"started", "complete"},
+    }
+    if key not in allowed or value not in allowed[key]:
+        return
+    output = os.environ.get("GITHUB_OUTPUT")
+    if os.environ.get("EM_PARSER_STAGE_REPORT") != "true" or not output:
+        return
+    try:
+        with Path(output).open("a", encoding="utf-8") as stream:
+            stream.write(key + "=" + value + "\n")
+    except OSError:
+        pass
+
+
+def report_oom_state(state: dict[str, object]) -> None:
+    """Describe actual daemon fields without retaining arbitrary values."""
+    running = state.get("Running")
+    killed = state.get("OOMKilled")
+    code = state.get("ExitCode")
+    stopped = "stopped" if running is False else "running" if running is True else "unknown"
+    oom = "killed" if killed is True else "notkilled" if killed is False else "unknown"
+    exit_code = (
+        "137" if type(code) is int and code == 137 else "other" if type(code) is int else "unknown"
+    )
+    output = os.environ.get("GITHUB_OUTPUT")
+    if os.environ.get("EM_PARSER_STAGE_REPORT") != "true" or not output:
+        return
+    try:
+        with Path(output).open("a", encoding="utf-8") as stream:
+            stream.write("parser_oom_state=" + stopped + "_" + oom + "_" + exit_code + "\n")
+    except OSError:
+        pass
+
+
 def docker(*arguments: str, timeout: float = 180) -> subprocess.CompletedProcess[str]:
     try:
         return subprocess.run(
@@ -49,6 +97,8 @@ def settled_oom(identifier: str, state: dict[str, object]) -> dict[str, object]:
 
 
 def run(command: list[str], *, expected_oom: bool = False) -> dict[str, object]:
+    if expected_oom:
+        report_oom("parser_oom_phase", "create")
     created = docker(
         "create",
         "--network=none",
@@ -67,12 +117,18 @@ def run(command: list[str], *, expected_oom: bool = False) -> dict[str, object]:
         IMAGE,
         *command,
     )
+    if expected_oom:
+        report_oom("parser_oom_phase", "identifier")
     identifier = created.stdout.strip()
     if len(identifier) != 64 or any(c not in "0123456789abcdef" for c in identifier):
         raise RuntimeError("Unexpected disposable container identifier")
     try:
+        if expected_oom:
+            report_oom("parser_oom_phase", "config_inspect")
         metadata = json.loads(docker("inspect", identifier).stdout)[0]
         config = metadata["HostConfig"]
+        if expected_oom:
+            report_oom("parser_oom_phase", "config_check")
         if (
             config["NetworkMode"] != "none"
             or config["Privileged"]
@@ -88,6 +144,8 @@ def run(command: list[str], *, expected_oom: bool = False) -> dict[str, object]:
         ):
             raise RuntimeError("Container isolation/resource configuration mismatch")
         # No Docker/host socket, credential, control-plane or writable host mounts.
+        if expected_oom:
+            report_oom("parser_oom_phase", "attach")
         started = subprocess.run(
             ["docker", "start", "--attach", identifier],
             capture_output=True,
@@ -95,9 +153,14 @@ def run(command: list[str], *, expected_oom: bool = False) -> dict[str, object]:
             timeout=30,
             check=False,
         )
+        if expected_oom:
+            report_oom("parser_oom_phase", "state_inspect")
         after = json.loads(docker("inspect", identifier).stdout)[0]["State"]
         if expected_oom:
+            report_oom("parser_oom_phase", "settle")
             after = settled_oom(identifier, after)
+            report_oom("parser_oom_phase", "verify")
+            report_oom_state(after)
             if (
                 after.get("Running") is not False
                 or after["OOMKilled"] is not True
@@ -121,9 +184,15 @@ def run(command: list[str], *, expected_oom: bool = False) -> dict[str, object]:
             if evidence["diagnostic"] != "network-none-parser":
                 raise RuntimeError("Missing actual parser evidence")
             print(json.dumps(evidence))
+        if expected_oom:
+            report_oom("parser_oom_phase", "complete")
         return {"oom_killed": after["OOMKilled"], "exit_code": after["ExitCode"]}
     finally:
+        if expected_oom:
+            report_oom("parser_oom_cleanup", "started")
         docker("rm", "--force", identifier)
+        if expected_oom:
+            report_oom("parser_oom_cleanup", "complete")
 
 
 def report_stage(stage: str) -> None:

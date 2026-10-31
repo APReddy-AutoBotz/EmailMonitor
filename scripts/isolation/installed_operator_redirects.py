@@ -144,7 +144,7 @@ class LoginRedirects:
 
     def bind_frame(self, frame: str) -> None:
         if self._frame or self.active or not self._identifier(frame):
-            self._reject()
+            self._reject("installed_redirect_order_bind")
         self._frame = frame
 
     @staticmethod
@@ -169,14 +169,14 @@ class LoginRedirects:
         pending = self._pending
         if pending is None:
             if self.active and url == ERROR_DOCUMENT:
-                self._reject()
+                self._reject("installed_redirect_order_commit")
             return
         if self.failed or frame != self._frame or url != ERROR_DOCUMENT or target != pending.target:
             self._reject("installed_redirect_failure_identity")
         if self._loader is not None or loader in self._loaders or not self._identifier(loader):
-            self._reject()
+            self._reject("installed_redirect_order_commit")
         if len(self._loaders) >= 4:
-            self._reject()
+            self._reject("installed_redirect_order_commit")
         self._loaders.add(loader)
         self._loader = loader
         self._wake()
@@ -187,17 +187,17 @@ class LoginRedirects:
         # Unrelated/early lifecycle events cannot satisfy the owned commit.
         if loader != self._loader:
             if loader in self._loaders:
-                self._reject()
+                self._reject("installed_redirect_order_lifecycle")
             return
         if self.failed or frame != self._frame or self._cdp_loaded:
-            self._reject()
+            self._reject("installed_redirect_order_lifecycle")
         self._cdp_loaded = True
         self._wake()
 
     def observe_public_commit(self, *, sequence: int, main_frame: bool, url: str) -> None:
         pending = self._pending
         if self.failed or pending is None or pending.sequence != sequence:
-            self._reject()
+            self._reject("installed_redirect_order_public_commit")
         if not main_frame or url != ERROR_DOCUMENT or self._public_commit:
             self._reject("installed_redirect_failure_identity")
         self._public_commit = True
@@ -206,7 +206,7 @@ class LoginRedirects:
     def observe_public_loaded(self, *, sequence: int) -> None:
         pending = self._pending
         if self.failed or pending is None or pending.sequence != sequence or self._public_loaded:
-            self._reject()
+            self._reject("installed_redirect_order_public_load")
         if not self._public_commit:
             return
         self._public_loaded = True
@@ -224,7 +224,7 @@ class LoginRedirects:
 
     def begin(self) -> None:
         if self.failed or self.active or self.logins >= 2 or self._pending is not None:
-            self._reject()
+            self._reject("installed_redirect_order_begin")
         self.active = True
         self._phase = 0
         self._source = self.api + "/api/v1/auth/start"
@@ -347,7 +347,7 @@ class LoginRedirects:
             or self._pending is not None
             or self._phase not in {0, 1}
         ):
-            self._reject()
+            self._reject("installed_redirect_order_arm")
         if source != self._source:
             self._reject("installed_redirect_source")
         if method != "GET" or not main_frame or redirected_from is not None:
@@ -374,7 +374,16 @@ class LoginRedirects:
     ) -> None:
         pending = self._pending
         if self.failed or not self.active or pending is None or self._observed:
-            self._reject()
+            reason: InstalledReason = (
+                "installed_redirect_failure_latched"
+                if self.failed
+                else "installed_redirect_failure_inactive"
+                if not self.active
+                else "installed_redirect_failure_unarmed"
+                if pending is None
+                else "installed_redirect_failure_duplicate"
+            )
+            self._reject(reason)
         if target != pending.target or method != "GET" or not main_frame:
             self._reject("installed_redirect_failure_identity")
         if redirected_from is not pending.original:
@@ -394,7 +403,7 @@ class LoginRedirects:
         # The caller owns one unchanged ten-second budget for the entire login.
         await self._event.wait()
         if self.failed or not self.active or self._pending is None or not self._ready():
-            self._reject()
+            self._reject("installed_redirect_order_next")
         assert self._pending is not None
         target = self._pending.target
         self._pending = None
@@ -407,7 +416,7 @@ class LoginRedirects:
 
     def finish(self) -> None:
         if self.failed or not self.active or self._phase != 2 or self._pending is not None:
-            self._reject()
+            self._reject("installed_redirect_order_finish")
         self.active = False
         self.logins += 1
 
@@ -419,7 +428,7 @@ class LoginRedirects:
             or self.redirects != 4
             or self.navigations != 4
         ):
-            self._reject()
+            self._reject("installed_redirect_order_receipt")
         return {
             "redirect_navigation": NAVIGATION,
             "server_redirects": 4,
@@ -485,7 +494,7 @@ class ErrorDocumentObserver:
 
     def arm(self, original: object, **arguments: Any) -> None:
         if self.closed or self.public:
-            self.redirects._reject()
+            self.redirects._reject("installed_redirect_order_observer")
         sequence = self.redirects.redirects + 1
 
         def committed(frame: "Frame") -> None:

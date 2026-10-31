@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiScope } from './client'
 import { CurrentArticleMetadata } from './articleMetadata'
 import { CurrentObservationQuality } from './observationQuality'
+import { CurrentReviewHistory } from './reviewHistory'
 import type { Contact } from './models'
 import type { Context } from './ui'
 import { EvidenceDrawer } from './views'
@@ -58,6 +59,17 @@ function setup(denied = false, revision = 0, organization = fixtures.contact.ass
 }
 
 describe('evidence selection across asynchronous native close and workspace refresh', () => {
+  it('binds recorded history to the current contact, tenant, association and revision', () => {
+    const history = (root: ReturnType<typeof EvidenceDrawer>) => Children.toArray(root.props.children)
+      .find(child => isValidElement(child) && child.type === CurrentReviewHistory) as ReactElement<Record<string, unknown>>
+    const current = history(setup().root)
+    expect(current.props.batch).toBe(fixtures.contact.batch_id)
+    expect(current.props.association).toBe(fixtures.contact.association_id)
+    expect((current.props.scope as ApiScope).organization).toBe(fixtures.contact.association_id)
+    expect((current.props.contact as { data: unknown }).data).toBe(fixtures.contact)
+    expect(history(setup(false, 1).root).key).not.toBe(current.key)
+    expect(history(setup(false, 0, '00000000-0000-4000-8000-000000000099').root).key).not.toBe(current.key)
+  })
   it('gives metadata and quality distinct identities that reset on refresh and organization change', () => {
     const keys = (root: ReturnType<typeof EvidenceDrawer>) => Children.toArray(root.props.children)
       .filter(child => isValidElement(child) && [CurrentArticleMetadata, CurrentObservationQuality].includes(child.type as typeof CurrentArticleMetadata))

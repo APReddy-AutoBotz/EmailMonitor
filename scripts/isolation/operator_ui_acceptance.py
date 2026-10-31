@@ -21,9 +21,11 @@ from operator_ui_protocol import (
     OUTCOME_PHASES,
     STAGES,
     AuthoredOutcomeReplayReadiness,
+    ContactSuppressionPhase,
     EvidenceFocusTrace,
     FocusExhaustion,
     HandoffTrace,
+    JobDeletionPhase,
     KeyboardAttemptTrace,
     ObservationTrace,
     OutcomeReplayReadiness,
@@ -975,7 +977,7 @@ async def authored_outcome_paging(
         presence_select = region.get_by_role(
             "combobox", name="Article-outcome candidate presence", exact=True
         )
-        await activate(
+        await traced_activate(
             page,
             region.get_by_role("button", name="Next article outcome page", exact=True),
         )
@@ -1539,17 +1541,21 @@ async def main() -> None:
     stage = "browser_launch"
     outcome_phase: str | None = None
     evidence_phase: str | None = None
+    deletion_phase: JobDeletionPhase | None = None
+    suppression_phase: ContactSuppressionPhase | None = None
     observation_trace: ObservationTrace | Literal["unavailable"] | None = None
     evidence_focus_trace: EvidenceFocusTrace | Literal["unavailable"] | None = None
     evidence_focus_observations: dict[str, object] = {}
 
     def checkpoint(value: str) -> None:
-        nonlocal stage, outcome_phase, evidence_phase
+        nonlocal stage, outcome_phase, evidence_phase, deletion_phase, suppression_phase
         if value not in STAGES:
             raise RuntimeError("Fixed UI stage required")
         stage = value
         outcome_phase = None
         evidence_phase = None
+        deletion_phase = None
+        suppression_phase = None
         print(json.dumps({"kind": "stage", "stage": value}), flush=True)
 
     def outcome_checkpoint(value: str) -> None:
@@ -2261,13 +2267,30 @@ async def main() -> None:
                 page, page.get_by_role("button", name="Create and validate plan", exact=True)
             )
             await page.get_by_role("region", name="Server source plan").wait_for()
-            await activate(page, page.get_by_role("button", name="Launch extraction", exact=True))
+            await activate(page, page.get_by_role("button", name="Open draft job", exact=True))
+            saved_draft = (
+                await page.get_by_role(
+                    "heading", name=re.compile(r"^Job [0-9a-f-]{36}$")
+                ).inner_text()
+            ).removeprefix("Job ")
+            await activate(page, page.get_by_role("button", name="Back to recent jobs", exact=True))
+            await activate(
+                page, page.get_by_role("button", name="Open job " + saved_draft, exact=True)
+            )
+            await activate(
+                page, page.get_by_role("button", name="Validate saved draft plan", exact=True)
+            )
+            await page.get_by_role("region", name="Validated saved draft", exact=True).wait_for()
+            await activate(
+                page, page.get_by_role("button", name="Launch this saved draft", exact=True)
+            )
             await page.get_by_text("Enumeration unknown", exact=False).wait_for()
             keyword_job = (
                 await page.get_by_role(
                     "heading", name=re.compile(r"^Job [0-9a-f-]{36}$")
                 ).inner_text()
             ).removeprefix("Job ")
+            assert keyword_job == saved_draft
             checkpoint("pause_resume")
             await activate(page, page.get_by_role("button", name="Pause", exact=True))
             await page.get_by_role("button", name="Resume", exact=True).wait_for()
@@ -2351,6 +2374,8 @@ async def main() -> None:
             )
             await expect(metadata.get_by_role("list")).to_be_visible()
             await expect(metadata).to_contain_text("Recorded date type:")
+            history = page.get_by_role("region", name="Recorded review history", exact=True)
+            await expect(history).to_contain_text("earliest 100 records")
             await channel.request({"kind": "control", "action": "hold_quality"})
             await activate(
                 page,
@@ -2417,6 +2442,18 @@ async def main() -> None:
             )
             await activate(page, page.get_by_role("button", name="Save review", exact=True))
             await page.get_by_role("dialog").wait_for(state="hidden")
+            await activate(
+                page, page.get_by_role("button", name="Evidence and review", exact=True).first
+            )
+            history = page.get_by_role("region", name="Recorded review history", exact=True)
+            await expect(history).to_contain_text("Synthetic keyboard evidence review")
+            await activate(page, history.locator("summary"))
+            await expect(history.get_by_role("list")).to_be_visible()
+            await expect(history).to_contain_text("Recorded action: accept")
+            await expect(history).to_contain_text("Expected association revision:")
+            await expect(history.locator("time").first).to_be_visible()
+            await activate(page, page.get_by_role("button", name="Close evidence", exact=True))
+            await wait_evidence_closed(page)
             # Real retained DOI filtering, using only the authored article-a metadata.
             paper_input = page.get_by_label(
                 "Paper DOI (optional; across authorized jobs)", exact=True
@@ -2759,28 +2796,37 @@ async def main() -> None:
             # retained-data journeys: suppression intentionally fences matching data.
             await channel.request({"kind": "control", "action": "verify_retained"})
             checkpoint("contact_suppression")
+            suppression_phase = "select_organization"
             organization = page.get_by_role("combobox", name="Active organization", exact=True)
             values = await organization.locator("option").evaluate_all(
                 "nodes => nodes.map(node => node.value)"
             )
             await select_index(page, organization, values.index(setup["initial_organization"]))
+            suppression_phase = "open_contacts"
             await activate(page, page.get_by_role("button", name="Contacts", exact=True))
             table = page.get_by_role("table", name="Current-authorized observed contacts")
             await expect(table).to_be_visible()
+            suppression_phase = "read_contact"
             selected_address = (
                 await table.locator("tbody tr").first.locator("td").nth(2).inner_text()
             ).splitlines()[0]
             for commit in (False, True):
+                suppression_phase = "open_evidence_confirm" if commit else "open_evidence_cancel"
                 await activate(
                     page, page.get_by_role("button", name="Evidence and review", exact=True).first
                 )
                 action = page.get_by_role("button", name="Review contact suppression", exact=True)
+                suppression_phase = "choose_reason_confirm" if commit else "choose_reason_cancel"
                 await expect(action).to_be_disabled()
                 await select_index(page, suppression_reason(page), 1)
+                suppression_phase = (
+                    "open_confirmation_confirm" if commit else "open_confirmation_cancel"
+                )
                 await activate(page, action)
                 confirmation = page.get_by_role("dialog")
                 await expect(confirmation).to_contain_text("throughout this organization")
                 await expect(confirmation).to_contain_text(selected_address)
+                suppression_phase = "confirm_suppression" if commit else "cancel_confirmation"
                 await activate(
                     page,
                     page.get_by_role(
@@ -2794,6 +2840,7 @@ async def main() -> None:
                     await expect(
                         suppression_address_cells(table, selected_address).first
                     ).to_be_visible()
+            suppression_phase = "verify_result"
             await expect(
                 page.get_by_text(
                     "Action completed. Current permissions are rechecked by the server.", exact=True
@@ -2803,6 +2850,50 @@ async def main() -> None:
                 table.or_(page.get_by_text("No contacts match these server filters.", exact=True))
             ).to_be_visible()
             await expect(suppression_address_cells(table, selected_address)).to_have_count(0)
+            checkpoint("job_deletion")
+            deletion_phase = "navigate_jobs"
+            await activate(page, page.get_by_role("button", name="Jobs", exact=True))
+            deletion_phase = "open_job"
+            await activate(
+                page, page.get_by_role("button", name="Open job " + actual_job, exact=True)
+            )
+            deletion = page.get_by_role("region", name="Job deletion", exact=True)
+            for commit in (False, True):
+                action = deletion.get_by_role("button", name="Review job deletion", exact=True)
+                if not commit:
+                    deletion_phase = "choose_reason"
+                    await expect(action).to_be_disabled()
+                    await select_index(page, page.get_by_label(re.compile(r"^Deletion reason")), 2)
+                deletion_phase = "open_confirmation"
+                await activate(page, action)
+                confirmation = page.get_by_role("dialog")
+                await expect(confirmation).to_contain_text(actual_job)
+                await expect(confirmation).to_contain_text(
+                    "all existing exports in this organization"
+                )
+                await expect(confirmation).to_contain_text("Physical purge")
+                deletion_phase = "confirm_focus" if commit else "cancel_confirmation"
+                deletion_target = confirmation.get_by_role(
+                    "button",
+                    name="Confirm stage job deletion" if commit else "Keep unchanged",
+                    exact=True,
+                )
+                await focus(page, deletion_target)
+                if commit:
+                    deletion_phase = "confirm_keypress"
+                await page.keyboard.press("Enter")
+                if commit:
+                    deletion_phase = "confirm_close"
+                await expect(confirmation).not_to_be_visible()
+                if not commit:
+                    await expect(
+                        page.get_by_role("heading", name="Job " + actual_job, exact=True)
+                    ).to_be_visible()
+            deletion_phase = "receipt"
+            await expect(deletion).to_contain_text("Verified deletion receipt:")
+            await expect(deletion).to_contain_text("is fenced")
+            await expect(deletion).to_contain_text("No physical purge was requested")
+            deletion_phase = "settled_requests"
             await asyncio.wait_for(settled_requests(), timeout=10)
             checkpoint("final_cleanup")
             print(
@@ -2834,6 +2925,7 @@ async def main() -> None:
                         "org_switch": True,
                         "readonly_role": True,
                         "contact_suppression": True,
+                        "job_deletion": True,
                         "stale_network_retry": True,
                         "late_old_response_refused": True,
                         "late_old_replay_refused": True,
@@ -2869,6 +2961,16 @@ async def main() -> None:
                         else {}
                     ),
                     **({"outcome_phase": outcome_phase} if outcome_phase is not None else {}),
+                    **(
+                        {"job_deletion_phase": deletion_phase}
+                        if stage == "job_deletion" and deletion_phase is not None
+                        else {}
+                    ),
+                    **(
+                        {"contact_suppression_phase": suppression_phase}
+                        if stage == "contact_suppression" and suppression_phase is not None
+                        else {}
+                    ),
                     **(
                         {
                             "observation_trace": observation_trace.model_dump()
