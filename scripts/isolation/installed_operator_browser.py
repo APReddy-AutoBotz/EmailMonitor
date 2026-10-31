@@ -55,6 +55,33 @@ HEADERS = {
 }
 
 
+async def assert_explicit_filter_refusal(page: Page) -> None:
+    """Real server refusal must not silently broaden either requested filter."""
+    await type_text(page, page.get_by_label("Requested journal"), "Synthetic Journal")
+    await type_text(page, page.get_by_label("Requested article type"), "review")
+    await activate(page, page.get_by_role("button", name="Create and validate plan", exact=True))
+    filtered = page.get_by_role("region", name="Server source plan")
+    await expect(filtered).to_contain_text("cannot apply the requested filters")
+    await expect(filtered).to_contain_text("Requested journal: Synthetic Journal")
+    await expect(filtered).to_contain_text("Requested article types: review")
+    await expect(
+        filtered.get_by_role("button", name="Launch extraction", exact=True)
+    ).to_be_disabled()
+    await type_text(page, page.get_by_label("Requested journal"), "")
+    await type_text(page, page.get_by_label("Requested article type"), "")
+    await expect(filtered).to_have_count(0)
+
+
+async def inspect_contact_article_details(page: Page) -> None:
+    await activate(
+        page, page.get_by_role("button", name=re.compile(r"^View article details for ")).first
+    )
+    details = page.get_by_role("region", name="Article details")
+    await expect(details).to_contain_text("Publication-date text")
+    await activate(page, details.get_by_role("button", name="Close article details"))
+    await expect(details).to_have_count(0)
+
+
 async def transient_context_journey(page: Page) -> None:
     """Compare two real retained fixture citations without making a review link."""
     openers = page.get_by_role("button", name="Evidence and review", exact=True)
@@ -96,7 +123,8 @@ async def transient_context_journey(page: Page) -> None:
     await expect(section).to_contain_text("does not establish the same person")
     await activate(page, section.get_by_role("button", name="Clear context", exact=True))
     await expect(section).not_to_contain_text("Source digest:")
-    # Leave the chosen observation open for the existing independent review.
+    await activate(page, dialog.get_by_role("button", name="Close evidence", exact=True))
+    await dialog.wait_for(state="hidden")
 
 
 def isolation() -> list[int]:
@@ -540,21 +568,7 @@ async def main() -> None:
                 await type_text(
                     page, page.get_by_label("Keyword", exact=True), "Myocardial Infarction"
                 )
-                await type_text(page, page.get_by_label("Requested journal"), "Synthetic Journal")
-                await type_text(page, page.get_by_label("Requested article type"), "review")
-                await activate(
-                    page, page.get_by_role("button", name="Create and validate plan", exact=True)
-                )
-                filtered = page.get_by_role("region", name="Server source plan")
-                await expect(filtered).to_contain_text("cannot apply the requested filters")
-                await expect(filtered).to_contain_text("Requested journal: Synthetic Journal")
-                await expect(filtered).to_contain_text("Requested article types: review")
-                await expect(
-                    filtered.get_by_role("button", name="Launch extraction", exact=True)
-                ).to_be_disabled()
-                await type_text(page, page.get_by_label("Requested journal"), "")
-                await type_text(page, page.get_by_label("Requested article type"), "")
-                await expect(filtered).to_have_count(0)
+                await assert_explicit_filter_refusal(page)
                 await activate(
                     page, page.get_by_role("button", name="Create and validate plan", exact=True)
                 )
@@ -591,17 +605,14 @@ async def main() -> None:
                 await channel.request({"kind": "control", "action": "wait_jobs"})
                 checkpoint("evidence_review")
                 await activate(page, page.get_by_role("button", name="Contacts", exact=True))
-                await activate(
-                    page,
-                    page.get_by_role(
-                        "button", name=re.compile(r"^View article details for ")
-                    ).first,
-                )
-                details = page.get_by_role("region", name="Article details")
-                await expect(details).to_contain_text("Publication-date text")
-                await activate(page, details.get_by_role("button", name="Close article details"))
-                await expect(details).to_have_count(0)
+                await inspect_contact_article_details(page)
                 await transient_context_journey(page)
+                await activate(
+                    page, page.get_by_role("button", name="Evidence and review", exact=True).first
+                )
+                await page.get_by_role(
+                    "heading", name="Actual retained citation", exact=True
+                ).wait_for()
                 await type_text(
                     page,
                     page.get_by_label("Reason", exact=True),
