@@ -58,6 +58,39 @@ REQUIRED = (
 )
 
 
+def report_reuse_export_failure(
+    admin_url: str,
+    organization: UUID,
+    owner: UUID,
+    publisher: threading.Thread | None,
+    stop: threading.Event,
+    failed: bool,
+    completed_pass: bool,
+    destination: Path,
+) -> None:
+    """Report a bounded, value-free snapshot before owned failure cleanup."""
+    from guest_outcome import case_export_snapshot, record_export_snapshot
+
+    fields: dict[str, Any] = {
+        "publisher_started": publisher is not None,
+        "publisher_alive": publisher is not None and publisher.is_alive(),
+        "publisher_stop_requested": stop.is_set(),
+        "publisher_failed": failed,
+        "publisher_completed_pass": completed_pass,
+    }
+    try:
+        # Use the existing bounded, read-only owned XML acceptance query; loading it
+        # only on failure keeps the normal installed journey unchanged.
+        from test_installed_xml_acceptance import owned_export_states
+
+        fields["exports"] = owned_export_states(admin_url, organization, owner)
+    except Exception:
+        fields["exports"] = "unavailable"
+    record_export_snapshot(fields)
+    with destination.open("a", encoding="ascii") as output:
+        output.write("reuse_export_snapshot=" + case_export_snapshot() + "\n")
+
+
 def require_installed_ci(environment: dict[str, str]) -> None:
     missing = [key for key in REQUIRED if not environment.get(key)]
     if missing:
@@ -775,6 +808,20 @@ def installed_journey(
                     stage.enter("service_process_cleanup")
     except BaseException as error:
         primary = error
+        if retained_reuse and os.environ.get("EM_INSTALLED_STAGE_REPORT") == "true":
+            try:
+                report_reuse_export_failure(
+                    case.admin_url,
+                    org,
+                    case.identities["owner"],
+                    publisher_thread,
+                    stop,
+                    bool(errors),
+                    publication_passes > 0,
+                    Path(os.environ["GITHUB_OUTPUT"]),
+                )
+            except Exception:
+                error.add_note("Fixed reuse export failure snapshot unavailable")
         stage.fail()
         raise
     finally:

@@ -142,6 +142,9 @@ jobs:
       - name: "Installed reuse stage: ${{ steps.installed-operator-test.outputs.reuse_stage || 'fixture_or_report_unavailable' }}"
         if: ${{ !cancelled() && steps.installed-operator-test.outcome != 'skipped' }}
         run: ':'
+      - name: "Installed reuse export snapshot: ${{ steps.installed-operator-test.outputs.reuse_export_snapshot || 'unavailable' }}"
+        if: ${{ !cancelled() && steps.installed-operator-test.outcome != 'skipped' }}
+        run: ':'
       - name: "Installed guest outcome: ${{ steps.installed-operator-test.outputs.guest_outcome || 'unavailable' }}"
         if: ${{ !cancelled() && steps.installed-operator-test.outcome != 'skipped' }}
         run: ':'

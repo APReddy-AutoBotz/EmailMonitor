@@ -1,7 +1,9 @@
 """Controlled-fake metadata tests; these do not execute installed acceptance."""
 
+import threading
 from pathlib import Path
 from typing import Literal, cast
+from uuid import uuid4
 
 import pytest
 import test_installed_operator_acceptance as acceptance
@@ -126,6 +128,42 @@ def test_reuse_reporting_error_does_not_replace_original(
         acceptance.test_required_installed_retained_reuse_journey(None, tmp_path)  # type: ignore[arg-type]
     assert caught.value is original
     assert original.__notes__ == ["Fixed installed reuse stage reporting failed"]
+
+
+@pytest.mark.parametrize("mode", ["queued", "invalid", "unavailable"])
+def test_reuse_export_snapshot_is_fixed_and_failure_only(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, mode: str
+) -> None:
+    import test_installed_xml_acceptance as xml
+
+    def states(*args: object) -> list[dict[str, object]]:
+        if mode == "unavailable":
+            raise RuntimeError("private sentinel")
+        return [
+            {
+                "format": "csv" if mode == "queued" else "private sentinel",
+                "state": "queued",
+                "attempts": 0,
+                "lease_present": False,
+                "lease_active": False,
+                "pending": True,
+                "confirmed": False,
+                "delivered": False,
+            }
+        ]
+
+    monkeypatch.setattr(xml, "owned_export_states", states)
+    output = tmp_path / "output"
+    acceptance.report_reuse_export_failure(
+        "private sentinel", uuid4(), uuid4(), None, threading.Event(), False, True, output
+    )
+    expected = {
+        "queued": "p00001.csv_queued.0.00100",
+        "invalid": "unavailable",
+        "unavailable": "p00001.sql_unavailable",
+    }[mode]
+    assert output.read_text() == "reuse_export_snapshot=" + expected + "\n"
+    assert "private sentinel" not in output.read_text()
 
 
 def test_output_key_is_closed(tmp_path: Path) -> None:
