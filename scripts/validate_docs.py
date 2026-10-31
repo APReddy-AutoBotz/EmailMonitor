@@ -108,6 +108,7 @@ def main() -> int:
         'article-metadata-precision.json': 'article-metadata-precision.schema.json',
         'association-bundle.json': 'association-bundle.schema.json',
         'association-review-request.json': 'association-review-request.schema.json',
+        'review-context-view-request.json': 'review-context-view-request.schema.json',
         'progress-snapshot.json': 'progress-snapshot.schema.json',
         'progress-event.json': 'progress-event.schema.json',
         'progress-item.json': 'progress-item.schema.json',

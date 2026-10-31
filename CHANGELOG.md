@@ -499,3 +499,5 @@ Add a trusted Python-only executor factory to the normal claimed Celery path, re
   explicitly empty journal filters rather than broaden a search.
 - Exercise synthetic source-side filters and describe documented provider-native
   ScienceDirect search terms offline; no source activation or entitlement is implied.
+- Add a transient, separately audited review-context view with current checks on
+  both source batches. It neither attaches evidence nor changes review/export state.

@@ -735,3 +735,11 @@ documented provider-native year and journal/book-title search terms without
 equating them to product filters. See [scope and limits](85-source-filter-contract.md).
 No publisher access, migration or authority change is included. Actual database,
 installed browser, hosted and source-specific acceptance remain pending.
+
+## Transient review context — local candidate
+
+An explicitly temporary, metadata-audited view can display an independently
+authorized citation next to a current association without attaching evidence,
+merging people, carrying review approval or changing an export. See [scope and
+limits](86-transient-review-context.md). It adds no migration or new grant.
+Database, deletion/concurrency and installed-browser acceptance remain pending.

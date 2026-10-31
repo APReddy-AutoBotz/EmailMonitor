@@ -14,6 +14,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import Connection, text
 from sqlalchemy.exc import DBAPIError
 
+from emailmonitor.associations.context_view import ContextView, project_context
 from emailmonitor.associations.mapping import identifier, map_observation
 from emailmonitor.associations.metadata import ArticleMetadata, project_metadata
 from emailmonitor.associations.models import Bundle, Review
@@ -25,7 +26,7 @@ from emailmonitor.extraction.html import ArticleObservation
 from emailmonitor.extraction.pdf_retained import RetainedPdf
 from emailmonitor.extraction.service import Extraction
 from emailmonitor.extraction.xml_retained import RetainedXml
-from emailmonitor.organizations.database import AuthorizationDenied, RevisionConflict
+from emailmonitor.organizations.database import AuthorizationDenied, RevisionConflict, TenantContext
 from emailmonitor.organizations.roles import Capability
 from emailmonitor.runtime.access import WorkAuthority, WorkDatabase
 
@@ -285,6 +286,67 @@ VALUES(:org,:batch,:candidate,:ordinal,:raw)
     def detail(self, org: UUID, batch: UUID) -> Bundle:
         with self.discovery._tenant(org, Capability.READ_ORGANIZATION) as (c, _):
             return self._bundle(c, org, batch)
+
+    def context_view(
+        self,
+        org: UUID,
+        target_batch: UUID,
+        association: UUID,
+        revision: int,
+        source_batch: UUID,
+        evidence: UUID,
+    ) -> ContextView:
+        """Read both observations and audit access, without creating a link."""
+        if target_batch == source_batch or type(self.token) is not str:
+            raise AuthorizationDenied()
+        with self.discovery._tenant(org, Capability.REVIEW_ASSOCIATIONS) as (c, ctx):
+            if not isinstance(ctx, TenantContext):
+                raise AuthorizationDenied()
+            # Order shared locks consistently; both reads retain their RLS and source fences.
+            for batch in sorted((target_batch, source_batch), key=lambda value: value.int):
+                self._lock(c, org, batch)
+            target = self._bundle(c, org, target_batch)
+            source = self._bundle(c, org, source_batch)
+            view = project_context(
+                org, target_batch, target, association, revision, source_batch, source, evidence
+            )
+            # Re-read under RLS as well as the parent fence before returning. A
+            # suppression/review change between the two reads must not release
+            # an older context or target revision.
+            current_target = self._bundle(c, org, target_batch)
+            current_source = self._bundle(c, org, source_batch)
+            current = project_context(
+                org,
+                target_batch,
+                current_target,
+                association,
+                revision,
+                source_batch,
+                current_source,
+                evidence,
+            )
+            if current != view:
+                raise RevisionConflict()
+            # The existing audit ledger contains identifiers only; neither the
+            # citation nor a cross-observation reference is persisted here.
+            # Failure to audit aborts the transaction and the response.
+            for action, resource in (
+                ("association.context_target_viewed", association),
+                ("association.context_evidence_viewed", evidence),
+            ):
+                c.execute(
+                    text("""INSERT INTO emailmonitor.audit_events
+                    (organization_id,id,actor_id,action,resource_id)
+                    VALUES(:org,:id,:actor,:action,:resource)"""),
+                    {
+                        "org": org,
+                        "id": uuid4(),
+                        "actor": ctx.identity_id,
+                        "action": action,
+                        "resource": resource,
+                    },
+                )
+            return view
 
     def quality(self, org: UUID, batch: UUID) -> ObservationQuality:
         return self._observation_view(org, batch, project_quality)

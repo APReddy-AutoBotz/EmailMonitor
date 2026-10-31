@@ -8,6 +8,7 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 
+from emailmonitor.associations.context_view import ContextView
 from emailmonitor.associations.metadata import (
     ArticleMetadata,
     ArticleMetadataPrecision,
@@ -70,6 +71,15 @@ class ReviewInput(BaseModel):
             evidence_ids=tuple(self.evidence_ids),
             reason=self.reason,
         )
+
+
+class ContextViewInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    target_batch_id: Identifier
+    target_association_id: Identifier
+    expected_revision: int = Field(ge=1, strict=True)
+    source_batch_id: Identifier
+    source_evidence_id: Identifier
 
 
 def association_router(
@@ -142,6 +152,24 @@ def association_router(
                 422, "Current observed author/address citations required"
             ) from error
         return result
+
+    @router.post("/organizations/{organization_id}/review-context/view")
+    def context_view(
+        request: Request, organization_id: UUID, body: ContextViewInput
+    ) -> ContextView:
+        """Audited context read; no source attachment or review mutation."""
+        service = service_for(csrf(request))
+        try:
+            return service.context_view(
+                organization_id,
+                body.target_batch_id,
+                body.target_association_id,
+                body.expected_revision,
+                body.source_batch_id,
+                body.source_evidence_id,
+            )
+        except RevisionConflict as error:
+            raise HTTPException(409, "Association revision conflict") from error
 
     @router.get("/organizations/{organization_id}/association-batches/{batch_id}/reviews")
     def history(request: Request, organization_id: UUID, batch_id: UUID) -> list[dict[str, object]]:
