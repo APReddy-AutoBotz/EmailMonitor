@@ -12,9 +12,21 @@ acquisition mode, database migration or deletion of real data is introduced.
   batch and contact authorization, but no recorded-history panel. The local
   candidate carries that panel and its tenant/revision/retention fences. The
   newer audited `unlink` action is explicitly displayed; malformed history is
-  unavailable rather than rendered. The original parser-phase diagnostic and
-  process-cleanup test-helper changes are not included and need separate
-  disposition; they are not product features or claimed equivalent.
+  unavailable rather than rendered. The synthetic check-shell helper now starts
+  its own session and, on timeout, signals only that owned process group. Tests
+  check success, timeout, already-gone and cleanup-refusal behavior; an uncertain
+  signal or reap retains the original timeout and records fixed uncertainty.
+  This is test machinery, not product process management.
+
+  PR67's parser stage receipt already identifies build, parser, OOM and complete,
+  preserves the original result and is covered by controlled-double tests.
+  PR67 additionally waits up to two seconds for the daemon's OOM event and
+  still requires a stopped container, actual `OOMKilled=true` and exit 137.
+  Pure tests cover each failed condition and owned cleanup. The older extra
+  `oom_flag_absent_exit137` check-metadata category is not byte-equivalent and
+  is deliberately not copied: it adds no acceptance evidence when there is no
+  actual OOM and no current failure requiring a further metadata split. Stage
+  metadata alone does not establish which OOM-state check failed.
 - **PR61:** current PR67 has the existing lifecycle API but lacks the
   selected-job staging UI. The local candidate carries explicit owner capability,
   a selected-job-only reason and confirmation, job reread, scope/revision fences,
@@ -30,8 +42,18 @@ acquisition mode, database migration or deletion of real data is introduced.
   rejects unpersisted or unsupported plans, and submits a reviewed launch at most
   once. It keeps plan state outside the resource-loading child so refresh does
   not discard it. PR67 already contains the authored current-job/generation
-  replay/render readiness and fixed focus metadata; the sibling's separate
-  browser process-outcome wrapper is not included and needs a separate disposition.
+  replay/render readiness and fixed focus metadata. The first presence-page Next
+  action now uses the existing passive same-attempt trace, preserving the same
+  single keyboard action, target, 100-Tab cap and readiness budget.
+
+  The old separate browser-result shell wrapper is deliberately not carried
+  forward. PR67 directly propagates the guarded runner's result and keeps the
+  exact protected workflow baseline. The old wrapper only separated outer exit
+  statuses 1–127 from 128–255; the latter could be a signal or a high exit code
+  and neither category identifies an inner browser or assertion failure. It is
+  not claimed equivalent metadata. Its limited extra signal does not justify a
+  protected workflow rewrite for the current integration; no historical failure
+  is explained by this choice.
 
 PR67 contains later association unlink, fixture-only retained reuse and temporary
 review context. The integration preserves their behavior: history is not current
@@ -56,8 +78,7 @@ The exact-inventory and same-tree zero-skip join remain required.
 Before publication or product acceptance: inspect the complete source diff;
 execute the actual scoped SQL and keyboard cases with authorized fixture
 resources; run all normal exact-head hosted workflows and the matching-tree join;
-review historical timeout/diagnostic failures separately; and disposition the
-remaining sibling test-only diagnostics. No prior green Draft transfers its
+and review historical timeout/diagnostic failures separately. No prior green Draft transfers its
 acceptance to this local candidate. Interactive buyer presentation still needs a
 supported isolated human-viewing workflow; the genuine-CI-only guest must not be
 converted into a local bypass. Real publisher rights, operational readiness,

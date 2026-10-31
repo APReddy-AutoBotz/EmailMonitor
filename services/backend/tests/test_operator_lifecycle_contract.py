@@ -560,10 +560,26 @@ def test_authored_outcome_next_uses_existing_single_keyboard_trace() -> None:
         and node.value.func.id == "traced_activate"
         and "Next article outcome page" in ast.unparse(node)
     ]
-    assert len(calls) == 2  # This page loop plus the existing late-organization probe.
+    # The loop, first presence activation, and late-organization probe each
+    # retain their own passive trace of the same single keyboard activation.
+    assert len(calls) == 3
     loop = next(
         node
         for node in ast.walk(journey)
         if isinstance(node, ast.For) and ast.unparse(node.iter) == "range(6)"
     )
     assert sum(node in ast.walk(loop) for node in calls) == 1
+    presence = next(
+        node.lineno
+        for node in ast.walk(journey)
+        if isinstance(node, ast.Call)
+        and ast.unparse(node) == "checkpoint('outcomes_presence_keyboard')"
+    )
+    presence_end = next(
+        node.lineno
+        for node in ast.walk(journey)
+        if isinstance(node, ast.Call)
+        and "Page 2: 25 article outcomes" in ast.unparse(node)
+        and node.lineno > presence
+    )
+    assert sum(presence < node.lineno < presence_end for node in calls) == 1
