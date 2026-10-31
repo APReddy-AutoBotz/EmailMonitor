@@ -13,7 +13,7 @@ import application_test_partition as partition
 import pytest
 
 OTHER = "tests/test_other.py::test_other"
-FULL = [*partition.RESERVED_SQL, *partition.CAPACITY_EXTRA, OTHER]
+FULL = [*partition.RESERVED_SQL, *partition.CAPACITY_EXTRA, *partition.CONTEXT_SQL, OTHER]
 TREE = "a" * 40
 CONFIG = "b" * 64
 
@@ -108,6 +108,21 @@ def test_each_new_capacity_node_is_required_once_and_refuses_collision() -> None
                 nodes.append(node)
             with pytest.raises(partition.PartitionRefused):
                 partition.partitions(nodes)
+
+
+def test_context_sql_inventory_is_required_once_and_cannot_be_skipped() -> None:
+    assert len(partition.CONTEXT_SQL) == len(set(partition.CONTEXT_SQL)) == 13
+    assert not set(partition.CONTEXT_SQL) & set(partition.RESERVED_SQL)
+    assert not set(partition.CONTEXT_SQL) & set(partition.CAPACITY_EXTRA)
+    result = partition.partitions(FULL)
+    for node in partition.CONTEXT_SQL:
+        assert result["capacity_sql"].count(node) == 1
+        assert node not in result["backend"] and node not in result["outcome_sql"]
+        for mutation in ("missing", "duplicate"):
+            changed = FULL.copy()
+            changed.remove(node) if mutation == "missing" else changed.append(node)
+            with pytest.raises(partition.PartitionRefused):
+                partition.partitions(changed)
 
 
 def test_new_tests_are_never_omitted_from_exact_disjoint_multiset_union() -> None:
@@ -353,7 +368,7 @@ def test_actual_pytest_lifecycle_enforces_assigned_nodes_and_zero_skips(
         "fail": "assert False",
     }.get(mutation, "assert True")
     functions: dict[str, dict[str, list[str]]] = {}
-    for node in (*partition.RESERVED_SQL, *partition.CAPACITY_EXTRA):
+    for node in (*partition.RESERVED_SQL, *partition.CAPACITY_EXTRA, *partition.CONTEXT_SQL):
         filename, function = node.split("::", 1)
         name, _, variant = function.partition("[")
         functions.setdefault(filename, {}).setdefault(name, [])

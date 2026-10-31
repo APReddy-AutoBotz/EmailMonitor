@@ -603,10 +603,12 @@ FR-004/006: the local [source-filter contract](85-source-filter-contract.md) map
 `test_synthetic_source_filter_contract.py`, `test_sciencedirect_filter_plan.py`,
 `test_discovery.py`, `test_reuse_adapters.py` and `wizardBrowser.test.tsx`.
 The offline fixture and inert provider-native request description do not enable
-source-side product filters or prove publisher entitlement. Real PostgreSQL,
-installed browser and exact-head hosted acceptance remain pending.
+source-side product filters or prove publisher entitlement. Four real disposable
+PostgreSQL planner-refusal cases passed. Installed browser and exact-head hosted
+acceptance remain pending.
 
 FR-020/028: the local [transient context view](86-transient-review-context.md)
 maps to `test_review_context_view.py` and `reviewContext.test.tsx`. It records
 fixed metadata-only read audit events and has no durable attachment or review
-effect. Fake-based tests do not prove real RLS, audit, deletion or concurrency.
+effect. Disposable PostgreSQL cases cover selected RLS, audit, deletion,
+revocation and concurrency paths; hosted and installed browser proof is pending.

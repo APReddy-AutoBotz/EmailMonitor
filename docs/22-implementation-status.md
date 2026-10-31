@@ -742,4 +742,5 @@ An explicitly temporary, metadata-audited view can display an independently
 authorized citation next to a current association without attaching evidence,
 merging people, carrying review approval or changing an export. See [scope and
 limits](86-transient-review-context.md). It adds no migration or new grant.
-Database, deletion/concurrency and installed-browser acceptance remain pending.
+Disposable PostgreSQL tests cover the stated tenant, audit, deletion and
+concurrency cases; installed-browser and exact-head hosted acceptance remain pending.

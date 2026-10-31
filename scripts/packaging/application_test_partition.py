@@ -1406,7 +1406,25 @@ CAPACITY_EXTRA = (
         "_checkpoint_terminalizes_frontier_and_reconcile_is_inert"
     ),
 )
-CAPACITY_SQL = (*MEASURED_SQL, *CAPACITY_EXTRA)
+# New context/filter SQL cases run with the same services and mandatory join.
+# The existing capacity partition had substantial headroom in its last receipt;
+# this adds only new cases rather than moving or omitting existing inventory.
+CONTEXT_SQL = (
+    "services/backend/tests/test_review_context_tenant.py::test_real_context_audits_without_mutating_either_review_or_evidence",
+    "services/backend/tests/test_review_context_tenant.py::test_real_context_does_not_change_existing_export",
+    "services/backend/tests/test_review_context_tenant.py::test_real_context_uses_reviewer_capability_and_rejects_cross_tenant",
+    "services/backend/tests/test_review_context_tenant.py::test_real_foreign_source_batch_cannot_be_read_from_valid_target",
+    "services/backend/tests/test_review_context_tenant.py::test_real_audit_failure_rolls_back_both_events_and_does_not_change_reviews",
+    "services/backend/tests/test_review_context_tenant.py::test_real_source_deletion_fences_context_and_purge_has_no_cross_batch_reference",
+    "services/backend/tests/test_review_context_tenant.py::test_real_source_deletion_refuses_during_context_fence",
+    "services/backend/tests/test_review_context_tenant.py::test_real_source_policy_revocation_refuses_later_context",
+    "services/backend/tests/test_review_context_tenant.py::test_real_reviewer_revocation_cannot_cross_active_context_read",
+    "services/backend/tests/test_discovery_tenant.py::test_real_unsupported_journal_and_type_remain_draft_without_discovery[filters0]",
+    "services/backend/tests/test_discovery_tenant.py::test_real_unsupported_journal_and_type_remain_draft_without_discovery[filters1]",
+    "services/backend/tests/test_discovery_tenant.py::test_real_unsupported_journal_and_type_remain_draft_without_discovery[filters2]",
+    "services/backend/tests/test_discovery_tenant.py::test_real_unsupported_journal_and_type_remain_draft_without_discovery[filters3]",
+)
+CAPACITY_SQL = (*MEASURED_SQL, *CAPACITY_EXTRA, *CONTEXT_SQL)
 PROFILES = ("backend", "outcome_sql", "capacity_sql")
 ARGUMENTS = (
     "-c",
@@ -1671,7 +1689,7 @@ def decode_receipt(raw: str, profile: str) -> dict[str, Any]:
     if (
         value["outcome_sql"] != manifest(outcome_expected)
         or value["capacity_sql"] != manifest(CAPACITY_SQL)
-        or value["excluded_backend"] != manifest((*RESERVED_SQL, *CAPACITY_EXTRA))
+        or value["excluded_backend"] != manifest((*RESERVED_SQL, *CAPACITY_EXTRA, *CONTEXT_SQL))
         or value["full"]["count"] != sum(value[p]["count"] for p in PROFILES)
         or any(
             value["excluded_" + p]["count"] != value["full"]["count"] - value[p]["count"]

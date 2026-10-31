@@ -695,6 +695,17 @@ def installed_journey(
                         )
                         == 1
                     )
+                    for action in (
+                        "association.context_target_viewed",
+                        "association.context_evidence_viewed",
+                    ):
+                        assert (
+                            scalar(
+                                "SELECT count(*) FROM emailmonitor.audit_events WHERE "
+                                "organization_id=:org AND action='" + action + "'"
+                            )
+                            == 1
+                        )
                     assert scalar(
                         "SELECT count(*) FROM emailmonitor.service_delegations WHERE "
                         "organization_id=:org AND revoked_at IS NULL"
