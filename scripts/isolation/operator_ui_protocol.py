@@ -405,6 +405,7 @@ STAGES = (
     "old_contact_response",
     "readonly_role",
     "contact_suppression",
+    "job_deletion",
     "final_cleanup",
 )
 ERRORS = {

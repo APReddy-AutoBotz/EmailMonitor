@@ -1,3 +1,7 @@
+## Local sibling-Draft integration candidate
+
+- Reconcile current-scoped review history, selected-job deletion staging and saved-draft plan/launch UI on the PR67 source. No server authority, migration, live source or actual deletion change. See [integration scope](docs/87-sibling-integration.md); real SQL and hosted browser/full acceptance remain pending.
+
 ## Contact article details — local candidate
 
 - Open current-authorized retained date text, journal, DOI and citations from a

@@ -2261,13 +2261,30 @@ async def main() -> None:
                 page, page.get_by_role("button", name="Create and validate plan", exact=True)
             )
             await page.get_by_role("region", name="Server source plan").wait_for()
-            await activate(page, page.get_by_role("button", name="Launch extraction", exact=True))
+            await activate(page, page.get_by_role("button", name="Open draft job", exact=True))
+            saved_draft = (
+                await page.get_by_role(
+                    "heading", name=re.compile(r"^Job [0-9a-f-]{36}$")
+                ).inner_text()
+            ).removeprefix("Job ")
+            await activate(page, page.get_by_role("button", name="Back to recent jobs", exact=True))
+            await activate(
+                page, page.get_by_role("button", name="Open job " + saved_draft, exact=True)
+            )
+            await activate(
+                page, page.get_by_role("button", name="Validate saved draft plan", exact=True)
+            )
+            await page.get_by_role("region", name="Validated saved draft", exact=True).wait_for()
+            await activate(
+                page, page.get_by_role("button", name="Launch this saved draft", exact=True)
+            )
             await page.get_by_text("Enumeration unknown", exact=False).wait_for()
             keyword_job = (
                 await page.get_by_role(
                     "heading", name=re.compile(r"^Job [0-9a-f-]{36}$")
                 ).inner_text()
             ).removeprefix("Job ")
+            assert keyword_job == saved_draft
             checkpoint("pause_resume")
             await activate(page, page.get_by_role("button", name="Pause", exact=True))
             await page.get_by_role("button", name="Resume", exact=True).wait_for()
@@ -2351,6 +2368,8 @@ async def main() -> None:
             )
             await expect(metadata.get_by_role("list")).to_be_visible()
             await expect(metadata).to_contain_text("Recorded date type:")
+            history = page.get_by_role("region", name="Recorded review history", exact=True)
+            await expect(history).to_contain_text("earliest 100 records")
             await channel.request({"kind": "control", "action": "hold_quality"})
             await activate(
                 page,
@@ -2417,6 +2436,18 @@ async def main() -> None:
             )
             await activate(page, page.get_by_role("button", name="Save review", exact=True))
             await page.get_by_role("dialog").wait_for(state="hidden")
+            await activate(
+                page, page.get_by_role("button", name="Evidence and review", exact=True).first
+            )
+            history = page.get_by_role("region", name="Recorded review history", exact=True)
+            await expect(history).to_contain_text("Synthetic keyboard evidence review")
+            await activate(page, history.locator("summary"))
+            await expect(history.get_by_role("list")).to_be_visible()
+            await expect(history).to_contain_text("Recorded action: accept")
+            await expect(history).to_contain_text("Expected association revision:")
+            await expect(history.locator("time").first).to_be_visible()
+            await activate(page, page.get_by_role("button", name="Close evidence", exact=True))
+            await wait_evidence_closed(page)
             # Real retained DOI filtering, using only the authored article-a metadata.
             paper_input = page.get_by_label(
                 "Paper DOI (optional; across authorized jobs)", exact=True
@@ -2803,6 +2834,40 @@ async def main() -> None:
                 table.or_(page.get_by_text("No contacts match these server filters.", exact=True))
             ).to_be_visible()
             await expect(suppression_address_cells(table, selected_address)).to_have_count(0)
+            checkpoint("job_deletion")
+            await activate(page, page.get_by_role("button", name="Jobs", exact=True))
+            await activate(
+                page, page.get_by_role("button", name="Open job " + actual_job, exact=True)
+            )
+            deletion = page.get_by_role("region", name="Job deletion", exact=True)
+            for commit in (False, True):
+                action = deletion.get_by_role("button", name="Review job deletion", exact=True)
+                if not commit:
+                    await expect(action).to_be_disabled()
+                    await select_index(page, page.get_by_label(re.compile(r"^Deletion reason")), 2)
+                await activate(page, action)
+                confirmation = page.get_by_role("dialog")
+                await expect(confirmation).to_contain_text(actual_job)
+                await expect(confirmation).to_contain_text(
+                    "all existing exports in this organization"
+                )
+                await expect(confirmation).to_contain_text("Physical purge")
+                await activate(
+                    page,
+                    confirmation.get_by_role(
+                        "button",
+                        name="Confirm stage job deletion" if commit else "Keep unchanged",
+                        exact=True,
+                    ),
+                )
+                await expect(confirmation).not_to_be_visible()
+                if not commit:
+                    await expect(
+                        page.get_by_role("heading", name="Job " + actual_job, exact=True)
+                    ).to_be_visible()
+            await expect(deletion).to_contain_text("Verified deletion receipt:")
+            await expect(deletion).to_contain_text("is fenced")
+            await expect(deletion).to_contain_text("No physical purge was requested")
             await asyncio.wait_for(settled_requests(), timeout=10)
             checkpoint("final_cleanup")
             print(
@@ -2834,6 +2899,7 @@ async def main() -> None:
                         "org_switch": True,
                         "readonly_role": True,
                         "contact_suppression": True,
+                        "job_deletion": True,
                         "stale_network_retry": True,
                         "late_old_response_refused": True,
                         "late_old_replay_refused": True,

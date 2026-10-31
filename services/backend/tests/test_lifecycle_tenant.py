@@ -338,6 +338,69 @@ def test_real_lifecycle_api_has_current_csrf_role_and_cross_tenant_refusal(
         assert "raw_address" not in success.text
 
 
+def test_real_selected_job_staging_receipt_is_idempotent_without_physical_purge(
+    scenario: Scenario,
+) -> None:
+    results, job = prepared(scenario)
+    org = scenario.organizations[0]
+    export = ready(results, org, job)
+    with fixture_client(scenario) as client:
+        csrf = scenario.login(client, "owner")
+        path = f"/api/v1/organizations/{org}/privacy/deletions"
+        headers = {"Origin": ORIGIN, "X-CSRF-Token": csrf}
+        first = client.post(
+            path, json={"job_id": str(job), "reason": "owner_request"}, headers=headers
+        )
+        assert first.status_code == 201
+        receipt = first.json()
+        assert receipt["job_id"] == str(job) and receipt["organization_id"] == str(org)
+        assert receipt["stage"] == "fenced" and receipt["purged_at"] is None
+        assert receipt["backup_replay_required"] is True
+        repeated = client.post(
+            path, json={"job_id": str(job), "reason": "privacy_request"}, headers=headers
+        )
+        assert repeated.status_code == 201 and repeated.json() == receipt
+    with pytest.raises(AuthorizationDenied):
+        results.contacts(org, Filters(job_id=job))
+    with pytest.raises(AuthorizationDenied):
+        results.download(org, export)
+    admin = create_engine(scenario.admin_url, hide_parameters=True)
+    try:
+        with admin.connect() as connection:
+            assert (
+                connection.execute(
+                    text(
+                        "SELECT count(*) FROM emailmonitor.article_observations "
+                        "WHERE organization_id=:org AND job_id=:job"
+                    ),
+                    {"org": org, "job": job},
+                ).scalar_one()
+                > 0
+            )
+            assert (
+                connection.execute(
+                    text(
+                        "SELECT count(*) FROM emailmonitor.deletion_tombstones "
+                        "WHERE organization_id=:org"
+                    ),
+                    {"org": org},
+                ).scalar_one()
+                == 1
+            )
+            assert (
+                connection.execute(
+                    text(
+                        "SELECT count(*) FROM emailmonitor.audit_events WHERE organization_id=:org "
+                        "AND action='lifecycle.fenced' AND resource_id=:job"
+                    ),
+                    {"org": org, "job": job},
+                ).scalar_one()
+                == 1
+            )
+    finally:
+        admin.dispose()
+
+
 def test_real_runtime_cannot_read_keys_context_or_create_unreviewed_grants(
     scenario: Scenario,
 ) -> None:
