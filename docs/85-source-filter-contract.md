@@ -8,6 +8,11 @@ Four disposable PostgreSQL cases exercise the real planner's empty-journal, expl
 
 The internal `source-filter-capability-v1` contract declares date types, exact journal semantics and exact-any article-type semantics without granting permission. An offline authored index exercises the contract with full published calendar dates, exact case-sensitive journals and explicit article types. It applies supported predicates to its complete synthetic index before paging, uses inclusive bounds, and refuses missing, partial or conflicting required metadata. Page and article caps are reported as partial. The index, reported total and outcomes describe only authored fixtures, not an actual publisher or a retained-results postfilter.
 
+The XML/PDF worker source package includes the shared filter-capability module
+because the existing parser import chain uses discovery planning. Exact import
+closure and materialized offline parsing tests guard this package input; its
+addition does not provide a live connector or change parser isolation.
+
 The fixture's consistency token binds its index, request and pagination limits for this isolated exercise. It is neither signed nor tenant-authorized and is not a production API cursor. The fixture is not a registered adapter and cannot activate discovery. The existing source planning and policy fences remain in effect.
 
 Real publisher filtering remains unsupported until authoritative source-specific evidence establishes available date types and precision, inclusive boundary behavior, journal and article-type vocabulary and matching, result completeness, stable pagination and applicable policy rights. No source-declared date can be inferred from a generic HTML time element. An implementation must preserve source provenance, current tenant and lifecycle authority, explicit limitations and the existing caps. Local contract and browser-component tests do not establish those publisher semantics, actual PostgreSQL acceptance or installed authenticated browser acceptance.

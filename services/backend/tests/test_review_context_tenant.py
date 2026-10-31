@@ -7,6 +7,7 @@ from threading import Event
 from uuid import UUID, uuid4
 
 import pytest
+from emailmonitor.associations.models import Bundle
 from emailmonitor.associations.service import Associations
 from emailmonitor.discovery.fixture import step_fixture
 from emailmonitor.discovery.service import Discovery
@@ -17,7 +18,7 @@ from emailmonitor.lifecycle.models import DeletionRequest
 from emailmonitor.lifecycle.service import Lifecycle
 from emailmonitor.organizations.database import AuthorizationDenied, Database
 from emailmonitor.results.models import Filters
-from sqlalchemy import create_engine, text
+from sqlalchemy import Connection, create_engine, text
 from sqlalchemy.exc import DBAPIError
 from test_association_tenant import client
 from test_durable_jobs import SETTINGS
@@ -239,7 +240,7 @@ def test_real_source_deletion_refuses_during_context_fence(
     locked, release = Event(), Event()
     original = service._bundle
 
-    def held(c: object, organization: UUID, batch: UUID):
+    def held(c: Connection, organization: UUID, batch: UUID) -> Bundle:
         result = original(c, organization, batch)
         if batch == source and not locked.is_set():
             locked.set()
@@ -312,7 +313,7 @@ def test_real_reviewer_revocation_cannot_cross_active_context_read(
         locked, release = Event(), Event()
         original = reviewer._bundle
 
-        def held(c: object, organization: UUID, batch: UUID):
+        def held(c: Connection, organization: UUID, batch: UUID) -> Bundle:
             result = original(c, organization, batch)
             if batch == source and not locked.is_set():
                 locked.set()
