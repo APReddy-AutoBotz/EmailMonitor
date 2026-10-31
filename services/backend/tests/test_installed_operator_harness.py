@@ -432,17 +432,40 @@ def test_installed_redirect_order_and_replay_latch(failure_point: str) -> None:
                 arm_login(coordinator, original)
             else:
                 observe_redirect(coordinator, original, target)
-        expected = (
-            "installed_redirect_order_arm"
-            if failure_point == "wrong_order"
-            else "installed_redirect_order_failure"
-        )
+        expected = {
+            "unarmed": "installed_redirect_failure_unarmed",
+            "duplicate": "installed_redirect_failure_duplicate",
+            "replay": "installed_redirect_failure_unarmed",
+            "wrong_order": "installed_redirect_order_arm",
+        }[failure_point]
         assert coordinator.failure_reason == expected
         with pytest.raises(RuntimeError, match="redirect refused"):
             coordinator.finish()
         assert coordinator.failure_reason == expected
 
     asyncio.run(exercise())
+
+
+@pytest.mark.parametrize(
+    ("state", "expected"),
+    [
+        ("inactive", "installed_redirect_failure_inactive"),
+        ("latched", "installed_redirect_failure_latched"),
+    ],
+)
+def test_failed_navigation_categories_preserve_fail_closed_state(state: str, expected: str) -> None:
+    coordinator = bound_redirects()
+    if state == "latched":
+        coordinator.begin()
+        coordinator.invalidate()
+    with pytest.raises(RuntimeError, match="redirect refused"):
+        observe_redirect(coordinator, object(), "private-synthetic-value")
+    assert coordinator.failed
+    assert coordinator.failure_reason == expected
+    with pytest.raises(RuntimeError, match="redirect refused"):
+        coordinator.finish()
+    assert coordinator.failure_reason == expected
+    assert "private" not in expected
 
 
 @pytest.mark.parametrize(

@@ -139,3 +139,48 @@ def test_oom_report_refuses_values_and_does_not_mask_a_create_failure(
     monkeypatch.setenv("GITHUB_OUTPUT", str(tmp_path))
     parser.report_oom("parser_oom_phase", "create")
     parser.report_oom_state({})
+
+
+def test_oom_cleanup_failure_remains_a_failure(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    output = tmp_path / "output"
+    monkeypatch.setenv("EM_PARSER_STAGE_REPORT", "true")
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
+    identifier = "a" * 64
+    state = {"Running": False, "OOMKilled": True, "ExitCode": 137}
+    host = {
+        "NetworkMode": "none",
+        "Privileged": False,
+        "CapAdd": None,
+        "CapDrop": ["ALL"],
+        "SecurityOpt": ["no-new-privileges"],
+        "ReadonlyRootfs": True,
+        "Binds": None,
+        "Memory": 134217728,
+        "MemorySwap": 134217728,
+        "PidsLimit": 32,
+        "NanoCpus": 500000000,
+    }
+    failure = RuntimeError("private cleanup failure")
+
+    def docker(*args: str, **_kwargs: Any) -> subprocess.CompletedProcess[str]:
+        if args[0] == "create":
+            return subprocess.CompletedProcess(args, 0, identifier, "")
+        if args[0] == "inspect":
+            return subprocess.CompletedProcess(
+                args, 0, json.dumps([{"HostConfig": host, "State": state}]), ""
+            )
+        assert args == ("rm", "--force", identifier)
+        raise failure
+
+    monkeypatch.setattr(parser, "docker", docker)
+    monkeypatch.setattr(parser, "settled_oom", lambda _identifier, observed: observed)
+    monkeypatch.setattr(
+        subprocess, "run", lambda *args, **kwargs: subprocess.CompletedProcess(args, 0, "", "")
+    )
+    with pytest.raises(RuntimeError) as caught:
+        parser.run(["synthetic"], expected_oom=True)
+    assert caught.value is failure
+    assert output.read_text().splitlines()[-1] == "parser_oom_cleanup=started"
+    assert "private" not in output.read_text()

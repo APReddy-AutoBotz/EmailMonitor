@@ -441,6 +441,10 @@ InstalledReason = Literal[
     "installed_redirect_order_begin",
     "installed_redirect_order_arm",
     "installed_redirect_order_failure",
+    "installed_redirect_failure_latched",
+    "installed_redirect_failure_inactive",
+    "installed_redirect_failure_unarmed",
+    "installed_redirect_failure_duplicate",
     "installed_redirect_order_next",
     "installed_redirect_order_finish",
     "installed_redirect_order_receipt",
@@ -525,6 +529,21 @@ JobDeletionPhase = Literal[
     "confirm_close",
     "receipt",
     "settled_requests",
+]
+
+ContactSuppressionPhase = Literal[
+    "select_organization",
+    "open_contacts",
+    "read_contact",
+    "open_evidence_cancel",
+    "open_evidence_confirm",
+    "choose_reason_cancel",
+    "choose_reason_confirm",
+    "open_confirmation_cancel",
+    "open_confirmation_confirm",
+    "cancel_confirmation",
+    "confirm_suppression",
+    "verify_result",
 ]
 
 EvidencePhase = Literal[
@@ -723,6 +742,7 @@ class DiagnosticFrame(BaseModel):
     export_assertion_line: int | None = Field(default=None, ge=1, le=10000)
     outcome_phase: OutcomePhase | None = None
     job_deletion_phase: JobDeletionPhase | None = None
+    contact_suppression_phase: ContactSuppressionPhase | None = None
     observation_trace: ObservationTrace | Literal["unavailable"] | None = None
     evidence_phase: EvidencePhase | None = None
     evidence_focus_trace: EvidenceFocusTrace | Literal["unavailable"] | None = None
@@ -767,6 +787,10 @@ class DiagnosticFrame(BaseModel):
             self.kind != "failure" or self.stage != "job_deletion"
         ):
             raise ValueError("Job deletion phase requires its exact failure stage")
+        if self.contact_suppression_phase is not None and (
+            self.kind != "failure" or self.stage != "contact_suppression"
+        ):
+            raise ValueError("Contact suppression phase requires its exact failure stage")
         if self.observation_trace is not None and (
             self.kind != "failure"
             or self.stage != "url_worker"

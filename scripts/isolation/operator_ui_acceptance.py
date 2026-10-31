@@ -21,6 +21,7 @@ from operator_ui_protocol import (
     OUTCOME_PHASES,
     STAGES,
     AuthoredOutcomeReplayReadiness,
+    ContactSuppressionPhase,
     EvidenceFocusTrace,
     FocusExhaustion,
     HandoffTrace,
@@ -1541,18 +1542,20 @@ async def main() -> None:
     outcome_phase: str | None = None
     evidence_phase: str | None = None
     deletion_phase: JobDeletionPhase | None = None
+    suppression_phase: ContactSuppressionPhase | None = None
     observation_trace: ObservationTrace | Literal["unavailable"] | None = None
     evidence_focus_trace: EvidenceFocusTrace | Literal["unavailable"] | None = None
     evidence_focus_observations: dict[str, object] = {}
 
     def checkpoint(value: str) -> None:
-        nonlocal stage, outcome_phase, evidence_phase, deletion_phase
+        nonlocal stage, outcome_phase, evidence_phase, deletion_phase, suppression_phase
         if value not in STAGES:
             raise RuntimeError("Fixed UI stage required")
         stage = value
         outcome_phase = None
         evidence_phase = None
         deletion_phase = None
+        suppression_phase = None
         print(json.dumps({"kind": "stage", "stage": value}), flush=True)
 
     def outcome_checkpoint(value: str) -> None:
@@ -2793,28 +2796,37 @@ async def main() -> None:
             # retained-data journeys: suppression intentionally fences matching data.
             await channel.request({"kind": "control", "action": "verify_retained"})
             checkpoint("contact_suppression")
+            suppression_phase = "select_organization"
             organization = page.get_by_role("combobox", name="Active organization", exact=True)
             values = await organization.locator("option").evaluate_all(
                 "nodes => nodes.map(node => node.value)"
             )
             await select_index(page, organization, values.index(setup["initial_organization"]))
+            suppression_phase = "open_contacts"
             await activate(page, page.get_by_role("button", name="Contacts", exact=True))
             table = page.get_by_role("table", name="Current-authorized observed contacts")
             await expect(table).to_be_visible()
+            suppression_phase = "read_contact"
             selected_address = (
                 await table.locator("tbody tr").first.locator("td").nth(2).inner_text()
             ).splitlines()[0]
             for commit in (False, True):
+                suppression_phase = "open_evidence_confirm" if commit else "open_evidence_cancel"
                 await activate(
                     page, page.get_by_role("button", name="Evidence and review", exact=True).first
                 )
                 action = page.get_by_role("button", name="Review contact suppression", exact=True)
+                suppression_phase = "choose_reason_confirm" if commit else "choose_reason_cancel"
                 await expect(action).to_be_disabled()
                 await select_index(page, suppression_reason(page), 1)
+                suppression_phase = (
+                    "open_confirmation_confirm" if commit else "open_confirmation_cancel"
+                )
                 await activate(page, action)
                 confirmation = page.get_by_role("dialog")
                 await expect(confirmation).to_contain_text("throughout this organization")
                 await expect(confirmation).to_contain_text(selected_address)
+                suppression_phase = "confirm_suppression" if commit else "cancel_confirmation"
                 await activate(
                     page,
                     page.get_by_role(
@@ -2828,6 +2840,7 @@ async def main() -> None:
                     await expect(
                         suppression_address_cells(table, selected_address).first
                     ).to_be_visible()
+            suppression_phase = "verify_result"
             await expect(
                 page.get_by_text(
                     "Action completed. Current permissions are rechecked by the server.", exact=True
@@ -2951,6 +2964,11 @@ async def main() -> None:
                     **(
                         {"job_deletion_phase": deletion_phase}
                         if stage == "job_deletion" and deletion_phase is not None
+                        else {}
+                    ),
+                    **(
+                        {"contact_suppression_phase": suppression_phase}
+                        if stage == "contact_suppression" and suppression_phase is not None
                         else {}
                     ),
                     **(

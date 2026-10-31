@@ -10,6 +10,7 @@ from typing import Annotated, Literal, get_args
 from operator_ui_protocol import (
     OUTCOME_PHASES,
     STAGES,
+    ContactSuppressionPhase,
     DiagnosticFrame,
     FocusExhaustion,
     InstalledCallbackDelivery,
@@ -50,6 +51,7 @@ class Trace:
         self.login_timing: LoginTimingTrace | None = None
         self.outcome = "none"
         self.deletion: JobDeletionPhase | None = None
+        self.suppression: ContactSuppressionPhase | None = None
         self.focus: FocusExhaustion | str | None = None
         self.cleanup: set[str] = set()
         self.export: InstalledExportStep | None = None
@@ -87,6 +89,11 @@ class Trace:
             self.deletion not in get_args(JobDeletionPhase) or self.phase != "job_deletion"
         ):
             raise ValueError("Closed job deletion phase required")
+        if self.suppression is not None and (
+            self.suppression not in get_args(ContactSuppressionPhase)
+            or self.phase != "contact_suppression"
+        ):
+            raise ValueError("Closed contact suppression phase required")
         focus = "none"
         attempt = ""
         if isinstance(self.focus, FocusExhaustion):
@@ -137,10 +144,11 @@ class Trace:
             export = "-export_" + export_step.phase + "." + (export_step.format or "none")
         callback = "-callback_" + self.callback if self.callback is not None else ""
         deletion = "-deletion_" + self.deletion if self.deletion is not None else ""
+        suppression = "-suppression_" + self.suppression if self.suppression is not None else ""
         return (
             f"{stage}-phase_{self.phase}-error_{self.error}-reason_{self.reason}-cleanup_{cleanup}"
             f"-login_{self.login}"
-            f"-outcome_{self.outcome}-focus_{focus}{attempt}{export}{callback}{deletion}"
+            f"-outcome_{self.outcome}-focus_{focus}{attempt}{export}{callback}{deletion}{suppression}"
         )
 
 
@@ -316,6 +324,7 @@ def guest_frame(frame: DiagnosticFrame) -> None:
             trace.login_timing = fixed.installed_login_timing
             trace.outcome = fixed.outcome_phase or "none"
             trace.deletion = fixed.job_deletion_phase
+            trace.suppression = fixed.contact_suppression_phase
             trace.focus = fixed.focus_exhaustion
             trace.export = fixed.installed_export_step
 

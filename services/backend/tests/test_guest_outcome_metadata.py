@@ -7,6 +7,7 @@ import guest_outcome as trace
 import pytest
 from operator_ui_protocol import (
     OUTCOME_PHASES,
+    ContactSuppressionPhase,
     DiagnosticFrame,
     FocusExhaustion,
     InstalledExportStep,
@@ -162,6 +163,57 @@ def test_job_deletion_phase_rejects_unlisted_or_wrong_scope(output: Path) -> Non
             "job_deletion_phase": "receipt",
         },
         {"kind": "stage", "stage": "job_deletion", "job_deletion_phase": "receipt"},
+    ]:
+        with pytest.raises(ValueError):
+            DiagnosticFrame.model_validate(value)
+    assert not output.exists()
+
+
+@pytest.mark.parametrize("phase", get_args(ContactSuppressionPhase))
+def test_suppression_phase_is_fixed_and_preserves_failure(output: Path, phase: str) -> None:
+    original = RuntimeError("private synthetic failure")
+
+    @trace.observed_guest
+    def failed() -> None:
+        trace.guest_stage("conversation")
+        trace.guest_frame(
+            DiagnosticFrame.model_validate(
+                {
+                    "kind": "failure",
+                    "stage": "contact_suppression",
+                    "error": "RuntimeError",
+                    "contact_suppression_phase": phase,
+                }
+            )
+        )
+        raise original
+
+    with pytest.raises(RuntimeError) as caught:
+        failed()
+    assert caught.value is original
+    assert "-suppression_" + phase in output.read_text()
+    assert "private" not in output.read_text()
+
+
+def test_suppression_phase_rejects_unlisted_or_wrong_scope(output: Path) -> None:
+    for value in [
+        {
+            "kind": "failure",
+            "stage": "contact_suppression",
+            "error": "RuntimeError",
+            "contact_suppression_phase": "private\ninjected",
+        },
+        {
+            "kind": "failure",
+            "stage": "job_deletion",
+            "error": "RuntimeError",
+            "contact_suppression_phase": "verify_result",
+        },
+        {
+            "kind": "stage",
+            "stage": "contact_suppression",
+            "contact_suppression_phase": "verify_result",
+        },
     ]:
         with pytest.raises(ValueError):
             DiagnosticFrame.model_validate(value)

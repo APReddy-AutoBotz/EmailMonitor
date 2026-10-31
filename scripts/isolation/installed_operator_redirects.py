@@ -374,7 +374,16 @@ class LoginRedirects:
     ) -> None:
         pending = self._pending
         if self.failed or not self.active or pending is None or self._observed:
-            self._reject("installed_redirect_order_failure")
+            reason: InstalledReason = (
+                "installed_redirect_failure_latched"
+                if self.failed
+                else "installed_redirect_failure_inactive"
+                if not self.active
+                else "installed_redirect_failure_unarmed"
+                if pending is None
+                else "installed_redirect_failure_duplicate"
+            )
+            self._reject(reason)
         if target != pending.target or method != "GET" or not main_frame:
             self._reject("installed_redirect_failure_identity")
         if redirected_from is not pending.original:

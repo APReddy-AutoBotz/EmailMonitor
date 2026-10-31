@@ -88,15 +88,23 @@ daemon state. A fixed-category receipt distinguishes the existing operation,
 observed memory state and owned cleanup, without changing the isolation limits,
 OOM assertions or error handling. The failure remains unexplained.
 
+On the same head, the keyboard journey failed earlier during contact suppression,
+before deletion was reached. Fixed subphases identify the existing action without
+reporting contact values. An installed XML journey separately reached the existing
+failed-navigation ordering refusal; fixed categories now distinguish its original
+latched, inactive, unarmed and duplicate conditions. These are diagnostic labels:
+the original refusal, keyboard sequence, cleanup and budgets remain unchanged.
+Neither observation establishes a root cause or repairs earlier failures.
+
 The existing component tests are carried forward with added checks for unlink,
 malformed history, unpersisted plans and simultaneous workspace lifetimes. The
 older synthetic keyboard flows for saved draft, recorded history and selected
-job deletion are authored together against the current guest; they have not been
-executed in genuine isolated browser CI for this new source. The restored real
-PostgreSQL history/retention/authority and selected-job deletion cases require a
-future explicitly authorized disposable database; local collection or skips do
-not establish SQL execution. They are assigned once to the existing capacity SQL
-partition. The previous accepted capacity run used 743 of its existing 1,200
+job deletion are authored together against the current guest; the last observed
+keyboard run stopped before deletion. Eleven selected PostgreSQL cases passed on
+the initial PR68 source with owned disposable resources and verified cleanup;
+later exact-head capacity SQL runs also passed. Local collection or skips alone
+do not establish SQL execution. The SQL cases are assigned once to the existing
+capacity SQL partition. The previous accepted capacity run used 743 of its existing 1,200
 work seconds; that margin is observed, not a guarantee for the expanded set.
 The exact-inventory and same-tree zero-skip join remain required.
 

@@ -612,3 +612,32 @@ def test_job_deletion_failure_metadata_uses_only_fixed_local_phases() -> None:
             )
     assert phases == set(get_args(JobDeletionPhase))
     assert '"job_deletion_phase": deletion_phase' in source.read_text()
+
+
+def test_suppression_failure_metadata_uses_only_fixed_local_phases() -> None:
+    import ast
+    from pathlib import Path
+    from typing import get_args
+
+    from operator_ui_protocol import ContactSuppressionPhase
+
+    source = Path(__file__).resolve().parents[3] / "scripts/isolation/operator_ui_acceptance.py"
+    module = ast.parse(source.read_text())
+    main = next(
+        node
+        for node in module.body
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "main"
+    )
+    phases: set[str] = set()
+    for node in ast.walk(main):
+        if isinstance(node, ast.Assign) and any(
+            isinstance(target, ast.Name) and target.id == "suppression_phase"
+            for target in node.targets
+        ):
+            phases.update(
+                value.value
+                for value in ast.walk(node.value)
+                if isinstance(value, ast.Constant) and isinstance(value.value, str)
+            )
+    assert phases == set(get_args(ContactSuppressionPhase))
+    assert '"contact_suppression_phase": suppression_phase' in source.read_text()
