@@ -1,3 +1,10 @@
+## Contact article details — local candidate
+
+- Open current-authorized retained date text, journal, DOI and citations from a
+  selected contact without entering review; hide stale or malformed results.
+- Replace the unconditional unobserved-date label. No source filtering, new
+  authority or migration is introduced; hosted browser acceptance is pending.
+
 ## Retained observation reuse — local candidate, acceptance pending
 
 - Add explicitly selected, fixture-only retained reuse with source-bound XML/PDF support proposed in migration 0026, original-time provenance and independent target review. Unsupported inputs and production-mode requests refuse; no live acquisition is enabled.
@@ -485,3 +492,12 @@ Add a trusted Python-only executor factory to the normal claimed Celery path, re
   preserving separate evidence, authors and reviews; no live acquisition.
 - Forward-only migration 0019 adds a derived identity index and filtered export
   checks. Validation is in progress; no deployment or public release is claimed.
+
+## Unpublished source-filter contract candidate
+
+- Record explicit journal and article-type requests and refuse unsupported or
+  explicitly empty journal filters rather than broaden a search.
+- Exercise synthetic source-side filters and describe documented provider-native
+  ScienceDirect search terms offline; no source activation or entitlement is implied.
+- Add a transient, separately audited review-context view with current checks on
+  both source batches. It neither attaches evidence nor changes review/export state.

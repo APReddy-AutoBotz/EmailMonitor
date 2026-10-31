@@ -717,3 +717,30 @@ or migration change is included.
 ## Retained reuse — local candidate, acceptance pending
 
 Explicit fixture-only reuse records the original source observation and selected freshness cutoff while giving the target job independent review. Current source, tenant, policy and lifecycle checks remain required; unsupported or missing retained input cannot fall back to acquisition. Migrations 0024–0026 were also applied to a populated disposable PostgreSQL database with row counts, table ACLs/RLS and test-role attributes and memberships preserved. Source-bound XML/PDF admission, the connected service, broker, installed-browser and restore paths still require full exact-head acceptance. The candidate is not a live-source or production capability. See [reuse decisions](82-evidence-date-reuse-decisions.md).
+
+## Contact article details — local candidate
+
+Open currently authorized retained article metadata directly from Contacts and
+Review; replace the unconditional unobserved-date claim, and keep stale or
+malformed results unavailable. See [scope](84-contact-article-details.md).
+Local synthetic component checks are separate from pending installed-browser and
+exact-head hosted acceptance. No migration, grant, live source or deployment.
+
+## Source-filter contract — local candidate
+
+The wizard accepts explicit journal and article-type requests, which the existing
+fixture source refuses. An offline complete synthetic index exercises supported
+filter semantics; a separate inert ScienceDirect request description represents
+documented provider-native year and journal/book-title search terms without
+equating them to product filters. See [scope and limits](85-source-filter-contract.md).
+No publisher access, migration or authority change is included. Actual database,
+installed browser, hosted and source-specific acceptance remain pending.
+
+## Transient review context — local candidate
+
+An explicitly temporary, metadata-audited view can display an independently
+authorized citation next to a current association without attaching evidence,
+merging people, carrying review approval or changing an export. See [scope and
+limits](86-transient-review-context.md). It adds no migration or new grant.
+Disposable PostgreSQL tests cover the stated tenant, audit, deletion and
+concurrency cases; installed-browser and exact-head hosted acceptance remain pending.

@@ -42,7 +42,8 @@ def xml_inputs(tmp_path: Path) -> Path:
 
 def test_explicit_worker_entrypoint_import_closure() -> None:
     files = set(xml_artifacts.XML_FILES)
-    assert len(files) == 39
+    assert len(files) == 40
+    assert "sources/filter_capabilities.py" in files
     assert "parsing/xml_worker.py" in files
     assert "fetching/fixture.py" in files  # Shared helper code is deliberately disclosed.
     assert "api.py" not in files

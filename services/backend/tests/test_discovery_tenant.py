@@ -72,6 +72,46 @@ def test_real_date_request_is_retained_but_plan_has_no_discovery(
         discovery.prepare(org, job)
 
 
+@pytest.mark.parametrize(
+    "filters",
+    [
+        {"journal": ""},
+        {"journal": "Synthetic Journal A"},
+        {"article_types": ["review"]},
+        {"journal": "Synthetic Journal A", "article_types": ["review"]},
+    ],
+)
+def test_real_unsupported_journal_and_type_remain_draft_without_discovery(
+    scenario: Scenario, filters: dict[str, object]
+) -> None:
+    ledger = approved(scenario)
+    org = scenario.organizations[0]
+    body = request_body()
+    body["input"] = {
+        "type": "keyword",
+        "source_id": "synthetic-publisher",
+        "original_query": "Myocardial Infarction",
+    }
+    body["filters"] = filters
+    request = JobRequest.model_validate(body)
+    key = str(uuid4())
+    job = ledger.create(org, request, key)
+    assert ledger.create(org, request, key) == job
+    discovery = Discovery(ledger.database, ledger.token, SETTINGS)
+    result = discovery.plan(org, job, 1)
+    assert result["persisted"] is False
+    plan = cast(dict[str, object], result["plan"])
+    assert plan["classification"] == "unsupported"
+    assert plan["reason"] == "fixture_filters_unavailable" and plan["start_url"] is None
+    saved = snapshot(ledger, org, job)
+    assert saved["state"] == "draft"
+    saved_request = cast(dict[str, object], saved["request"])
+    for field, value in filters.items():
+        assert cast(dict[str, object], saved_request["filters"])[field] == value
+    with pytest.raises(HTTPException):
+        discovery.prepare(org, job)
+
+
 def test_real_reuse_refusal_creates_no_job_or_idempotency_receipt(scenario: Scenario) -> None:
     ledger = approved(scenario)
     org, key = scenario.organizations[0], str(uuid4())

@@ -55,6 +55,78 @@ HEADERS = {
 }
 
 
+async def assert_explicit_filter_refusal(page: Page) -> None:
+    """Real server refusal must not silently broaden either requested filter."""
+    await type_text(page, page.get_by_label("Requested journal"), "Synthetic Journal")
+    await type_text(page, page.get_by_label("Requested article type"), "review")
+    await activate(page, page.get_by_role("button", name="Create and validate plan", exact=True))
+    filtered = page.get_by_role("region", name="Server source plan")
+    await expect(filtered).to_contain_text("cannot apply the requested filters")
+    await expect(filtered).to_contain_text("Requested journal: Synthetic Journal")
+    await expect(filtered).to_contain_text("Requested article types: review")
+    await expect(
+        filtered.get_by_role("button", name="Launch extraction", exact=True)
+    ).to_be_disabled()
+    await type_text(page, page.get_by_label("Requested journal"), "")
+    await type_text(page, page.get_by_label("Requested article type"), "")
+    await expect(filtered).to_have_count(0)
+
+
+async def inspect_contact_article_details(page: Page) -> None:
+    await activate(
+        page, page.get_by_role("button", name=re.compile(r"^View article details for ")).first
+    )
+    details = page.get_by_role("region", name="Article details")
+    await expect(details).to_contain_text("Publication-date text")
+    await activate(page, details.get_by_role("button", name="Close article details"))
+    await expect(details).to_have_count(0)
+
+
+async def transient_context_journey(page: Page) -> None:
+    """Compare two real retained fixture citations without making a review link."""
+    openers = page.get_by_role("button", name="Evidence and review", exact=True)
+    if await openers.count() < 2:
+        raise RuntimeError("Two retained observations are required for context acceptance")
+    await activate(page, openers.first)
+    dialog = page.get_by_role("dialog", name="Evidence and review", exact=True)
+    await dialog.get_by_role("heading", name="Actual retained citation", exact=True).wait_for()
+    await activate(page, dialog.get_by_text("Reference IDs for temporary context", exact=True))
+    batch_text = await dialog.get_by_text(re.compile(r"^Observation batch ID: ")).inner_text()
+    evidence_text = await dialog.get_by_text(re.compile(r"evidence ID: ")).first.inner_text()
+    identifier = r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}"
+    source = re.search(identifier, batch_text)
+    evidence = re.search(identifier, evidence_text)
+    if source is None or evidence is None:
+        raise RuntimeError("Current retained context references unavailable")
+    await activate(page, dialog.get_by_role("button", name="Close evidence", exact=True))
+    await dialog.wait_for(state="hidden")
+
+    found = False
+    for index in range(1, await openers.count()):
+        await activate(page, openers.nth(index))
+        await dialog.get_by_role("heading", name="Actual retained citation", exact=True).wait_for()
+        await activate(page, dialog.get_by_text("Reference IDs for temporary context", exact=True))
+        current = await dialog.get_by_text(re.compile(r"^Observation batch ID: ")).inner_text()
+        if source.group() not in current:
+            found = True
+            break
+        await activate(page, dialog.get_by_role("button", name="Close evidence", exact=True))
+        await dialog.wait_for(state="hidden")
+    if not found:
+        raise RuntimeError("A second retained observation is required for context acceptance")
+    section = dialog.get_by_role("region", name="Temporary source context")
+    await expect(section).to_contain_text("not attached or saved")
+    await type_text(page, section.get_by_label("Other observation batch ID"), source.group())
+    await type_text(page, section.get_by_label("Other observation evidence ID"), evidence.group())
+    await activate(page, section.get_by_role("button", name="View temporary context", exact=True))
+    await expect(section).to_contain_text("Source digest:")
+    await expect(section).to_contain_text("does not establish the same person")
+    await activate(page, section.get_by_role("button", name="Clear context", exact=True))
+    await expect(section).not_to_contain_text("Source digest:")
+    await activate(page, dialog.get_by_role("button", name="Close evidence", exact=True))
+    await dialog.wait_for(state="hidden")
+
+
 def isolation() -> list[int]:
     if os.environ.get("EM_ISOLATION_DIAGNOSTIC") != "synthetic-operator-ui" or os.geteuid() == 0:
         raise RuntimeError("Explicit nonroot installed operator diagnostic required")
@@ -496,6 +568,7 @@ async def main() -> None:
                 await type_text(
                     page, page.get_by_label("Keyword", exact=True), "Myocardial Infarction"
                 )
+                await assert_explicit_filter_refusal(page)
                 await activate(
                     page, page.get_by_role("button", name="Create and validate plan", exact=True)
                 )
@@ -532,6 +605,8 @@ async def main() -> None:
                 await channel.request({"kind": "control", "action": "wait_jobs"})
                 checkpoint("evidence_review")
                 await activate(page, page.get_by_role("button", name="Contacts", exact=True))
+                await inspect_contact_article_details(page)
+                await transient_context_journey(page)
                 await activate(
                     page, page.get_by_role("button", name="Evidence and review", exact=True).first
                 )

@@ -115,3 +115,5 @@ Controlled SQL reproduction established publisher receipt/worker authority self-
 ### Delegated date, reuse and unlink defaults
 
 The selected conservative product semantics and current implementation limits are recorded in `docs/82-evidence-date-reuse-decisions.md`. In particular, the existing generic HTML `time` parser label does not itself prove an explicit source publication-date declaration, and the current search fixture cannot apply date filtering. Do not infer complete filter support from an accepted request shape.
+
+ScienceDirect's general quota page lists 200 results per page, while its V2 migration guide specifies 10, 25, 50 or 100. The inactive request description uses the narrower V2 set and refuses a page crossing 6,000 results. Publication-year range endpoint inclusivity and journal/book title matching remain unspecified. Provider-native search terms cannot satisfy the product's day-inclusive or exact-journal filters. Applicable retention/contact rights remain unestablished; see [source filter contract](85-source-filter-contract.md).

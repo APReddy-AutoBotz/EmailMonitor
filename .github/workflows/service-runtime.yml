@@ -142,6 +142,12 @@ jobs:
       - name: "Installed reuse stage: ${{ steps.installed-operator-test.outputs.reuse_stage || 'fixture_or_report_unavailable' }}"
         if: ${{ !cancelled() && steps.installed-operator-test.outcome != 'skipped' }}
         run: ':'
+      - name: "Installed reuse export snapshot: ${{ steps.installed-operator-test.outputs.reuse_export_snapshot || 'unavailable' }}"
+        if: ${{ !cancelled() && steps.installed-operator-test.outcome != 'skipped' }}
+        run: ':'
+      - name: "Installed publisher failure: ${{ steps.installed-operator-test.outputs.installed_publisher_failure || 'unavailable' }}"
+        if: ${{ !cancelled() && steps.installed-operator-test.outcome != 'skipped' }}
+        run: ':'
       - name: "Installed guest outcome: ${{ steps.installed-operator-test.outputs.guest_outcome || 'unavailable' }}"
         if: ${{ !cancelled() && steps.installed-operator-test.outcome != 'skipped' }}
         run: ':'
@@ -163,6 +169,9 @@ jobs:
         if: ${{ !cancelled() && steps.installed-xml-test.outcome != 'skipped' }}
         run: ':'
       - name: "Installed XML check: ${{ steps.installed-xml-test.outputs.xml_check || 'consumer_not_reached' }}"
+        if: ${{ !cancelled() && steps.installed-xml-test.outcome != 'skipped' }}
+        run: ':'
+      - name: "Installed XML publisher failure: ${{ steps.installed-xml-test.outputs.installed_publisher_failure || 'unavailable' }}"
         if: ${{ !cancelled() && steps.installed-xml-test.outcome != 'skipped' }}
         run: ':'
       - name: "Installed XML first failure: ${{ steps.installed-xml-test.outputs.xml_failure || 'unavailable' }}"

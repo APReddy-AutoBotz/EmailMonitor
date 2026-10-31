@@ -83,6 +83,17 @@ class Filters(StrictModel):
         return self
 
 
+def has_requested_filters(filters: Filters) -> bool:
+    """Presence is significant even when a caller supplies an empty journal."""
+    return (
+        filters.publication_from is not None
+        or filters.publication_to is not None
+        or filters.publication_date_type is not None
+        or filters.journal is not None
+        or bool(filters.article_types)
+    )
+
+
 class Options(StrictModel):
     max_articles: int = Field(ge=1, le=10000)
     max_search_pages: int = Field(ge=1, le=1000)

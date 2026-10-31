@@ -52,6 +52,8 @@ export function SourcePlanSummary({ plan, job }: { plan: Record<string, unknown>
     ? reasons[detail.reason] : 'The server did not provide a recognized explanation. See the technical plan details.'
   const source = text(plan.source_id ?? input?.source_id)
   const hasDates = filters && (filters.publication_from !== undefined || filters.publication_to !== undefined)
+  const hasJournal = filters && Object.hasOwn(filters, 'journal')
+  const hasTypes = filters && Object.hasOwn(filters, 'article_types') && (!Array.isArray(filters.article_types) || filters.article_types.length > 0)
   return <>
     <p><strong>{status}.</strong> {reason}</p>
     <dl aria-label="Plan summary" className="plan-summary">
@@ -70,6 +72,9 @@ export function SourcePlanSummary({ plan, job }: { plan: Record<string, unknown>
       <div><dt>Article URLs listed at planning</dt><dd>{Array.isArray(checkpoint?.articles) && checkpoint.articles.every(value => typeof value === 'string') ? count(checkpoint.articles.length) : 'Unavailable'}</dd></div>
     </dl>
     {hasDates ? <p>Requested publication date: {text(filters.publication_date_type)}; from {text(filters.publication_from)} to {text(filters.publication_to)} (inclusive where supplied). A request is not proof that the source applied the filter.</p> : null}
+    {hasJournal ? <p>Requested journal: {filters.journal === '' ? 'Empty value' : text(filters.journal)}.</p> : null}
+    {hasTypes ? <p>Requested article types: {Array.isArray(filters.article_types) && filters.article_types.every(value => typeof value === 'string') ? filters.article_types.join(', ') : 'Unavailable'}.</p> : null}
+    {hasJournal || hasTypes ? <p>These are requested filters, not proof that a source applied them.</p> : null}
     {reuse ? <p>Retained reuse: {text(reuse.mode)}; fresh since {text(reuse.fresh_since)}. Eligibility is checked by the server.</p> : null}
     {plan.persisted === false ? <p>The server did not persist this plan. It cannot be launched; revise the input and create a new plan.</p> : null}
     <p>Listed URLs are not verified completed articles. Source-reported totals and discovered URLs are different; this is a planning snapshot. Estimated units and cost are unavailable. A matching input is not permission to acquire it; current source policy, capabilities, retention and server limits still apply at launch and execution.</p>

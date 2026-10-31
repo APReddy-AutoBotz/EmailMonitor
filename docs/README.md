@@ -71,6 +71,9 @@ Versioning: documents use Git history; public API uses `/api/v1`; event/schema r
 - [69 — Exact retained article selection and candidate presence](69-retained-article-filters.md)
 
 - [78 — Retained article metadata in review](78-retained-article-metadata.md)
+- [84 — Retained article details from contact results](84-contact-article-details.md)
+- [85 — Source search filter contract](85-source-filter-contract.md)
+- [86 — Transient review context](86-transient-review-context.md)
 
 - [81 — Retained job timing](81-retained-job-timing.md)
 - [80 — Contextual contact suppression](80-contextual-contact-suppression.md)

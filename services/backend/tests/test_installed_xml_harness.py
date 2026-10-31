@@ -188,7 +188,13 @@ def test_installed_html_steps_remain_identical_under_separate_branch() -> None:
                 and isinstance(value.value, ast.Call)
                 and isinstance(value.value.func, ast.Name)
                 and value.value.func.id
-                in {"assert_refused_preflight", "assert_supported_preflight"}
+                in {
+                    "assert_refused_preflight",
+                    "assert_supported_preflight",
+                    "assert_explicit_filter_refusal",
+                    "inspect_contact_article_details",
+                    "transient_context_journey",
+                }
             ):
                 self.calls.append(ast.unparse(value))
                 return None
@@ -198,7 +204,10 @@ def test_installed_html_steps_remain_identical_under_separate_branch() -> None:
     original_html = preflight.visit(original_html)
     assert preflight.calls == [
         "await assert_refused_preflight(page, api, setup['initial_organization'])",
+        "await assert_explicit_filter_refusal(page)",
         "await assert_supported_preflight(page)",
+        "await inspect_contact_article_details(page)",
+        "await transient_context_journey(page)",
     ]
     assert html.index("await assert_refused_preflight(page,") < html.index("Myocardial Infarction")
     assert html.index("await assert_supported_preflight(page)") < html.index("Launch extraction")
@@ -214,6 +223,39 @@ def test_installed_html_steps_remain_identical_under_separate_branch() -> None:
     assert "await login()" in html
     assert "actual_callback" in source and "foreign_tenant_job_denied" in source
     assert '"cookies" in setup' in source and "add_cookies" not in source
+
+
+def test_new_installed_context_checks_are_explicit_and_preserve_refusal() -> None:
+    tree = ast.parse((ROOT / "scripts/isolation/installed_operator_browser.py").read_text())
+    functions = {
+        node.name: ast.unparse(node) for node in tree.body if isinstance(node, ast.AsyncFunctionDef)
+    }
+    filters = functions["assert_explicit_filter_refusal"]
+    for text in (
+        "Requested journal",
+        "Requested article type",
+        "cannot apply the requested filters",
+        "Requested journal: Synthetic Journal",
+        "Requested article types: review",
+    ):
+        assert text in filters
+    assert "to_be_disabled()" in filters and "to_have_count(0)" in filters
+    details = functions["inspect_contact_article_details"]
+    assert "Publication-date text" in details and "Close article details" in details
+    assert "to_have_count(0)" in details
+    context = functions["transient_context_journey"]
+    for text in (
+        "Reference IDs for temporary context",
+        "not attached or saved",
+        "does not establish the same person",
+        "Other observation batch ID",
+        "Other observation evidence ID",
+        "View temporary context",
+        "Clear context",
+    ):
+        assert text in context
+    assert "not_to_contain_text('Source digest:')" in context
+    assert context.count("name='Close evidence'") == 3
 
 
 def test_installed_reuse_checkpoints_are_fixed_and_scoped_to_opt_in() -> None:

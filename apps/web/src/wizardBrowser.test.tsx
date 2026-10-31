@@ -300,3 +300,39 @@ describe('publication date request ownership', () => {
     expect(form.context.openJob).not.toHaveBeenCalled()
   })
 })
+
+describe('explicit journal and article type requests', () => {
+  it('preserves omission, invalidates the old plan and sends exact requested values', async () => {
+    const form = setup()
+    await form.submit()
+    expect(form.write.mock.calls[0][1]).toMatchObject({ filters: {} })
+    const oldKey = form.write.mock.calls[0][3]
+    form.changeDate('Requested journal', 'Synthetic Journal A')
+    form.changeDate('Requested article type', 'review')
+    expect(form.hasPlan()).toBe(false)
+    form.write.mockImplementation(async path => path === '/jobs' ? { id: '00000000-0000-0000-0000-000000000002' } : { plan: { classification: 'unsupported', reason: 'fixture_filters_unavailable' }, persisted: false })
+    await form.submit()
+    const creates = form.write.mock.calls.filter(([path]) => path === '/jobs')
+    expect(creates[1][1]).toMatchObject({ filters: { journal: 'Synthetic Journal A', article_types: ['review'] } })
+    expect(creates[1][3]).not.toBe(oldKey)
+    expect(form.launchDisabled()).toBe(true)
+    expect(form.write.mock.calls.some(([path]) => path.endsWith('/start'))).toBe(false)
+  })
+  it.each(['Requested journal', 'Requested article type'])('fences a late plan after editing %s', async label => {
+    const form = setup()
+    let release!: (value: { classification: string }) => void
+    form.write.mockImplementation(async path => path === '/jobs' ? { id: '00000000-0000-0000-0000-000000000002' } : new Promise(resolve => { release = resolve }))
+    const pending = form.submit()
+    await vi.waitFor(() => expect(release).toBeTypeOf('function'))
+    form.changeDate(label, 'requested'); form.changeDate(label, '')
+    release({ classification: 'article' }); await pending
+    expect(form.hasPlan()).toBe(false)
+    expect(form.context.openJob).not.toHaveBeenCalled()
+  })
+  it('rejects a whitespace-only filter before creating a draft', async () => {
+    const form = setup()
+    form.changeDate('Requested journal', '  ')
+    await expect(form.submit()).rejects.toThrow('Enter a nonblank journal')
+    expect(form.write).not.toHaveBeenCalled()
+  })
+})

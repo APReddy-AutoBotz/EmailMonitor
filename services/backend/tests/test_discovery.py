@@ -107,6 +107,14 @@ def test_filters_are_not_silently_ignored() -> None:
     assert plan_input(JobRequest.model_validate(body)).reason == "fixture_filters_unavailable"
 
 
+def test_explicit_empty_journal_is_not_silently_treated_as_no_filter() -> None:
+    body = request_body()
+    body["filters"] = {"journal": ""}
+    plan = plan_input(JobRequest.model_validate(body))
+    assert plan.classification == "unsupported"
+    assert plan.reason == "fixture_filters_unavailable" and plan.start_url is None
+
+
 @pytest.mark.parametrize(
     "input_value",
     [

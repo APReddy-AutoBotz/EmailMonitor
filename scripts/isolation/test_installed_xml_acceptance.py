@@ -54,6 +54,7 @@ from test_installed_operator_acceptance import (
     config_file,
     finite,
     installed_package,
+    report_publisher_failure,
     require_installed_ci,
 )
 from test_real_broker_jobs import wait_for
@@ -470,6 +471,13 @@ def test_installed_controlled_xml_operator(
                         except Exception as error:
                             errors.append(type(error).__name__)
                             stop.set()
+                            if os.environ.get("EM_XML_CASE_OUTCOME_REPORT") == "true":
+                                try:
+                                    report_publisher_failure(
+                                        error, Path(os.environ["GITHUB_OUTPUT"])
+                                    )
+                                except Exception:
+                                    pass
 
                 def control(action: str) -> None:
                     nonlocal expiry_observed

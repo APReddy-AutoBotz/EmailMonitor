@@ -53,6 +53,7 @@ XML_FILES = (
     "progress/binding.py",
     "sources/__init__.py",
     "sources/access.py",
+    "sources/filter_capabilities.py",
     "sources/policy.py",
     "sources/provider_documents.py",
     "sources/sciencedirect.py",

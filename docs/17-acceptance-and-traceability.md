@@ -590,3 +590,25 @@ and populated restore acceptance require their real infrastructure and must not
 be counted from local skips. The CI-only migration baseline also applies 0022
 in an owned database and probes its installed disabled-link check expression;
 that probe is not a substitute for the prior full 0022 runtime refusal receipt.
+
+FR-010/017/023 and NFR-011: the local [contact article-details candidate](84-contact-article-details.md)
+maps to `contactArticleDetails.test.tsx`, `contactArticleDetailsFlow.test.tsx`,
+`contactArticleDetailsFocus.test.tsx` and `articleMetadata.test.tsx`. These exercise the existing current-authorized
+metadata path, date text and citations, selection ownership and fail-closed UI
+states with synthetic component fixtures. Installed keyboard/browser and exact-head
+hosted acceptance remain pending; these local tests do not prove source filtering
+or change the existing endpoint's authority.
+
+FR-004/006: the local [source-filter contract](85-source-filter-contract.md) maps to
+`test_synthetic_source_filter_contract.py`, `test_sciencedirect_filter_plan.py`,
+`test_discovery.py`, `test_reuse_adapters.py` and `wizardBrowser.test.tsx`.
+The offline fixture and inert provider-native request description do not enable
+source-side product filters or prove publisher entitlement. Four real disposable
+PostgreSQL planner-refusal cases passed. Installed browser and exact-head hosted
+acceptance remain pending.
+
+FR-020/028: the local [transient context view](86-transient-review-context.md)
+maps to `test_review_context_view.py` and `reviewContext.test.tsx`. It records
+fixed metadata-only read audit events and has no durable attachment or review
+effect. Disposable PostgreSQL cases cover selected RLS, audit, deletion,
+revocation and concurrency paths; hosted and installed browser proof is pending.

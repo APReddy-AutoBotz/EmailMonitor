@@ -64,6 +64,14 @@ def test_classification_refuses_unselected_or_out_of_scope(failure: str) -> None
     assert retained_adapter(JobRequest.model_validate(body)) is None
 
 
+def test_reuse_refuses_an_explicit_empty_journal_filter() -> None:
+    body = request_body()
+    body["input"] = {"type": "url", "url": "https://synthetic.publisher.example/article-a.html"}
+    body["reuse"] = {"mode": "verified_retained", "fresh_since": "2000-01-01T00:00:00Z"}
+    body["filters"] = {"journal": ""}
+    assert retained_adapter(JobRequest.model_validate(body)) is None
+
+
 @pytest.mark.parametrize(
     "url",
     [

@@ -22,9 +22,22 @@ describe('current retained article metadata', () => {
   it.each([['org-b', 'batch-a'], ['org-a', 'batch-b']])('rejects mismatched response identity', (org, batch) => {
     expect(render({ loading: false, data }, org, batch)).not.toContain('Authored journal')
   })
+  it.each([
+    { ...data, preferred_metadata: null },
+    { ...data, facts: [null] },
+    { ...data, facts: [{ ...data.facts[0], evidence: null }] },
+    { ...data, multiple_value_fields: null },
+    { ...data, observation_route: ['html'] },
+    { ...data, fact_availability: 'unknown' },
+  ])('hides malformed current metadata instead of presenting or crashing on it', malformed => {
+    const html = render({ loading: false, data: malformed as unknown as ArticleMetadata })
+    expect(html).toContain('Current article metadata is unavailable')
+    expect(html).not.toContain('Authored journal')
+  })
   it('distinguishes unrecorded citations from a false empty-result claim', () => {
     const html = render({ loading: false, data: { ...data, fact_availability: 'not_recorded', facts: [], preferred_metadata: { title: null, journal: null, publication_date: null, doi: null }, multiple_value_fields: [] } })
     expect(html).toContain('Individual metadata citations were not recorded')
+    expect(html).toContain('<dt>Publication-date text</dt><dd>Not recorded</dd>')
     expect(html).not.toContain('No metadata facts are retained')
   })
   it('renders untrusted retained text as text, not links or executable markup', () => {
