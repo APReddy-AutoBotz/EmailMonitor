@@ -76,6 +76,12 @@ the available category does not distinguish focus readiness from waiting for the
 dialog to close. A further fixed split records those actions without changing
 the focus operation, Enter keypress or close assertion. No cause is established.
 
+That attempt also failed an installed XML case with the existing redirect-order
+refusal after callback delivery. Its generic category did not identify the
+rejecting check. Fixed rejection-location categories distinguish the original
+fail-closed checks without changing their predicates, exception, or login budget;
+they do not contain authentication values. This failure remains unexplained.
+
 The existing component tests are carried forward with added checks for unlink,
 malformed history, unpersisted plans and simultaneous workspace lifetimes. The
 older synthetic keyboard flows for saved draft, recorded history and selected

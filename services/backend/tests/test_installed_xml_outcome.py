@@ -164,6 +164,64 @@ def test_worker_failure_detail_is_closed_and_preserves_first_exception(
     assert "private" not in output.read_text()
 
 
+@pytest.mark.parametrize(
+    "reason",
+    [
+        "installed_redirect_order_bind",
+        "installed_redirect_order_commit",
+        "installed_redirect_order_lifecycle",
+        "installed_redirect_order_public_commit",
+        "installed_redirect_order_public_load",
+        "installed_redirect_order_begin",
+        "installed_redirect_order_arm",
+        "installed_redirect_order_failure",
+        "installed_redirect_order_next",
+        "installed_redirect_order_finish",
+        "installed_redirect_order_receipt",
+        "installed_redirect_order_observer",
+    ],
+)
+def test_redirect_refusal_category_reaches_fixed_xml_output(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, reason: str
+) -> None:
+    import guest_outcome as guest
+    from operator_ui_protocol import DiagnosticFrame
+
+    output = tmp_path / "output"
+    monkeypatch.setenv("EM_XML_CASE_OUTCOME_REPORT", "true")
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
+    progress = XmlProgress()
+    progress.pytest_runtest_logstart("synthetic", None)
+    original = RuntimeError("private synthetic value")
+
+    @guest.observed_guest
+    def failed() -> None:
+        guest.guest_stage("conversation")
+        guest.guest_frame(
+            DiagnosticFrame.model_validate(
+                {
+                    "kind": "failure",
+                    "stage": "keyword_worker",
+                    "error": "RuntimeError",
+                    "reason": reason,
+                    "installed_login_phase": "callback_document",
+                    "installed_callback_delivery": "fulfilled",
+                }
+            )
+        )
+        raise original
+
+    with pytest.raises(RuntimeError) as caught:
+        failed()
+    assert caught.value is original
+    progress.pytest_runtest_logreport(SimpleNamespace(outcome="failed", when="call"))
+    assert (
+        f"xml_worker_failure=error_RuntimeError-reason_{reason}-"
+        "login_callback_document-callback_fulfilled"
+    ) in output.read_text().splitlines()
+    assert "private" not in output.read_text()
+
+
 def test_callback_timing_revalidates_bounds_and_refuses_other_phases(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

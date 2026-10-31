@@ -432,8 +432,15 @@ def test_installed_redirect_order_and_replay_latch(failure_point: str) -> None:
                 arm_login(coordinator, original)
             else:
                 observe_redirect(coordinator, original, target)
+        expected = (
+            "installed_redirect_order_arm"
+            if failure_point == "wrong_order"
+            else "installed_redirect_order_failure"
+        )
+        assert coordinator.failure_reason == expected
         with pytest.raises(RuntimeError, match="redirect refused"):
             coordinator.finish()
+        assert coordinator.failure_reason == expected
 
     asyncio.run(exercise())
 
