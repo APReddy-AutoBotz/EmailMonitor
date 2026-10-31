@@ -508,7 +508,9 @@ JobDeletionPhase = Literal[
     "choose_reason",
     "cancel_confirmation",
     "open_confirmation",
-    "confirm_deletion",
+    "confirm_focus",
+    "confirm_keypress",
+    "confirm_close",
     "receipt",
     "settled_requests",
 ]

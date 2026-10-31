@@ -2859,15 +2859,18 @@ async def main() -> None:
                     "all existing exports in this organization"
                 )
                 await expect(confirmation).to_contain_text("Physical purge")
-                deletion_phase = "confirm_deletion" if commit else "cancel_confirmation"
-                await activate(
-                    page,
-                    confirmation.get_by_role(
-                        "button",
-                        name="Confirm stage job deletion" if commit else "Keep unchanged",
-                        exact=True,
-                    ),
+                deletion_phase = "confirm_focus" if commit else "cancel_confirmation"
+                deletion_target = confirmation.get_by_role(
+                    "button",
+                    name="Confirm stage job deletion" if commit else "Keep unchanged",
+                    exact=True,
                 )
+                await focus(page, deletion_target)
+                if commit:
+                    deletion_phase = "confirm_keypress"
+                await page.keyboard.press("Enter")
+                if commit:
+                    deletion_phase = "confirm_close"
                 await expect(confirmation).not_to_be_visible()
                 if not commit:
                     await expect(

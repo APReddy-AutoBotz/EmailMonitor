@@ -71,6 +71,11 @@ DOM text, identifiers or payloads, adds no stage frames, and does not change the
 keyboard action, assertion, deadline or failure. This is diagnostic evidence,
 not a product or runtime repair. Preserve the failed receipt separately.
 
+The next hosted attempt reported an `AssertionError` while confirming deletion;
+the available category does not distinguish focus readiness from waiting for the
+dialog to close. A further fixed split records those actions without changing
+the focus operation, Enter keypress or close assertion. No cause is established.
+
 The existing component tests are carried forward with added checks for unlink,
 malformed history, unpersisted plans and simultaneous workspace lifetimes. The
 older synthetic keyboard flows for saved draft, recorded history and selected
