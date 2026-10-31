@@ -91,6 +91,32 @@ def report_reuse_export_failure(
         output.write("reuse_export_snapshot=" + case_export_snapshot() + "\n")
 
 
+_first_publisher_failure: set[str] = set()
+
+
+def report_publisher_failure(error: Exception, destination: Path) -> None:
+    """Keep the first publisher failure's fixed category, never exception contents."""
+    target = str(destination)
+    if target in _first_publisher_failure:
+        return
+    if isinstance(error, subprocess.TimeoutExpired):
+        category = "deadline"
+    elif type(error) is RuntimeError and error.args == ("Installed finite service command failed",):
+        value = getattr(error, "_em_finite_category", None)
+        category = (
+            value if value in ("exit_nonzero", "stdout_limit", "stderr_limit") else "command_failed"
+        )
+    elif type(error) is RuntimeError and error.args == (
+        "Bounded installed publication receipt missing",
+    ):
+        category = "invalid_receipt"
+    else:
+        category = "other"
+    with destination.open("a", encoding="ascii") as output:
+        output.write("installed_publisher_failure=" + category + "\n")
+    _first_publisher_failure.add(target)
+
+
 def require_installed_ci(environment: dict[str, str]) -> None:
     missing = [key for key in REQUIRED if not environment.get(key)]
     if missing:
@@ -342,7 +368,15 @@ def finite(installed: Path, action: str, config: Path) -> str:
         check=False,
     )
     if result.returncode != 0 or len(result.stdout) > 1024 or len(result.stderr) > 1024:
-        raise RuntimeError("Installed finite service command failed")
+        error = RuntimeError("Installed finite service command failed")
+        error._em_finite_category = (  # type: ignore[attr-defined]
+            "exit_nonzero"
+            if result.returncode != 0
+            else "stdout_limit"
+            if len(result.stdout) > 1024
+            else "stderr_limit"
+        )
+        raise error
     return result.stdout.decode().strip()
 
 
@@ -596,6 +630,13 @@ def installed_journey(
                         except Exception as error:
                             errors.append(type(error).__name__)
                             stop.set()
+                            if os.environ.get("EM_INSTALLED_STAGE_REPORT") == "true":
+                                try:
+                                    report_publisher_failure(
+                                        error, Path(os.environ["GITHUB_OUTPUT"])
+                                    )
+                                except Exception:
+                                    pass
 
                 def control(action: str) -> None:
                     nonlocal expiry_observed
