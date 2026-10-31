@@ -24,6 +24,7 @@ from operator_ui_protocol import (
     EvidenceFocusTrace,
     FocusExhaustion,
     HandoffTrace,
+    JobDeletionPhase,
     KeyboardAttemptTrace,
     ObservationTrace,
     OutcomeReplayReadiness,
@@ -1539,17 +1540,19 @@ async def main() -> None:
     stage = "browser_launch"
     outcome_phase: str | None = None
     evidence_phase: str | None = None
+    deletion_phase: JobDeletionPhase | None = None
     observation_trace: ObservationTrace | Literal["unavailable"] | None = None
     evidence_focus_trace: EvidenceFocusTrace | Literal["unavailable"] | None = None
     evidence_focus_observations: dict[str, object] = {}
 
     def checkpoint(value: str) -> None:
-        nonlocal stage, outcome_phase, evidence_phase
+        nonlocal stage, outcome_phase, evidence_phase, deletion_phase
         if value not in STAGES:
             raise RuntimeError("Fixed UI stage required")
         stage = value
         outcome_phase = None
         evidence_phase = None
+        deletion_phase = None
         print(json.dumps({"kind": "stage", "stage": value}), flush=True)
 
     def outcome_checkpoint(value: str) -> None:
@@ -2835,7 +2838,9 @@ async def main() -> None:
             ).to_be_visible()
             await expect(suppression_address_cells(table, selected_address)).to_have_count(0)
             checkpoint("job_deletion")
+            deletion_phase = "navigate_jobs"
             await activate(page, page.get_by_role("button", name="Jobs", exact=True))
+            deletion_phase = "open_job"
             await activate(
                 page, page.get_by_role("button", name="Open job " + actual_job, exact=True)
             )
@@ -2843,8 +2848,10 @@ async def main() -> None:
             for commit in (False, True):
                 action = deletion.get_by_role("button", name="Review job deletion", exact=True)
                 if not commit:
+                    deletion_phase = "choose_reason"
                     await expect(action).to_be_disabled()
                     await select_index(page, page.get_by_label(re.compile(r"^Deletion reason")), 2)
+                deletion_phase = "open_confirmation"
                 await activate(page, action)
                 confirmation = page.get_by_role("dialog")
                 await expect(confirmation).to_contain_text(actual_job)
@@ -2852,6 +2859,7 @@ async def main() -> None:
                     "all existing exports in this organization"
                 )
                 await expect(confirmation).to_contain_text("Physical purge")
+                deletion_phase = "confirm_deletion" if commit else "cancel_confirmation"
                 await activate(
                     page,
                     confirmation.get_by_role(
@@ -2865,9 +2873,11 @@ async def main() -> None:
                     await expect(
                         page.get_by_role("heading", name="Job " + actual_job, exact=True)
                     ).to_be_visible()
+            deletion_phase = "receipt"
             await expect(deletion).to_contain_text("Verified deletion receipt:")
             await expect(deletion).to_contain_text("is fenced")
             await expect(deletion).to_contain_text("No physical purge was requested")
+            deletion_phase = "settled_requests"
             await asyncio.wait_for(settled_requests(), timeout=10)
             checkpoint("final_cleanup")
             print(
@@ -2935,6 +2945,11 @@ async def main() -> None:
                         else {}
                     ),
                     **({"outcome_phase": outcome_phase} if outcome_phase is not None else {}),
+                    **(
+                        {"job_deletion_phase": deletion_phase}
+                        if stage == "job_deletion" and deletion_phase is not None
+                        else {}
+                    ),
                     **(
                         {
                             "observation_trace": observation_trace.model_dump()

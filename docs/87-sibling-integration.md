@@ -63,6 +63,14 @@ not by itself proof of byte-for-byte equivalence or successful merging.
 
 ## Verification and remaining work
 
+The first PR68 hosted operator attempt on the original integration head failed
+with an unknown-reason `RuntimeError` in the selected-job deletion stage; its
+exact action is not established by that receipt. The local follow-up records
+only a closed subphase for that existing stage on a future failure. It emits no
+DOM text, identifiers or payloads, adds no stage frames, and does not change the
+keyboard action, assertion, deadline or failure. This is diagnostic evidence,
+not a product or runtime repair. Preserve the failed receipt separately.
+
 The existing component tests are carried forward with added checks for unlink,
 malformed history, unpersisted plans and simultaneous workspace lifetimes. The
 older synthetic keyboard flows for saved draft, recorded history and selected

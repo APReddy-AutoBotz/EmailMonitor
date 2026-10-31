@@ -502,6 +502,17 @@ OutcomePhase = Literal[
 ]
 OUTCOME_PHASES = get_args(OutcomePhase)
 
+JobDeletionPhase = Literal[
+    "navigate_jobs",
+    "open_job",
+    "choose_reason",
+    "cancel_confirmation",
+    "open_confirmation",
+    "confirm_deletion",
+    "receipt",
+    "settled_requests",
+]
+
 EvidencePhase = Literal[
     "contacts",
     "open",
@@ -697,6 +708,7 @@ class DiagnosticFrame(BaseModel):
     installed_login_timing: LoginTimingTrace | None = None
     export_assertion_line: int | None = Field(default=None, ge=1, le=10000)
     outcome_phase: OutcomePhase | None = None
+    job_deletion_phase: JobDeletionPhase | None = None
     observation_trace: ObservationTrace | Literal["unavailable"] | None = None
     evidence_phase: EvidencePhase | None = None
     evidence_focus_trace: EvidenceFocusTrace | Literal["unavailable"] | None = None
@@ -737,6 +749,10 @@ class DiagnosticFrame(BaseModel):
             self.kind != "failure" or self.stage != "url_worker"
         ):
             raise ValueError("Outcome phase requires its exact failure stage")
+        if self.job_deletion_phase is not None and (
+            self.kind != "failure" or self.stage != "job_deletion"
+        ):
+            raise ValueError("Job deletion phase requires its exact failure stage")
         if self.observation_trace is not None and (
             self.kind != "failure"
             or self.stage != "url_worker"
