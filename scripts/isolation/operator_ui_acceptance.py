@@ -2038,6 +2038,157 @@ async def main() -> None:
                 ).index(setup["initial_organization"]),
             )
             await page.get_by_role("heading", name="Synthetic tenant 0", exact=True).wait_for()
+
+            async def settled_requests() -> None:
+                while channel.pending or channel.admitted:
+                    await asyncio.sleep(0.05)
+
+            async def privacy_journey(actual_job: str) -> None:
+                nonlocal suppression_phase, deletion_phase
+                checkpoint("contact_suppression")
+                suppression_phase = "select_organization"
+                organization = page.get_by_role("combobox", name="Active organization", exact=True)
+                values = await organization.locator("option").evaluate_all(
+                    "nodes => nodes.map(node => node.value)"
+                )
+                await select_index(page, organization, values.index(setup["initial_organization"]))
+                suppression_phase = "open_contacts"
+                await activate(page, page.get_by_role("button", name="Contacts", exact=True))
+                table = page.get_by_role("table", name="Current-authorized observed contacts")
+                await expect(table).to_be_visible()
+                suppression_phase = "read_contact"
+                selected_address = (
+                    await table.locator("tbody tr").first.locator("td").nth(2).inner_text()
+                ).splitlines()[0]
+                for commit in (False, True):
+                    suppression_phase = (
+                        "open_evidence_confirm" if commit else "open_evidence_cancel"
+                    )
+                    await activate(
+                        page,
+                        page.get_by_role("button", name="Evidence and review", exact=True).first,
+                    )
+                    action = page.get_by_role(
+                        "button", name="Review contact suppression", exact=True
+                    )
+                    suppression_phase = (
+                        "choose_reason_confirm" if commit else "choose_reason_cancel"
+                    )
+                    await expect(action).to_be_disabled()
+                    await select_index(page, suppression_reason(page), 1)
+                    suppression_phase = (
+                        "open_confirmation_confirm" if commit else "open_confirmation_cancel"
+                    )
+                    await activate(page, action)
+                    confirmation = page.get_by_role("dialog")
+                    await expect(confirmation).to_contain_text("throughout this organization")
+                    await expect(confirmation).to_contain_text(selected_address)
+                    suppression_phase = "confirm_suppression" if commit else "cancel_confirmation"
+                    await activate(
+                        page,
+                        page.get_by_role(
+                            "button",
+                            name="Confirm suppress observed contact"
+                            if commit
+                            else "Keep unchanged",
+                            exact=True,
+                        ),
+                    )
+                    await expect(confirmation).not_to_be_visible()
+                    if not commit:
+                        await expect(
+                            suppression_address_cells(table, selected_address).first
+                        ).to_be_visible()
+                suppression_phase = "verify_result"
+                await expect(
+                    page.get_by_text(
+                        "Action completed. Current permissions are rechecked by the server.",
+                        exact=True,
+                    )
+                ).to_be_visible()
+                await expect(
+                    table.or_(
+                        page.get_by_text("No contacts match these server filters.", exact=True)
+                    )
+                ).to_be_visible()
+                await expect(suppression_address_cells(table, selected_address)).to_have_count(0)
+                checkpoint("job_deletion")
+                deletion_phase = "navigate_jobs"
+                await activate(page, page.get_by_role("button", name="Jobs", exact=True))
+                deletion_phase = "open_job"
+                await deletion_open_job(
+                    page,
+                    page.get_by_role("button", name="Open job " + actual_job, exact=True),
+                    mark_deletion,
+                )
+                deletion = page.get_by_role("region", name="Job deletion", exact=True)
+                for commit in (False, True):
+                    action = deletion.get_by_role("button", name="Review job deletion", exact=True)
+                    if not commit:
+                        deletion_phase = "choose_reason"
+                        await expect(action).to_be_disabled()
+                        await select_index(
+                            page, page.get_by_label(re.compile(r"^Deletion reason")), 2
+                        )
+                    confirmation = await deletion_open_confirmation(
+                        page, action, actual_job, commit, mark_deletion, observe_deletion_dialog
+                    )
+                    deletion_phase = "confirm_focus" if commit else "cancel_confirmation"
+                    deletion_target = confirmation.get_by_role(
+                        "button",
+                        name="Confirm stage job deletion" if commit else "Keep unchanged",
+                        exact=True,
+                    )
+                    await focus(page, deletion_target)
+                    if commit:
+                        deletion_phase = "confirm_keypress"
+                    await page.keyboard.press("Enter")
+                    if commit:
+                        deletion_phase = "confirm_close"
+                    await expect(confirmation).not_to_be_visible()
+                    if not commit:
+                        await expect(
+                            page.get_by_role("heading", name="Job " + actual_job, exact=True)
+                        ).to_be_visible()
+                deletion_phase = "receipt"
+                await deletion_receipt_checks(
+                    page, deletion, mark_deletion, observe_deletion_receipt
+                )
+                deletion_phase = "settled_requests"
+                await asyncio.wait_for(settled_requests(), timeout=10)
+
+            if setup.get("journey") == "controlled_privacy":
+                organization = page.get_by_role("combobox", name="Active organization", exact=True)
+                values = await organization.locator("option").evaluate_all(
+                    "nodes => nodes.map(node => node.value)"
+                )
+                await select_index(page, organization, values.index(setup["other_organization"]))
+                await page.get_by_role("heading", name="Synthetic tenant 1", exact=True).wait_for()
+                actual_job = str(setup["target_job"])
+                await privacy_journey(actual_job)
+                if channel.request_limit_refused:
+                    raise RuntimeError("UI diagnostic request cap exceeded")
+                checkpoint("final_cleanup")
+                print(
+                    json.dumps(
+                        {
+                            "kind": "result",
+                            "journey": "operator_privacy",
+                            "diagnostic": "synthetic-operator-ui",
+                            "keyboard": True,
+                            "target_job": actual_job,
+                            "request_count": channel.identifier,
+                            "network_errno": network,
+                            "interfaces": interfaces,
+                            "contact_suppression": True,
+                            "job_deletion": True,
+                        }
+                    ),
+                    flush=True,
+                )
+                await context.close()
+                await browser.close()
+                return
             if setup.get("journey") == "controlled_lifecycle":
                 checkpoint("pause_resume")
                 await lifecycle_journey(page, channel, setup, checkpoint)
@@ -3055,10 +3206,6 @@ async def main() -> None:
             ):
                 raise RuntimeError("UI service workers must remain absent")
 
-            async def settled_requests() -> None:
-                while channel.pending:
-                    await asyncio.sleep(0.05)
-
             await asyncio.wait_for(settled_requests(), timeout=10)
             if old_address in await page.locator("body").inner_text():
                 raise RuntimeError("Late previous-tenant response survived switch")
@@ -3075,107 +3222,18 @@ async def main() -> None:
             # Exercise the existing management action only after the preceding
             # retained-data journeys: suppression intentionally fences matching data.
             await channel.request({"kind": "control", "action": "verify_retained"})
-            checkpoint("contact_suppression")
-            suppression_phase = "select_organization"
-            organization = page.get_by_role("combobox", name="Active organization", exact=True)
-            values = await organization.locator("option").evaluate_all(
-                "nodes => nodes.map(node => node.value)"
-            )
-            await select_index(page, organization, values.index(setup["initial_organization"]))
-            suppression_phase = "open_contacts"
-            await activate(page, page.get_by_role("button", name="Contacts", exact=True))
-            table = page.get_by_role("table", name="Current-authorized observed contacts")
-            await expect(table).to_be_visible()
-            suppression_phase = "read_contact"
-            selected_address = (
-                await table.locator("tbody tr").first.locator("td").nth(2).inner_text()
-            ).splitlines()[0]
-            for commit in (False, True):
-                suppression_phase = "open_evidence_confirm" if commit else "open_evidence_cancel"
-                await activate(
-                    page, page.get_by_role("button", name="Evidence and review", exact=True).first
-                )
-                action = page.get_by_role("button", name="Review contact suppression", exact=True)
-                suppression_phase = "choose_reason_confirm" if commit else "choose_reason_cancel"
-                await expect(action).to_be_disabled()
-                await select_index(page, suppression_reason(page), 1)
-                suppression_phase = (
-                    "open_confirmation_confirm" if commit else "open_confirmation_cancel"
-                )
-                await activate(page, action)
-                confirmation = page.get_by_role("dialog")
-                await expect(confirmation).to_contain_text("throughout this organization")
-                await expect(confirmation).to_contain_text(selected_address)
-                suppression_phase = "confirm_suppression" if commit else "cancel_confirmation"
-                await activate(
-                    page,
-                    page.get_by_role(
-                        "button",
-                        name="Confirm suppress observed contact" if commit else "Keep unchanged",
-                        exact=True,
-                    ),
-                )
-                await expect(confirmation).not_to_be_visible()
-                if not commit:
-                    await expect(
-                        suppression_address_cells(table, selected_address).first
-                    ).to_be_visible()
-            suppression_phase = "verify_result"
-            await expect(
-                page.get_by_text(
-                    "Action completed. Current permissions are rechecked by the server.", exact=True
-                )
-            ).to_be_visible()
-            await expect(
-                table.or_(page.get_by_text("No contacts match these server filters.", exact=True))
-            ).to_be_visible()
-            await expect(suppression_address_cells(table, selected_address)).to_have_count(0)
-            checkpoint("job_deletion")
-            deletion_phase = "navigate_jobs"
-            await activate(page, page.get_by_role("button", name="Jobs", exact=True))
-            deletion_phase = "open_job"
-            await deletion_open_job(
-                page,
-                page.get_by_role("button", name="Open job " + actual_job, exact=True),
-                mark_deletion,
-            )
-            deletion = page.get_by_role("region", name="Job deletion", exact=True)
-            for commit in (False, True):
-                action = deletion.get_by_role("button", name="Review job deletion", exact=True)
-                if not commit:
-                    deletion_phase = "choose_reason"
-                    await expect(action).to_be_disabled()
-                    await select_index(page, page.get_by_label(re.compile(r"^Deletion reason")), 2)
-                confirmation = await deletion_open_confirmation(
-                    page, action, actual_job, commit, mark_deletion, observe_deletion_dialog
-                )
-                deletion_phase = "confirm_focus" if commit else "cancel_confirmation"
-                deletion_target = confirmation.get_by_role(
-                    "button",
-                    name="Confirm stage job deletion" if commit else "Keep unchanged",
-                    exact=True,
-                )
-                await focus(page, deletion_target)
-                if commit:
-                    deletion_phase = "confirm_keypress"
-                await page.keyboard.press("Enter")
-                if commit:
-                    deletion_phase = "confirm_close"
-                await expect(confirmation).not_to_be_visible()
-                if not commit:
-                    await expect(
-                        page.get_by_role("heading", name="Job " + actual_job, exact=True)
-                    ).to_be_visible()
-            deletion_phase = "receipt"
-            await deletion_receipt_checks(page, deletion, mark_deletion, observe_deletion_receipt)
-            deletion_phase = "settled_requests"
             await asyncio.wait_for(settled_requests(), timeout=10)
+            if channel.request_limit_refused:
+                raise RuntimeError("UI diagnostic request cap exceeded")
             checkpoint("final_cleanup")
             print(
                 json.dumps(
                     {
                         "kind": "result",
                         "diagnostic": "synthetic-operator-ui",
+                        "journey": "operator_core",
+                        "target_job": actual_job,
+                        "request_count": channel.identifier,
                         "keyboard": True,
                         "built_assets": accepted,
                         "sandbox": sandbox,
@@ -3199,8 +3257,6 @@ async def main() -> None:
                         "download_cancelled": True,
                         "org_switch": True,
                         "readonly_role": True,
-                        "contact_suppression": True,
-                        "job_deletion": True,
                         "stale_network_retry": True,
                         "late_old_response_refused": True,
                         "late_old_replay_refused": True,

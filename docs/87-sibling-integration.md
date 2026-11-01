@@ -175,3 +175,23 @@ acceptance to this local candidate. Interactive buyer presentation still needs a
 supported isolated human-viewing workflow; the genuine-CI-only guest must not be
 converted into a local bypass. Real publisher rights, operational readiness,
 security and integration review, UAT and production release remain separate.
+
+## Two independently isolated operator scenarios (local candidate)
+
+The existing keyboard extraction-to-export journey, organization switching, stale
+response and retained-artifact proof remain together in one isolated guest. After
+that guest completes, the host validates its receipt against the retained job and
+ready artifact, then creates a new synthetic login for the same fixture owner and
+a separately owned browser guest. That second guest performs the existing keyboard
+suppression cancellation/confirmation and selected-job deletion cancellation/
+confirmation/receipt sequence on the same owned fixture data. The host requires
+both receipts to match the same clean checkout commit, source tree and target job and preserves the
+original post-suppression export/contact refusals and tombstone/non-purge checks.
+
+Each guest has its own unchanged 512-request lifetime cap, concurrency limits,
+180-second conversation deadline, browser sandbox and network-none ownership
+checks. Each successful receipt reports its bounded count only after admitted and
+pending requests drain; a request-cap refusal still fails the guest. The two-session
+result does not prove an uninterrupted suppression/deletion session. Local synthetic
+contract tests do not establish either genuine browser journey or overall hosted
+acceptance. Previous operator and XML failures retain their stated uncertainty.

@@ -1298,6 +1298,7 @@ def validate_journey(setup: dict[str, object]) -> None:
         "controlled_lifecycle",
         "controlled_browser",
         "controlled_keyword_browser",
+        "controlled_privacy",
     ):
         raise ValueError("Fixed controlled operator journey required")
     if journey == "controlled_lifecycle":
@@ -1319,6 +1320,24 @@ def validate_journey(setup: dict[str, object]) -> None:
                 raise ValueError("Exact lifecycle identifiers required")
         if setup["cancel_job"] == setup["retry_job"]:
             raise ValueError("Separate lifecycle fixtures required")
+    if journey == "controlled_privacy":
+        if set(setup) != {
+            "kind",
+            "origin",
+            "journey",
+            "cookies",
+            "assets",
+            "initial_organization",
+            "other_organization",
+            "target_job",
+        }:
+            raise ValueError("Fixed privacy bootstrap required")
+        for key in ("initial_organization", "other_organization", "target_job"):
+            identifier = setup[key]
+            if not isinstance(identifier, str) or str(UUID(identifier)) != identifier:
+                raise ValueError("Exact privacy fixture identifiers required")
+        if setup["initial_organization"] == setup["other_organization"]:
+            raise ValueError("Separate privacy fixture organizations required")
     if journey in ("controlled_browser", "controlled_keyword_browser") and set(setup) != {
         "kind",
         "origin",
@@ -1329,3 +1348,80 @@ def validate_journey(setup: dict[str, object]) -> None:
         "other_organization",
     }:
         raise ValueError("Fixed controlled browser bootstrap required")
+
+
+OPERATOR_CORE_FLAGS = (
+    "keyboard",
+    "keyword_partial",
+    "url_no_contact",
+    "actual_zero_contact_quality_dialog",
+    "actual_terminal_replay_render_ready",
+    "delayed_terminal_replay_render_proof",
+    "authored_127_outcome_paging",
+    "review",
+    "pause_resume_cancel_dismiss",
+    "dialog_focus_restore",
+    "configuration_keyboard",
+    "branding_scope_clear",
+    "optional_field_preview",
+    "usage_audit_settings",
+    "download_cancelled",
+    "org_switch",
+    "readonly_role",
+    "stale_network_retry",
+    "late_old_response_refused",
+    "late_old_replay_refused",
+)
+
+
+def validate_operator_core(
+    core: dict[str, object], target_job: str, source_commit: str, source_tree: str
+) -> None:
+    """Require the original connected keyboard evidence before privacy mutation."""
+    count = core.get("request_count")
+    if (
+        str(UUID(target_job)) != target_job
+        or not re.fullmatch(r"[0-9a-f]{40}", source_commit)
+        or not re.fullmatch(r"[0-9a-f]{40}", source_tree)
+        or core.get("kind") != "result"
+        or core.get("diagnostic") != "synthetic-operator-ui"
+        or core.get("journey") != "operator_core"
+        or core.get("target_job") != target_job
+        or core.get("source_commit") != source_commit
+        or core.get("source_tree") != source_tree
+        or any(core.get(flag) is not True for flag in OPERATOR_CORE_FLAGS)
+        or core.get("network_errno") != [101, 101]
+        or core.get("interfaces") != ["lo"]
+        or type(count) is not int
+        or not 1 <= count <= 512
+    ):
+        raise ValueError("Complete scoped operator core receipt required")
+
+
+def validate_operator_aggregate(
+    core: dict[str, object],
+    privacy: dict[str, object],
+    target_job: str,
+    source_commit: str,
+    source_tree: str,
+) -> None:
+    """Both independently isolated guest receipts bind to the same owned job."""
+    validate_operator_core(core, target_job, source_commit, source_tree)
+    count = privacy.get("request_count")
+    if (
+        privacy.get("kind") != "result"
+        or privacy.get("diagnostic") != "synthetic-operator-ui"
+        or privacy.get("journey") != "operator_privacy"
+        or privacy.get("target_job") != target_job
+        or privacy.get("source_commit") != source_commit
+        or privacy.get("source_tree") != source_tree
+        or any(
+            privacy.get(flag) is not True
+            for flag in ("keyboard", "contact_suppression", "job_deletion")
+        )
+        or privacy.get("network_errno") != [101, 101]
+        or privacy.get("interfaces") != ["lo"]
+        or type(count) is not int
+        or not 1 <= count <= 512
+    ):
+        raise ValueError("Complete scoped operator privacy receipt required")
