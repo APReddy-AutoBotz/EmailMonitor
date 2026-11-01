@@ -16,7 +16,7 @@ from emailmonitor.organizations.database import AuthorizationDenied, digest
 from emailmonitor.organizations.roles import Capability
 from emailmonitor.progress.service import Progress
 from emailmonitor.results.broker import ExportEvent
-from emailmonitor.runtime.authority import ServiceProcess
+from emailmonitor.runtime.authority import ServiceProcess, ServiceWork
 from emailmonitor.runtime.database import ServiceDatabase
 from emailmonitor.runtime.publisher import PublisherError
 from emailmonitor.runtime.service_publisher import publish_service_once
@@ -631,6 +631,186 @@ def test_service_real_export_publish_claim_race_recovers_without_manual_delivery
                     {"org": org, "id": artifact.id},
                 ).scalar_one()
                 == 1
+            )
+    finally:
+        close_owned(application, config.queue)
+
+
+@pytest.fixture
+def worker_first_export(
+    service_case: ServiceCase, publisher_config: ServiceRuntimeConfig
+) -> tuple[UUID, UUID, int]:
+    """An ordinary queued export with separately scoped worker and publisher."""
+    from emailmonitor.results.service import Results
+    from test_progress_tenant import drain
+    from test_results_tenant import options
+
+    case, config = service_case, publisher_config
+    org, job = case.scope.organization, case.scope.resource
+    drain(case.progress, org, job)
+    human = Results(case.progress.database, case.progress.token, SETTINGS)
+    artifact = human.create(org, options(job), str(uuid4()))
+    with case.progress.database.tenant(case.progress.token, org, Capability.EXPORT_RESULTS) as (
+        connection,
+        _,
+    ):
+        for principal in (case.principal, config.process.principal):
+            connection.execute(
+                text(
+                    "SELECT emailmonitor.delegate_service_work(:org,:principal,:id,'export',21600)"
+                ),
+                {"org": org, "principal": principal, "id": artifact.id},
+            )
+    with case.admin.connect() as connection:
+        event = connection.execute(
+            text(
+                "SELECT event_id,generation FROM emailmonitor.export_outbox "
+                "WHERE organization_id=:org AND export_id=:id"
+            ),
+            {"org": org, "id": artifact.id},
+        ).one()
+    return artifact.id, event.event_id, event.generation
+
+
+def test_service_export_worker_first_claim_refuses_publisher_then_uncontended_succeeds(
+    service_case: ServiceCase,
+    publisher_config: ServiceRuntimeConfig,
+    worker_first_export: tuple[UUID, UUID, int],
+) -> None:
+    """Hold the real worker claim transaction; no retry while its lock is held."""
+    case, config = service_case, publisher_config
+    org = case.scope.organization
+    artifact, event, generation = worker_first_export
+    scope = ServiceWork(
+        organization=org, resource=artifact, purpose="export", generation=generation
+    )
+    application = broker_application(config)
+    publisher = ServiceDatabase(config.database_url, config.process)
+    params = {
+        "org": org,
+        "resource": artifact,
+        "purpose": "export",
+        "generation": generation,
+        "event": event,
+        "item": None,
+        "confirm": False,
+    }
+    sqlstates: list[str] = []
+
+    class RollBackSyntheticClaim(Exception):
+        pass
+
+    try:
+        declare_owned(application, config.queue)
+        with pytest.raises(RollBackSyntheticClaim):
+            with case.database.tenant(scope, org, Capability.EXPORT_RESULTS) as (worker, _):
+                claimed: object = worker.execute(
+                    text("SELECT emailmonitor.exports_claim(:org,:id,:event,:gen,:nonce,30)"),
+                    {
+                        "org": org,
+                        "id": artifact,
+                        "event": event,
+                        "gen": generation,
+                        "nonce": uuid4(),
+                    },
+                ).scalar_one()
+                assert claimed is not None
+                # The first independent transaction establishes the exact SQLSTATE.
+                with pytest.raises(AuthorizationDenied):
+                    with publisher.tenant(scope, org, Capability.EXPORT_RESULTS) as (connection, _):
+                        try:
+                            connection.execute(
+                                text(
+                                    "SELECT emailmonitor.service_publish_event("
+                                    ":org,:resource,:purpose,:generation,:event,:item,:confirm)"
+                                ),
+                                params,
+                            ).scalar_one()
+                        except DBAPIError as error:
+                            assert error.orig is not None
+                            detail = error.orig.args[0]
+                            assert isinstance(detail, dict)
+                            sqlstates.append(str(detail.get("C")))
+                            raise
+                assert sqlstates == ["55P03"]
+                # The actual finite publisher must still refuse and never send.
+                with pytest.raises(PublisherError, match="^Service publication failed$") as caught:
+                    publish_service_once(config)
+                assert getattr(caught.value, "_em_publisher_stage", None) == "claim"
+                assert not any(queue_counts(application, config.queue).values())
+                with case.admin.connect() as observer:
+                    assert (
+                        observer.execute(
+                            text(
+                                "SELECT published_at FROM emailmonitor.export_outbox "
+                                "WHERE organization_id=:org AND export_id=:id AND event_id=:event"
+                            ),
+                            {"org": org, "id": artifact, "event": event},
+                        ).scalar_one()
+                        is None
+                    )
+                raise RollBackSyntheticClaim()
+        # A separate explicit control after rollback proves the normal path works.
+        assert publish_service_once(config) == 1
+        assert sum(queue_counts(application, config.queue).values()) == 1
+    finally:
+        publisher.engine.dispose()
+        close_owned(application, config.queue)
+
+
+def test_service_export_revocation_after_enumeration_refuses_without_send(
+    service_case: ServiceCase,
+    publisher_config: ServiceRuntimeConfig,
+    worker_first_export: tuple[UUID, UUID, int],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A real authority revocation must not be mistaken for benign contention."""
+    from typing import Any
+
+    from emailmonitor.runtime import service_publisher
+    from kombu import Connection
+
+    case, config = service_case, publisher_config
+    artifact, event, _ = worker_first_export
+    application = broker_application(config)
+    revoked = False
+
+    def revoke_then_connect(*args: Any, **kwargs: Any) -> Any:
+        nonlocal revoked
+        with case.admin.begin() as connection:
+            changed = connection.execute(
+                text(
+                    "UPDATE emailmonitor.service_delegations SET revoked_at=clock_timestamp() "
+                    "WHERE organization_id=:org AND resource_id=:id AND principal_id=:principal "
+                    "AND purpose='export' AND revoked_at IS NULL"
+                ),
+                {
+                    "org": case.scope.organization,
+                    "id": artifact,
+                    "principal": config.process.principal,
+                },
+            ).rowcount
+            assert changed == 1
+        revoked = True
+        return Connection(*args, **kwargs)
+
+    try:
+        declare_owned(application, config.queue)
+        monkeypatch.setattr(service_publisher, "Connection", revoke_then_connect)
+        with pytest.raises(PublisherError, match="^Service publication failed$") as caught:
+            publish_service_once(config)
+        assert revoked and getattr(caught.value, "_em_publisher_stage", None) == "claim"
+        assert not any(queue_counts(application, config.queue).values())
+        with case.admin.connect() as observer:
+            assert (
+                observer.execute(
+                    text(
+                        "SELECT published_at FROM emailmonitor.export_outbox "
+                        "WHERE organization_id=:org AND export_id=:id AND event_id=:event"
+                    ),
+                    {"org": case.scope.organization, "id": artifact, "event": event},
+                ).scalar_one()
+                is None
             )
     finally:
         close_owned(application, config.queue)
