@@ -29,3 +29,12 @@ jobs:
       - name: "Parser stage: ${{ steps.parser-test.outputs.parser_stage || 'unavailable' }}"
         if: ${{ !cancelled() && steps.parser-test.outcome != 'skipped' }}
         run: ':'
+      - name: "Parser memory phase: ${{ steps.parser-test.outputs.parser_oom_phase || 'unavailable' }}"
+        if: ${{ !cancelled() && steps.parser-test.outcome != 'skipped' }}
+        run: ':'
+      - name: "Parser memory state: ${{ steps.parser-test.outputs.parser_oom_state || 'unavailable' }}"
+        if: ${{ !cancelled() && steps.parser-test.outcome != 'skipped' }}
+        run: ':'
+      - name: "Parser memory cleanup: ${{ steps.parser-test.outputs.parser_oom_cleanup || 'unavailable' }}"
+        if: ${{ !cancelled() && steps.parser-test.outcome != 'skipped' }}
+        run: ':'

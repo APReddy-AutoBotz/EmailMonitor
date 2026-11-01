@@ -110,17 +110,19 @@ def test_retained_proof_and_pending_drain_precede_suppression_completion() -> No
         n for n in ast.parse(guest).body if isinstance(n, ast.AsyncFunctionDef) and n.name == "main"
     )
     code = ast.unparse(main)
-    assert code.index("'action': 'verify_retained'") < code.index(
-        "checkpoint('contact_suppression')"
+    privacy = next(
+        n
+        for n in ast.walk(main)
+        if isinstance(n, ast.AsyncFunctionDef) and n.name == "privacy_journey"
     )
-    start = code.index(
+    privacy_code = ast.unparse(privacy)
+    assert "'action': 'verify_retained'" in code
+    assert "await privacy_journey(actual_job)" in code
+    start = privacy_code.index(
         "await expect(suppression_address_cells(table, selected_address)).to_have_count(0)"
     )
-    tail = code[start:]
-    assert tail.index("await asyncio.wait_for(settled_requests(), timeout=10)") < tail.index(
-        "checkpoint('final_cleanup')"
-    )
-    assert "'contact_suppression': True" in tail
+    assert "await asyncio.wait_for(settled_requests(), timeout=10)" in privacy_code[start:]
+    assert "'contact_suppression': True" in code
     host = (root / "scripts/isolation/test_operator_ui_acceptance.py").read_text()
     tree = ast.parse(host)
     proof = next(
@@ -136,5 +138,15 @@ def test_retained_proof_and_pending_drain_precede_suppression_completion() -> No
     ]:
         assert assertion in proof_code
     host_code = ast.unparse(tree)
+    assert host_code.index(
+        "validate_operator_core(evidence, str(target_job), source_commit, source_tree)"
+    ) < (host_code.index("privacy_evidence = run(app, privacy_setup, control, before_reply)"))
+    assert host_code.index("assert retained_receipt") < host_code.index(
+        "privacy_evidence = run(app, privacy_setup, control, before_reply)"
+    )
+    aggregate = host_code.index("validate_operator_aggregate(")
+    assert aggregate < host_code.index(
+        "results.download(org, UUID(str(retained_receipt['export_id'])))", aggregate
+    )
     assert "with pytest.raises(AuthorizationDenied):" in host_code
     assert "results.download(org, UUID(str(retained_receipt['export_id'])))" in host_code

@@ -405,6 +405,7 @@ STAGES = (
     "old_contact_response",
     "readonly_role",
     "contact_suppression",
+    "job_deletion",
     "final_cleanup",
 )
 ERRORS = {
@@ -432,6 +433,22 @@ InstalledReason = Literal[
     "installed_login_deadline",
     "installed_expected_navigation_mismatch",
     "installed_redirect_order",
+    "installed_redirect_order_bind",
+    "installed_redirect_order_commit",
+    "installed_redirect_order_lifecycle",
+    "installed_redirect_order_public_commit",
+    "installed_redirect_order_public_load",
+    "installed_redirect_order_begin",
+    "installed_redirect_order_arm",
+    "installed_redirect_order_failure",
+    "installed_redirect_failure_latched",
+    "installed_redirect_failure_inactive",
+    "installed_redirect_failure_unarmed",
+    "installed_redirect_failure_duplicate",
+    "installed_redirect_order_next",
+    "installed_redirect_order_finish",
+    "installed_redirect_order_receipt",
+    "installed_redirect_order_observer",
     "installed_redirect_source",
     "installed_redirect_request_identity",
     "installed_redirect_status",
@@ -500,6 +517,99 @@ OutcomePhase = Literal[
     "outcomes_stream_invalidation",
 ]
 OUTCOME_PHASES = get_args(OutcomePhase)
+
+JobDeletionPhase = Literal[
+    "navigate_jobs",
+    "open_job",
+    "open_job_focus",
+    "open_job_key",
+    "choose_reason",
+    "cancel_confirmation",
+    "open_confirmation",
+    "cancel_open_focus",
+    "cancel_open_key",
+    "cancel_dialog_job",
+    "cancel_dialog_exports",
+    "cancel_dialog_purge",
+    "confirm_open_focus",
+    "confirm_open_key",
+    "confirm_dialog_job",
+    "confirm_dialog_exports",
+    "confirm_dialog_purge",
+    "confirm_focus",
+    "confirm_keypress",
+    "confirm_close",
+    "receipt",
+    "receipt_verified",
+    "receipt_fenced",
+    "receipt_no_purge",
+    "settled_requests",
+]
+
+JobDeletionDialogState = Literal["absent", "closed", "open_box", "open_no_box", "unavailable"]
+JobDeletionReceiptState = Literal[
+    "region_absent",
+    "verified_fenced",
+    "verified_other",
+    "submitted_unverified",
+    "awaiting_submission",
+    "other",
+    "unavailable",
+]
+
+BrowserExceptionClass = Literal[
+    "python_runtime",
+    "python_timeout",
+    "playwright_timeout",
+    "playwright_error",
+    "assertion",
+    "value_error",
+    "other",
+]
+BrowserSourceFunction = Literal[
+    "main",
+    "focus",
+    "activate",
+    "select_index",
+    "deletion_open_job",
+    "deletion_open_confirmation",
+    "deletion_receipt_checks",
+    "request",
+    "route_request",
+    "other",
+]
+
+
+class BrowserFailureTrace(BaseModel):
+    """Closed, value-free pre-cleanup browser failure evidence."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+    exception: BrowserExceptionClass
+    cause: BrowserExceptionClass | Literal["none"]
+    source_function: BrowserSourceFunction
+    source_line: int | None = Field(ge=1, le=10000)
+    browser_connected: bool | None
+    page_closed: bool | None
+    receiver_done: bool
+    admitted: int = Field(ge=0, le=16)
+    request_limit_refused: bool = False
+    cleanup_replaced: bool
+
+
+ContactSuppressionPhase = Literal[
+    "select_organization",
+    "open_contacts",
+    "read_contact",
+    "open_evidence_cancel",
+    "open_evidence_confirm",
+    "choose_reason_cancel",
+    "choose_reason_confirm",
+    "open_confirmation_cancel",
+    "open_confirmation_confirm",
+    "cancel_confirmation",
+    "confirm_suppression",
+    "verify_result",
+]
 
 EvidencePhase = Literal[
     "contacts",
@@ -696,6 +806,11 @@ class DiagnosticFrame(BaseModel):
     installed_login_timing: LoginTimingTrace | None = None
     export_assertion_line: int | None = Field(default=None, ge=1, le=10000)
     outcome_phase: OutcomePhase | None = None
+    job_deletion_phase: JobDeletionPhase | None = None
+    job_deletion_dialog_state: JobDeletionDialogState | None = None
+    job_deletion_receipt_state: JobDeletionReceiptState | None = None
+    browser_failure_trace: BrowserFailureTrace | None = None
+    contact_suppression_phase: ContactSuppressionPhase | None = None
     observation_trace: ObservationTrace | Literal["unavailable"] | None = None
     evidence_phase: EvidencePhase | None = None
     evidence_focus_trace: EvidenceFocusTrace | Literal["unavailable"] | None = None
@@ -718,6 +833,8 @@ class DiagnosticFrame(BaseModel):
             and (self.error is not None or self.api_statuses or self.reason != "unknown")
         ):
             raise ValueError("Explicit failure or fixed stage required")
+        if self.browser_failure_trace is not None and self.kind != "failure":
+            raise ValueError("Browser failure trace requires a failure")
         if self.handoff_trace is not None and (
             self.kind != "failure" or self.stage != "export_preview"
         ):
@@ -736,6 +853,27 @@ class DiagnosticFrame(BaseModel):
             self.kind != "failure" or self.stage != "url_worker"
         ):
             raise ValueError("Outcome phase requires its exact failure stage")
+        if self.job_deletion_phase is not None and (
+            self.kind != "failure" or self.stage != "job_deletion"
+        ):
+            raise ValueError("Job deletion phase requires its exact failure stage")
+        if self.job_deletion_dialog_state is not None and (
+            self.kind != "failure"
+            or self.stage != "job_deletion"
+            or self.job_deletion_phase not in {"cancel_dialog_job", "confirm_dialog_job"}
+        ):
+            raise ValueError("Job deletion dialog state requires its exact content assertion")
+        if self.job_deletion_receipt_state is not None and (
+            self.kind != "failure"
+            or self.stage != "job_deletion"
+            or self.job_deletion_phase
+            not in {"receipt_verified", "receipt_fenced", "receipt_no_purge"}
+        ):
+            raise ValueError("Job deletion receipt state requires its exact assertion")
+        if self.contact_suppression_phase is not None and (
+            self.kind != "failure" or self.stage != "contact_suppression"
+        ):
+            raise ValueError("Contact suppression phase requires its exact failure stage")
         if self.observation_trace is not None and (
             self.kind != "failure"
             or self.stage != "url_worker"
@@ -1160,6 +1298,7 @@ def validate_journey(setup: dict[str, object]) -> None:
         "controlled_lifecycle",
         "controlled_browser",
         "controlled_keyword_browser",
+        "controlled_privacy",
     ):
         raise ValueError("Fixed controlled operator journey required")
     if journey == "controlled_lifecycle":
@@ -1181,6 +1320,24 @@ def validate_journey(setup: dict[str, object]) -> None:
                 raise ValueError("Exact lifecycle identifiers required")
         if setup["cancel_job"] == setup["retry_job"]:
             raise ValueError("Separate lifecycle fixtures required")
+    if journey == "controlled_privacy":
+        if set(setup) != {
+            "kind",
+            "origin",
+            "journey",
+            "cookies",
+            "assets",
+            "initial_organization",
+            "other_organization",
+            "target_job",
+        }:
+            raise ValueError("Fixed privacy bootstrap required")
+        for key in ("initial_organization", "other_organization", "target_job"):
+            identifier = setup[key]
+            if not isinstance(identifier, str) or str(UUID(identifier)) != identifier:
+                raise ValueError("Exact privacy fixture identifiers required")
+        if setup["initial_organization"] == setup["other_organization"]:
+            raise ValueError("Separate privacy fixture organizations required")
     if journey in ("controlled_browser", "controlled_keyword_browser") and set(setup) != {
         "kind",
         "origin",
@@ -1191,3 +1348,80 @@ def validate_journey(setup: dict[str, object]) -> None:
         "other_organization",
     }:
         raise ValueError("Fixed controlled browser bootstrap required")
+
+
+OPERATOR_CORE_FLAGS = (
+    "keyboard",
+    "keyword_partial",
+    "url_no_contact",
+    "actual_zero_contact_quality_dialog",
+    "actual_terminal_replay_render_ready",
+    "delayed_terminal_replay_render_proof",
+    "authored_127_outcome_paging",
+    "review",
+    "pause_resume_cancel_dismiss",
+    "dialog_focus_restore",
+    "configuration_keyboard",
+    "branding_scope_clear",
+    "optional_field_preview",
+    "usage_audit_settings",
+    "download_cancelled",
+    "org_switch",
+    "readonly_role",
+    "stale_network_retry",
+    "late_old_response_refused",
+    "late_old_replay_refused",
+)
+
+
+def validate_operator_core(
+    core: dict[str, object], target_job: str, source_commit: str, source_tree: str
+) -> None:
+    """Require the original connected keyboard evidence before privacy mutation."""
+    count = core.get("request_count")
+    if (
+        str(UUID(target_job)) != target_job
+        or not re.fullmatch(r"[0-9a-f]{40}", source_commit)
+        or not re.fullmatch(r"[0-9a-f]{40}", source_tree)
+        or core.get("kind") != "result"
+        or core.get("diagnostic") != "synthetic-operator-ui"
+        or core.get("journey") != "operator_core"
+        or core.get("target_job") != target_job
+        or core.get("source_commit") != source_commit
+        or core.get("source_tree") != source_tree
+        or any(core.get(flag) is not True for flag in OPERATOR_CORE_FLAGS)
+        or core.get("network_errno") != [101, 101]
+        or core.get("interfaces") != ["lo"]
+        or type(count) is not int
+        or not 1 <= count <= 512
+    ):
+        raise ValueError("Complete scoped operator core receipt required")
+
+
+def validate_operator_aggregate(
+    core: dict[str, object],
+    privacy: dict[str, object],
+    target_job: str,
+    source_commit: str,
+    source_tree: str,
+) -> None:
+    """Both independently isolated guest receipts bind to the same owned job."""
+    validate_operator_core(core, target_job, source_commit, source_tree)
+    count = privacy.get("request_count")
+    if (
+        privacy.get("kind") != "result"
+        or privacy.get("diagnostic") != "synthetic-operator-ui"
+        or privacy.get("journey") != "operator_privacy"
+        or privacy.get("target_job") != target_job
+        or privacy.get("source_commit") != source_commit
+        or privacy.get("source_tree") != source_tree
+        or any(
+            privacy.get(flag) is not True
+            for flag in ("keyboard", "contact_suppression", "job_deletion")
+        )
+        or privacy.get("network_errno") != [101, 101]
+        or privacy.get("interfaces") != ["lo"]
+        or type(count) is not int
+        or not 1 <= count <= 512
+    ):
+        raise ValueError("Complete scoped operator privacy receipt required")

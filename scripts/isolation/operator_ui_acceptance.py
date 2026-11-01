@@ -9,7 +9,8 @@ import os
 import re
 import socket
 import sys
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Literal, cast
 from urllib.parse import parse_qs, urlsplit
@@ -21,9 +22,16 @@ from operator_ui_protocol import (
     OUTCOME_PHASES,
     STAGES,
     AuthoredOutcomeReplayReadiness,
+    BrowserExceptionClass,
+    BrowserFailureTrace,
+    BrowserSourceFunction,
+    ContactSuppressionPhase,
     EvidenceFocusTrace,
     FocusExhaustion,
     HandoffTrace,
+    JobDeletionDialogState,
+    JobDeletionPhase,
+    JobDeletionReceiptState,
     KeyboardAttemptTrace,
     ObservationTrace,
     OutcomeReplayReadiness,
@@ -45,8 +53,127 @@ from playwright.async_api import (
     async_playwright,
     expect,
 )
+from playwright.async_api import (
+    TimeoutError as PlaywrightTimeoutError,
+)
 
 ORIGIN = "https://app.example.test"
+
+
+def browser_exception_class(error: BaseException) -> BrowserExceptionClass:
+    """Classify only known types; never serialize exception values or messages."""
+    if isinstance(error, PlaywrightTimeoutError):
+        return "playwright_timeout"
+    if isinstance(error, Error):
+        return "playwright_error"
+    if isinstance(error, TimeoutError):
+        return "python_timeout"
+    if isinstance(error, AssertionError):
+        return "assertion"
+    if isinstance(error, ValueError):
+        return "value_error"
+    if isinstance(error, RuntimeError):
+        return "python_runtime"
+    return "other"
+
+
+def browser_source(error: BaseException) -> tuple[BrowserSourceFunction, int | None]:
+    """Return the deepest owned source coordinate, never a path or source text."""
+    own_literal = Path(__file__)
+    own_file = own_literal.resolve()
+    owned_files = {
+        "/app/operator_ui_acceptance.py",
+        "/app/operator_ui_helpers.py",
+        str(own_literal),
+        str(own_file),
+    }
+    # The source checkout has a separate installed entrypoint. In the image it
+    # is copied to the exact /app/operator_ui_acceptance.py path above.
+    if own_file.name == "operator_ui_acceptance.py" and own_file.parent.name == "isolation":
+        owned_files.add(str(own_literal.with_name("installed_operator_browser.py")))
+        owned_files.add(str(own_file.with_name("installed_operator_browser.py")))
+    functions = {
+        "main",
+        "focus",
+        "activate",
+        "select_index",
+        "deletion_open_job",
+        "deletion_open_confirmation",
+        "deletion_receipt_checks",
+        "request",
+        "route_request",
+    }
+    source: BrowserSourceFunction = "other"
+    line: int | None = None
+    frame = error.__traceback__
+    for _ in range(256):
+        if frame is None:
+            break
+        code = frame.tb_frame.f_code
+        if code.co_filename in owned_files and 1 <= frame.tb_lineno <= 10000:
+            source = cast(
+                BrowserSourceFunction, code.co_name if code.co_name in functions else "other"
+            )
+            line = frame.tb_lineno
+        frame = frame.tb_next
+    return source, line
+
+
+def browser_flag(value: object | None, method: str) -> bool | None:
+    """Read an already-owned synchronous state flag; never start another operation."""
+    try:
+        result = getattr(value, method)()
+        return result if type(result) is bool else None
+    except Exception:
+        return None
+
+
+class BrowserFailureCapture:
+    def __init__(self, receiver: asyncio.Task[Any], channel: "Channel") -> None:
+        self.receiver = receiver
+        self.channel = channel
+        self.browser: object | None = None
+        self.page: object | None = None
+        self.original: Exception | None = None
+        self.snapshot: BrowserFailureTrace | None = None
+
+    def record(self, error: Exception) -> None:
+        source, line = browser_source(error)
+        cause = error.__cause__
+        if cause is None and not error.__suppress_context__:
+            cause = error.__context__
+        self.snapshot = BrowserFailureTrace(
+            exception=browser_exception_class(error),
+            cause=browser_exception_class(cause) if cause is not None else "none",
+            source_function=source,
+            source_line=line,
+            browser_connected=browser_flag(self.browser, "is_connected"),
+            page_closed=browser_flag(self.page, "is_closed"),
+            receiver_done=self.receiver.done(),
+            admitted=self.channel.admitted,
+            request_limit_refused=self.channel.request_limit_refused,
+            cleanup_replaced=False,
+        )
+        self.original = error
+
+    def result(self, error: Exception) -> BrowserFailureTrace | None:
+        if self.snapshot is None or self.original is None:
+            return None
+        return self.snapshot.model_copy(update={"cleanup_replaced": error is not self.original})
+
+
+@asynccontextmanager
+async def capture_browser_failure(capture: BrowserFailureCapture) -> AsyncIterator[None]:
+    """Capture before the owning Playwright context exits; never change its failure."""
+    try:
+        yield
+    except Exception as error:
+        try:
+            capture.record(error)
+        except Exception:
+            pass
+        raise
+
 
 # Passive, value-free observations of one owned keyboard attempt. No focus calls,
 # event cancellation, DOM writes, retries, timer changes or payload collection.
@@ -180,6 +307,7 @@ class Channel:
         self.capacity = asyncio.Semaphore(8)
         self.waiting = 0
         self.admitted = 0
+        self.request_limit_refused = False
 
     async def read(self) -> None:
         while True:
@@ -202,6 +330,7 @@ class Channel:
         deadline = asyncio.get_running_loop().time() + RPC_DEADLINE
         queued = self.admitted >= 8
         if self.identifier >= 512:
+            self.request_limit_refused = True
             raise RuntimeError("UI diagnostic request cap exceeded")
         if self.admitted >= 16:
             raise RuntimeError("UI diagnostic admission cap exceeded")
@@ -217,6 +346,7 @@ class Channel:
                 self.waiting -= 1
                 queued = False
             if self.identifier >= 512:
+                self.request_limit_refused = True
                 raise RuntimeError("UI diagnostic request cap exceeded")
             self.identifier += 1
             identifier = self.identifier
@@ -304,6 +434,138 @@ async def focus(page: Page, target: Locator) -> None:
 async def activate(page: Page, target: Locator) -> None:
     await focus(page, target)
     await page.keyboard.press("Enter")
+
+
+async def deletion_open_job(
+    page: Page, target: Locator, mark: Callable[[JobDeletionPhase], None]
+) -> None:
+    """Retain the ordinary activation while identifying its failing operation."""
+    mark("open_job_focus")
+    await focus(page, target)
+    mark("open_job_key")
+    await page.keyboard.press("Enter")
+
+
+async def deletion_open_confirmation(
+    page: Page,
+    target: Locator,
+    job: str,
+    commit: bool,
+    mark: Callable[[JobDeletionPhase], None],
+    observe: Callable[[JobDeletionDialogState], None],
+) -> Locator:
+    """The same single keyboard activation and three original assertions."""
+    phases: tuple[
+        JobDeletionPhase, JobDeletionPhase, JobDeletionPhase, JobDeletionPhase, JobDeletionPhase
+    ]
+    phases = (
+        (
+            "confirm_open_focus",
+            "confirm_open_key",
+            "confirm_dialog_job",
+            "confirm_dialog_exports",
+            "confirm_dialog_purge",
+        )
+        if commit
+        else (
+            "cancel_open_focus",
+            "cancel_open_key",
+            "cancel_dialog_job",
+            "cancel_dialog_exports",
+            "cancel_dialog_purge",
+        )
+    )
+    mark(phases[0])
+    await focus(page, target)
+    mark(phases[1])
+    await page.keyboard.press("Enter")
+    confirmation = page.get_by_role("dialog")
+    mark(phases[2])
+    try:
+        await expect(confirmation).to_contain_text(job)
+    except Exception:
+        try:
+            observe(await deletion_dialog_snapshot(page))
+        except Exception:
+            pass  # Observation cannot replace the original assertion failure.
+        raise
+    mark(phases[3])
+    await expect(confirmation).to_contain_text("all existing exports in this organization")
+    mark(phases[4])
+    await expect(confirmation).to_contain_text("Physical purge")
+    return confirmation
+
+
+async def deletion_dialog_snapshot(page: Page) -> JobDeletionDialogState:
+    """Observe dialog geometry only after a failure; never return DOM contents."""
+    try:
+        result = await asyncio.wait_for(
+            page.evaluate("""() => {
+                const dialog = document.querySelector('dialog[open]');
+                if (!dialog) return document.querySelector('dialog') ? 'closed' : 'absent';
+                const box = dialog.getBoundingClientRect();
+                return box.width > 0 && box.height > 0 ? 'open_box' : 'open_no_box';
+            }"""),
+            timeout=0.1,
+        )
+        if result in {"absent", "closed", "open_box", "open_no_box"}:
+            return cast(JobDeletionDialogState, result)
+    except Exception:
+        pass
+    return "unavailable"
+
+
+async def deletion_receipt_snapshot(page: Page) -> JobDeletionReceiptState:
+    """Classify only existing fixed UI states after a receipt assertion fails."""
+    try:
+        result = await asyncio.wait_for(
+            page.evaluate("""() => {
+                const region = document.querySelector('section[aria-label="Job deletion"]');
+                if (!region) return 'region_absent';
+                const text = region.textContent || '';
+                if (text.includes('Verified deletion receipt:'))
+                    return text.includes(' is fenced.') ? 'verified_fenced' : 'verified_other';
+                if (text.includes('A deletion request was submitted. Its outcome is unverified'))
+                    return 'submitted_unverified';
+                if (region.querySelector('select')) return 'awaiting_submission';
+                return 'other';
+            }"""),
+            timeout=0.1,
+        )
+        if result in {
+            "region_absent",
+            "verified_fenced",
+            "verified_other",
+            "submitted_unverified",
+            "awaiting_submission",
+            "other",
+        }:
+            return cast(JobDeletionReceiptState, result)
+    except Exception:
+        pass
+    return "unavailable"
+
+
+async def deletion_receipt_checks(
+    page: Page,
+    deletion: Locator,
+    mark: Callable[[JobDeletionPhase], None],
+    observe: Callable[[JobDeletionReceiptState], None],
+) -> None:
+    """Keep the original assertions and observe only after their failure."""
+    try:
+        mark("receipt_verified")
+        await expect(deletion).to_contain_text("Verified deletion receipt:")
+        mark("receipt_fenced")
+        await expect(deletion).to_contain_text("is fenced")
+        mark("receipt_no_purge")
+        await expect(deletion).to_contain_text("No physical purge was requested")
+    except Exception:
+        try:
+            observe(await deletion_receipt_snapshot(page))
+        except Exception:
+            pass  # Observation cannot replace the original assertion failure.
+        raise
 
 
 async def traced_activate(page: Page, target: Locator) -> None:
@@ -975,7 +1237,7 @@ async def authored_outcome_paging(
         presence_select = region.get_by_role(
             "combobox", name="Article-outcome candidate presence", exact=True
         )
-        await activate(
+        await traced_activate(
             page,
             region.get_by_role("button", name="Next article outcome page", exact=True),
         )
@@ -1519,6 +1781,7 @@ async def main() -> None:
         raise RuntimeError("Immutable built asset manifest mismatch")
     channel = Channel()
     receiver = asyncio.create_task(channel.read())
+    browser_failure_capture = BrowserFailureCapture(receiver, channel)
     accepted = 0
     api_statuses: list[int] = []
     download_seen = asyncio.Event()
@@ -1539,18 +1802,36 @@ async def main() -> None:
     stage = "browser_launch"
     outcome_phase: str | None = None
     evidence_phase: str | None = None
+    deletion_phase: JobDeletionPhase | None = None
+    deletion_dialog_state: JobDeletionDialogState | None = None
+    deletion_receipt_state: JobDeletionReceiptState | None = None
+    suppression_phase: ContactSuppressionPhase | None = None
     observation_trace: ObservationTrace | Literal["unavailable"] | None = None
     evidence_focus_trace: EvidenceFocusTrace | Literal["unavailable"] | None = None
     evidence_focus_observations: dict[str, object] = {}
 
     def checkpoint(value: str) -> None:
-        nonlocal stage, outcome_phase, evidence_phase
+        nonlocal stage, outcome_phase, evidence_phase, deletion_phase, suppression_phase
         if value not in STAGES:
             raise RuntimeError("Fixed UI stage required")
         stage = value
         outcome_phase = None
         evidence_phase = None
+        deletion_phase = None
+        suppression_phase = None
         print(json.dumps({"kind": "stage", "stage": value}), flush=True)
+
+    def mark_deletion(value: JobDeletionPhase) -> None:
+        nonlocal deletion_phase
+        deletion_phase = value
+
+    def observe_deletion_dialog(value: JobDeletionDialogState) -> None:
+        nonlocal deletion_dialog_state
+        deletion_dialog_state = value
+
+    def observe_deletion_receipt(value: JobDeletionReceiptState) -> None:
+        nonlocal deletion_receipt_state
+        deletion_receipt_state = value
 
     def outcome_checkpoint(value: str) -> None:
         nonlocal outcome_phase
@@ -1567,18 +1848,23 @@ async def main() -> None:
 
     try:
         checkpoint("browser_launch")
-        async with async_playwright() as playwright:
+        async with (
+            async_playwright() as playwright,
+            capture_browser_failure(browser_failure_capture),
+        ):
             browser = await playwright.chromium.launch(
                 channel="chromium",
                 headless=True,
                 chromium_sandbox=True,
                 args=["--enable-automation"],
             )
+            browser_failure_capture.browser = browser
             if browser.version != "153.0.8010.12":
                 raise RuntimeError("Pinned Chromium required")
             context = await browser.new_context(service_workers="block", accept_downloads=False)
             await context.add_cookies(setup["cookies"])
             page = await context.new_page()
+            browser_failure_capture.page = page
             await page.add_init_script(HANDOFF_OBSERVER)
             page.set_default_timeout(10000)
             checkpoint("sandbox")
@@ -1752,6 +2038,157 @@ async def main() -> None:
                 ).index(setup["initial_organization"]),
             )
             await page.get_by_role("heading", name="Synthetic tenant 0", exact=True).wait_for()
+
+            async def settled_requests() -> None:
+                while channel.pending or channel.admitted:
+                    await asyncio.sleep(0.05)
+
+            async def privacy_journey(actual_job: str) -> None:
+                nonlocal suppression_phase, deletion_phase
+                checkpoint("contact_suppression")
+                suppression_phase = "select_organization"
+                organization = page.get_by_role("combobox", name="Active organization", exact=True)
+                values = await organization.locator("option").evaluate_all(
+                    "nodes => nodes.map(node => node.value)"
+                )
+                await select_index(page, organization, values.index(setup["initial_organization"]))
+                suppression_phase = "open_contacts"
+                await activate(page, page.get_by_role("button", name="Contacts", exact=True))
+                table = page.get_by_role("table", name="Current-authorized observed contacts")
+                await expect(table).to_be_visible()
+                suppression_phase = "read_contact"
+                selected_address = (
+                    await table.locator("tbody tr").first.locator("td").nth(2).inner_text()
+                ).splitlines()[0]
+                for commit in (False, True):
+                    suppression_phase = (
+                        "open_evidence_confirm" if commit else "open_evidence_cancel"
+                    )
+                    await activate(
+                        page,
+                        page.get_by_role("button", name="Evidence and review", exact=True).first,
+                    )
+                    action = page.get_by_role(
+                        "button", name="Review contact suppression", exact=True
+                    )
+                    suppression_phase = (
+                        "choose_reason_confirm" if commit else "choose_reason_cancel"
+                    )
+                    await expect(action).to_be_disabled()
+                    await select_index(page, suppression_reason(page), 1)
+                    suppression_phase = (
+                        "open_confirmation_confirm" if commit else "open_confirmation_cancel"
+                    )
+                    await activate(page, action)
+                    confirmation = page.get_by_role("dialog")
+                    await expect(confirmation).to_contain_text("throughout this organization")
+                    await expect(confirmation).to_contain_text(selected_address)
+                    suppression_phase = "confirm_suppression" if commit else "cancel_confirmation"
+                    await activate(
+                        page,
+                        page.get_by_role(
+                            "button",
+                            name="Confirm suppress observed contact"
+                            if commit
+                            else "Keep unchanged",
+                            exact=True,
+                        ),
+                    )
+                    await expect(confirmation).not_to_be_visible()
+                    if not commit:
+                        await expect(
+                            suppression_address_cells(table, selected_address).first
+                        ).to_be_visible()
+                suppression_phase = "verify_result"
+                await expect(
+                    page.get_by_text(
+                        "Action completed. Current permissions are rechecked by the server.",
+                        exact=True,
+                    )
+                ).to_be_visible()
+                await expect(
+                    table.or_(
+                        page.get_by_text("No contacts match these server filters.", exact=True)
+                    )
+                ).to_be_visible()
+                await expect(suppression_address_cells(table, selected_address)).to_have_count(0)
+                checkpoint("job_deletion")
+                deletion_phase = "navigate_jobs"
+                await activate(page, page.get_by_role("button", name="Jobs", exact=True))
+                deletion_phase = "open_job"
+                await deletion_open_job(
+                    page,
+                    page.get_by_role("button", name="Open job " + actual_job, exact=True),
+                    mark_deletion,
+                )
+                deletion = page.get_by_role("region", name="Job deletion", exact=True)
+                for commit in (False, True):
+                    action = deletion.get_by_role("button", name="Review job deletion", exact=True)
+                    if not commit:
+                        deletion_phase = "choose_reason"
+                        await expect(action).to_be_disabled()
+                        await select_index(
+                            page, page.get_by_label(re.compile(r"^Deletion reason")), 2
+                        )
+                    confirmation = await deletion_open_confirmation(
+                        page, action, actual_job, commit, mark_deletion, observe_deletion_dialog
+                    )
+                    deletion_phase = "confirm_focus" if commit else "cancel_confirmation"
+                    deletion_target = confirmation.get_by_role(
+                        "button",
+                        name="Confirm stage job deletion" if commit else "Keep unchanged",
+                        exact=True,
+                    )
+                    await focus(page, deletion_target)
+                    if commit:
+                        deletion_phase = "confirm_keypress"
+                    await page.keyboard.press("Enter")
+                    if commit:
+                        deletion_phase = "confirm_close"
+                    await expect(confirmation).not_to_be_visible()
+                    if not commit:
+                        await expect(
+                            page.get_by_role("heading", name="Job " + actual_job, exact=True)
+                        ).to_be_visible()
+                deletion_phase = "receipt"
+                await deletion_receipt_checks(
+                    page, deletion, mark_deletion, observe_deletion_receipt
+                )
+                deletion_phase = "settled_requests"
+                await asyncio.wait_for(settled_requests(), timeout=10)
+
+            if setup.get("journey") == "controlled_privacy":
+                organization = page.get_by_role("combobox", name="Active organization", exact=True)
+                values = await organization.locator("option").evaluate_all(
+                    "nodes => nodes.map(node => node.value)"
+                )
+                await select_index(page, organization, values.index(setup["other_organization"]))
+                await page.get_by_role("heading", name="Synthetic tenant 1", exact=True).wait_for()
+                actual_job = str(setup["target_job"])
+                await privacy_journey(actual_job)
+                if channel.request_limit_refused:
+                    raise RuntimeError("UI diagnostic request cap exceeded")
+                checkpoint("final_cleanup")
+                print(
+                    json.dumps(
+                        {
+                            "kind": "result",
+                            "journey": "operator_privacy",
+                            "diagnostic": "synthetic-operator-ui",
+                            "keyboard": True,
+                            "target_job": actual_job,
+                            "request_count": channel.identifier,
+                            "network_errno": network,
+                            "interfaces": interfaces,
+                            "contact_suppression": True,
+                            "job_deletion": True,
+                        }
+                    ),
+                    flush=True,
+                )
+                await context.close()
+                await browser.close()
+                return
             if setup.get("journey") == "controlled_lifecycle":
                 checkpoint("pause_resume")
                 await lifecycle_journey(page, channel, setup, checkpoint)
@@ -2261,13 +2698,30 @@ async def main() -> None:
                 page, page.get_by_role("button", name="Create and validate plan", exact=True)
             )
             await page.get_by_role("region", name="Server source plan").wait_for()
-            await activate(page, page.get_by_role("button", name="Launch extraction", exact=True))
+            await activate(page, page.get_by_role("button", name="Open draft job", exact=True))
+            saved_draft = (
+                await page.get_by_role(
+                    "heading", name=re.compile(r"^Job [0-9a-f-]{36}$")
+                ).inner_text()
+            ).removeprefix("Job ")
+            await activate(page, page.get_by_role("button", name="Back to recent jobs", exact=True))
+            await activate(
+                page, page.get_by_role("button", name="Open job " + saved_draft, exact=True)
+            )
+            await activate(
+                page, page.get_by_role("button", name="Validate saved draft plan", exact=True)
+            )
+            await page.get_by_role("region", name="Validated saved draft", exact=True).wait_for()
+            await activate(
+                page, page.get_by_role("button", name="Launch this saved draft", exact=True)
+            )
             await page.get_by_text("Enumeration unknown", exact=False).wait_for()
             keyword_job = (
                 await page.get_by_role(
                     "heading", name=re.compile(r"^Job [0-9a-f-]{36}$")
                 ).inner_text()
             ).removeprefix("Job ")
+            assert keyword_job == saved_draft
             checkpoint("pause_resume")
             await activate(page, page.get_by_role("button", name="Pause", exact=True))
             await page.get_by_role("button", name="Resume", exact=True).wait_for()
@@ -2351,6 +2805,8 @@ async def main() -> None:
             )
             await expect(metadata.get_by_role("list")).to_be_visible()
             await expect(metadata).to_contain_text("Recorded date type:")
+            history = page.get_by_role("region", name="Recorded review history", exact=True)
+            await expect(history).to_contain_text("earliest 100 records")
             await channel.request({"kind": "control", "action": "hold_quality"})
             await activate(
                 page,
@@ -2417,6 +2873,18 @@ async def main() -> None:
             )
             await activate(page, page.get_by_role("button", name="Save review", exact=True))
             await page.get_by_role("dialog").wait_for(state="hidden")
+            await activate(
+                page, page.get_by_role("button", name="Evidence and review", exact=True).first
+            )
+            history = page.get_by_role("region", name="Recorded review history", exact=True)
+            await expect(history).to_contain_text("Synthetic keyboard evidence review")
+            await activate(page, history.locator("summary"))
+            await expect(history.get_by_role("list")).to_be_visible()
+            await expect(history).to_contain_text("Recorded action: accept")
+            await expect(history).to_contain_text("Expected association revision:")
+            await expect(history.locator("time").first).to_be_visible()
+            await activate(page, page.get_by_role("button", name="Close evidence", exact=True))
+            await wait_evidence_closed(page)
             # Real retained DOI filtering, using only the authored article-a metadata.
             paper_input = page.get_by_label(
                 "Paper DOI (optional; across authorized jobs)", exact=True
@@ -2738,10 +3206,6 @@ async def main() -> None:
             ):
                 raise RuntimeError("UI service workers must remain absent")
 
-            async def settled_requests() -> None:
-                while channel.pending:
-                    await asyncio.sleep(0.05)
-
             await asyncio.wait_for(settled_requests(), timeout=10)
             if old_address in await page.locator("body").inner_text():
                 raise RuntimeError("Late previous-tenant response survived switch")
@@ -2758,58 +3222,18 @@ async def main() -> None:
             # Exercise the existing management action only after the preceding
             # retained-data journeys: suppression intentionally fences matching data.
             await channel.request({"kind": "control", "action": "verify_retained"})
-            checkpoint("contact_suppression")
-            organization = page.get_by_role("combobox", name="Active organization", exact=True)
-            values = await organization.locator("option").evaluate_all(
-                "nodes => nodes.map(node => node.value)"
-            )
-            await select_index(page, organization, values.index(setup["initial_organization"]))
-            await activate(page, page.get_by_role("button", name="Contacts", exact=True))
-            table = page.get_by_role("table", name="Current-authorized observed contacts")
-            await expect(table).to_be_visible()
-            selected_address = (
-                await table.locator("tbody tr").first.locator("td").nth(2).inner_text()
-            ).splitlines()[0]
-            for commit in (False, True):
-                await activate(
-                    page, page.get_by_role("button", name="Evidence and review", exact=True).first
-                )
-                action = page.get_by_role("button", name="Review contact suppression", exact=True)
-                await expect(action).to_be_disabled()
-                await select_index(page, suppression_reason(page), 1)
-                await activate(page, action)
-                confirmation = page.get_by_role("dialog")
-                await expect(confirmation).to_contain_text("throughout this organization")
-                await expect(confirmation).to_contain_text(selected_address)
-                await activate(
-                    page,
-                    page.get_by_role(
-                        "button",
-                        name="Confirm suppress observed contact" if commit else "Keep unchanged",
-                        exact=True,
-                    ),
-                )
-                await expect(confirmation).not_to_be_visible()
-                if not commit:
-                    await expect(
-                        suppression_address_cells(table, selected_address).first
-                    ).to_be_visible()
-            await expect(
-                page.get_by_text(
-                    "Action completed. Current permissions are rechecked by the server.", exact=True
-                )
-            ).to_be_visible()
-            await expect(
-                table.or_(page.get_by_text("No contacts match these server filters.", exact=True))
-            ).to_be_visible()
-            await expect(suppression_address_cells(table, selected_address)).to_have_count(0)
             await asyncio.wait_for(settled_requests(), timeout=10)
+            if channel.request_limit_refused:
+                raise RuntimeError("UI diagnostic request cap exceeded")
             checkpoint("final_cleanup")
             print(
                 json.dumps(
                     {
                         "kind": "result",
                         "diagnostic": "synthetic-operator-ui",
+                        "journey": "operator_core",
+                        "target_job": actual_job,
+                        "request_count": channel.identifier,
                         "keyboard": True,
                         "built_assets": accepted,
                         "sandbox": sandbox,
@@ -2833,7 +3257,6 @@ async def main() -> None:
                         "download_cancelled": True,
                         "org_switch": True,
                         "readonly_role": True,
-                        "contact_suppression": True,
                         "stale_network_retry": True,
                         "late_old_response_refused": True,
                         "late_old_replay_refused": True,
@@ -2846,6 +3269,7 @@ async def main() -> None:
     except Exception as error:
         name = type(error).__name__
         handoff = handoff_trace if stage == "export_preview" else None
+        browser_failure = browser_failure_capture.result(error)
         # Report before cancelling the owned stdin reader: its executor shutdown awaits host EOF.
         print(
             json.dumps(
@@ -2854,6 +3278,11 @@ async def main() -> None:
                     "stage": stage,
                     "error": name if name in ERRORS else "UnexpectedError",
                     "reason": failure_reason(error),
+                    **(
+                        {"browser_failure_trace": browser_failure.model_dump()}
+                        if browser_failure is not None
+                        else {}
+                    ),
                     **(
                         {
                             "handoff_trace": handoff.model_dump()
@@ -2869,6 +3298,26 @@ async def main() -> None:
                         else {}
                     ),
                     **({"outcome_phase": outcome_phase} if outcome_phase is not None else {}),
+                    **(
+                        {"job_deletion_phase": deletion_phase}
+                        if stage == "job_deletion" and deletion_phase is not None
+                        else {}
+                    ),
+                    **(
+                        {"job_deletion_dialog_state": deletion_dialog_state}
+                        if deletion_dialog_state is not None
+                        else {}
+                    ),
+                    **(
+                        {"job_deletion_receipt_state": deletion_receipt_state}
+                        if deletion_receipt_state is not None
+                        else {}
+                    ),
+                    **(
+                        {"contact_suppression_phase": suppression_phase}
+                        if stage == "contact_suppression" and suppression_phase is not None
+                        else {}
+                    ),
                     **(
                         {
                             "observation_trace": observation_trace.model_dump()

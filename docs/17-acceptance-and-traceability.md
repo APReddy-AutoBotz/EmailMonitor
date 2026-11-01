@@ -1,5 +1,7 @@
 # 17 — Acceptance scenarios and requirements traceability
 
+The local sibling integration candidate maps FR-006/020/021/025/029 and NFR-011 to saved-draft, history and selected-job-staging unit tests, plus authored real-SQL and keyboard cases pending actual execution. See [integration scope](87-sibling-integration.md).
+
 **Baseline:** 2026-10-08. Test IDs below are planned test families. They are not tests that have already passed. Actual evidence is recorded in document 22 and implementation reports.
 
 ## Functional traceability

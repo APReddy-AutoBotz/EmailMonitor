@@ -14,7 +14,7 @@ import socket
 import ssl
 import subprocess
 import threading
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Literal
@@ -66,6 +66,39 @@ from transport_topology import Topology, resource
 from xml_image_evidence import require_packaged_image
 
 ROOT = Path(__file__).resolve().parents[2]
+_first_xml_publisher_order: set[str] = set()
+
+
+def report_publisher_order(observed: bool, stage: object, destination: Path) -> None:
+    """First runner failure only; report handler observation, not causal order."""
+    target = str(destination)
+    if target in _first_xml_publisher_order:
+        return
+    category = "publisher_handler_observed" if observed else "publisher_handler_not_observed"
+    stages = {"startup", "pending", "broker_connect", "claim", "broker_send", "confirm", "cleanup"}
+    fixed_stage = stage if type(stage) is str and stage in stages and observed else "unavailable"
+    with destination.open("a", encoding="ascii") as output:
+        output.write("installed_xml_publisher_order=" + category + "\n")
+        output.write("installed_xml_publisher_stage=" + fixed_stage + "\n")
+    _first_xml_publisher_order.add(target)
+
+
+@contextmanager
+def capture_publisher_order(
+    observed: threading.Event, stage: Callable[[], object]
+) -> Iterator[None]:
+    """Never replace the installed browser runner's original exception."""
+    try:
+        yield
+    except BaseException:
+        if os.environ.get("EM_XML_CASE_OUTCOME_REPORT") == "true":
+            try:
+                report_publisher_order(
+                    observed.is_set(), stage(), Path(os.environ["GITHUB_OUTPUT"])
+                )
+            except Exception:
+                pass
+        raise
 
 
 class ExportStateReceipt(BaseModel):
@@ -338,6 +371,8 @@ def test_installed_controlled_xml_operator(
         port = reserved.getsockname()[1]
     origin = f"https://127.0.0.1:{port}"
     publisher_thread: threading.Thread | None = None
+    publisher_failure_observed = threading.Event()
+    publisher_failure_stage: str | None = None
     primary: BaseException | None = None
     try:
         with synthetic_issuer(
@@ -459,16 +494,30 @@ def test_installed_controlled_xml_operator(
                         ).scalar_one()
 
                 def publish() -> None:
-                    nonlocal publication_passes
+                    nonlocal publication_passes, publisher_failure_stage
                     while not stop.wait(0.2):
                         if not release.is_set():
                             continue
                         try:
-                            output = finite(installed, "publish-once", configs["publisher"])
+                            output = finite(
+                                installed,
+                                "publish-once",
+                                configs["publisher"],
+                                publisher_diagnostics=(
+                                    os.environ.get("EM_XML_CASE_OUTCOME_REPORT") == "true"
+                                ),
+                            )
                             if not output.startswith("published=") or not output[10:].isdigit():
                                 raise RuntimeError("Bounded installed publication receipt missing")
                             publication_passes += 1
                         except Exception as error:
+                            try:
+                                publisher_failure_stage = getattr(
+                                    error, "_em_publisher_stage", None
+                                )
+                            except Exception:
+                                publisher_failure_stage = None
+                            publisher_failure_observed.set()
                             errors.append(type(error).__name__)
                             stop.set()
                             if os.environ.get("EM_XML_CASE_OUTCOME_REPORT") == "true":
@@ -579,12 +628,15 @@ def test_installed_controlled_xml_operator(
                         "initial_organization": str(org),
                         "other_organization": str(other),
                     }
-                    evidence = run_installed(
-                        application(origin, identity.origin, identity.ca, assets, downloads),
-                        setup,
-                        control,
-                        lambda _: False,
-                    )
+                    with capture_publisher_order(
+                        publisher_failure_observed, lambda: publisher_failure_stage
+                    ):
+                        evidence = run_installed(
+                            application(origin, identity.origin, identity.ca, assets, downloads),
+                            setup,
+                            control,
+                            lambda _: False,
+                        )
                     assert evidence["redirect_navigation"] == (
                         "observed_303_failed_target_explicit_navigation"
                     )

@@ -7,10 +7,13 @@ import guest_outcome as trace
 import pytest
 from operator_ui_protocol import (
     OUTCOME_PHASES,
+    BrowserFailureTrace,
+    ContactSuppressionPhase,
     DiagnosticFrame,
     FocusExhaustion,
     InstalledExportStep,
     InstalledLoginPhase,
+    JobDeletionPhase,
     LoginTimingTrace,
     OutcomePhase,
 )
@@ -85,6 +88,46 @@ def test_first_failure_survives_cleanup_and_later_success(output: Path) -> None:
     )
 
 
+def test_precleanup_browser_failure_is_bounded_and_preserves_primary(output: Path) -> None:
+    original = RuntimeError("private diagnostic failure")
+
+    @trace.observed_guest
+    def failed() -> None:
+        trace.guest_stage("conversation")
+        trace.guest_frame(
+            DiagnosticFrame(
+                kind="failure",
+                stage="sandbox",
+                error="TimeoutError",
+                browser_failure_trace=BrowserFailureTrace(
+                    exception="playwright_timeout",
+                    cause="none",
+                    source_function="main",
+                    source_line=1739,
+                    browser_connected=True,
+                    page_closed=False,
+                    receiver_done=False,
+                    admitted=1,
+                    cleanup_replaced=False,
+                ),
+            )
+        )
+        raise original
+
+    @trace.observed_guest
+    def later_success() -> None:
+        trace.guest_stage("complete")
+
+    with pytest.raises(RuntimeError) as caught:
+        failed()
+    assert caught.value is original
+    later_success()
+    lines = output.read_text().splitlines()
+    assert len(lines) == 2 and lines[0] == lines[1]
+    assert "-browser_playwright_timeout.none.main.1739.100.1.0" in lines[0]
+    assert "private" not in lines[0]
+
+
 def test_first_callback_timing_is_bounded_and_survives_later_success(output: Path) -> None:
     original = TimeoutError("private synthetic detail")
 
@@ -118,6 +161,166 @@ def test_first_callback_timing_is_bounded_and_survives_later_success(output: Pat
     assert len(lines) == 4 and lines[0] == lines[2] and lines[1] == lines[3]
     assert lines[1] == "guest_login_timing=total_10000-phase_7000-fulfilled_9500"
     assert "private" not in output.read_text()
+
+
+@pytest.mark.parametrize("phase", get_args(JobDeletionPhase))
+def test_job_deletion_phase_is_fixed_and_preserves_primary(output: Path, phase: str) -> None:
+    original = RuntimeError("private synthetic failure")
+
+    @trace.observed_guest
+    def failed() -> None:
+        trace.guest_stage("conversation")
+        trace.guest_frame(
+            DiagnosticFrame.model_validate(
+                {
+                    "kind": "failure",
+                    "stage": "job_deletion",
+                    "error": "RuntimeError",
+                    "job_deletion_phase": phase,
+                }
+            )
+        )
+        raise original
+
+    with pytest.raises(RuntimeError) as caught:
+        failed()
+    assert caught.value is original
+    assert "-deletion_" + phase in output.read_text()
+    assert "private synthetic" not in output.read_text()
+
+
+def test_job_deletion_phase_rejects_unlisted_or_wrong_scope(output: Path) -> None:
+    for value in [
+        {
+            "kind": "failure",
+            "stage": "job_deletion",
+            "error": "RuntimeError",
+            "job_deletion_phase": "private\ninjected",
+        },
+        {
+            "kind": "failure",
+            "stage": "evidence_review",
+            "error": "RuntimeError",
+            "job_deletion_phase": "receipt",
+        },
+        {"kind": "stage", "stage": "job_deletion", "job_deletion_phase": "receipt"},
+    ]:
+        with pytest.raises(ValueError):
+            DiagnosticFrame.model_validate(value)
+    assert not output.exists()
+
+
+def test_job_deletion_dialog_state_is_fixed_and_keeps_first_failure(output: Path) -> None:
+    original = RuntimeError("private synthetic failure")
+
+    @trace.observed_guest
+    def failed() -> None:
+        trace.guest_stage("conversation")
+        trace.guest_frame(
+            DiagnosticFrame(
+                kind="failure",
+                stage="job_deletion",
+                error="RuntimeError",
+                job_deletion_phase="cancel_dialog_job",
+                job_deletion_dialog_state="open_box",
+            )
+        )
+        raise original
+
+    @trace.observed_guest
+    def later_success() -> None:
+        trace.guest_stage("complete")
+
+    with pytest.raises(RuntimeError) as caught:
+        failed()
+    assert caught.value is original
+    later_success()
+    lines = output.read_text().splitlines()
+    assert len(lines) == 2 and lines[0] == lines[1]
+    assert "-deletion_cancel_dialog_job-deletion_dialog_open_box" in lines[0]
+    assert "private" not in lines[0]
+
+
+def test_job_deletion_receipt_state_is_fixed_and_keeps_first_failure(output: Path) -> None:
+    original = RuntimeError("private synthetic failure")
+
+    @trace.observed_guest
+    def failed() -> None:
+        trace.guest_stage("conversation")
+        trace.guest_frame(
+            DiagnosticFrame(
+                kind="failure",
+                stage="job_deletion",
+                error="RuntimeError",
+                job_deletion_phase="receipt_verified",
+                job_deletion_receipt_state="submitted_unverified",
+            )
+        )
+        raise original
+
+    @trace.observed_guest
+    def later_success() -> None:
+        trace.guest_stage("complete")
+
+    with pytest.raises(RuntimeError) as caught:
+        failed()
+    assert caught.value is original
+    later_success()
+    lines = output.read_text().splitlines()
+    assert len(lines) == 2 and lines[0] == lines[1]
+    assert "-deletion_receipt_verified-deletion_receipt_submitted_unverified" in lines[0]
+    assert "private" not in lines[0]
+
+
+@pytest.mark.parametrize("phase", get_args(ContactSuppressionPhase))
+def test_suppression_phase_is_fixed_and_preserves_failure(output: Path, phase: str) -> None:
+    original = RuntimeError("private synthetic failure")
+
+    @trace.observed_guest
+    def failed() -> None:
+        trace.guest_stage("conversation")
+        trace.guest_frame(
+            DiagnosticFrame.model_validate(
+                {
+                    "kind": "failure",
+                    "stage": "contact_suppression",
+                    "error": "RuntimeError",
+                    "contact_suppression_phase": phase,
+                }
+            )
+        )
+        raise original
+
+    with pytest.raises(RuntimeError) as caught:
+        failed()
+    assert caught.value is original
+    assert "-suppression_" + phase in output.read_text()
+    assert "private" not in output.read_text()
+
+
+def test_suppression_phase_rejects_unlisted_or_wrong_scope(output: Path) -> None:
+    for value in [
+        {
+            "kind": "failure",
+            "stage": "contact_suppression",
+            "error": "RuntimeError",
+            "contact_suppression_phase": "private\ninjected",
+        },
+        {
+            "kind": "failure",
+            "stage": "job_deletion",
+            "error": "RuntimeError",
+            "contact_suppression_phase": "verify_result",
+        },
+        {
+            "kind": "stage",
+            "stage": "contact_suppression",
+            "contact_suppression_phase": "verify_result",
+        },
+    ]:
+        with pytest.raises(ValueError):
+            DiagnosticFrame.model_validate(value)
+    assert not output.exists()
 
 
 @pytest.mark.parametrize(

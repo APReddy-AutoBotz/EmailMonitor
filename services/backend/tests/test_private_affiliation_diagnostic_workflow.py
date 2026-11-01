@@ -263,7 +263,7 @@ def test_new_composer_preserves_original_one_shot_guest_parser_and_gates(
     if relative == ".github/workflows/operator-ui.yml":
         content = lifecycle_operator_baseline(content)
     if relative == ".github/workflows/parser-isolation.yml":
-        # Only the fixed stage receipt is additive; retain the original digest
+        # Only fixed diagnostic receipts are additive; retain the original digest
         # of the actual parser command, gates and every other workflow byte.
         diagnostic_environment = b"        id: parser-test\n        env:\n" + (
             b'          EM_PARSER_STAGE_REPORT: "true"\n'
@@ -276,6 +276,22 @@ def test_new_composer_preserves_original_one_shot_guest_parser_and_gates(
         )
         assert content.count(diagnostic_environment) == content.count(diagnostic_step) == 1
         content = content.replace(diagnostic_environment, b"").replace(diagnostic_step, b"")
+        for label, output in (
+            (b"Parser memory phase", b"parser_oom_phase"),
+            (b"Parser memory state", b"parser_oom_state"),
+            (b"Parser memory cleanup", b"parser_oom_cleanup"),
+        ):
+            extra_step = (
+                b'      - name: "'
+                + label
+                + b": ${{ steps.parser-test.outputs."
+                + output
+                + b" || 'unavailable' }}\"\n"
+                + b"        if: ${{ !cancelled() && steps.parser-test.outcome != 'skipped' }}\n"
+                + b"        run: ':'\n"
+            )
+            assert content.count(extra_step) == 1
+            content = content.replace(extra_step, b"")
     if relative == ".github/workflows/application.yml":
         # Preserve the original backend bytes, normalizing only its fixed receipt
         # wiring. Additional mandatory jobs/join have executable contract tests.

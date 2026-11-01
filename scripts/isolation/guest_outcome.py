@@ -10,11 +10,16 @@ from typing import Annotated, Literal, get_args
 from operator_ui_protocol import (
     OUTCOME_PHASES,
     STAGES,
+    BrowserFailureTrace,
+    ContactSuppressionPhase,
     DiagnosticFrame,
     FocusExhaustion,
     InstalledCallbackDelivery,
     InstalledExportStep,
     InstalledLoginPhase,
+    JobDeletionDialogState,
+    JobDeletionPhase,
+    JobDeletionReceiptState,
     KeyboardAttemptTrace,
     LoginTimingTrace,
 )
@@ -48,6 +53,11 @@ class Trace:
         self.callback: InstalledCallbackDelivery | None = None
         self.login_timing: LoginTimingTrace | None = None
         self.outcome = "none"
+        self.deletion: JobDeletionPhase | None = None
+        self.deletion_dialog: JobDeletionDialogState | None = None
+        self.deletion_receipt: JobDeletionReceiptState | None = None
+        self.browser_failure: BrowserFailureTrace | None = None
+        self.suppression: ContactSuppressionPhase | None = None
         self.focus: FocusExhaustion | str | None = None
         self.cleanup: set[str] = set()
         self.export: InstalledExportStep | None = None
@@ -81,6 +91,27 @@ class Trace:
             raise ValueError("Closed callback delivery category required")
         if self.outcome not in ("none", *OUTCOME_PHASES):
             raise ValueError("Closed outcome phase required")
+        if self.deletion is not None and (
+            self.deletion not in get_args(JobDeletionPhase) or self.phase != "job_deletion"
+        ):
+            raise ValueError("Closed job deletion phase required")
+        if self.deletion_dialog is not None and (
+            self.deletion_dialog not in get_args(JobDeletionDialogState)
+            or self.phase != "job_deletion"
+            or self.deletion not in {"cancel_dialog_job", "confirm_dialog_job"}
+        ):
+            raise ValueError("Closed job deletion dialog state required")
+        if self.deletion_receipt is not None and (
+            self.deletion_receipt not in get_args(JobDeletionReceiptState)
+            or self.phase != "job_deletion"
+            or self.deletion not in {"receipt_verified", "receipt_fenced", "receipt_no_purge"}
+        ):
+            raise ValueError("Closed job deletion receipt state required")
+        if self.suppression is not None and (
+            self.suppression not in get_args(ContactSuppressionPhase)
+            or self.phase != "contact_suppression"
+        ):
+            raise ValueError("Closed contact suppression phase required")
         focus = "none"
         attempt = ""
         if isinstance(self.focus, FocusExhaustion):
@@ -130,10 +161,40 @@ class Trace:
                 raise ValueError("Export step requires its exact failure phase")
             export = "-export_" + export_step.phase + "." + (export_step.format or "none")
         callback = "-callback_" + self.callback if self.callback is not None else ""
+        deletion = "-deletion_" + self.deletion if self.deletion is not None else ""
+        deletion_dialog = (
+            "-deletion_dialog_" + self.deletion_dialog if self.deletion_dialog is not None else ""
+        )
+        deletion_receipt = (
+            "-deletion_receipt_" + self.deletion_receipt
+            if self.deletion_receipt is not None
+            else ""
+        )
+        browser_failure = ""
+        if self.browser_failure is not None:
+            browser_value = BrowserFailureTrace.model_validate(self.browser_failure.model_dump())
+            line = (
+                str(browser_value.source_line) if browser_value.source_line is not None else "none"
+            )
+            flags = "".join(
+                "1" if flag is True else "0" if flag is False else "u"
+                for flag in (
+                    browser_value.browser_connected,
+                    browser_value.page_closed,
+                    browser_value.receiver_done,
+                )
+            )
+            browser_failure = (
+                f"-browser_{browser_value.exception}.{browser_value.cause}."
+                f"{browser_value.source_function}.{line}.{flags}.{browser_value.admitted}."
+                f"{int(browser_value.cleanup_replaced)}.{int(browser_value.request_limit_refused)}"
+            )
+        suppression = "-suppression_" + self.suppression if self.suppression is not None else ""
         return (
             f"{stage}-phase_{self.phase}-error_{self.error}-reason_{self.reason}-cleanup_{cleanup}"
             f"-login_{self.login}"
-            f"-outcome_{self.outcome}-focus_{focus}{attempt}{export}{callback}"
+            f"-outcome_{self.outcome}-focus_{focus}{attempt}{export}{callback}{deletion}"
+            f"{deletion_dialog}{deletion_receipt}{suppression}{browser_failure}"
         )
 
 
@@ -308,6 +369,11 @@ def guest_frame(frame: DiagnosticFrame) -> None:
             trace.callback = fixed.installed_callback_delivery
             trace.login_timing = fixed.installed_login_timing
             trace.outcome = fixed.outcome_phase or "none"
+            trace.deletion = fixed.job_deletion_phase
+            trace.deletion_dialog = fixed.job_deletion_dialog_state
+            trace.deletion_receipt = fixed.job_deletion_receipt_state
+            trace.browser_failure = fixed.browser_failure_trace
+            trace.suppression = fixed.contact_suppression_phase
             trace.focus = fixed.focus_exhaustion
             trace.export = fixed.installed_export_step
 

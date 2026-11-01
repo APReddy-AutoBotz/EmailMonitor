@@ -689,6 +689,9 @@ def test_real_concurrent_unlinks_have_one_revision_and_audit_receipt(scenario: S
         assert (
             current.revision == 2 and current.state == "needs_review" and current.author_id is None
         )
-        assert len(service.history(org, batch)) == 1
+        history = service.history(org, batch)
+        assert len(history) == 1
+        assert history[0]["action"] == "unlink"
+        assert history[0]["association_id"] == request.association_id
     finally:
         other.engine.dispose()

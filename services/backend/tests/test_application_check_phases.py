@@ -4,6 +4,7 @@ import json
 import os
 import re
 import shlex
+import signal
 import subprocess
 import sys
 from pathlib import Path
@@ -61,6 +62,38 @@ DATABASE_KEYS = (
 )
 
 
+def run_owned_shell(
+    command: list[str], *, cwd: Path, env: dict[str, str], timeout: float
+) -> subprocess.CompletedProcess[str]:
+    """Run only this synthetic check shell in its own process group."""
+    process = subprocess.Popen(
+        command,
+        cwd=cwd,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=True,
+    )
+    try:
+        stdout, stderr = process.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired as original:
+        # subprocess.run stops only the shell; the authored stub can retain its
+        # pipes. Signal only the new session owned by this invocation.
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        except OSError:
+            original.add_note("Owned synthetic process-group signal failed; cleanup is uncertain")
+        try:
+            process.communicate(timeout=2)
+        except (subprocess.TimeoutExpired, OSError):
+            original.add_note("Owned synthetic process-group reap failed; cleanup is uncertain")
+        raise
+    return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
+
+
 def invoke(
     temporary: Path,
     arguments: tuple[str, ...],
@@ -93,13 +126,8 @@ if len(log.read_text().splitlines()) == int(os.environ['CHECK_FAIL_AT']):
         "CHECK_FAIL_AT": str(fail_at),
     }
     script = "scripts/check_tenant_foundation.sh" if tenant else "scripts/check.sh"
-    result = subprocess.run(
-        ["bash", str(ROOT / script), *arguments],
-        cwd=temporary,
-        env=environment,
-        capture_output=True,
-        text=True,
-        timeout=10,
+    result = run_owned_shell(
+        ["bash", str(ROOT / script), *arguments], cwd=temporary, env=environment, timeout=10
     )
     return result, [json.loads(line) for line in log.read_text().splitlines()]
 

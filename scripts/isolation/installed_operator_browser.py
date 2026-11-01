@@ -181,6 +181,7 @@ async def main() -> None:
             raise RuntimeError("Exact ephemeral HTTPS origin required")
     channel = Channel()
     receiver = asyncio.create_task(channel.read())
+    browser_failure_capture = keyboard_helpers.BrowserFailureCapture(receiver, channel)
     statuses: list[int] = []
     received_assets: set[str] = set()
     callback_index_seen = False
@@ -238,19 +239,25 @@ async def main() -> None:
 
     try:
         checkpoint("browser_launch")
-        async with async_playwright() as playwright, AsyncExitStack() as observers:
+        async with (
+            async_playwright() as playwright,
+            AsyncExitStack() as observers,
+            keyboard_helpers.capture_browser_failure(browser_failure_capture),
+        ):
             browser = await playwright.chromium.launch(
                 channel="chromium",
                 headless=True,
                 chromium_sandbox=True,
                 args=["--enable-automation"],
             )
+            browser_failure_capture.browser = browser
             if browser.version != "153.0.8010.12":
                 raise RuntimeError("Pinned Chromium required")
             context = await browser.new_context(service_workers="block", accept_downloads=False)
             if await context.cookies():
                 raise RuntimeError("Fresh browser session required")
             page = await context.new_page()
+            browser_failure_capture.page = page
             page.set_default_timeout(10000)
             checkpoint("sandbox")
             await page.goto("chrome://sandbox", wait_until="domcontentloaded")
@@ -874,12 +881,20 @@ async def main() -> None:
             else "unknown"
         )
         fixed = diagnostics.capture(error, reason, login_phase)
+        browser_failure = (
+            browser_failure_capture.result(error) if isinstance(error, Exception) else None
+        )
         print(
             json.dumps(
                 {
                     "kind": "failure",
                     "stage": stage,
                     **fixed,
+                    **(
+                        {"browser_failure_trace": browser_failure.model_dump()}
+                        if browser_failure is not None
+                        else {}
+                    ),
                     **(
                         {"installed_login_timing": login_timing.snapshot().model_dump()}
                         if login_phase is not None

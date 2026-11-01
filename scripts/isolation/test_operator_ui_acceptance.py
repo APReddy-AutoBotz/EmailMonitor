@@ -4,6 +4,8 @@ import hashlib
 import io
 import json
 import os
+import re
+import subprocess
 import threading
 from collections.abc import Iterator, Sequence
 from pathlib import Path
@@ -23,6 +25,7 @@ from emailmonitor.organizations.roles import Capability
 from emailmonitor.progress.broker import publish as publish_execution
 from emailmonitor.progress.service import Progress
 from emailmonitor.results.broker import publish as publish_exports
+from emailmonitor.results.models import Filters
 from emailmonitor.results.service import Results
 from entitlement_sql_diagnostic import entitlement_diagnostic
 from operator_queue_probe import observe as observe_parse_queue
@@ -33,6 +36,8 @@ from operator_ui_protocol import (
     completion_state_counts,
     completion_unit_counts,
     completion_worker_snapshot,
+    validate_operator_aggregate,
+    validate_operator_core,
 )
 from run_operator_ui_acceptance import run
 from sqlalchemy import create_engine, text
@@ -42,6 +47,54 @@ from test_tenant_foundation import ORIGIN, Scenario
 from test_tenant_foundation import scenario as scenario
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def operator_source_identity() -> tuple[str, str]:
+    """Use only a clean committed source tree for both separately built guests."""
+    try:
+        dirty = subprocess.check_output(
+            ["git", "status", "--porcelain", "--untracked-files=all"],
+            cwd=ROOT,
+            stderr=subprocess.DEVNULL,
+            timeout=10,
+        )
+        commit = (
+            subprocess.check_output(
+                ["git", "rev-parse", "HEAD"], cwd=ROOT, stderr=subprocess.DEVNULL, timeout=10
+            )
+            .decode("ascii")
+            .strip()
+        )
+        if dirty or not re.fullmatch(r"[0-9a-f]{40}", commit):
+            raise ValueError
+        tree = (
+            subprocess.check_output(
+                ["git", "rev-parse", commit + "^{tree}"],
+                cwd=ROOT,
+                stderr=subprocess.DEVNULL,
+                timeout=10,
+            )
+            .decode("ascii")
+            .strip()
+        )
+        final_commit = (
+            subprocess.check_output(
+                ["git", "rev-parse", "HEAD"], cwd=ROOT, stderr=subprocess.DEVNULL, timeout=10
+            )
+            .decode("ascii")
+            .strip()
+        )
+        final_dirty = subprocess.check_output(
+            ["git", "status", "--porcelain", "--untracked-files=all"],
+            cwd=ROOT,
+            stderr=subprocess.DEVNULL,
+            timeout=10,
+        )
+        if final_dirty or final_commit != commit or not re.fullmatch(r"[0-9a-f]{40}", tree):
+            raise ValueError
+        return commit, tree
+    except Exception:
+        raise RuntimeError("Clean exact operator source tree required") from None
 
 
 @pytest.fixture
@@ -232,6 +285,7 @@ def test_required_actual_keyboard_operator_ui(
             contact_sheet = archive.read("xl/worksheets/sheet1.xml")
         assert b">Affiliations<" not in contact_sheet and b">Article title<" in contact_sheet
         retained_receipt.update(
+            target_job=str(jobs[1].id),
             export_id=exports[0].id,
             review_receipts=reviews,
             durable_effects=effects,
@@ -394,39 +448,101 @@ WHERE i.organization_id=:org AND j.kind='extraction' LIMIT 33
 
             wait_for(consumer_ready)
             thread.start()
+            source_commit, source_tree = operator_source_identity()
             evidence = run(app, setup, control, before_reply)
+            assert operator_source_identity() == (source_commit, source_tree)
+            assert "source_tree" not in evidence and "source_commit" not in evidence
+            evidence["source_commit"] = source_commit
+            evidence["source_tree"] = source_tree
             assert len(faults) == 1 and len(late_replies) >= 1 and len(late_events) >= 1
             assert not errors
-            assert all(
-                evidence[name] is True
-                for name in [
-                    "keyboard",
-                    "keyword_partial",
-                    "url_no_contact",
-                    "actual_zero_contact_quality_dialog",
-                    "actual_terminal_replay_render_ready",
-                    "delayed_terminal_replay_render_proof",
-                    "authored_127_outcome_paging",
-                    "review",
-                    "pause_resume_cancel_dismiss",
-                    "dialog_focus_restore",
-                    "optional_field_preview",
-                    "usage_audit_settings",
-                    "download_cancelled",
-                    "org_switch",
-                    "readonly_role",
-                    "contact_suppression",
-                ]
-            )
-            assert evidence["network_errno"] == [101, 101] and evidence["interfaces"] == ["lo"]
             assert retained_receipt
+            target_job = UUID(str(retained_receipt["target_job"]))
+            validate_operator_core(evidence, str(target_job), source_commit, source_tree)
+
+            # A separate issued login and separately owned guest keep each
+            # channel's existing lifetime limits; the durable proof above is
+            # bound to the same job before suppression changes visibility.
+            with APIClient(app, ORIGIN) as privacy_owner:
+                scenario.login(privacy_owner, "owner")
+                privacy_session = privacy_owner.get(
+                    "/api/v1/auth/session", headers={"X-EmailMonitor-UI": "session"}
+                )
+                assert privacy_session.status_code == 200
+                assert privacy_session.json()["identity_id"] == str(scenario.identities["owner"])
+                privacy_cookies = [
+                    {
+                        "name": value.name,
+                        "value": value.value,
+                        "domain": "app.example.test",
+                        "path": "/",
+                        "secure": True,
+                        "httpOnly": True,
+                        "sameSite": "Strict" if value.name.endswith("csrf") else "Lax",
+                    }
+                    for value in privacy_owner.cookies.jar
+                ]
+                privacy_token = next(
+                    value.value
+                    for value in privacy_owner.cookies.jar
+                    if value.name == "__Host-emailmonitor_session"
+                )
+                assert privacy_token != token
+            privacy_setup = {
+                **setup,
+                "journey": "controlled_privacy",
+                "cookies": privacy_cookies,
+                "target_job": str(target_job),
+            }
+            assert operator_source_identity() == (source_commit, source_tree)
+            privacy_evidence = run(app, privacy_setup, control, before_reply)
+            assert operator_source_identity() == (source_commit, source_tree)
+            assert "source_tree" not in privacy_evidence and "source_commit" not in privacy_evidence
+            privacy_evidence["source_commit"] = source_commit
+            privacy_evidence["source_tree"] = source_tree
+            validate_operator_aggregate(
+                evidence, privacy_evidence, str(target_job), source_commit, source_tree
+            )
+            assert not errors
             with pytest.raises(AuthorizationDenied):
                 results.download(org, UUID(str(retained_receipt["export_id"])))
+            with pytest.raises(AuthorizationDenied):
+                results.contacts(org, Filters(job_id=target_job))
+            admin = create_engine(scenario.admin_url, hide_parameters=True)
+            try:
+                with admin.connect() as connection:
+                    markers = connection.execute(
+                        text(
+                            "SELECT job_id,reason,purged_at FROM emailmonitor.deletion_tombstones "
+                            "WHERE organization_id=:org"
+                        ),
+                        {"org": org},
+                    ).all()
+                    assert len(markers) == 2 and all(row.job_id is not None for row in markers)
+                    selected = [row for row in markers if row.job_id == target_job]
+                    assert len(selected) == 1
+                    assert selected[0].reason == "owner_request" and selected[0].purged_at is None
+                    assert (
+                        connection.execute(
+                            text(
+                                "SELECT count(*) FROM emailmonitor.article_observations "
+                                "WHERE organization_id=:org AND job_id=:job"
+                            ),
+                            {"org": org, "job": target_job},
+                        ).scalar_one()
+                        > 0
+                    )
+            finally:
+                admin.dispose()
 
             print(
                 json.dumps(
                     {
                         **evidence,
+                        "privacy_request_count": privacy_evidence["request_count"],
+                        "contact_suppression": privacy_evidence["contact_suppression"],
+                        "job_deletion": privacy_evidence["job_deletion"],
+                        "operator_sessions": "two_independent_guests",
                         "actual_postgresql": True,
                         "actual_broker_worker": True,
                         **{

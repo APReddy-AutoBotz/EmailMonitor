@@ -1424,7 +1424,23 @@ CONTEXT_SQL = (
     "services/backend/tests/test_discovery_tenant.py::test_real_unsupported_journal_and_type_remain_draft_without_discovery[filters2]",
     "services/backend/tests/test_discovery_tenant.py::test_real_unsupported_journal_and_type_remain_draft_without_discovery[filters3]",
 )
-CAPACITY_SQL = (*MEASURED_SQL, *CAPACITY_EXTRA, *CONTEXT_SQL)
+# The integration restores the sibling Drafts' exact real-SQL cases. Assign the
+# new cases to the measured capacity job, leaving all existing nodes and budgets
+# intact. The previous accepted head used 743 seconds of this job's 1,200-second
+# work limit; this allocation is not a guarantee of future runtime.
+INTEGRATION_SQL = (
+    "services/backend/tests/test_observation_quality_tenant.py::test_quality_current_authority_refuses[history-policy]",
+    "services/backend/tests/test_observation_quality_tenant.py::test_quality_current_authority_refuses[history-session]",
+    "services/backend/tests/test_observation_quality_tenant.py::test_quality_current_authority_refuses[history-suppression]",
+    "services/backend/tests/test_observation_quality_tenant.py::test_quality_current_authority_refuses[history-deletion]",
+    "services/backend/tests/test_observation_quality_tenant.py::test_quality_current_authority_refuses[history-expiry]",
+    "services/backend/tests/test_observation_quality_tenant.py::test_quality_respects_current_retention_before_sweep[history-excerpt_days]",
+    "services/backend/tests/test_observation_quality_tenant.py::test_quality_respects_current_retention_before_sweep[history-contact_days]",
+    "services/backend/tests/test_observation_quality_tenant.py::test_history_viewer_api_current_batch_and_revision_conflict",
+    "services/backend/tests/test_observation_quality_tenant.py::test_history_final_visibility_refusal_releases_no_prior_decisions",
+    "services/backend/tests/test_lifecycle_tenant.py::test_real_selected_job_staging_receipt_is_idempotent_without_physical_purge",
+)
+CAPACITY_SQL = (*MEASURED_SQL, *CAPACITY_EXTRA, *CONTEXT_SQL, *INTEGRATION_SQL)
 PROFILES = ("backend", "outcome_sql", "capacity_sql")
 ARGUMENTS = (
     "-c",
@@ -1689,7 +1705,8 @@ def decode_receipt(raw: str, profile: str) -> dict[str, Any]:
     if (
         value["outcome_sql"] != manifest(outcome_expected)
         or value["capacity_sql"] != manifest(CAPACITY_SQL)
-        or value["excluded_backend"] != manifest((*RESERVED_SQL, *CAPACITY_EXTRA, *CONTEXT_SQL))
+        or value["excluded_backend"]
+        != manifest((*RESERVED_SQL, *CAPACITY_EXTRA, *CONTEXT_SQL, *INTEGRATION_SQL))
         or value["full"]["count"] != sum(value[p]["count"] for p in PROFILES)
         or any(
             value["excluded_" + p]["count"] != value["full"]["count"] - value[p]["count"]
