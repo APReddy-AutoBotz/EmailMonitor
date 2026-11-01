@@ -521,15 +521,29 @@ OUTCOME_PHASES = get_args(OutcomePhase)
 JobDeletionPhase = Literal[
     "navigate_jobs",
     "open_job",
+    "open_job_focus",
+    "open_job_key",
     "choose_reason",
     "cancel_confirmation",
     "open_confirmation",
+    "cancel_open_focus",
+    "cancel_open_key",
+    "cancel_dialog_job",
+    "cancel_dialog_exports",
+    "cancel_dialog_purge",
+    "confirm_open_focus",
+    "confirm_open_key",
+    "confirm_dialog_job",
+    "confirm_dialog_exports",
+    "confirm_dialog_purge",
     "confirm_focus",
     "confirm_keypress",
     "confirm_close",
     "receipt",
     "settled_requests",
 ]
+
+JobDeletionDialogState = Literal["absent", "closed", "open_box", "open_no_box", "unavailable"]
 
 ContactSuppressionPhase = Literal[
     "select_organization",
@@ -742,6 +756,7 @@ class DiagnosticFrame(BaseModel):
     export_assertion_line: int | None = Field(default=None, ge=1, le=10000)
     outcome_phase: OutcomePhase | None = None
     job_deletion_phase: JobDeletionPhase | None = None
+    job_deletion_dialog_state: JobDeletionDialogState | None = None
     contact_suppression_phase: ContactSuppressionPhase | None = None
     observation_trace: ObservationTrace | Literal["unavailable"] | None = None
     evidence_phase: EvidencePhase | None = None
@@ -787,6 +802,12 @@ class DiagnosticFrame(BaseModel):
             self.kind != "failure" or self.stage != "job_deletion"
         ):
             raise ValueError("Job deletion phase requires its exact failure stage")
+        if self.job_deletion_dialog_state is not None and (
+            self.kind != "failure"
+            or self.stage != "job_deletion"
+            or self.job_deletion_phase not in {"cancel_dialog_job", "confirm_dialog_job"}
+        ):
+            raise ValueError("Job deletion dialog state requires its exact content assertion")
         if self.contact_suppression_phase is not None and (
             self.kind != "failure" or self.stage != "contact_suppression"
         ):

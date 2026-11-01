@@ -25,6 +25,7 @@ from operator_ui_protocol import (
     EvidenceFocusTrace,
     FocusExhaustion,
     HandoffTrace,
+    JobDeletionDialogState,
     JobDeletionPhase,
     KeyboardAttemptTrace,
     ObservationTrace,
@@ -306,6 +307,77 @@ async def focus(page: Page, target: Locator) -> None:
 async def activate(page: Page, target: Locator) -> None:
     await focus(page, target)
     await page.keyboard.press("Enter")
+
+
+async def deletion_open_job(
+    page: Page, target: Locator, mark: Callable[[JobDeletionPhase], None]
+) -> None:
+    """Retain the ordinary activation while identifying its failing operation."""
+    mark("open_job_focus")
+    await focus(page, target)
+    mark("open_job_key")
+    await page.keyboard.press("Enter")
+
+
+async def deletion_open_confirmation(
+    page: Page,
+    target: Locator,
+    job: str,
+    commit: bool,
+    mark: Callable[[JobDeletionPhase], None],
+) -> Locator:
+    """The same single keyboard activation and three original assertions."""
+    phases: tuple[
+        JobDeletionPhase, JobDeletionPhase, JobDeletionPhase, JobDeletionPhase, JobDeletionPhase
+    ]
+    phases = (
+        (
+            "confirm_open_focus",
+            "confirm_open_key",
+            "confirm_dialog_job",
+            "confirm_dialog_exports",
+            "confirm_dialog_purge",
+        )
+        if commit
+        else (
+            "cancel_open_focus",
+            "cancel_open_key",
+            "cancel_dialog_job",
+            "cancel_dialog_exports",
+            "cancel_dialog_purge",
+        )
+    )
+    mark(phases[0])
+    await focus(page, target)
+    mark(phases[1])
+    await page.keyboard.press("Enter")
+    confirmation = page.get_by_role("dialog")
+    mark(phases[2])
+    await expect(confirmation).to_contain_text(job)
+    mark(phases[3])
+    await expect(confirmation).to_contain_text("all existing exports in this organization")
+    mark(phases[4])
+    await expect(confirmation).to_contain_text("Physical purge")
+    return confirmation
+
+
+async def deletion_dialog_snapshot(page: Page) -> JobDeletionDialogState:
+    """Observe dialog geometry only after a failure; never return DOM contents."""
+    try:
+        result = await asyncio.wait_for(
+            page.evaluate("""() => {
+                const dialog = document.querySelector('dialog[open]');
+                if (!dialog) return document.querySelector('dialog') ? 'closed' : 'absent';
+                const box = dialog.getBoundingClientRect();
+                return box.width > 0 && box.height > 0 ? 'open_box' : 'open_no_box';
+            }"""),
+            timeout=0.1,
+        )
+        if result in {"absent", "closed", "open_box", "open_no_box"}:
+            return cast(JobDeletionDialogState, result)
+    except Exception:
+        pass
+    return "unavailable"
 
 
 async def traced_activate(page: Page, target: Locator) -> None:
@@ -1557,6 +1629,10 @@ async def main() -> None:
         deletion_phase = None
         suppression_phase = None
         print(json.dumps({"kind": "stage", "stage": value}), flush=True)
+
+    def mark_deletion(value: JobDeletionPhase) -> None:
+        nonlocal deletion_phase
+        deletion_phase = value
 
     def outcome_checkpoint(value: str) -> None:
         nonlocal outcome_phase
@@ -2854,8 +2930,10 @@ async def main() -> None:
             deletion_phase = "navigate_jobs"
             await activate(page, page.get_by_role("button", name="Jobs", exact=True))
             deletion_phase = "open_job"
-            await activate(
-                page, page.get_by_role("button", name="Open job " + actual_job, exact=True)
+            await deletion_open_job(
+                page,
+                page.get_by_role("button", name="Open job " + actual_job, exact=True),
+                mark_deletion,
             )
             deletion = page.get_by_role("region", name="Job deletion", exact=True)
             for commit in (False, True):
@@ -2864,14 +2942,9 @@ async def main() -> None:
                     deletion_phase = "choose_reason"
                     await expect(action).to_be_disabled()
                     await select_index(page, page.get_by_label(re.compile(r"^Deletion reason")), 2)
-                deletion_phase = "open_confirmation"
-                await activate(page, action)
-                confirmation = page.get_by_role("dialog")
-                await expect(confirmation).to_contain_text(actual_job)
-                await expect(confirmation).to_contain_text(
-                    "all existing exports in this organization"
+                confirmation = await deletion_open_confirmation(
+                    page, action, actual_job, commit, mark_deletion
                 )
-                await expect(confirmation).to_contain_text("Physical purge")
                 deletion_phase = "confirm_focus" if commit else "cancel_confirmation"
                 deletion_target = confirmation.get_by_role(
                     "button",
@@ -2938,6 +3011,12 @@ async def main() -> None:
     except Exception as error:
         name = type(error).__name__
         handoff = handoff_trace if stage == "export_preview" else None
+        deletion_dialog_state = (
+            await deletion_dialog_snapshot(page)
+            if stage == "job_deletion"
+            and deletion_phase in {"cancel_dialog_job", "confirm_dialog_job"}
+            else None
+        )
         # Report before cancelling the owned stdin reader: its executor shutdown awaits host EOF.
         print(
             json.dumps(
@@ -2964,6 +3043,11 @@ async def main() -> None:
                     **(
                         {"job_deletion_phase": deletion_phase}
                         if stage == "job_deletion" and deletion_phase is not None
+                        else {}
+                    ),
+                    **(
+                        {"job_deletion_dialog_state": deletion_dialog_state}
+                        if deletion_dialog_state is not None
                         else {}
                     ),
                     **(

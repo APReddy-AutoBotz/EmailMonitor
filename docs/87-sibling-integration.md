@@ -76,6 +76,18 @@ the available category does not distinguish focus readiness from waiting for the
 dialog to close. A further fixed split records those actions without changing
 the focus operation, Enter keypress or close assertion. No cause is established.
 
+Two subsequent attempts on `ca045bdefb4cf4c54a7d49d4b2d55dbbe201a465` reported
+an unknown-reason `RuntimeError` at `open_job` and `open_confirmation`,
+respectively. Those labels cannot identify the failing operation. The local
+diagnostic candidate separates focus and Enter, then the three existing dialog
+content assertions, for the cancel and confirm attempts. On failure of the
+first content assertion only, a bounded observation reports whether an open
+dialog has a nonzero box; it emits no text, identifiers, request data or
+exception message. The observation is not proof of visibility or causality.
+The same keyboard sequence, assertion budgets, original errors and protected
+runner remain in force. Hosted verification of this diagnostic is pending; it
+is not a claimed fix for either failure.
+
 That attempt also failed an installed XML case with the existing redirect-order
 refusal after callback delivery. Its generic category did not identify the
 rejecting check. Fixed rejection-location categories distinguish the original

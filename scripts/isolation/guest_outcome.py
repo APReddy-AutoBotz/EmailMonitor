@@ -16,6 +16,7 @@ from operator_ui_protocol import (
     InstalledCallbackDelivery,
     InstalledExportStep,
     InstalledLoginPhase,
+    JobDeletionDialogState,
     JobDeletionPhase,
     KeyboardAttemptTrace,
     LoginTimingTrace,
@@ -51,6 +52,7 @@ class Trace:
         self.login_timing: LoginTimingTrace | None = None
         self.outcome = "none"
         self.deletion: JobDeletionPhase | None = None
+        self.deletion_dialog: JobDeletionDialogState | None = None
         self.suppression: ContactSuppressionPhase | None = None
         self.focus: FocusExhaustion | str | None = None
         self.cleanup: set[str] = set()
@@ -89,6 +91,12 @@ class Trace:
             self.deletion not in get_args(JobDeletionPhase) or self.phase != "job_deletion"
         ):
             raise ValueError("Closed job deletion phase required")
+        if self.deletion_dialog is not None and (
+            self.deletion_dialog not in get_args(JobDeletionDialogState)
+            or self.phase != "job_deletion"
+            or self.deletion not in {"cancel_dialog_job", "confirm_dialog_job"}
+        ):
+            raise ValueError("Closed job deletion dialog state required")
         if self.suppression is not None and (
             self.suppression not in get_args(ContactSuppressionPhase)
             or self.phase != "contact_suppression"
@@ -144,11 +152,15 @@ class Trace:
             export = "-export_" + export_step.phase + "." + (export_step.format or "none")
         callback = "-callback_" + self.callback if self.callback is not None else ""
         deletion = "-deletion_" + self.deletion if self.deletion is not None else ""
+        deletion_dialog = (
+            "-deletion_dialog_" + self.deletion_dialog if self.deletion_dialog is not None else ""
+        )
         suppression = "-suppression_" + self.suppression if self.suppression is not None else ""
         return (
             f"{stage}-phase_{self.phase}-error_{self.error}-reason_{self.reason}-cleanup_{cleanup}"
             f"-login_{self.login}"
-            f"-outcome_{self.outcome}-focus_{focus}{attempt}{export}{callback}{deletion}{suppression}"
+            f"-outcome_{self.outcome}-focus_{focus}{attempt}{export}{callback}{deletion}"
+            f"{deletion_dialog}{suppression}"
         )
 
 
@@ -324,6 +336,7 @@ def guest_frame(frame: DiagnosticFrame) -> None:
             trace.login_timing = fixed.installed_login_timing
             trace.outcome = fixed.outcome_phase or "none"
             trace.deletion = fixed.job_deletion_phase
+            trace.deletion_dialog = fixed.job_deletion_dialog_state
             trace.suppression = fixed.contact_suppression_phase
             trace.focus = fixed.focus_exhaustion
             trace.export = fixed.installed_export_step
