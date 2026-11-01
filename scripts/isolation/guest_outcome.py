@@ -10,6 +10,7 @@ from typing import Annotated, Literal, get_args
 from operator_ui_protocol import (
     OUTCOME_PHASES,
     STAGES,
+    BrowserFailureTrace,
     ContactSuppressionPhase,
     DiagnosticFrame,
     FocusExhaustion,
@@ -55,6 +56,7 @@ class Trace:
         self.deletion: JobDeletionPhase | None = None
         self.deletion_dialog: JobDeletionDialogState | None = None
         self.deletion_receipt: JobDeletionReceiptState | None = None
+        self.browser_failure: BrowserFailureTrace | None = None
         self.suppression: ContactSuppressionPhase | None = None
         self.focus: FocusExhaustion | str | None = None
         self.cleanup: set[str] = set()
@@ -168,12 +170,31 @@ class Trace:
             if self.deletion_receipt is not None
             else ""
         )
+        browser_failure = ""
+        if self.browser_failure is not None:
+            browser_value = BrowserFailureTrace.model_validate(self.browser_failure.model_dump())
+            line = (
+                str(browser_value.source_line) if browser_value.source_line is not None else "none"
+            )
+            flags = "".join(
+                "1" if flag is True else "0" if flag is False else "u"
+                for flag in (
+                    browser_value.browser_connected,
+                    browser_value.page_closed,
+                    browser_value.receiver_done,
+                )
+            )
+            browser_failure = (
+                f"-browser_{browser_value.exception}.{browser_value.cause}."
+                f"{browser_value.source_function}.{line}.{flags}.{browser_value.admitted}."
+                f"{int(browser_value.cleanup_replaced)}"
+            )
         suppression = "-suppression_" + self.suppression if self.suppression is not None else ""
         return (
             f"{stage}-phase_{self.phase}-error_{self.error}-reason_{self.reason}-cleanup_{cleanup}"
             f"-login_{self.login}"
             f"-outcome_{self.outcome}-focus_{focus}{attempt}{export}{callback}{deletion}"
-            f"{deletion_dialog}{deletion_receipt}{suppression}"
+            f"{deletion_dialog}{deletion_receipt}{suppression}{browser_failure}"
         )
 
 
@@ -351,6 +372,7 @@ def guest_frame(frame: DiagnosticFrame) -> None:
             trace.deletion = fixed.job_deletion_phase
             trace.deletion_dialog = fixed.job_deletion_dialog_state
             trace.deletion_receipt = fixed.job_deletion_receipt_state
+            trace.browser_failure = fixed.browser_failure_trace
             trace.suppression = fixed.contact_suppression_phase
             trace.focus = fixed.focus_exhaustion
             trace.export = fixed.installed_export_step

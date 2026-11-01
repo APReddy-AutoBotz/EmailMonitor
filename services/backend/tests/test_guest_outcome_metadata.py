@@ -7,6 +7,7 @@ import guest_outcome as trace
 import pytest
 from operator_ui_protocol import (
     OUTCOME_PHASES,
+    BrowserFailureTrace,
     ContactSuppressionPhase,
     DiagnosticFrame,
     FocusExhaustion,
@@ -85,6 +86,46 @@ def test_first_failure_survives_cleanup_and_later_success(output: Path) -> None:
         "guest_outcome=conversation-phase_evidence_review-error_AssertionError-"
         "reason_dialog_focus_restore-cleanup_both-login_none-outcome_none-focus_none"
     )
+
+
+def test_precleanup_browser_failure_is_bounded_and_preserves_primary(output: Path) -> None:
+    original = RuntimeError("private diagnostic failure")
+
+    @trace.observed_guest
+    def failed() -> None:
+        trace.guest_stage("conversation")
+        trace.guest_frame(
+            DiagnosticFrame(
+                kind="failure",
+                stage="sandbox",
+                error="TimeoutError",
+                browser_failure_trace=BrowserFailureTrace(
+                    exception="playwright_timeout",
+                    cause="none",
+                    source_function="main",
+                    source_line=1739,
+                    browser_connected=True,
+                    page_closed=False,
+                    receiver_done=False,
+                    admitted=1,
+                    cleanup_replaced=False,
+                ),
+            )
+        )
+        raise original
+
+    @trace.observed_guest
+    def later_success() -> None:
+        trace.guest_stage("complete")
+
+    with pytest.raises(RuntimeError) as caught:
+        failed()
+    assert caught.value is original
+    later_success()
+    lines = output.read_text().splitlines()
+    assert len(lines) == 2 and lines[0] == lines[1]
+    assert "-browser_playwright_timeout.none.main.1739.100.1.0" in lines[0]
+    assert "private" not in lines[0]
 
 
 def test_first_callback_timing_is_bounded_and_survives_later_success(output: Path) -> None:

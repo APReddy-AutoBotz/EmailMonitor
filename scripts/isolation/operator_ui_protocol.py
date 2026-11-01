@@ -557,6 +557,44 @@ JobDeletionReceiptState = Literal[
     "unavailable",
 ]
 
+BrowserExceptionClass = Literal[
+    "python_runtime",
+    "python_timeout",
+    "playwright_timeout",
+    "playwright_error",
+    "assertion",
+    "value_error",
+    "other",
+]
+BrowserSourceFunction = Literal[
+    "main",
+    "focus",
+    "activate",
+    "select_index",
+    "deletion_open_job",
+    "deletion_open_confirmation",
+    "deletion_receipt_checks",
+    "request",
+    "route_request",
+    "other",
+]
+
+
+class BrowserFailureTrace(BaseModel):
+    """Closed, value-free pre-cleanup browser failure evidence."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+    exception: BrowserExceptionClass
+    cause: BrowserExceptionClass | Literal["none"]
+    source_function: BrowserSourceFunction
+    source_line: int | None = Field(ge=1, le=10000)
+    browser_connected: bool | None
+    page_closed: bool | None
+    receiver_done: bool
+    admitted: int = Field(ge=0, le=16)
+    cleanup_replaced: bool
+
+
 ContactSuppressionPhase = Literal[
     "select_organization",
     "open_contacts",
@@ -770,6 +808,7 @@ class DiagnosticFrame(BaseModel):
     job_deletion_phase: JobDeletionPhase | None = None
     job_deletion_dialog_state: JobDeletionDialogState | None = None
     job_deletion_receipt_state: JobDeletionReceiptState | None = None
+    browser_failure_trace: BrowserFailureTrace | None = None
     contact_suppression_phase: ContactSuppressionPhase | None = None
     observation_trace: ObservationTrace | Literal["unavailable"] | None = None
     evidence_phase: EvidencePhase | None = None
@@ -793,6 +832,8 @@ class DiagnosticFrame(BaseModel):
             and (self.error is not None or self.api_statuses or self.reason != "unknown")
         ):
             raise ValueError("Explicit failure or fixed stage required")
+        if self.browser_failure_trace is not None and self.kind != "failure":
+            raise ValueError("Browser failure trace requires a failure")
         if self.handoff_trace is not None and (
             self.kind != "failure" or self.stage != "export_preview"
         ):

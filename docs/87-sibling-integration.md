@@ -102,6 +102,16 @@ candidate captures the same bounded observation inside the failing assertion's
 context and always rethrows the original failure; receipt snapshots follow the
 same rule. This corrects diagnostic timing only, not the deletion workflow.
 
+The next local diagnostic observes exceptions inside the Playwright context,
+before its teardown can obscure the triggering operation. It exports only a
+fixed exception/cause category, an owned source-function category and line,
+bounded browser/page/receiver flags and admission count, and whether context
+cleanup replaced the original exception. It preserves both the original action
+and existing exception propagation. Coordinates are meaningful only against
+the exact tested source. A missing snapshot or a category alone cannot prove a
+root cause; no browser messages, URLs, tenant identifiers or payloads are
+included. This candidate has not been run in the protected hosted browser.
+
 That hosted application's backend completed 7,372 assigned cases with one
 failure in the fixed-phase source contract: the original test scanned only
 `main`, while the diagnostic moved markers into two helpers. The local candidate

@@ -9,7 +9,8 @@ import os
 import re
 import socket
 import sys
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Literal, cast
 from urllib.parse import parse_qs, urlsplit
@@ -21,6 +22,9 @@ from operator_ui_protocol import (
     OUTCOME_PHASES,
     STAGES,
     AuthoredOutcomeReplayReadiness,
+    BrowserExceptionClass,
+    BrowserFailureTrace,
+    BrowserSourceFunction,
     ContactSuppressionPhase,
     EvidenceFocusTrace,
     FocusExhaustion,
@@ -49,8 +53,116 @@ from playwright.async_api import (
     async_playwright,
     expect,
 )
+from playwright.async_api import (
+    TimeoutError as PlaywrightTimeoutError,
+)
 
 ORIGIN = "https://app.example.test"
+
+
+def browser_exception_class(error: BaseException) -> BrowserExceptionClass:
+    """Classify only known types; never serialize exception values or messages."""
+    if isinstance(error, PlaywrightTimeoutError):
+        return "playwright_timeout"
+    if isinstance(error, Error):
+        return "playwright_error"
+    if isinstance(error, TimeoutError):
+        return "python_timeout"
+    if isinstance(error, AssertionError):
+        return "assertion"
+    if isinstance(error, ValueError):
+        return "value_error"
+    if isinstance(error, RuntimeError):
+        return "python_runtime"
+    return "other"
+
+
+def browser_source(error: BaseException) -> tuple[BrowserSourceFunction, int | None]:
+    """Return the deepest owned source coordinate, never a path or source text."""
+    functions = {
+        "main",
+        "focus",
+        "activate",
+        "select_index",
+        "deletion_open_job",
+        "deletion_open_confirmation",
+        "deletion_receipt_checks",
+        "request",
+        "route_request",
+    }
+    source: BrowserSourceFunction = "other"
+    line: int | None = None
+    frame = error.__traceback__
+    for _ in range(256):
+        if frame is None:
+            break
+        code = frame.tb_frame.f_code
+        if (
+            Path(code.co_filename).name == "operator_ui_acceptance.py"
+            and 1 <= frame.tb_lineno <= 10000
+        ):
+            source = cast(
+                BrowserSourceFunction, code.co_name if code.co_name in functions else "other"
+            )
+            line = frame.tb_lineno
+        frame = frame.tb_next
+    return source, line
+
+
+def browser_flag(value: object | None, method: str) -> bool | None:
+    """Read an already-owned synchronous state flag; never start another operation."""
+    try:
+        result = getattr(value, method)()
+        return result if type(result) is bool else None
+    except Exception:
+        return None
+
+
+class BrowserFailureCapture:
+    def __init__(self, receiver: asyncio.Task[Any], channel: "Channel") -> None:
+        self.receiver = receiver
+        self.channel = channel
+        self.browser: object | None = None
+        self.page: object | None = None
+        self.original: Exception | None = None
+        self.snapshot: BrowserFailureTrace | None = None
+
+    def record(self, error: Exception) -> None:
+        source, line = browser_source(error)
+        cause = error.__cause__
+        if cause is None and not error.__suppress_context__:
+            cause = error.__context__
+        self.snapshot = BrowserFailureTrace(
+            exception=browser_exception_class(error),
+            cause=browser_exception_class(cause) if cause is not None else "none",
+            source_function=source,
+            source_line=line,
+            browser_connected=browser_flag(self.browser, "is_connected"),
+            page_closed=browser_flag(self.page, "is_closed"),
+            receiver_done=self.receiver.done(),
+            admitted=self.channel.admitted,
+            cleanup_replaced=False,
+        )
+        self.original = error
+
+    def result(self, error: Exception) -> BrowserFailureTrace | None:
+        if self.snapshot is None or self.original is None:
+            return None
+        return self.snapshot.model_copy(update={"cleanup_replaced": error is not self.original})
+
+
+@asynccontextmanager
+async def capture_browser_failure(capture: BrowserFailureCapture) -> AsyncIterator[None]:
+    """Capture before the owning Playwright context exits; never change its failure."""
+    try:
+        yield
+    except Exception as error:
+        try:
+            capture.record(error)
+        except Exception:
+            pass
+        raise
+
 
 # Passive, value-free observations of one owned keyboard attempt. No focus calls,
 # event cancellation, DOM writes, retries, timer changes or payload collection.
@@ -1655,6 +1767,7 @@ async def main() -> None:
         raise RuntimeError("Immutable built asset manifest mismatch")
     channel = Channel()
     receiver = asyncio.create_task(channel.read())
+    browser_failure_capture = BrowserFailureCapture(receiver, channel)
     accepted = 0
     api_statuses: list[int] = []
     download_seen = asyncio.Event()
@@ -1721,18 +1834,23 @@ async def main() -> None:
 
     try:
         checkpoint("browser_launch")
-        async with async_playwright() as playwright:
+        async with (
+            async_playwright() as playwright,
+            capture_browser_failure(browser_failure_capture),
+        ):
             browser = await playwright.chromium.launch(
                 channel="chromium",
                 headless=True,
                 chromium_sandbox=True,
                 args=["--enable-automation"],
             )
+            browser_failure_capture.browser = browser
             if browser.version != "153.0.8010.12":
                 raise RuntimeError("Pinned Chromium required")
             context = await browser.new_context(service_workers="block", accept_downloads=False)
             await context.add_cookies(setup["cookies"])
             page = await context.new_page()
+            browser_failure_capture.page = page
             await page.add_init_script(HANDOFF_OBSERVER)
             page.set_default_timeout(10000)
             checkpoint("sandbox")
@@ -3081,6 +3199,7 @@ async def main() -> None:
     except Exception as error:
         name = type(error).__name__
         handoff = handoff_trace if stage == "export_preview" else None
+        browser_failure = browser_failure_capture.result(error)
         # Report before cancelling the owned stdin reader: its executor shutdown awaits host EOF.
         print(
             json.dumps(
@@ -3089,6 +3208,11 @@ async def main() -> None:
                     "stage": stage,
                     "error": name if name in ERRORS else "UnexpectedError",
                     "reason": failure_reason(error),
+                    **(
+                        {"browser_failure_trace": browser_failure.model_dump()}
+                        if browser_failure is not None
+                        else {}
+                    ),
                     **(
                         {
                             "handoff_trace": handoff.model_dump()
