@@ -610,7 +610,45 @@ def test_job_deletion_failure_metadata_uses_only_fixed_local_phases() -> None:
                 for value in ast.walk(node.value)
                 if isinstance(value, ast.Constant) and isinstance(value.value, str)
             )
-    assert phases == set(get_args(JobDeletionPhase))
+    # The two bounded keyboard helpers own the detailed phase markers. Inspect
+    # only their explicit mark calls and phase tuple, not unrelated literals.
+    for helper in ("deletion_open_job", "deletion_open_confirmation"):
+        function = next(
+            node
+            for node in module.body
+            if isinstance(node, ast.AsyncFunctionDef) and node.name == helper
+        )
+        indexed: set[int] = set()
+        for node in ast.walk(function):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id == "mark"
+            ):
+                assert len(node.args) == 1 and not node.keywords
+                argument = node.args[0]
+                if isinstance(argument, ast.Constant) and isinstance(argument.value, str):
+                    phases.add(argument.value)
+                else:
+                    assert helper == "deletion_open_confirmation"
+                    assert isinstance(argument, ast.Subscript)
+                    assert isinstance(argument.value, ast.Name) and argument.value.id == "phases"
+                    assert isinstance(argument.slice, ast.Constant)
+                    assert type(argument.slice.value) is int and argument.slice.value in range(5)
+                    indexed.add(argument.slice.value)
+            if isinstance(node, ast.Assign) and any(
+                isinstance(target, ast.Name) and target.id == "phases" for target in node.targets
+            ):
+                phases.update(
+                    value.value
+                    for value in ast.walk(node.value)
+                    if isinstance(value, ast.Constant) and isinstance(value.value, str)
+                )
+        assert indexed == (set(range(5)) if helper == "deletion_open_confirmation" else set())
+    # Retain the old coarse value for decoding prior fixed diagnostics only.
+    legacy = {"open_confirmation"}
+    assert not phases & legacy
+    assert phases | legacy == set(get_args(JobDeletionPhase))
     assert '"job_deletion_phase": deletion_phase' in source.read_text()
 
 
