@@ -128,27 +128,142 @@ def test_protected_baseline_is_captured_only_once_and_repeated_start_refuses(
 
 
 def test_baseline_diagnostic_distinguishes_order_and_actual_field_changes() -> None:
-    before: dict[str, object] = {"routes": [{"dst": "default"}, {"dst": "127.0.0.1"}]}
-    reordered: dict[str, object] = {"routes": [{"dst": "127.0.0.1"}, {"dst": "default"}]}
+    before: dict[str, object] = {
+        "addresses": [],
+        "rules": [],
+        "routes": [{"dst": "default"}, {"dst": "127.0.0.1"}],
+    }
+    reordered: dict[str, object] = {
+        "addresses": [],
+        "rules": [],
+        "routes": [{"dst": "127.0.0.1"}, {"dst": "default"}],
+    }
     order = json.loads(baseline_diagnostic(before, reordered))["host_baseline_difference"]
-    assert order["routes"]["order_only"] and before != reordered
-    changed: dict[str, object] = {"routes": [{"dst": "default", "gateway": "192.0.2.1"}]}
+    assert order["order"] == "changed" and order["status"] == "material" and before != reordered
+    changed: dict[str, object] = {
+        "addresses": [],
+        "rules": [],
+        "routes": [{"dst": "default", "gateway": "192.0.2.1"}],
+    }
     fields = json.loads(baseline_diagnostic(before, changed))["host_baseline_difference"]
-    assert not fields["routes"]["order_only"]
-    assert fields["routes"]["removed_count"] == 2
-    assert fields["routes"]["added_count"] == 1
-    assert "192.0.2.1" in fields["routes"]["added"][0]
+    assert fields["status"] == "material" and fields["counts"]["route"] > 0
+    assert "192.0.2.1" not in json.dumps(fields)
     assert before != changed
 
 
-def test_baseline_diagnostic_is_bounded_and_retains_duplicate_counts() -> None:
-    before: dict[str, object] = {"routes": [{"dst": "x" * 20000}] * 100}
-    after: dict[str, object] = {"routes": []}
+def test_baseline_diagnostic_refuses_oversized_input() -> None:
+    before: dict[str, object] = {
+        "addresses": [],
+        "rules": [],
+        "routes": [{"dst": "x" * 20000}] * 100,
+    }
+    after: dict[str, object] = {"addresses": [], "rules": [], "routes": []}
     diagnostic = baseline_diagnostic(before, after)
-    section = json.loads(diagnostic)["host_baseline_difference"]["routes"]
-    assert len(diagnostic) < 16384 and section["removed_count"] == 100
-    assert len(section["removed"]) == 4
-    assert all(len(row) <= 512 for row in section["removed"])
+    section = json.loads(diagnostic)["host_baseline_difference"]
+    assert section == {"status": "unavailable"} and "x" * 100 not in diagnostic
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        "equal",
+        "lifetime",
+        "mixed",
+        "mixed_unknown",
+        "interface",
+        "interface_added",
+        "address",
+        "address_added",
+        "route",
+        "rule",
+        "unknown",
+    ],
+)
+def test_complete_value_safe_receipt_never_hides_material_changes(change: str) -> None:
+    import copy
+
+    before: dict[str, Any] = {
+        "addresses": [
+            {
+                "ifname": "private-interface",
+                "addr_info": [
+                    {
+                        "family": "inet",
+                        "local": "192.0.2.1",
+                        "prefixlen": 24,
+                        "valid_life_time": 1800,
+                        "preferred_life_time": 900,
+                        "future_private_field": "x" * 600 + "before",
+                    }
+                ],
+            }
+        ],
+        "routes": [],
+        "rules": [],
+    }
+    after = copy.deepcopy(before)
+    address = after["addresses"][0]["addr_info"][0]
+    if change in ("lifetime", "mixed", "mixed_unknown"):
+        address["preferred_life_time"] -= 1
+    if change == "mixed" or change == "address":
+        address["local"] = "192.0.2.2"
+    elif change == "interface":
+        after["addresses"][0]["ifname"] = "another-private-interface"
+    elif change == "interface_added":
+        after["addresses"].append({"ifname": "another-private-interface", "addr_info": []})
+    elif change == "address_added":
+        after["addresses"][0]["addr_info"].append({"local": "192.0.2.9"})
+    elif change == "route":
+        after["routes"].append({"dst": "192.0.2.0/24"})
+    elif change == "rule":
+        after["rules"].append({"table": 123})
+    elif change in ("unknown", "mixed_unknown"):
+        address["future_private_field"] = "x" * 600 + "after"
+    receipt = baseline_diagnostic(before, after)
+    result = json.loads(receipt)["host_baseline_difference"]
+    assert result["status"] == (
+        "equal" if change == "equal" else "lifetime_only" if change == "lifetime" else "material"
+    )
+    assert result["counts"]["lifetime"] == (
+        1 if change in ("lifetime", "mixed", "mixed_unknown") else 0
+    )
+    if change in ("unknown", "mixed_unknown"):
+        assert result["counts"]["other"] == 1
+    if change == "interface_added":
+        assert result["counts"]["interface"] == 1
+    if change == "address_added":
+        assert result["counts"]["address"] == 1
+    assert "private" not in receipt and "192.0.2" not in receipt and "x" * 100 not in receipt
+
+
+@pytest.mark.parametrize("replacement", [True, -1, 4294967296, "private", None])
+def test_lifetime_receipt_refuses_malformed_values_without_exposing_them(
+    replacement: object,
+) -> None:
+    import copy
+
+    before: dict[str, Any] = {
+        "addresses": [{"ifname": "private", "addr_info": [{"preferred_life_time": 900}]}],
+        "routes": [],
+        "rules": [],
+    }
+    after = copy.deepcopy(before)
+    after["addresses"][0]["addr_info"][0]["preferred_life_time"] = replacement
+    receipt = baseline_diagnostic(before, after)
+    assert json.loads(receipt)["host_baseline_difference"] == {"status": "unavailable"}
+    assert "private" not in receipt
+
+
+def test_receipt_failure_does_not_replace_cleanup_refusal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    value = shell(tmp_path)
+    value.baseline = {"addresses": [], "routes": [], "rules": []}
+    current = {"addresses": [], "routes": [{"dst": "private"}], "rules": []}
+    monkeypatch.setattr(topology_module, "host_baseline", lambda: current)
+    monkeypatch.setattr(json, "dumps", lambda *args, **kwargs: 1 / 0)
+    with pytest.raises(RuntimeError, match="baseline_cleanup"):
+        value.close()
 
 
 @pytest.mark.parametrize("kind", ["snapshot", "inspect", "stop"])

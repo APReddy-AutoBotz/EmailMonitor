@@ -142,31 +142,172 @@ def host_baseline(deadline: float | None = None) -> dict[str, object]:
 
 
 def baseline_diagnostic(before: dict[str, object], after: dict[str, object]) -> str:
-    """Bounded read-only evidence; never normalizes or changes acceptance equality."""
-    sections: dict[str, object] = {}
-    for key in ("addresses", "routes", "rules"):
-        original, current = before.get(key), after.get(key)
-        if original == current:
-            continue
-        if type(original) is not list or type(current) is not list:
-            sections[key] = {"unexpected_shape": True}
-            continue
-        left = Counter(json.dumps(row, sort_keys=True) for row in original)
-        right = Counter(json.dumps(row, sort_keys=True) for row in current)
-        removed, added = (
-            list((left - right).elements()),
-            list((right - left).elements()),
-        )
-        sections[key] = {
-            "before_count": len(original),
-            "after_count": len(current),
-            "removed_count": len(removed),
-            "added_count": len(added),
-            "removed": [row[:512] for row in removed[:4]],
-            "added": [row[:512] for row in added[:4]],
-            "order_only": not removed and not added,
+    """Compare complete bounded snapshots without emitting any host values.
+
+    This receipt does not alter the strict acceptance or cleanup comparisons.
+    Counts describe differing positions, not causality or accepted drift.
+    """
+    unavailable = '{"host_baseline_difference":{"status":"unavailable"}}'
+    try:
+        sections = {"addresses", "routes", "rules"}
+        if set(before) != sections or set(after) != sections:
+            return unavailable
+        budget = [0, 0]
+
+        def validate(value: object, depth: int = 0) -> None:
+            budget[0] += 1
+            if budget[0] > 20000 or depth > 16:
+                raise ValueError("Bounded host diagnostic required")
+            if type(value) is dict:
+                for key, item in value.items():
+                    if type(key) is not str or len(key) > 4096:
+                        raise ValueError("Invalid host diagnostic key")
+                    budget[1] += len(key.encode("utf-8"))
+                    validate(item, depth + 1)
+            elif type(value) is list:
+                for item in value:
+                    validate(item, depth + 1)
+            elif type(value) is str:
+                if len(value) > 4096:
+                    raise ValueError("Bounded host diagnostic value required")
+                budget[1] += len(value.encode("utf-8"))
+            elif value is not None and type(value) not in (bool, int):
+                raise ValueError("Invalid host diagnostic value")
+            if budget[1] > 524288:
+                raise ValueError("Bounded host diagnostic bytes required")
+
+        validate(before)
+        validate(after)
+        if any(
+            type(value[section]) is not list for value in (before, after) for section in sections
+        ):
+            return unavailable
+        counts = {key: 0 for key in ("lifetime", "interface", "address", "route", "rule", "other")}
+        lifetime = {key: 0 for key in ("decreased", "increased", "zero", "infinity_transition")}
+        reordered = False
+        interface_fields = {
+            "ifindex",
+            "ifname",
+            "flags",
+            "mtu",
+            "qdisc",
+            "operstate",
+            "group",
+            "txqlen",
+            "link_type",
+            "address",
+            "broadcast",
+            "link_index",
+            "link_netnsid",
+            "master",
+            "altnames",
+            "linkinfo",
+            "promiscuity",
+            "min_mtu",
+            "max_mtu",
+            "gso_max_size",
+            "gso_max_segs",
+            "num_tx_queues",
+            "num_rx_queues",
+            "carrier",
+            "carrier_changes",
         }
-    return json.dumps({"host_baseline_difference": sections}, sort_keys=True)[:16384]
+        address_fields = {
+            "family",
+            "local",
+            "prefixlen",
+            "broadcast",
+            "scope",
+            "label",
+            "flags",
+            "dynamic",
+            "secondary",
+            "temporary",
+            "tentative",
+            "deprecated",
+            "noprefixroute",
+        }
+
+        def category(path: tuple[object, ...]) -> str:
+            if not path:
+                return "other"
+            if path[0] == "routes":
+                return "route"
+            if path[0] == "rules":
+                return "rule"
+            if path[0] != "addresses":
+                return "other"
+            if len(path) < 3:
+                return "interface"
+            if path[2] == "addr_info":
+                return "address" if len(path) < 5 or path[4] in address_fields else "other"
+            return "interface" if path[2] in interface_fields else "other"
+
+        def compare(left: object, right: object, path: tuple[object, ...]) -> None:
+            nonlocal reordered
+            is_lifetime = (
+                len(path) == 5
+                and path[0] == "addresses"
+                and type(path[1]) is int
+                and path[2] == "addr_info"
+                and type(path[3]) is int
+                and path[4] in ("valid_life_time", "preferred_life_time")
+            )
+            if is_lifetime:
+                if (
+                    type(left) is not int
+                    or type(right) is not int
+                    or not (0 <= left <= 4294967295 and 0 <= right <= 4294967295)
+                ):
+                    raise ValueError("Invalid lifetime diagnostic")
+                if left == right:
+                    return
+                counts["lifetime"] += 1
+                if (left == 4294967295) != (right == 4294967295):
+                    lifetime["infinity_transition"] += 1
+                elif right == 0:
+                    lifetime["zero"] += 1
+                elif right < left:
+                    lifetime["decreased"] += 1
+                else:
+                    lifetime["increased"] += 1
+                return
+            if type(left) not in (dict, list) and type(left) is type(right) and left == right:
+                return
+            if type(left) is dict and type(right) is dict:
+                for key in left.keys() | right.keys():
+                    if key not in left or key not in right:
+                        counts[category((*path, key))] += 1
+                    else:
+                        compare(left[key], right[key], (*path, key))
+            elif type(left) is list and type(right) is list:
+                if left != right and len(left) == len(right):
+                    first = Counter(json.dumps(row, sort_keys=True) for row in left)
+                    second = Counter(json.dumps(row, sort_keys=True) for row in right)
+                    reordered |= first == second
+                for index, (a, b) in enumerate(zip(left, right, strict=False)):
+                    compare(a, b, (*path, index))
+                counts[category(path)] += abs(len(left) - len(right))
+            else:
+                counts[category(path)] += 1
+
+        compare(before, after, ())
+        material = sum(value for key, value in counts.items() if key != "lifetime")
+        status = "material" if material else "lifetime_only" if counts["lifetime"] else "equal"
+        order = "changed" if reordered else "indeterminate" if material else "unchanged"
+        return json.dumps(
+            {
+                "host_baseline_difference": {
+                    "status": status,
+                    "counts": counts,
+                    "lifetime": lifetime,
+                    "order": order,
+                }
+            },
+            sort_keys=True,
+        )
+    except Exception:
+        return unavailable
 
 
 def check_daemon() -> str:
