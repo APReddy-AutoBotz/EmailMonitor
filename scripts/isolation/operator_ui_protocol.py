@@ -466,6 +466,8 @@ InstalledReason = Literal[
     "installed_redirect_network",
     "installed_route_headers",
     "installed_route_relay",
+    "installed_relay_capacity_timeout",
+    "installed_relay_reply_timeout",
     "installed_relay_request_capacity",
     "installed_relay_admission_capacity",
     "installed_relay_request_size",

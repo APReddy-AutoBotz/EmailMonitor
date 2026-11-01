@@ -3,10 +3,13 @@
 import ast
 import asyncio
 import base64
+import contextlib
+import io
 import json
 from pathlib import Path
 from typing import Any
 
+import operator_ui_acceptance as guest
 import pytest
 from installed_operator_redirects import (
     CallbackDeliveryTrace,
@@ -110,6 +113,61 @@ def owned_exchange(channel: Any) -> Any:
     }
     exec(compile(ast.Module(body=[node], type_ignores=[]), "owned-exchange", "exec"), namespace)
     return namespace["exchange"]
+
+
+@pytest.mark.parametrize(
+    ("failure_point", "reason"),
+    [
+        (1, "installed_relay_capacity_timeout"),
+        (2, "installed_relay_reply_timeout"),
+    ],
+)
+def test_actual_channel_timeout_preserves_error_and_releases_capacity(
+    monkeypatch: pytest.MonkeyPatch, failure_point: int, reason: str
+) -> None:
+    async def exercise() -> None:
+        channel = guest.Channel()
+        original_wait_for = asyncio.wait_for
+        original_error = TimeoutError("private synthetic data")
+        deadlines: list[float] = []
+
+        async def controlled(awaitable: Any, timeout: float) -> Any:
+            deadlines.append(timeout)
+            if len(deadlines) == failure_point:
+                if hasattr(awaitable, "close"):
+                    awaitable.close()
+                elif hasattr(awaitable, "cancel"):
+                    awaitable.cancel()
+                raise original_error
+            return await original_wait_for(awaitable, timeout)
+
+        monkeypatch.setattr(asyncio, "wait_for", controlled)
+        operation: list[InstalledReason] = ["installed_route_relay"]
+        with contextlib.redirect_stdout(io.StringIO()), pytest.raises(TimeoutError) as caught:
+            await owned_exchange(channel)({}, operation)
+        assert caught.value is original_error
+        assert operation == [reason]
+        assert guest.RPC_DEADLINE == 10.0 and all(0 <= value <= 10 for value in deadlines)
+        assert channel.admitted == 0 and not channel.pending and channel.capacity._value == 8
+        frame = DiagnosticFrame.model_validate(
+            {
+                "kind": "failure",
+                "stage": "keyword_worker",
+                "error": "TimeoutError",
+                "reason": operation[0],
+            }
+        )
+        assert "private" not in frame.model_dump_json()
+
+    asyncio.run(exercise())
+
+
+@pytest.mark.parametrize("marker", [None, "private\ninjected=value", 1])
+def test_unrecognized_timeout_marker_remains_generic(marker: object) -> None:
+    error = TimeoutError("private")
+    if marker is not None:
+        error._em_relay_wait = marker  # type: ignore[attr-defined]
+    assert installed_relay_reason(error) == "installed_route_relay"
 
 
 def test_concurrent_requests_keep_exact_exception_and_local_reason_with_first_capture() -> None:

@@ -95,6 +95,15 @@ class InstalledDiagnostics:
 
 def installed_relay_reason(error: BaseException) -> InstalledReason:
     """Classify only exact authored guards; no exception text enters diagnostics."""
+    if type(error) is TimeoutError:
+        try:
+            wait = getattr(error, "_em_relay_wait", None)
+        except Exception:
+            wait = None
+        if type(wait) is str and wait == "capacity":
+            return "installed_relay_capacity_timeout"
+        if type(wait) is str and wait == "reply":
+            return "installed_relay_reply_timeout"
     known = failure_reason(error)
     if known == "rpc_request_capacity":
         return "installed_relay_request_capacity"

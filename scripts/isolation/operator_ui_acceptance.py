@@ -340,7 +340,14 @@ class Channel:
         acquired = False
         identifier = None
         try:
-            await asyncio.wait_for(self.capacity.acquire(), timeout=RPC_DEADLINE)
+            try:
+                await asyncio.wait_for(self.capacity.acquire(), timeout=RPC_DEADLINE)
+            except TimeoutError as error:
+                try:
+                    error._em_relay_wait = "capacity"  # type: ignore[attr-defined]
+                except Exception:
+                    pass
+                raise
             acquired = True
             if queued:
                 self.waiting -= 1
@@ -358,9 +365,16 @@ class Channel:
             self.pending[identifier] = future
             async with self.writer:
                 print(raw, flush=True)
-            return await asyncio.wait_for(
-                future, timeout=max(0, deadline - asyncio.get_running_loop().time())
-            )
+            try:
+                return await asyncio.wait_for(
+                    future, timeout=max(0, deadline - asyncio.get_running_loop().time())
+                )
+            except TimeoutError as error:
+                try:
+                    error._em_relay_wait = "reply"  # type: ignore[attr-defined]
+                except Exception:
+                    pass
+                raise
         finally:
             if identifier is not None:
                 self.pending.pop(identifier, None)

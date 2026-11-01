@@ -145,6 +145,12 @@ jobs:
       - name: "Installed reuse export snapshot: ${{ steps.installed-operator-test.outputs.reuse_export_snapshot || 'unavailable' }}"
         if: ${{ !cancelled() && steps.installed-operator-test.outcome != 'skipped' }}
         run: ':'
+      - name: "Installed operator publisher: ${{ steps.installed-operator-test.outputs.operator_publisher_order || 'unavailable' }} / ${{ steps.installed-operator-test.outputs.operator_publisher_stage || 'unavailable' }}"
+        if: ${{ !cancelled() && steps.installed-operator-test.outcome != 'skipped' }}
+        run: ':'
+      - name: "Installed reuse publisher: ${{ steps.installed-operator-test.outputs.reuse_publisher_order || 'unavailable' }} / ${{ steps.installed-operator-test.outputs.reuse_publisher_stage || 'unavailable' }}"
+        if: ${{ !cancelled() && steps.installed-operator-test.outcome != 'skipped' }}
+        run: ':'
       - name: "Installed publisher failure: ${{ steps.installed-operator-test.outputs.installed_publisher_failure || 'unavailable' }}"
         if: ${{ !cancelled() && steps.installed-operator-test.outcome != 'skipped' }}
         run: ':'

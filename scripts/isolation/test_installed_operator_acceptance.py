@@ -94,6 +94,39 @@ def report_reuse_export_failure(
 _first_publisher_failure: set[str] = set()
 
 
+def report_operator_publisher_order(
+    observed: bool, stage: object, destination: Path, *, retained_reuse: bool
+) -> None:
+    """Report the publisher handler's state when this browser runner fails."""
+    prefix = "reuse_publisher" if retained_reuse else "operator_publisher"
+    stages = {"startup", "pending", "broker_connect", "claim", "broker_send", "confirm", "cleanup"}
+    fixed = stage if type(stage) is str and stage in stages and observed else "unavailable"
+    order = "publisher_handler_observed" if observed else "publisher_handler_not_observed"
+    with destination.open("a", encoding="ascii") as output:
+        output.write(prefix + "_order=" + order + "\n")
+        output.write(prefix + "_stage=" + fixed + "\n")
+
+
+@contextmanager
+def capture_operator_publisher_order(
+    observed: threading.Event, stage: Callable[[], object], *, retained_reuse: bool
+) -> Iterator[None]:
+    try:
+        yield
+    except BaseException:
+        if os.environ.get("EM_INSTALLED_STAGE_REPORT") == "true":
+            try:
+                report_operator_publisher_order(
+                    observed.is_set(),
+                    stage(),
+                    Path(os.environ["GITHUB_OUTPUT"]),
+                    retained_reuse=retained_reuse,
+                )
+            except BaseException:
+                pass
+        raise
+
+
 def report_publisher_failure(error: Exception, destination: Path) -> None:
     """Keep the first publisher failure's fixed category, never exception contents."""
     target = str(destination)
@@ -522,6 +555,8 @@ def installed_journey(
         port = reserved.getsockname()[1]
     origin = f"https://127.0.0.1:{port}"
     publisher_thread: threading.Thread | None = None
+    publisher_failure_observed = threading.Event()
+    publisher_failure_stage: str | None = None
     primary: BaseException | None = None
     try:
         stage.enter("identity_and_roles")
@@ -637,16 +672,30 @@ def installed_journey(
                         ).scalar_one()
 
                 def publish() -> None:
-                    nonlocal publication_passes
+                    nonlocal publication_passes, publisher_failure_stage
                     while not stop.wait(0.2):
                         if not release.is_set():
                             continue
                         try:
-                            output = finite(installed, "publish-once", configs["publisher"])
+                            output = finite(
+                                installed,
+                                "publish-once",
+                                configs["publisher"],
+                                publisher_diagnostics=(
+                                    os.environ.get("EM_INSTALLED_STAGE_REPORT") == "true"
+                                ),
+                            )
                             if not output.startswith("published=") or not output[10:].isdigit():
                                 raise RuntimeError("Bounded installed publication receipt missing")
                             publication_passes += 1
                         except Exception as error:
+                            try:
+                                publisher_failure_stage = getattr(
+                                    error, "_em_publisher_stage", None
+                                )
+                            except Exception:
+                                publisher_failure_stage = None
+                            publisher_failure_observed.set()
                             errors.append(type(error).__name__)
                             stop.set()
                             if os.environ.get("EM_INSTALLED_STAGE_REPORT") == "true":
@@ -759,12 +808,17 @@ def installed_journey(
                     if retained_reuse:
                         setup["retained_reuse"] = True
                     stage.enter("browser_execution_and_owned_cleanup")
-                    evidence = run_installed(
-                        application(origin, identity.origin, identity.ca, assets, downloads),
-                        setup,
-                        control,
-                        lambda _: False,
-                    )
+                    with capture_operator_publisher_order(
+                        publisher_failure_observed,
+                        lambda: publisher_failure_stage,
+                        retained_reuse=retained_reuse,
+                    ):
+                        evidence = run_installed(
+                            application(origin, identity.origin, identity.ca, assets, downloads),
+                            setup,
+                            control,
+                            lambda _: False,
+                        )
                     stage.enter("postconditions")
                     assert evidence["redirect_navigation"] == (
                         "observed_303_failed_target_explicit_navigation"
