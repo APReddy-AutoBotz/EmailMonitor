@@ -383,7 +383,13 @@ def finite(
         )
         if publisher_diagnostics and action == "publish-once" and result.returncode != 0:
             for stage in (
-                "startup", "pending", "broker_connect", "claim", "broker_send", "confirm", "cleanup"
+                "startup",
+                "pending",
+                "broker_connect",
+                "claim",
+                "broker_send",
+                "confirm",
+                "cleanup",
             ):
                 expected = f"service_publisher_stage={stage}\nservice_runtime_failed\n".encode()
                 if result.stderr == expected:

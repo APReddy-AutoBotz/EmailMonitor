@@ -500,7 +500,9 @@ def test_installed_controlled_xml_operator(
                             continue
                         try:
                             output = finite(
-                                installed, "publish-once", configs["publisher"],
+                                installed,
+                                "publish-once",
+                                configs["publisher"],
                                 publisher_diagnostics=(
                                     os.environ.get("EM_XML_CASE_OUTCOME_REPORT") == "true"
                                 ),
