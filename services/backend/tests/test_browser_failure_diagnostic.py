@@ -5,7 +5,7 @@ import asyncio
 import copy
 import json
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 from typing import Any, cast
 from unittest.mock import AsyncMock
 
@@ -179,6 +179,36 @@ def test_real_select_helper_records_failing_keyboard_operation(
     assert snapshot.source_line is not None
     source = Path(guest.__file__).read_text().splitlines()
     assert source[snapshot.source_line - 1].strip() == 'await page.keyboard.press("Home")'
+
+
+def test_actual_helper_source_loaded_under_installed_alias_records_coordinate() -> None:
+    source_path = Path(guest.__file__).resolve()
+    source = source_path.read_text()
+    alias: Any = ModuleType("operator_ui_helpers")
+    alias.__file__ = "/app/operator_ui_helpers.py"
+    exec(compile(source, alias.__file__, "exec"), alias.__dict__)
+    original = RuntimeError("private synthetic failure")
+    alias.focus = AsyncMock()
+    receiver = SimpleNamespace(done=lambda: False)
+    channel = SimpleNamespace(admitted=0)
+    capture = alias.BrowserFailureCapture(receiver, channel)
+    keyboard = SimpleNamespace(press=AsyncMock(side_effect=original))
+
+    async def scenario() -> None:
+        async with alias.capture_browser_failure(capture):
+            await alias.select_index(SimpleNamespace(keyboard=keyboard), object(), 2)
+
+    with pytest.raises(RuntimeError) as caught:
+        asyncio.run(scenario())
+    assert caught.value is original
+    keyboard.press.assert_awaited_once_with("Home")
+    snapshot = capture.result(original)
+    assert snapshot is not None and snapshot.source_function == "select_index"
+    assert snapshot.source_line is not None
+    assert (
+        source.splitlines()[snapshot.source_line - 1].strip() == 'await page.keyboard.press("Home")'
+    )
+    assert "private" not in snapshot.model_dump_json()
 
 
 def test_failed_capture_does_not_replace_original(monkeypatch: pytest.MonkeyPatch) -> None:
