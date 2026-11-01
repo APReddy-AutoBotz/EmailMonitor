@@ -200,6 +200,37 @@ def test_job_deletion_dialog_state_is_fixed_and_keeps_first_failure(output: Path
     assert "private" not in lines[0]
 
 
+def test_job_deletion_receipt_state_is_fixed_and_keeps_first_failure(output: Path) -> None:
+    original = RuntimeError("private synthetic failure")
+
+    @trace.observed_guest
+    def failed() -> None:
+        trace.guest_stage("conversation")
+        trace.guest_frame(
+            DiagnosticFrame(
+                kind="failure",
+                stage="job_deletion",
+                error="RuntimeError",
+                job_deletion_phase="receipt_verified",
+                job_deletion_receipt_state="submitted_unverified",
+            )
+        )
+        raise original
+
+    @trace.observed_guest
+    def later_success() -> None:
+        trace.guest_stage("complete")
+
+    with pytest.raises(RuntimeError) as caught:
+        failed()
+    assert caught.value is original
+    later_success()
+    lines = output.read_text().splitlines()
+    assert len(lines) == 2 and lines[0] == lines[1]
+    assert "-deletion_receipt_verified-deletion_receipt_submitted_unverified" in lines[0]
+    assert "private" not in lines[0]
+
+
 @pytest.mark.parametrize("phase", get_args(ContactSuppressionPhase))
 def test_suppression_phase_is_fixed_and_preserves_failure(output: Path, phase: str) -> None:
     original = RuntimeError("private synthetic failure")

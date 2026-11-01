@@ -540,10 +540,22 @@ JobDeletionPhase = Literal[
     "confirm_keypress",
     "confirm_close",
     "receipt",
+    "receipt_verified",
+    "receipt_fenced",
+    "receipt_no_purge",
     "settled_requests",
 ]
 
 JobDeletionDialogState = Literal["absent", "closed", "open_box", "open_no_box", "unavailable"]
+JobDeletionReceiptState = Literal[
+    "region_absent",
+    "verified_fenced",
+    "verified_other",
+    "submitted_unverified",
+    "awaiting_submission",
+    "other",
+    "unavailable",
+]
 
 ContactSuppressionPhase = Literal[
     "select_organization",
@@ -757,6 +769,7 @@ class DiagnosticFrame(BaseModel):
     outcome_phase: OutcomePhase | None = None
     job_deletion_phase: JobDeletionPhase | None = None
     job_deletion_dialog_state: JobDeletionDialogState | None = None
+    job_deletion_receipt_state: JobDeletionReceiptState | None = None
     contact_suppression_phase: ContactSuppressionPhase | None = None
     observation_trace: ObservationTrace | Literal["unavailable"] | None = None
     evidence_phase: EvidencePhase | None = None
@@ -808,6 +821,13 @@ class DiagnosticFrame(BaseModel):
             or self.job_deletion_phase not in {"cancel_dialog_job", "confirm_dialog_job"}
         ):
             raise ValueError("Job deletion dialog state requires its exact content assertion")
+        if self.job_deletion_receipt_state is not None and (
+            self.kind != "failure"
+            or self.stage != "job_deletion"
+            or self.job_deletion_phase
+            not in {"receipt_verified", "receipt_fenced", "receipt_no_purge"}
+        ):
+            raise ValueError("Job deletion receipt state requires its exact assertion")
         if self.contact_suppression_phase is not None and (
             self.kind != "failure" or self.stage != "contact_suppression"
         ):

@@ -18,6 +18,7 @@ from operator_ui_protocol import (
     InstalledLoginPhase,
     JobDeletionDialogState,
     JobDeletionPhase,
+    JobDeletionReceiptState,
     KeyboardAttemptTrace,
     LoginTimingTrace,
 )
@@ -53,6 +54,7 @@ class Trace:
         self.outcome = "none"
         self.deletion: JobDeletionPhase | None = None
         self.deletion_dialog: JobDeletionDialogState | None = None
+        self.deletion_receipt: JobDeletionReceiptState | None = None
         self.suppression: ContactSuppressionPhase | None = None
         self.focus: FocusExhaustion | str | None = None
         self.cleanup: set[str] = set()
@@ -97,6 +99,12 @@ class Trace:
             or self.deletion not in {"cancel_dialog_job", "confirm_dialog_job"}
         ):
             raise ValueError("Closed job deletion dialog state required")
+        if self.deletion_receipt is not None and (
+            self.deletion_receipt not in get_args(JobDeletionReceiptState)
+            or self.phase != "job_deletion"
+            or self.deletion not in {"receipt_verified", "receipt_fenced", "receipt_no_purge"}
+        ):
+            raise ValueError("Closed job deletion receipt state required")
         if self.suppression is not None and (
             self.suppression not in get_args(ContactSuppressionPhase)
             or self.phase != "contact_suppression"
@@ -155,12 +163,17 @@ class Trace:
         deletion_dialog = (
             "-deletion_dialog_" + self.deletion_dialog if self.deletion_dialog is not None else ""
         )
+        deletion_receipt = (
+            "-deletion_receipt_" + self.deletion_receipt
+            if self.deletion_receipt is not None
+            else ""
+        )
         suppression = "-suppression_" + self.suppression if self.suppression is not None else ""
         return (
             f"{stage}-phase_{self.phase}-error_{self.error}-reason_{self.reason}-cleanup_{cleanup}"
             f"-login_{self.login}"
             f"-outcome_{self.outcome}-focus_{focus}{attempt}{export}{callback}{deletion}"
-            f"{deletion_dialog}{suppression}"
+            f"{deletion_dialog}{deletion_receipt}{suppression}"
         )
 
 
@@ -337,6 +350,7 @@ def guest_frame(frame: DiagnosticFrame) -> None:
             trace.outcome = fixed.outcome_phase or "none"
             trace.deletion = fixed.job_deletion_phase
             trace.deletion_dialog = fixed.job_deletion_dialog_state
+            trace.deletion_receipt = fixed.job_deletion_receipt_state
             trace.suppression = fixed.contact_suppression_phase
             trace.focus = fixed.focus_exhaustion
             trace.export = fixed.installed_export_step

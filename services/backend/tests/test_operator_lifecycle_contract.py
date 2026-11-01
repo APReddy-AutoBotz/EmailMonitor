@@ -612,7 +612,7 @@ def test_job_deletion_failure_metadata_uses_only_fixed_local_phases() -> None:
             )
     # The two bounded keyboard helpers own the detailed phase markers. Inspect
     # only their explicit mark calls and phase tuple, not unrelated literals.
-    for helper in ("deletion_open_job", "deletion_open_confirmation"):
+    for helper in ("deletion_open_job", "deletion_open_confirmation", "deletion_receipt_checks"):
         function = next(
             node
             for node in module.body

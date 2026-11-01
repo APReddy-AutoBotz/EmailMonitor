@@ -27,6 +27,7 @@ from operator_ui_protocol import (
     HandoffTrace,
     JobDeletionDialogState,
     JobDeletionPhase,
+    JobDeletionReceiptState,
     KeyboardAttemptTrace,
     ObservationTrace,
     OutcomeReplayReadiness,
@@ -325,6 +326,7 @@ async def deletion_open_confirmation(
     job: str,
     commit: bool,
     mark: Callable[[JobDeletionPhase], None],
+    observe: Callable[[JobDeletionDialogState], None],
 ) -> Locator:
     """The same single keyboard activation and three original assertions."""
     phases: tuple[
@@ -353,7 +355,14 @@ async def deletion_open_confirmation(
     await page.keyboard.press("Enter")
     confirmation = page.get_by_role("dialog")
     mark(phases[2])
-    await expect(confirmation).to_contain_text(job)
+    try:
+        await expect(confirmation).to_contain_text(job)
+    except Exception:
+        try:
+            observe(await deletion_dialog_snapshot(page))
+        except Exception:
+            pass  # Observation cannot replace the original assertion failure.
+        raise
     mark(phases[3])
     await expect(confirmation).to_contain_text("all existing exports in this organization")
     mark(phases[4])
@@ -378,6 +387,59 @@ async def deletion_dialog_snapshot(page: Page) -> JobDeletionDialogState:
     except Exception:
         pass
     return "unavailable"
+
+
+async def deletion_receipt_snapshot(page: Page) -> JobDeletionReceiptState:
+    """Classify only existing fixed UI states after a receipt assertion fails."""
+    try:
+        result = await asyncio.wait_for(
+            page.evaluate("""() => {
+                const region = document.querySelector('section[aria-label="Job deletion"]');
+                if (!region) return 'region_absent';
+                const text = region.textContent || '';
+                if (text.includes('Verified deletion receipt:'))
+                    return text.includes(' is fenced.') ? 'verified_fenced' : 'verified_other';
+                if (text.includes('A deletion request was submitted. Its outcome is unverified'))
+                    return 'submitted_unverified';
+                if (region.querySelector('select')) return 'awaiting_submission';
+                return 'other';
+            }"""),
+            timeout=0.1,
+        )
+        if result in {
+            "region_absent",
+            "verified_fenced",
+            "verified_other",
+            "submitted_unverified",
+            "awaiting_submission",
+            "other",
+        }:
+            return cast(JobDeletionReceiptState, result)
+    except Exception:
+        pass
+    return "unavailable"
+
+
+async def deletion_receipt_checks(
+    page: Page,
+    deletion: Locator,
+    mark: Callable[[JobDeletionPhase], None],
+    observe: Callable[[JobDeletionReceiptState], None],
+) -> None:
+    """Keep the original assertions and observe only after their failure."""
+    try:
+        mark("receipt_verified")
+        await expect(deletion).to_contain_text("Verified deletion receipt:")
+        mark("receipt_fenced")
+        await expect(deletion).to_contain_text("is fenced")
+        mark("receipt_no_purge")
+        await expect(deletion).to_contain_text("No physical purge was requested")
+    except Exception:
+        try:
+            observe(await deletion_receipt_snapshot(page))
+        except Exception:
+            pass  # Observation cannot replace the original assertion failure.
+        raise
 
 
 async def traced_activate(page: Page, target: Locator) -> None:
@@ -1614,6 +1676,8 @@ async def main() -> None:
     outcome_phase: str | None = None
     evidence_phase: str | None = None
     deletion_phase: JobDeletionPhase | None = None
+    deletion_dialog_state: JobDeletionDialogState | None = None
+    deletion_receipt_state: JobDeletionReceiptState | None = None
     suppression_phase: ContactSuppressionPhase | None = None
     observation_trace: ObservationTrace | Literal["unavailable"] | None = None
     evidence_focus_trace: EvidenceFocusTrace | Literal["unavailable"] | None = None
@@ -1633,6 +1697,14 @@ async def main() -> None:
     def mark_deletion(value: JobDeletionPhase) -> None:
         nonlocal deletion_phase
         deletion_phase = value
+
+    def observe_deletion_dialog(value: JobDeletionDialogState) -> None:
+        nonlocal deletion_dialog_state
+        deletion_dialog_state = value
+
+    def observe_deletion_receipt(value: JobDeletionReceiptState) -> None:
+        nonlocal deletion_receipt_state
+        deletion_receipt_state = value
 
     def outcome_checkpoint(value: str) -> None:
         nonlocal outcome_phase
@@ -2943,7 +3015,7 @@ async def main() -> None:
                     await expect(action).to_be_disabled()
                     await select_index(page, page.get_by_label(re.compile(r"^Deletion reason")), 2)
                 confirmation = await deletion_open_confirmation(
-                    page, action, actual_job, commit, mark_deletion
+                    page, action, actual_job, commit, mark_deletion, observe_deletion_dialog
                 )
                 deletion_phase = "confirm_focus" if commit else "cancel_confirmation"
                 deletion_target = confirmation.get_by_role(
@@ -2963,9 +3035,7 @@ async def main() -> None:
                         page.get_by_role("heading", name="Job " + actual_job, exact=True)
                     ).to_be_visible()
             deletion_phase = "receipt"
-            await expect(deletion).to_contain_text("Verified deletion receipt:")
-            await expect(deletion).to_contain_text("is fenced")
-            await expect(deletion).to_contain_text("No physical purge was requested")
+            await deletion_receipt_checks(page, deletion, mark_deletion, observe_deletion_receipt)
             deletion_phase = "settled_requests"
             await asyncio.wait_for(settled_requests(), timeout=10)
             checkpoint("final_cleanup")
@@ -3011,12 +3081,6 @@ async def main() -> None:
     except Exception as error:
         name = type(error).__name__
         handoff = handoff_trace if stage == "export_preview" else None
-        deletion_dialog_state = (
-            await deletion_dialog_snapshot(page)
-            if stage == "job_deletion"
-            and deletion_phase in {"cancel_dialog_job", "confirm_dialog_job"}
-            else None
-        )
         # Report before cancelling the owned stdin reader: its executor shutdown awaits host EOF.
         print(
             json.dumps(
@@ -3048,6 +3112,11 @@ async def main() -> None:
                     **(
                         {"job_deletion_dialog_state": deletion_dialog_state}
                         if deletion_dialog_state is not None
+                        else {}
+                    ),
+                    **(
+                        {"job_deletion_receipt_state": deletion_receipt_state}
+                        if deletion_receipt_state is not None
                         else {}
                     ),
                     **(

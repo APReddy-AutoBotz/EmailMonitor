@@ -88,6 +88,36 @@ The same keyboard sequence, assertion budgets, original errors and protected
 runner remain in force. Hosted verification of this diagnostic is pending; it
 is not a claimed fix for either failure.
 
+The first hosted run of that diagnostic reported an unknown-reason runtime
+failure during receipt checks. Closing the dialog does not establish a successful
+write: the UI closes it after both success and failure. A further local-only
+candidate separates the three existing receipt assertions and, only on their
+failure, classifies a fixed UI state such as verified/fenced, verified/other,
+submitted/unverified or awaiting submission. No receipt contents, identifiers
+or error text are emitted. This snapshot is an observation after failure, not a
+server receipt or an explanation of the historical failure.
+The previously published dialog snapshot was attempted after leaving the
+Playwright context, when the page could already be unavailable. The local
+candidate captures the same bounded observation inside the failing assertion's
+context and always rethrows the original failure; receipt snapshots follow the
+same rule. This corrects diagnostic timing only, not the deletion workflow.
+
+That hosted application's backend completed 7,372 assigned cases with one
+failure in the fixed-phase source contract: the original test scanned only
+`main`, while the diagnostic moved markers into two helpers. The local candidate
+checks the explicit helper markers as well as the retained legacy value; it
+does not weaken the phase allowlist. The narrow diagnostic development command
+is `bash scripts/check_operator_diagnostics.sh`, which includes that source
+contract alongside the focus and protocol tests. It is not a substitute for
+the full partition, actual database/browser execution or the required join.
+
+The same hosted head separately failed parser memory verification after eleven
+daemon observations reported exit 137 without `OOMKilled`; this does not prove
+why the process exited or satisfy the existing OOM gate. Installed XML reported
+one failed authored-PDF case out of six, waiting for a CSV export, alongside a
+publisher nonzero-exit observation. Those facts do not establish their causal
+relationship or repair either failure.
+
 That attempt also failed an installed XML case with the existing redirect-order
 refusal after callback delivery. Its generic category did not identify the
 rejecting check. Fixed rejection-location categories distinguish the original
