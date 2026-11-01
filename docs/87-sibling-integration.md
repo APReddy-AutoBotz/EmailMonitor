@@ -111,6 +111,13 @@ and existing exception propagation. Coordinates are meaningful only against
 the exact tested source. A missing snapshot or a category alone cannot prove a
 root cause; no browser messages, URLs, tenant identifiers or payloads are
 included. This candidate has not been run in the protected hosted browser.
+The installed journey has its own browser entrypoint: its local correction
+installs the same capture inside both its Playwright and observer contexts, so
+capture exits before either owner. Source coordinates accept only the two
+known image paths and the corresponding local checkout files, including the
+explicit `operator_ui_helpers.py` image alias. A shared basename in an unrelated
+path is not accepted. This adds evidence only; it does not establish why a
+previous sandbox or deletion operation failed.
 
 That hosted application's backend completed 7,372 assigned cases with one
 failure in the fixed-phase source contract: the original test scanned only

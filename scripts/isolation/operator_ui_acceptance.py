@@ -79,6 +79,19 @@ def browser_exception_class(error: BaseException) -> BrowserExceptionClass:
 
 def browser_source(error: BaseException) -> tuple[BrowserSourceFunction, int | None]:
     """Return the deepest owned source coordinate, never a path or source text."""
+    own_literal = Path(__file__)
+    own_file = own_literal.resolve()
+    owned_files = {
+        "/app/operator_ui_acceptance.py",
+        "/app/operator_ui_helpers.py",
+        str(own_literal),
+        str(own_file),
+    }
+    # The source checkout has a separate installed entrypoint. In the image it
+    # is copied to the exact /app/operator_ui_acceptance.py path above.
+    if own_file.name == "operator_ui_acceptance.py" and own_file.parent.name == "isolation":
+        owned_files.add(str(own_literal.with_name("installed_operator_browser.py")))
+        owned_files.add(str(own_file.with_name("installed_operator_browser.py")))
     functions = {
         "main",
         "focus",
@@ -97,10 +110,7 @@ def browser_source(error: BaseException) -> tuple[BrowserSourceFunction, int | N
         if frame is None:
             break
         code = frame.tb_frame.f_code
-        if (
-            Path(code.co_filename).name == "operator_ui_acceptance.py"
-            and 1 <= frame.tb_lineno <= 10000
-        ):
+        if code.co_filename in owned_files and 1 <= frame.tb_lineno <= 10000:
             source = cast(
                 BrowserSourceFunction, code.co_name if code.co_name in functions else "other"
             )
