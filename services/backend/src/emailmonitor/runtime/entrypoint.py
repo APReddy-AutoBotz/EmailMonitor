@@ -6,6 +6,7 @@ configuration remains refused until its separate identity/deployment gates pass.
 """
 
 import argparse
+import os
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -89,7 +90,34 @@ def main() -> int:
                     # Celery bootstep teardown logs and swallows exceptions.
                     # A wake ownership/cleanup failure must still fail the CLI.
                     worker.signal_wake.require_clean()
-    except Exception:
+    except Exception as error:
+        # Optional, fixed synthetic acceptance receipt. Preserve the ordinary
+        # suppressed exception, return status and default stderr exactly.
+        if (
+            options.command == "publish-once"
+            and os.environ.get("EM_SYNTHETIC_PUBLISHER_STAGE") == "1"
+        ):
+            try:
+                from emailmonitor.runtime.publisher import PublisherCleanupError, PublisherError
+
+                stage = getattr(error, "_em_publisher_stage", None)
+                if (
+                    type(error) not in (PublisherError, PublisherCleanupError)
+                    or type(stage) is not str
+                    or stage
+                    not in (
+                        "pending",
+                        "broker_connect",
+                        "claim",
+                        "broker_send",
+                        "confirm",
+                        "cleanup",
+                    )
+                ):
+                    stage = "startup"
+                print(f"service_publisher_stage={stage}", file=sys.stderr)
+            except Exception:
+                pass
         print("service_runtime_failed", file=sys.stderr)
         status = 1
     finally:

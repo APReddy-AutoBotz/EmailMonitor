@@ -592,6 +592,7 @@ class BrowserFailureTrace(BaseModel):
     page_closed: bool | None
     receiver_done: bool
     admitted: int = Field(ge=0, le=16)
+    request_limit_refused: bool = False
     cleanup_replaced: bool
 
 

@@ -174,6 +174,12 @@ jobs:
       - name: "Installed XML publisher failure: ${{ steps.installed-xml-test.outputs.installed_publisher_failure || 'unavailable' }}"
         if: ${{ !cancelled() && steps.installed-xml-test.outcome != 'skipped' }}
         run: ':'
+      - name: "Installed XML publisher stage: ${{ steps.installed-xml-test.outputs.installed_xml_publisher_stage || 'unavailable' }}"
+        if: ${{ !cancelled() && steps.installed-xml-test.outcome != 'skipped' }}
+        run: ':'
+      - name: "Installed XML publisher order: ${{ steps.installed-xml-test.outputs.installed_xml_publisher_order || 'unavailable' }}"
+        if: ${{ !cancelled() && steps.installed-xml-test.outcome != 'skipped' }}
+        run: ':'
       - name: "Installed XML first failure: ${{ steps.installed-xml-test.outputs.xml_failure || 'unavailable' }}"
         if: ${{ !cancelled() && steps.installed-xml-test.outcome != 'skipped' }}
         run: ':'

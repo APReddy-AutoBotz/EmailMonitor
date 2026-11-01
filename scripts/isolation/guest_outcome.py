@@ -187,7 +187,7 @@ class Trace:
             browser_failure = (
                 f"-browser_{browser_value.exception}.{browser_value.cause}."
                 f"{browser_value.source_function}.{line}.{flags}.{browser_value.admitted}."
-                f"{int(browser_value.cleanup_replaced)}"
+                f"{int(browser_value.cleanup_replaced)}.{int(browser_value.request_limit_refused)}"
             )
         suppression = "-suppression_" + self.suppression if self.suppression is not None else ""
         return (

@@ -358,11 +358,16 @@ def cleanup_resources(
     report_cleanup(errors, primary)
 
 
-def finite(installed: Path, action: str, config: Path) -> str:
+def finite(
+    installed: Path, action: str, config: Path, *, publisher_diagnostics: bool = False
+) -> str:
+    environment = process_environment()
+    if publisher_diagnostics and action == "publish-once":
+        environment["EM_SYNTHETIC_PUBLISHER_STAGE"] = "1"
     result = subprocess.run(
         command(installed, action, config),
         cwd=installed,
-        env=process_environment(),
+        env=environment,
         capture_output=True,
         timeout=20,
         check=False,
@@ -376,6 +381,14 @@ def finite(installed: Path, action: str, config: Path) -> str:
             if len(result.stdout) > 1024
             else "stderr_limit"
         )
+        if publisher_diagnostics and action == "publish-once" and result.returncode != 0:
+            for stage in (
+                "startup", "pending", "broker_connect", "claim", "broker_send", "confirm", "cleanup"
+            ):
+                expected = f"service_publisher_stage={stage}\nservice_runtime_failed\n".encode()
+                if result.stderr == expected:
+                    error._em_publisher_stage = stage  # type: ignore[attr-defined]
+                    break
         raise error
     return result.stdout.decode().strip()
 

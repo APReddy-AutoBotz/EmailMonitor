@@ -102,7 +102,7 @@ def test_capture_precedes_cleanup_and_preserves_original_exception(cleanup_repla
     browser = SimpleNamespace(is_connected=lambda: True)
     page = SimpleNamespace(is_closed=lambda: False)
     receiver = cast(asyncio.Task[Any], SimpleNamespace(done=lambda: False))
-    channel = cast(guest.Channel, SimpleNamespace(admitted=2))
+    channel = cast(guest.Channel, SimpleNamespace(admitted=2, request_limit_refused=False))
     capture = guest.BrowserFailureCapture(receiver, channel)
     capture.browser, capture.page = browser, page
     cleanup_seen = False
@@ -139,7 +139,7 @@ def test_capture_precedes_cleanup_and_preserves_original_exception(cleanup_repla
 
 def test_cause_is_classified_without_its_value() -> None:
     receiver = cast(asyncio.Task[Any], SimpleNamespace(done=lambda: True))
-    channel = cast(guest.Channel, SimpleNamespace(admitted=0))
+    channel = cast(guest.Channel, SimpleNamespace(admitted=0, request_limit_refused=False))
     capture = guest.BrowserFailureCapture(receiver, channel)
     try:
         try:
@@ -159,7 +159,7 @@ def test_real_select_helper_records_failing_keyboard_operation(
 ) -> None:
     original = RuntimeError("private synthetic failure")
     receiver = cast(asyncio.Task[Any], SimpleNamespace(done=lambda: False))
-    channel = cast(guest.Channel, SimpleNamespace(admitted=0))
+    channel = cast(guest.Channel, SimpleNamespace(admitted=0, request_limit_refused=False))
     capture = guest.BrowserFailureCapture(receiver, channel)
     keyboard = SimpleNamespace(press=AsyncMock(side_effect=original))
     page = cast(Page, SimpleNamespace(keyboard=keyboard))
@@ -181,7 +181,10 @@ def test_real_select_helper_records_failing_keyboard_operation(
     assert source[snapshot.source_line - 1].strip() == 'await page.keyboard.press("Home")'
 
 
-def test_actual_helper_source_loaded_under_installed_alias_records_coordinate() -> None:
+@pytest.mark.parametrize("limit_refused", [False, True])
+def test_actual_helper_source_loaded_under_installed_alias_records_coordinate(
+    limit_refused: bool,
+) -> None:
     source_path = Path(guest.__file__).resolve()
     source = source_path.read_text()
     alias: Any = ModuleType("operator_ui_helpers")
@@ -190,11 +193,15 @@ def test_actual_helper_source_loaded_under_installed_alias_records_coordinate() 
     original = RuntimeError("private synthetic failure")
     alias.focus = AsyncMock()
     receiver = SimpleNamespace(done=lambda: False)
-    channel = SimpleNamespace(admitted=0)
+    channel = alias.Channel()
     capture = alias.BrowserFailureCapture(receiver, channel)
     keyboard = SimpleNamespace(press=AsyncMock(side_effect=original))
 
     async def scenario() -> None:
+        if limit_refused:
+            channel.identifier = 512
+            with pytest.raises(RuntimeError, match="^UI diagnostic request cap exceeded$"):
+                await channel.request({"kind": "control"})
         async with alias.capture_browser_failure(capture):
             await alias.select_index(SimpleNamespace(keyboard=keyboard), object(), 2)
 
@@ -204,6 +211,7 @@ def test_actual_helper_source_loaded_under_installed_alias_records_coordinate() 
     keyboard.press.assert_awaited_once_with("Home")
     snapshot = capture.result(original)
     assert snapshot is not None and snapshot.source_function == "select_index"
+    assert snapshot.request_limit_refused is limit_refused
     assert snapshot.source_line is not None
     assert (
         source.splitlines()[snapshot.source_line - 1].strip() == 'await page.keyboard.press("Home")'
@@ -214,7 +222,7 @@ def test_actual_helper_source_loaded_under_installed_alias_records_coordinate() 
 def test_failed_capture_does_not_replace_original(monkeypatch: pytest.MonkeyPatch) -> None:
     original = RuntimeError("private original")
     receiver = cast(asyncio.Task[Any], SimpleNamespace(done=lambda: False))
-    channel = cast(guest.Channel, SimpleNamespace(admitted=0))
+    channel = cast(guest.Channel, SimpleNamespace(admitted=0, request_limit_refused=False))
     capture = guest.BrowserFailureCapture(receiver, channel)
     monkeypatch.setattr(
         capture, "record", lambda _: (_ for _ in ()).throw(ValueError("diagnostic"))
@@ -231,7 +239,7 @@ def test_failed_capture_does_not_replace_original(monkeypatch: pytest.MonkeyPatc
 
 def test_no_snapshot_after_success() -> None:
     receiver = cast(asyncio.Task[Any], SimpleNamespace(done=lambda: False))
-    channel = cast(guest.Channel, SimpleNamespace(admitted=0))
+    channel = cast(guest.Channel, SimpleNamespace(admitted=0, request_limit_refused=False))
     capture = guest.BrowserFailureCapture(receiver, channel)
 
     async def scenario() -> None:
@@ -252,6 +260,7 @@ def test_no_snapshot_after_success() -> None:
         {"browser_connected": "true"},
         {"admitted": 17},
         {"cleanup_replaced": 1},
+        {"request_limit_refused": 1},
         {"private": "not allowed"},
     ],
 )
@@ -364,7 +373,7 @@ def test_actual_entrypoint_context_order_captures_before_any_owner_teardown(
 
     original, cleanup = RuntimeError("private original"), ValueError("private cleanup")
     receiver = cast(asyncio.Task[Any], SimpleNamespace(done=lambda: False))
-    channel = cast(guest.Channel, SimpleNamespace(admitted=1))
+    channel = cast(guest.Channel, SimpleNamespace(admitted=1, request_limit_refused=False))
     capture = guest.BrowserFailureCapture(receiver, channel)
     capture.browser = SimpleNamespace(is_connected=lambda: True)
     capture.page = SimpleNamespace(is_closed=lambda: False)
@@ -438,7 +447,7 @@ def test_actual_installed_failure_handler_emits_fixed_trace_and_keeps_wrapper(st
 
     original = PlaywrightTimeoutError("private https://private.invalid/path")
     receiver = cast(asyncio.Task[Any], SimpleNamespace(done=lambda: False))
-    channel = cast(guest.Channel, SimpleNamespace(admitted=0))
+    channel = cast(guest.Channel, SimpleNamespace(admitted=0, request_limit_refused=False))
     capture = guest.BrowserFailureCapture(receiver, channel)
     capture.record(original)
     payloads: list[dict[str, Any]] = []

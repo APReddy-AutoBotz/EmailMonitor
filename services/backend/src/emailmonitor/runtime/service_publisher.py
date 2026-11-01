@@ -25,6 +25,7 @@ def publish_service_once(config: ServiceRuntimeConfig) -> int:
     failed = False
     count = 0
     started = time.monotonic()
+    stage = "pending"
     try:
         if database.organization != config.organization:
             raise ValueError("Registered service tenant must match queue tenant")
@@ -46,6 +47,7 @@ def publish_service_once(config: ServiceRuntimeConfig) -> int:
             )
         if not rows:
             return 0
+        stage = "broker_connect"
         connection = Connection(
             config.broker_url,
             connect_timeout=3,
@@ -102,6 +104,7 @@ def publish_service_once(config: ServiceRuntimeConfig) -> int:
                 if scope.purpose == "extraction"
                 else Capability.EXPORT_RESULTS
             )
+            stage = "claim"
             with database.tenant(scope, scope.organization, capability) as (c, _):
                 phase: str | None = c.execute(statement, params).scalar_one()
                 if phase is None:
@@ -111,6 +114,7 @@ def publish_service_once(config: ServiceRuntimeConfig) -> int:
                 queue = phase_queue(
                     config.queue, cast(Literal["fixture_io", "parse", "export"], phase)
                 )
+                stage = "broker_send"
                 application.send_task(
                     name,
                     args=[body],
@@ -128,6 +132,7 @@ def publish_service_once(config: ServiceRuntimeConfig) -> int:
                 )
                 # A crash after broker confirmation but before this commit permits
                 # duplicate delivery. Claim/effect idempotency remains in SQL.
+                stage = "confirm"
                 params["confirm"] = True
                 if c.execute(statement, params).scalar_one() != phase:
                     raise PublisherError("Publication receipt changed")
@@ -135,7 +140,9 @@ def publish_service_once(config: ServiceRuntimeConfig) -> int:
         return count
     except Exception:
         failed = True
-        raise PublisherError("Service publication failed") from None
+        error = PublisherError("Service publication failed")
+        error._em_publisher_stage = stage  # type: ignore[attr-defined]
+        raise error from None
     except BaseException:
         failed = True
         raise
@@ -152,4 +159,6 @@ def publish_service_once(config: ServiceRuntimeConfig) -> int:
         except BaseException:
             cleanup_failed = True
         if cleanup_failed and not failed:
-            raise PublisherCleanupError("Service publication cleanup failed") from None
+            cleanup_error = PublisherCleanupError("Service publication cleanup failed")
+            cleanup_error._em_publisher_stage = "cleanup"  # type: ignore[attr-defined]
+            raise cleanup_error from None

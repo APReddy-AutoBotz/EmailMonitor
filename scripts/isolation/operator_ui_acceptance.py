@@ -151,6 +151,7 @@ class BrowserFailureCapture:
             page_closed=browser_flag(self.page, "is_closed"),
             receiver_done=self.receiver.done(),
             admitted=self.channel.admitted,
+            request_limit_refused=self.channel.request_limit_refused,
             cleanup_replaced=False,
         )
         self.original = error
@@ -306,6 +307,7 @@ class Channel:
         self.capacity = asyncio.Semaphore(8)
         self.waiting = 0
         self.admitted = 0
+        self.request_limit_refused = False
 
     async def read(self) -> None:
         while True:
@@ -328,6 +330,7 @@ class Channel:
         deadline = asyncio.get_running_loop().time() + RPC_DEADLINE
         queued = self.admitted >= 8
         if self.identifier >= 512:
+            self.request_limit_refused = True
             raise RuntimeError("UI diagnostic request cap exceeded")
         if self.admitted >= 16:
             raise RuntimeError("UI diagnostic admission cap exceeded")
@@ -343,6 +346,7 @@ class Channel:
                 self.waiting -= 1
                 queued = False
             if self.identifier >= 512:
+                self.request_limit_refused = True
                 raise RuntimeError("UI diagnostic request cap exceeded")
             self.identifier += 1
             identifier = self.identifier
