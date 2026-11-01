@@ -225,6 +225,54 @@ def test_real_service_publisher_reports_only_fixed_failure_phase(
     assert caught.value.__cause__ is None
 
 
+@pytest.mark.parametrize("failure", ["authority", "invalid_phase"])
+def test_claim_stage_does_not_identify_underlying_failure(
+    monkeypatch: pytest.MonkeyPatch, failure: str
+) -> None:
+    """Two distinct synthetic failures reach the same sanitized claim receipt."""
+    from unittest.mock import MagicMock
+    from uuid import uuid4
+
+    from emailmonitor.organizations.database import AuthorizationDenied
+
+    organization = uuid4()
+    config = SimpleNamespace(
+        process=SimpleNamespace(kind="publisher", principal=uuid4(), pass_limit=1),
+        organization=organization,
+        database_url="synthetic",
+        broker_url="fixture",
+        queue="fixture",
+    )
+    database = MagicMock(organization=organization)
+    pending = database.engine.begin.return_value.__enter__.return_value
+    pending.execute.return_value.mappings.return_value.all.return_value = [
+        {
+            "organization_id": organization,
+            "resource_id": uuid4(),
+            "purpose": "export",
+            "generation": 1,
+            "event_id": uuid4(),
+            "item_id": None,
+        }
+    ]
+    transaction = MagicMock()
+    database.tenant.return_value.__enter__.return_value = (transaction, object())
+    if failure == "authority":
+        database.tenant.return_value.__enter__.side_effect = AuthorizationDenied()
+    else:
+        transaction.execute.return_value.scalar_one.return_value = "unsupported"
+    application, connection = MagicMock(), MagicMock()
+    monkeypatch.setattr(service_publisher, "ServiceDatabase", lambda *args: database)
+    monkeypatch.setattr(service_publisher, "broker_application", lambda *args: application)
+    monkeypatch.setattr(service_publisher, "Connection", lambda *args, **kwargs: connection)
+    monkeypatch.setattr(service_publisher, "Producer", lambda *args: object())
+    with pytest.raises(PublisherError, match="^Service publication failed$") as caught:
+        service_publisher.publish_service_once(cast(Any, config))
+    assert cast(Any, caught.value)._em_publisher_stage == "claim"
+    assert caught.value.__cause__ is None
+    application.send_task.assert_not_called()
+
+
 @pytest.mark.parametrize("report_available", [False, True])
 def test_xml_capture_cannot_replace_runner_failure(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, report_available: bool

@@ -389,6 +389,40 @@ def test_protected_cleanup_drift_fails_without_recapturing_baseline(
     assert value.baseline == {"routes": []}
 
 
+@pytest.mark.parametrize("change", ["countdown", "address"])
+def test_current_cleanup_guard_refuses_countdown_and_material_drift(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, change: str
+) -> None:
+    """Show the final exact-baseline check has the same countdown sensitivity."""
+    value = shell(tmp_path)
+    original: dict[str, Any] = {
+        "addresses": [
+            {
+                "ifname": "eth0",
+                "addr_info": [
+                    {
+                        "local": "192.0.2.1",
+                        "valid_life_time": 1800,
+                        "preferred_life_time": 900,
+                    }
+                ],
+            }
+        ],
+        "routes": [],
+        "rules": [],
+    }
+    current = json.loads(json.dumps(original))
+    if change == "countdown":
+        current["addresses"][0]["addr_info"][0]["preferred_life_time"] -= 1
+    else:
+        current["addresses"][0]["addr_info"][0]["local"] = "192.0.2.2"
+    value.baseline = original
+    monkeypatch.setattr(topology_module, "host_baseline", lambda: current)
+    with pytest.raises(RuntimeError, match="baseline_cleanup"):
+        value.close()
+    assert value.baseline == original
+
+
 def test_build_records_exact_owned_image_and_pinned_recipe_provenance(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
