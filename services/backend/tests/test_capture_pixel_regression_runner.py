@@ -7,7 +7,6 @@ from typing import Any
 
 import pytest
 import run_capture_pixel_regression as runner
-
 from emailmonitor.fetching.safety import FetchDenied
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -96,7 +95,7 @@ def test_failure_output_is_fixed_and_does_not_echo_exception(monkeypatch: Any, c
     with pytest.raises(SystemExit) as stopped:
         runner.main()
     assert stopped.value.code == 1
-    assert capsys.readouterr().out == "capture_pixel_result=failed\n"
+    assert capsys.readouterr().out == "capture_csp_result=failed\n"
 
 
 def test_owned_resources_cleaned_and_guest_success_verified(monkeypatch: Any) -> None:
@@ -145,7 +144,7 @@ def test_cleanup_uncertainty_is_reported_without_exception_details(
     monkeypatch.setattr(runner, "run", fail)
     with pytest.raises(SystemExit):
         runner.main()
-    assert capsys.readouterr().out == "capture_pixel_result=cleanup_uncertain\n"
+    assert capsys.readouterr().out == "capture_csp_result=cleanup_uncertain\n"
 
 
 def test_cleanup_attempted_when_daemon_create_fails(monkeypatch: Any) -> None:
@@ -171,3 +170,16 @@ def test_cleanup_attempted_when_daemon_create_fails(monkeypatch: Any) -> None:
     with pytest.raises(RuntimeError, match="^capture_pixel_cleanup_uncertain$"):
         runner.run()
     assert removed == ["container", "image"]
+
+
+def test_csp_control_uses_exact_built_app_policy_and_cannot_emit_images() -> None:
+    import capture_csp_probe as probe
+
+    config = (ROOT / "apps/web/vite.config.ts").read_text()
+    assert probe.POLICY in config
+    source = (ROOT / "scripts/isolation/capture_csp_probe.py").read_text()
+    assert "securitypolicyviolation" in source
+    assert "handle.evaluate(SHAPE" in source
+    assert "handle.evaluate(INSTALL" in source
+    assert "handle.evaluate(FINISH" in source
+    assert "capture_csp_probe import run" in runner.COMMAND[2]

@@ -11,20 +11,11 @@ from emailmonitor.fetching.browser_fixture import validate_applied_profile
 from transport_topology import OWNER_LABEL, remove_owned, require_owner, resource
 
 BRANCH = "refs/heads/codex/capture-pixel-regression-20261102"
-COMMAND = [
-    "python",
-    "-c",
-    (
-        "from test_operator_capture_pixels import "
-        "test_actual_sandboxed_chromium_redacts_temporarily_exposed_synthetic_values as run; run()"
-    ),
-]
+COMMAND = ["python", "-c", "from capture_csp_probe import run; run()"]
 PROXY_NAMES = {"http_proxy", "https_proxy", "all_proxy", "no_proxy"}
 
 
-def validate_guest(
-    value: dict[str, Any], image: str, owner: str, profile: Path
-) -> None:
+def validate_guest(value: dict[str, Any], image: str, owner: str, profile: Path) -> None:
     require_owner("container", value, owner)
     host, config = value["HostConfig"], value["Config"]
     env = config.get("Env") or []
@@ -35,9 +26,7 @@ def validate_guest(
         or config.get("Tty")
         or config.get("OpenStdin")
         or any(item.partition("=")[0].lower() in PROXY_NAMES for item in env)
-        or any(
-            item.partition("=")[0] in {"DEBUG", "DEBUG_FILE", "PWDEBUG"} for item in env
-        )
+        or any(item.partition("=")[0] in {"DEBUG", "DEBUG_FILE", "PWDEBUG"} for item in env)
         or host["NetworkMode"] != "none"
         or host["Privileged"] is not False
         or host["CapAdd"]
@@ -58,8 +47,7 @@ def validate_guest(
         or value["NetworkSettings"].get("Ports") not in (None, {})
         or config.get("Volumes")
         or any(
-            item.get("Type") != "tmpfs"
-            or item.get("Destination") not in {"/tmp", "/dev/shm"}
+            item.get("Type") != "tmpfs" or item.get("Destination") not in {"/tmp", "/dev/shm"}
             for item in value["Mounts"]
         )
     ):
@@ -82,10 +70,7 @@ def quiet_docker(*args: str, timeout: int) -> None:
 
 
 def run() -> None:
-    if (
-        os.environ.get("GITHUB_ACTIONS") != "true"
-        or os.environ.get("GITHUB_REF") != BRANCH
-    ):
+    if os.environ.get("GITHUB_ACTIONS") != "true" or os.environ.get("GITHUB_REF") != BRANCH:
         raise RuntimeError("capture_pixel_ci_refused")
     root = Path(__file__).resolve().parents[2]
     owner = secrets.token_hex(16)
@@ -176,14 +161,12 @@ def main() -> None:
     try:
         run()
     except BaseException as error:  # noqa: BLE001 - never emit guest or Docker output
-        if type(error) is RuntimeError and error.args == (
-            "capture_pixel_cleanup_uncertain",
-        ):
-            print("capture_pixel_result=cleanup_uncertain")
+        if type(error) is RuntimeError and error.args == ("capture_pixel_cleanup_uncertain",):
+            print("capture_csp_result=cleanup_uncertain")
         else:
-            print("capture_pixel_result=failed")
+            print("capture_csp_result=failed")
         raise SystemExit(1) from None
-    print("capture_pixel_result=passed")
+    print("capture_csp_result=passed")
 
 
 if __name__ == "__main__":
