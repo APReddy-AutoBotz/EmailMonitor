@@ -160,7 +160,7 @@ SHAPE = r"""(root, config) => {
     masks = [root.children[1],root.children[2]];
   } else return false;
   if (masks.some(e => !visible(e) || !e.textContent.trim())) return false;
-  if (root.__emCaptureObserver) return false;
+  if (root.__emCaptureObserver || document.adoptedStyleSheets.length !== 0) return false;
   root.__emCaptureChanged = false;
   root.__emCaptureMaskVerified = false;
   root.__emCaptureChangeKind = 'other';
@@ -192,8 +192,7 @@ SHAPE = r"""(root, config) => {
     }
     const nodes = [...record.addedNodes, ...record.removedNodes];
     if (!nodes.length || nodes.some(node => node.nodeType !== 1 ||
-        node.tagName !== 'STYLE' || node.textContent !== config.style) ||
-        Array.from(record.removedNodes).includes(root.__emCaptureOwnedStyle)) {
+        node.tagName !== 'STYLE' || node.textContent !== config.style)) {
       root.__emCaptureChangeKind = 'style';
       return true;
     }
@@ -213,13 +212,15 @@ SHAPE = r"""(root, config) => {
 
 INSTALL = """(root, style) => {
   if (!root.__emCaptureObserver || root.__emCaptureOwnedStyle ||
+      document.adoptedStyleSheets.length !== 0 ||
       style !== root.__emCaptureExpectedStyle) return false;
-  const node = document.createElement('style');
-  node.textContent = style;
-  root.__emCaptureOwnedStyle = node;
   try {
-    document.documentElement.append(node);
-    root.__emCaptureStyleRules = JSON.stringify(Array.from(node.sheet.cssRules, r => r.cssText));
+    const sheet = new CSSStyleSheet();
+    sheet.replaceSync(style);
+    if (sheet.disabled || sheet.cssRules.length !== 6) return false;
+    root.__emCaptureOwnedStyle = sheet;
+    root.__emCaptureStyleRules = JSON.stringify(Array.from(sheet.cssRules, r => r.cssText));
+    document.adoptedStyleSheets = [sheet];
     if (root.__emCaptureUnexpected(root.__emCaptureObserver.takeRecords()))
       root.__emCaptureChanged = true;
     root.__emCaptureVerifyMask();
@@ -228,9 +229,12 @@ INSTALL = """(root, style) => {
 }"""
 
 GEOMETRY = """root => {
-  if (!root.__emCaptureObserver || !root.__emCaptureOwnedStyle ||
-      !root.__emCaptureOwnedStyle.isConnected ||
-      !window.visualViewport || window.visualViewport.scale !== 1) return null;
+  const sheet = root.__emCaptureOwnedStyle;
+  if (!root.__emCaptureObserver || !sheet || sheet.disabled ||
+      document.adoptedStyleSheets.length !== 1 || document.adoptedStyleSheets[0] !== sheet ||
+      sheet.cssRules.length !== 6 || root.__emCaptureStyleRules !== JSON.stringify(
+        Array.from(sheet.cssRules, r => r.cssText)
+      ) || !window.visualViewport || window.visualViewport.scale !== 1) return null;
   const rect = box => [box.left + window.scrollX, box.top + window.scrollY,
     box.right + window.scrollX, box.bottom + window.scrollY];
   const safe = (node, container = false) => {
@@ -291,7 +295,10 @@ GEOMETRY = """root => {
 
 FINISH = """root => {
   if (!root.__emCaptureObserver) {
-    if (root.__emCaptureOwnedStyle) root.__emCaptureOwnedStyle.remove();
+    if (root.__emCaptureOwnedStyle) {
+      try { document.adoptedStyleSheets = Array.from(document.adoptedStyleSheets)
+        .filter(sheet => sheet !== root.__emCaptureOwnedStyle); } catch (_) {}
+    }
     return 'observer';
   }
   const changed = root.__emCaptureChanged ||
@@ -299,11 +306,10 @@ FINISH = """root => {
   const ownedStyle = root.__emCaptureOwnedStyle;
   let styleIntact = false;
   try {
-    styleIntact = !!ownedStyle && ownedStyle.isConnected &&
-      ownedStyle.parentNode === document.documentElement &&
-      ownedStyle.textContent === root.__emCaptureExpectedStyle &&
-      root.__emCaptureStyleRules === JSON.stringify(
-        Array.from(ownedStyle.sheet.cssRules, r => r.cssText)
+    styleIntact = !!ownedStyle && !ownedStyle.disabled &&
+      document.adoptedStyleSheets.length === 1 && document.adoptedStyleSheets[0] === ownedStyle &&
+      ownedStyle.cssRules.length === 6 && root.__emCaptureStyleRules === JSON.stringify(
+        Array.from(ownedStyle.cssRules, r => r.cssText)
       );
     if (styleIntact) root.__emCaptureVerifyMask();
   } catch (_) { styleIntact = false; }
@@ -315,7 +321,14 @@ FINISH = """root => {
   const changeKind = root.__emCaptureChangeKind;
   const maskKind = root.__emCaptureMaskKind;
   root.__emCaptureObserver.disconnect();
-  if (ownedStyle) ownedStyle.remove();
+  let cleanup = true;
+  if (ownedStyle) {
+    try {
+      document.adoptedStyleSheets = Array.from(document.adoptedStyleSheets)
+        .filter(sheet => sheet !== ownedStyle);
+      cleanup = !document.adoptedStyleSheets.includes(ownedStyle);
+    } catch (_) { cleanup = false; }
+  }
   const state = root.__emCaptureScroll;
   let restored = !!state && state[2].every(item => item[0].isConnected);
   let stateKind = 'detached';
@@ -344,6 +357,7 @@ FINISH = """root => {
   delete root.__emCaptureUnexpected;
   delete root.__emCaptureScroll;
   if (!root.isConnected) return 'detached';
+  if (!cleanup) return 'mask_absent';
   if (changed) return 'changed_' + changeKind;
   if (!restored) return 'state_' + stateKind;
   if (!maskVerified) return 'mask_' + maskKind;
@@ -389,8 +403,8 @@ def validate_png(data: bytes) -> None:
         if zlib.crc32(kind + chunk) & 0xFFFFFFFF != crc:
             raise ValueError("capture_png_refused")
         if kind == b"IHDR" and not seen and length == 13:
-            width, height, depth, color, compression, filtering, interlace = (
-                struct.unpack(">IIBBBBB", chunk)
+            width, height, depth, color, compression, filtering, interlace = struct.unpack(
+                ">IIBBBBB", chunk
             )
             if not (
                 1 <= width <= MAX_SIDE
@@ -416,13 +430,7 @@ def validate_png(data: bytes) -> None:
         ):
             # Exact constant color profiles carry no arbitrary metadata.
             pass
-        elif (
-            kind == b"IEND"
-            and length == 0
-            and body
-            and seen[-1] == b"IDAT"
-            and end == len(data)
-        ):
+        elif kind == b"IEND" and length == 0 and body and seen[-1] == b"IDAT" and end == len(data):
             seen.append(kind)
             break
         else:
@@ -462,9 +470,7 @@ def redaction_rectangles(
         or type(before["covered"]) is not int
         or before["covered"]
         not in (
-            {MASK_COUNTS[name] - 1, MASK_COUNTS[name]}
-            if name == "export"
-            else {MASK_COUNTS[name]}
+            {MASK_COUNTS[name] - 1, MASK_COUNTS[name]} if name == "export" else {MASK_COUNTS[name]}
         )
         or type(width) is not int
         or type(height) is not int
@@ -479,8 +485,7 @@ def redaction_rectangles(
             type(value) is not list
             or len(value) != 4
             or any(
-                type(n) not in (int, float) or abs(n) > 1e6 or not math.isfinite(n)
-                for n in value
+                type(n) not in (int, float) or abs(n) > 1e6 or not math.isfinite(n) for n in value
             )
         ):
             raise ValueError("capture_geometry_refused")
@@ -547,9 +552,7 @@ def redact_png(data: bytes, rectangles: list[tuple[int, int, int, int]]) -> byte
             body.extend(data[offset + 8 : offset + 8 + length])
         offset += 12 + length
     stride = width * channels
-    raw = zlib.decompress(
-        bytes(body)
-    )  # validate_png already bounds and validates this stream.
+    raw = zlib.decompress(bytes(body))  # validate_png already bounds and validates this stream.
     previous = bytearray(stride)
     output = bytearray()
     black = bytes((0, 0, 0) if channels == 3 else (0, 0, 0, 255))
@@ -680,9 +683,7 @@ async def capture(page: "Page", name: str) -> None:
         raise ValueError("capture_region_refused")
     handle = await locator.element_handle()
     style = style_for(name)
-    if handle is None or not await handle.evaluate(
-        SHAPE, {"name": name, "style": style}
-    ):
+    if handle is None or not await handle.evaluate(SHAPE, {"name": name, "style": style}):
         raise ValueError("capture_shape_refused")
     reason: str | None = None
     # Suppress internal traceback frames: they can contain the pre-redaction image.
@@ -822,10 +823,7 @@ def save_bundle(
 
     if tuple(core) != CORE or tuple(privacy) != PRIVACY:
         raise ValueError("capture_incomplete")
-    if any(
-        not re.fullmatch(r"[0-9a-f]{40}", value)
-        for value in (head, checked_out_commit, tree)
-    ):
+    if any(not re.fullmatch(r"[0-9a-f]{40}", value) for value in (head, checked_out_commit, tree)):
         raise ValueError("capture_source_refused")
     images = {**core, **privacy}
     for image in images.values():
@@ -850,16 +848,12 @@ def save_bundle(
         }
         for index, (name, image) in enumerate(images.items(), 1):
             destination = target / f"{index:02d}-{name}.png"
-            fd = os.open(
-                destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600
-            )
+            fd = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
             files.append(destination)
             with os.fdopen(fd, "wb") as stream:
                 stream.write(image)
         destination = target / "manifest.json"
-        fd = os.open(
-            destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600
-        )
+        fd = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
         files.append(destination)
         with os.fdopen(fd, "w", encoding="utf-8") as stream:
             json.dump(manifest, stream, sort_keys=True)
@@ -878,9 +872,7 @@ def save_bundle(
         raise
 
 
-def verify_bundle(
-    *, runner_temp: str, head: str, checked_out_commit: str, tree: str
-) -> None:
+def verify_bundle(*, runner_temp: str, head: str, checked_out_commit: str, tree: str) -> None:
     """Recheck the exact output set before a workflow uploads it."""
     import os
     import stat
@@ -925,8 +917,7 @@ def verify_bundle(
         "sessions": {"core": list(CORE), "privacy": list(PRIVACY)},
         "limitations": LIMITATIONS,
     } or any(
-        not re.fullmatch(r"[0-9a-f]{40}", value)
-        for value in (head, checked_out_commit, tree)
+        not re.fullmatch(r"[0-9a-f]{40}", value) for value in (head, checked_out_commit, tree)
     ):
         raise ValueError("capture_bundle_refused")
 
@@ -936,10 +927,7 @@ def main() -> None:
     import os
     import subprocess
 
-    if (
-        os.environ.get("GITHUB_ACTIONS") != "true"
-        or os.environ.get("EM_OPERATOR_CAPTURE") != "1"
-    ):
+    if os.environ.get("GITHUB_ACTIONS") != "true" or os.environ.get("EM_OPERATOR_CAPTURE") != "1":
         raise RuntimeError("Reviewed synthetic capture CI required")
 
     def git(*args: str) -> str:

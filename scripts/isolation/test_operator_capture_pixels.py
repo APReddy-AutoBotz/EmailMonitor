@@ -20,6 +20,7 @@ from typing import Any, cast
 from browser_acceptance import sandbox_status
 from operator_capture import (
     GEOMETRY,
+    INSTALL,
     TARGETS,
     capture,
     redaction_rectangles,
@@ -114,11 +115,7 @@ def fixture(name: str) -> str:
             "<button>Create asynchronous export</button></section>"
         )
     elif name in ("suppression", "deletion"):
-        title = (
-            "Suppress observed contact"
-            if name == "suppression"
-            else "Stage job deletion"
-        )
+        title = "Suppress observed contact" if name == "suppression" else "Stage job deletion"
         confirm = (
             "Confirm suppress observed contact"
             if name == "suppression"
@@ -131,20 +128,25 @@ def fixture(name: str) -> str:
         )
     else:
         raise ValueError("Fixed synthetic crop required")
+    policy = (
+        "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; "
+        "connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"
+    )
     return (
-        "<!doctype html><html><head><style>"
-        "body{font:16px sans-serif} dl{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}"
-        "dd{margin:0;overflow-wrap:anywhere}"
-        "</style></head><body><div class='workspace-heading'><h2>Synthetic tenant 0</h2></div>"
-        f"{target}</body></html>"
+        '<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="'
+        + policy
+        + '"><link rel="stylesheet" href="/synthetic.css"></head>'
+        + "<body><div class='workspace-heading'><h2>Synthetic tenant 0</h2></div>"
+        + target
+        + "</body></html>"
     )
 
 
 EXPOSE = """spec => {
-  const sheets = Array.from(document.querySelectorAll('style'))
-    .filter(s => s.textContent === spec.style);
-  if (sheets.length !== 1) return false;
-  const sheet = sheets[0].sheet;
+  const root = document.querySelector(spec.selector);
+  const sheet = root && root.__emCaptureOwnedStyle;
+  if (!sheet || document.adoptedStyleSheets.length !== 1 ||
+      document.adoptedStyleSheets[0] !== sheet) return false;
   window.__syntheticCaptureRules = sheet.cssRules.length;
   for (const part of spec.masks) sheet.insertRule(
     ':root ' + spec.selector + ' ' + part + '{visibility:visible!important}',sheet.cssRules.length
@@ -154,10 +156,10 @@ EXPOSE = """spec => {
 }"""
 
 CONTROL = """spec => {
-  const sheets = Array.from(document.querySelectorAll('style'))
-    .filter(s => s.textContent === spec.style);
-  if (sheets.length !== 1) return false;
-  const sheet = sheets[0].sheet;
+  const root = document.querySelector(spec.selector);
+  const sheet = root && root.__emCaptureOwnedStyle;
+  if (!sheet || document.adoptedStyleSheets.length !== 1 ||
+      document.adoptedStyleSheets[0] !== sheet) return false;
   for (const part of spec.masks) {
     const target = ':root ' + spec.selector + ' ' + part;
     sheet.insertRule(target + ',' + target + ' *{color:transparent!important;'
@@ -167,11 +169,11 @@ CONTROL = """spec => {
 }"""
 
 RESTORE = """spec => {
-  const sheets = Array.from(document.querySelectorAll('style'))
-    .filter(s => s.textContent === spec.style);
+  const root = document.querySelector(spec.selector);
+  const sheet = root && root.__emCaptureOwnedStyle;
   const initial = window.__syntheticCaptureRules;
-  if (sheets.length !== 1 || !Number.isInteger(initial)) return false;
-  const sheet = sheets[0].sheet;
+  if (!sheet || document.adoptedStyleSheets.length !== 1 ||
+      document.adoptedStyleSheets[0] !== sheet || !Number.isInteger(initial)) return false;
   if (sheet.cssRules.length !== initial + spec.masks.length * 2) return false;
   while (sheet.cssRules.length > initial) sheet.deleteRule(sheet.cssRules.length - 1);
   delete window.__syntheticCaptureRules;
@@ -208,10 +210,36 @@ PIXEL_ORACLE = """async images => {
 }"""
 
 
+FAULT = """fault => {
+  const root = document.querySelector('dl[aria-label="Plan summary"]');
+  const owned = root.__emCaptureOwnedStyle;
+  if (fault === 'preexisting') {
+    const foreign = new CSSStyleSheet(); window.__foreign = foreign;
+    document.adoptedStyleSheets = [foreign];
+  } else if (fault === 'removed') document.adoptedStyleSheets = [];
+  else if (fault === 'disabled') owned.disabled = true;
+  else if (fault === 'mutated') owned.insertRule('body{color:red}', owned.cssRules.length);
+  else if (fault === 'foreign' || fault === 'replaced') {
+    const foreign = new CSSStyleSheet(); window.__foreign = foreign;
+    document.adoptedStyleSheets = fault === 'foreign' ? [owned,foreign] : [foreign];
+  } else if (fault === 'unexpected') document.body.append(document.createElement('div'));
+  else if (fault === 'detached') root.remove();
+  else if (fault === 'cleanup') {
+    const current = document.adoptedStyleSheets;
+    Object.defineProperty(document,'adoptedStyleSheets',{
+      configurable:true,get(){return current;},set(){throw new Error('synthetic cleanup fault');}
+    });
+  } else return false;
+  return true;
+}"""
+
+
 class CaptureHandle:
-    def __init__(self, handle: Any, page: Page, name: str) -> None:
-        self.handle, self.page, self.name = handle, page, name
+    def __init__(self, handle: Any, page: Page, name: str, fault: str | None = None) -> None:
+        self.handle, self.page, self.name, self.fault = handle, page, name, fault
         self.geometry: list[Any] = []
+        self.fault_applied = False
+        self.screenshot_attempted = False
         self.exposure_verified = False
         self.exposed_image: bytes | None = None
         self.control_image: bytes | None = None
@@ -220,9 +248,14 @@ class CaptureHandle:
         result = await self.handle.evaluate(expression, *arguments)
         if expression == GEOMETRY:
             self.geometry.append(result)
+        if expression == INSTALL and result is True and self.fault:
+            if await self.page.evaluate(FAULT, self.fault) is not True:
+                raise RuntimeError("Synthetic fault unavailable")
+            self.fault_applied = True
         return result
 
     async def screenshot(self, **options: Any) -> bytes:
+        self.screenshot_attempted = True
         selector, masks = TARGETS[self.name]
         spec = {
             "style": style_for(self.name),
@@ -248,8 +281,8 @@ class CaptureHandle:
 
 
 class CaptureLocator:
-    def __init__(self, locator: Any, page: Page, name: str) -> None:
-        self.locator, self.page, self.name = locator, page, name
+    def __init__(self, locator: Any, page: Page, name: str, fault: str | None = None) -> None:
+        self.locator, self.page, self.name, self.fault = locator, page, name, fault
         self.handle: CaptureHandle | None = None
 
     async def count(self) -> int:
@@ -257,14 +290,14 @@ class CaptureLocator:
 
     async def element_handle(self) -> CaptureHandle:
         self.handle = CaptureHandle(
-            await self.locator.element_handle(), self.page, self.name
+            await self.locator.element_handle(), self.page, self.name, self.fault
         )
         return self.handle
 
 
 class CapturePage:
-    def __init__(self, page: Page, name: str) -> None:
-        self.page, self.name = page, name
+    def __init__(self, page: Page, name: str, fault: str | None = None) -> None:
+        self.page, self.name, self.fault = page, name, fault
         self.capture_locator: CaptureLocator | None = None
 
     @property
@@ -276,14 +309,12 @@ class CapturePage:
 
     def locator(self, selector: str) -> CaptureLocator:
         self.capture_locator = CaptureLocator(
-            self.page.locator(selector), self.page, self.name
+            self.page.locator(selector), self.page, self.name, self.fault
         )
         return self.capture_locator
 
 
-def assert_black_rectangles(
-    image: bytes, boxes: list[tuple[int, int, int, int]]
-) -> None:
+def assert_black_rectangles(image: bytes, boxes: list[tuple[int, int, int, int]]) -> None:
     validate_png(image)
     width, height, _, color, _, _, _ = struct.unpack(">IIBBBBB", image[16:29])
     channels = 3 if color == 2 else 4
@@ -318,9 +349,7 @@ async def exercise() -> None:
         try:
             if browser.version != "153.0.8010.12":
                 raise RuntimeError("Pinned Chromium required")
-            context = await browser.new_context(
-                service_workers="block", accept_downloads=False
-            )
+            context = await browser.new_context(service_workers="block", accept_downloads=False)
             page = await context.new_page()
             await page.goto("chrome://sandbox", wait_until="domcontentloaded")
             sandbox_status(
@@ -342,20 +371,28 @@ async def exercise() -> None:
                         content_type="text/html",
                         body=fixture(current["name"]),
                     )
+                elif (
+                    route.request.url == ORIGIN + "synthetic.css" and route.request.method == "GET"
+                ):
+                    await route.fulfill(
+                        status=200,
+                        content_type="text/css",
+                        body="body{font:16px sans-serif} "
+                        "dl{display:grid;grid-template-columns:repeat(3,1fr);gap:8px} "
+                        "dd{margin:0;overflow-wrap:anywhere}",
+                    )
                 else:
                     await route.abort()
 
             await page.route("**/*", route_request)
             for name in TARGETS:
                 current["name"] = name
-                await page.goto(ORIGIN, wait_until="domcontentloaded")
+                await page.goto(ORIGIN, wait_until="load")
                 wrapped = CapturePage(page, name)
                 output = io.StringIO()
                 with contextlib.redirect_stdout(output):
                     await capture(cast(Page, wrapped), name)
-                handle = (
-                    wrapped.capture_locator.handle if wrapped.capture_locator else None
-                )
+                handle = wrapped.capture_locator.handle if wrapped.capture_locator else None
                 if (
                     handle is None
                     or not handle.exposure_verified
@@ -374,9 +411,7 @@ async def exercise() -> None:
                     for index, frame in enumerate(frames)
                 ):
                     raise RuntimeError("Synthetic capture frame refused")
-                image = base64.b64decode(
-                    "".join(frame["data"] for frame in frames), validate=True
-                )
+                image = base64.b64decode("".join(frame["data"] for frame in frames), validate=True)
                 width, height = struct.unpack(">II", image[16:24])
                 boxes = redaction_rectangles(
                     handle.geometry[0], handle.geometry[1], width, height, name
@@ -389,9 +424,7 @@ async def exercise() -> None:
                 try:
                     oracle = await page.evaluate(PIXEL_ORACLE, encoded)
                 except Exception:  # noqa: BLE001 - suppress browser data in tracebacks
-                    raise RuntimeError(
-                        "Synthetic independent pixel oracle unavailable"
-                    ) from None
+                    raise RuntimeError("Synthetic independent pixel oracle unavailable") from None
                 if (
                     not isinstance(oracle, dict)
                     or set(oracle) != {"changed", "leaked"}
@@ -402,14 +435,55 @@ async def exercise() -> None:
                     raise RuntimeError("Synthetic independent pixel oracle refused")
                 handle.exposed_image = None
                 handle.control_image = None
+            current["name"] = "plan"
+            reasons = {
+                "preexisting": "capture_shape_refused",
+                "removed": "capture_geometry_refused",
+                "disabled": "capture_geometry_refused",
+                "mutated": "capture_geometry_refused",
+                "foreign": "capture_geometry_refused",
+                "replaced": "capture_geometry_refused",
+                "unexpected": "capture_change_child",
+                "detached": "capture_geometry_refused",
+                "cleanup": "capture_mask_absent",
+            }
+            for fault, expected_reason in reasons.items():
+                await page.goto(ORIGIN, wait_until="load")
+                if fault == "preexisting" and await page.evaluate(FAULT, fault) is not True:
+                    raise RuntimeError("Synthetic fault unavailable")
+                wrapped = CapturePage(page, "plan", None if fault == "preexisting" else fault)
+                output = io.StringIO()
+                with contextlib.redirect_stdout(output):
+                    try:
+                        await capture(cast(Page, wrapped), "plan")
+                    except ValueError as error:
+                        if error.args != (expected_reason,):
+                            raise RuntimeError("Synthetic refusal category refused") from None
+                    else:
+                        raise RuntimeError("Synthetic refusal missing")
+                if output.getvalue():
+                    raise RuntimeError("Synthetic refusal emitted output")
+                handle = wrapped.capture_locator.handle if wrapped.capture_locator else None
+                if handle is None or (fault != "preexisting" and not handle.fault_applied):
+                    raise RuntimeError("Synthetic fault not applied")
+                if handle.screenshot_attempted != (fault in ("unexpected", "cleanup")):
+                    raise RuntimeError("Synthetic refusal phase refused")
+                if fault in ("preexisting", "foreign", "replaced"):
+                    intact = await page.evaluate("""() =>
+                      document.adoptedStyleSheets.length === 1 &&
+                      document.adoptedStyleSheets[0] === window.__foreign
+                    """)
+                    if intact is not True:
+                        raise RuntimeError("Synthetic foreign sheet was not preserved")
+                elif fault != "cleanup":
+                    if await page.evaluate("document.adoptedStyleSheets.length") != 0:
+                        raise RuntimeError("Synthetic owned sheet remained")
             await context.close()
         finally:
             await browser.close()
 
 
-def test_actual_sandboxed_chromium_redacts_temporarily_exposed_synthetic_values() -> (
-    None
-):
+def test_actual_sandboxed_chromium_redacts_temporarily_exposed_synthetic_values() -> None:
     require_existing_isolation()
     # The oracle temporarily handles unredacted synthetic images. Never include
     # its internal frames in a pytest --showlocals report on failure.
