@@ -188,9 +188,9 @@ class FakeHandle:
         self.shape, self.unchanged, self.error = shape, unchanged, error
         self.calls: list[str] = []
 
-    async def evaluate(self, source: str, *args: Any) -> bool:
+    async def evaluate(self, source: str, *args: Any) -> bool | str:
         self.calls.append("shape" if args else "finish")
-        return self.shape if args else self.unchanged
+        return self.shape if args else ("ok" if self.unchanged else "changed_child")
 
     async def screenshot(self, **options: Any) -> bytes:
         self.calls.append("screenshot")
@@ -248,6 +248,38 @@ def test_capture_refuses_and_never_emits_on_missing_or_changed_guard(
     assert capsys.readouterr().out == ""
     if case == "screenshot":
         assert handle.calls == ["shape", "screenshot", "finish"]
+
+
+@pytest.mark.parametrize(
+    ("outcome", "reason"),
+    [
+        ("observer", "capture_observer_missing"),
+        ("detached", "capture_target_detached"),
+        ("changed_attribute", "capture_change_attribute"),
+        ("changed_text", "capture_change_text"),
+        ("changed_child", "capture_change_child"),
+        ("changed_style", "capture_change_style"),
+        ("state_detached", "capture_state_detached"),
+        ("state_focus", "capture_state_focus"),
+        ("state_scroll", "capture_state_scroll"),
+        ("mask_absent", "capture_mask_absent"),
+        ("mask_target", "capture_mask_target"),
+        ("mask_values", "capture_mask_values"),
+        ("mask_outside", "capture_mask_outside"),
+        ("untrusted private text", "capture_mutated"),
+        ({"untrusted": "private"}, "capture_mutated"),
+    ],
+)
+def test_finish_diagnostics_are_closed_and_never_emit_images_on_refusal(
+    outcome: Any, reason: str, capsys: Any
+) -> None:
+    class ResultHandle(FakeHandle):
+        async def evaluate(self, source: str, *args: Any) -> Any:
+            return True if args else outcome
+
+    with pytest.raises(ValueError, match=f"^{reason}$"):
+        asyncio.run(capture(cast(Page, FakePage(ResultHandle())), "plan"))
+    assert capsys.readouterr().out == ""
 
 
 def test_embedded_javascript_parses_without_running_browser() -> None:
@@ -349,6 +381,19 @@ def test_existing_ci_entry_guards_and_limits_remain_in_source() -> None:
         "capture_region_refused",
         "capture_shape_refused",
         "capture_mutated",
+        "capture_observer_missing",
+        "capture_target_detached",
+        "capture_change_attribute",
+        "capture_change_text",
+        "capture_change_child",
+        "capture_change_style",
+        "capture_state_detached",
+        "capture_state_focus",
+        "capture_state_scroll",
+        "capture_mask_absent",
+        "capture_mask_target",
+        "capture_mask_values",
+        "capture_mask_outside",
         "capture_png_refused",
     ],
 )
@@ -417,20 +462,23 @@ function setup() {
   return {root,rows,body,heading};
 }
 const config={name:'plan',style:'fixed'};
-function applyStyle(root, masks, allHidden=true) {
+function applyStyle(root, masks, fault='') {
   const outside=document.body.querySelectorAll('*').filter(e => !root.contains(e));
   for (const e of [...outside,...masks]) e.visible=false;
-  if (!allHidden) masks[0].visible=true;
+  if (fault === 'values') masks[0].visible=true;
+  if (fault === 'target') root.visible=false;
+  if (fault === 'outside') outside[0].visible=true;
   const style=new E('STYLE','fixed'); style.nodeType=1;
   root.__emCaptureObserver.callback([{type:'childList',target:document.documentElement,
     addedNodes:[style],removedNodes:[]}]);
   for (const e of [...outside,...masks]) e.visible=true;
+  root.visible=true;
 }
 {
   const {root,rows}=setup(); assert.equal(shape(root,config),true);
   applyStyle(root,rows.map(r => r.children[1]));
   rows[0].scrollTop=9; window.scrollY=7;
-  assert.equal(finish(root),true);
+  assert.equal(finish(root),'ok');
   assert.equal(rows[0].scrollTop,0); assert.equal(window.scrollY,0);
 }
 {
@@ -452,20 +500,53 @@ function applyStyle(root, masks, allHidden=true) {
 {
   const {root}=setup(); assert.equal(shape(root,config),true);
   records.push({type:'childList',target:document.body,addedNodes:[],removedNodes:[]});
-  assert.equal(finish(root),false);
+  assert.equal(finish(root),'changed_child');
 }
 {
   const {root}=setup(); assert.equal(shape(root,config),true);
-  assert.equal(finish(root),false); // No observed masking means no accepted image.
+  assert.equal(finish(root),'mask_absent'); // No observed masking means no accepted image.
 }
 {
   const {root,rows}=setup(); assert.equal(shape(root,config),true);
-  applyStyle(root,rows.map(r => r.children[1]),false);
-  assert.equal(finish(root),false); // A visible masked value is refused.
+  applyStyle(root,rows.map(r => r.children[1]),'values');
+  assert.equal(finish(root),'mask_values'); // A visible masked value is refused.
+}
+for (const fault of ['target','outside']) {
+  const {root,rows}=setup(); assert.equal(shape(root,config),true);
+  applyStyle(root,rows.map(r => r.children[1]),fault);
+  assert.equal(finish(root),'mask_'+fault);
+}
+for (const [type,kind] of [['attributes','attribute'],['characterData','text']]) {
+  const {root}=setup(); assert.equal(shape(root,config),true);
+  records.push({type,target:document.body});
+  assert.equal(finish(root),'changed_'+kind);
 }
 {
   const {root}=setup(); assert.equal(shape(root,config),true);
-  document.activeElement=new E('BUTTON','other'); assert.equal(finish(root),false);
+  const style=new E('STYLE','unexpected'); style.nodeType=1;
+  records.push({type:'childList',target:document.documentElement,addedNodes:[style],removedNodes:[]});
+  assert.equal(finish(root),'changed_style');
+}
+{
+  const {root}=setup(); assert.equal(shape(root,config),true);
+  document.activeElement=new E('BUTTON','other'); assert.equal(finish(root),'state_focus');
+}
+{
+  const {root}=setup(); assert.equal(finish(root),'observer');
+}
+{
+  const {root}=setup(); assert.equal(shape(root,config),true);
+  root.isConnected=false; assert.equal(finish(root),'detached');
+}
+{
+  const {root,rows}=setup(); assert.equal(shape(root,config),true);
+  rows[0].isConnected=false; assert.equal(finish(root),'state_detached');
+}
+{
+  const {root,rows}=setup(); assert.equal(shape(root,config),true);
+  applyStyle(root,rows.map(r => r.children[1]));
+  window.scrollY=7; const restore=window.scrollTo; window.scrollTo=()=>{};
+  assert.equal(finish(root),'state_scroll'); window.scrollTo=restore; window.scrollY=0;
 }
 """
     result = subprocess.run(
@@ -583,7 +664,7 @@ for (const kind of ['evidence-quality','export','suppression','deletion']) {
   root.__emCaptureObserver.callback([{type:'childList',target:document.documentElement,
     addedNodes:[style],removedNodes:[]}]);
   for (const e of [...outside,...masks]) e.visible=true;
-  assert.equal(finish(root),true);
+  assert.equal(finish(root),'ok');
 }
 {
   const {root}=setup('export'); root.children.push(new E('P','unexpected'));

@@ -154,22 +154,34 @@ SHAPE = r"""(root, config) => {
   if (root.__emCaptureObserver) return false;
   root.__emCaptureChanged = false;
   root.__emCaptureMaskVerified = false;
+  root.__emCaptureChangeKind = 'other';
+  root.__emCaptureMaskKind = 'absent';
   root.__emCaptureScroll = [
     window.scrollX, window.scrollY,
     all.map(e => [e,e.scrollLeft,e.scrollTop]), document.activeElement
   ];
   root.__emCaptureUnexpected = records => records.some(record => {
-    if (record.type !== 'childList' || record.target !== document.documentElement) return true;
+    if (record.type !== 'childList' || record.target !== document.documentElement) {
+      root.__emCaptureChangeKind = record.type === 'attributes' ? 'attribute' :
+        record.type === 'characterData' ? 'text' : 'child';
+      return true;
+    }
     const nodes = [...record.addedNodes, ...record.removedNodes];
     if (!nodes.length || nodes.some(node => node.nodeType !== 1 ||
-        node.tagName !== 'STYLE' || node.textContent !== config.style)) return true;
+        node.tagName !== 'STYLE' || node.textContent !== config.style)) {
+      root.__emCaptureChangeKind = 'style';
+      return true;
+    }
     if (record.addedNodes.length) {
       const masked = name === 'export' ? [...masks, root.children[3]] : masks;
-      root.__emCaptureMaskVerified = getComputedStyle(root).visibility === 'visible' &&
-        masked.every(e => getComputedStyle(e).visibility === 'hidden') &&
-        all.filter(e => !root.contains(e)).every(
-          e => getComputedStyle(e).visibility === 'hidden'
-        );
+      const target = getComputedStyle(root).visibility === 'visible';
+      const values = masked.every(e => getComputedStyle(e).visibility === 'hidden');
+      const outside = all.filter(e => !root.contains(e)).every(
+        e => getComputedStyle(e).visibility === 'hidden'
+      );
+      root.__emCaptureMaskKind = !target ? 'target' : !values ? 'values' :
+        !outside ? 'outside' : 'verified';
+      root.__emCaptureMaskVerified = target && values && outside;
     }
     return false;
   });
@@ -183,13 +195,16 @@ SHAPE = r"""(root, config) => {
 }"""
 
 FINISH = """root => {
-  if (!root.__emCaptureObserver) return false;
+  if (!root.__emCaptureObserver) return 'observer';
   const changed = root.__emCaptureChanged ||
     root.__emCaptureUnexpected(root.__emCaptureObserver.takeRecords());
   const maskVerified = root.__emCaptureMaskVerified;
+  const changeKind = root.__emCaptureChangeKind;
+  const maskKind = root.__emCaptureMaskKind;
   root.__emCaptureObserver.disconnect();
   const state = root.__emCaptureScroll;
   let restored = !!state && state[2].every(item => item[0].isConnected);
+  let stateKind = 'detached';
   if (restored) {
     for (const [element, left, top] of state[2]) {
       element.scrollLeft = left;
@@ -200,13 +215,20 @@ FINISH = """root => {
       document.activeElement === state[3] && state[2].every(
         item => item[0].scrollLeft === item[1] && item[0].scrollTop === item[2]
       );
+    stateKind = document.activeElement !== state[3] ? 'focus' : 'scroll';
   }
   delete root.__emCaptureObserver;
   delete root.__emCaptureChanged;
   delete root.__emCaptureMaskVerified;
+  delete root.__emCaptureChangeKind;
+  delete root.__emCaptureMaskKind;
   delete root.__emCaptureUnexpected;
   delete root.__emCaptureScroll;
-  return root.isConnected && !changed && restored && maskVerified;
+  if (!root.isConnected) return 'detached';
+  if (changed) return 'changed_' + changeKind;
+  if (!restored) return 'state_' + stateKind;
+  if (!maskVerified) return 'mask_' + maskKind;
+  return 'ok';
 }"""
 
 
@@ -339,9 +361,29 @@ async def capture(page: "Page", name: str) -> None:
         except BaseException:  # noqa: BLE001 - preserve the triggering failure
             error.add_note("capture_cleanup_unavailable")
         raise
-    unchanged = await handle.evaluate(FINISH)
-    if not unchanged:
-        raise ValueError("capture_mutated")
+    outcome = await handle.evaluate(FINISH)
+    if outcome != "ok":
+        reasons = {
+            "observer": "capture_observer_missing",
+            "detached": "capture_target_detached",
+            "changed_attribute": "capture_change_attribute",
+            "changed_text": "capture_change_text",
+            "changed_child": "capture_change_child",
+            "changed_style": "capture_change_style",
+            "state_detached": "capture_state_detached",
+            "state_focus": "capture_state_focus",
+            "state_scroll": "capture_state_scroll",
+            "mask_absent": "capture_mask_absent",
+            "mask_target": "capture_mask_target",
+            "mask_values": "capture_mask_values",
+            "mask_outside": "capture_mask_outside",
+        }
+        reason = (
+            reasons.get(outcome, "capture_mutated")
+            if isinstance(outcome, str)
+            else "capture_mutated"
+        )
+        raise ValueError(reason)
     validate_png(image)
     encoded = base64.b64encode(image).decode("ascii")
     parts = [encoded[index : index + CHUNK] for index in range(0, len(encoded), CHUNK)]
