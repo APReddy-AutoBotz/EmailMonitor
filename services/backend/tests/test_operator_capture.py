@@ -1316,3 +1316,42 @@ def test_browser_fixture_matches_production_csp_and_same_origin_stylesheet() -> 
         assert policy in html
         assert '<link rel="stylesheet" href="/synthetic.css">' in html
         assert "<style>" not in html
+
+
+@pytest.mark.parametrize("enabled", [True, False])
+def test_focus_pixel_oracle_flag_flows_to_actual_screenshot_wrapper(enabled: bool) -> None:
+    from test_operator_capture_pixels import FOCUS_EXPOSE, FOCUS_RESTORE, CapturePage
+
+    class Handle:
+        calls = 0
+
+        async def screenshot(self, **options: Any) -> bytes:
+            self.calls += 1
+            return image()
+
+    class Locator:
+        def __init__(self) -> None:
+            self.handle = Handle()
+
+        async def element_handle(self) -> Handle:
+            return self.handle
+
+    class PageStub:
+        def __init__(self) -> None:
+            self.locator_value = Locator()
+            self.expressions: list[str] = []
+
+        def locator(self, selector: str) -> Locator:
+            return self.locator_value
+
+        async def evaluate(self, expression: str, *args: Any) -> bool:
+            self.expressions.append(expression)
+            return True
+
+    page = PageStub()
+    wrapper = CapturePage(cast(Page, page), "evidence-quality", test_focus_pixels=enabled)
+    handle = asyncio.run(wrapper.locator("synthetic").element_handle())
+    asyncio.run(handle.screenshot())
+    assert (FOCUS_EXPOSE in page.expressions) is enabled
+    assert (FOCUS_RESTORE in page.expressions) is enabled
+    assert page.locator_value.handle.calls == (4 if enabled else 2)

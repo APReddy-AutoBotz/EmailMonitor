@@ -290,8 +290,17 @@ FAULT = """fault => {
 
 
 class CaptureHandle:
-    def __init__(self, handle: Any, page: Page, name: str, fault: str | None = None) -> None:
+    def __init__(
+        self,
+        handle: Any,
+        page: Page,
+        name: str,
+        fault: str | None = None,
+        *,
+        test_focus_pixels: bool = True,
+    ) -> None:
         self.handle, self.page, self.name, self.fault = handle, page, name, fault
+        self.test_focus_pixels = test_focus_pixels
         self.geometry: list[Any] = []
         self.fault_applied = False
         self.screenshot_attempted = False
@@ -324,7 +333,7 @@ class CaptureHandle:
             raise RuntimeError("Synthetic exposure was not established")
         try:
             image = await self.handle.screenshot(**options)
-            if self.name == "evidence-quality":
+            if self.name == "evidence-quality" and self.test_focus_pixels:
                 if await self.page.evaluate(FOCUS_EXPOSE) is not True:
                     raise RuntimeError("Synthetic focus exposure unavailable")
                 self.focus_visible_image = await self.handle.screenshot(**options)
@@ -345,8 +354,17 @@ class CaptureHandle:
 
 
 class CaptureLocator:
-    def __init__(self, locator: Any, page: Page, name: str, fault: str | None = None) -> None:
+    def __init__(
+        self,
+        locator: Any,
+        page: Page,
+        name: str,
+        fault: str | None = None,
+        *,
+        test_focus_pixels: bool = True,
+    ) -> None:
         self.locator, self.page, self.name, self.fault = locator, page, name, fault
+        self.test_focus_pixels = test_focus_pixels
         self.handle: CaptureHandle | None = None
 
     async def count(self) -> int:
@@ -354,14 +372,26 @@ class CaptureLocator:
 
     async def element_handle(self) -> CaptureHandle:
         self.handle = CaptureHandle(
-            await self.locator.element_handle(), self.page, self.name, self.fault
+            await self.locator.element_handle(),
+            self.page,
+            self.name,
+            self.fault,
+            test_focus_pixels=self.test_focus_pixels,
         )
         return self.handle
 
 
 class CapturePage:
-    def __init__(self, page: Page, name: str, fault: str | None = None) -> None:
+    def __init__(
+        self,
+        page: Page,
+        name: str,
+        fault: str | None = None,
+        *,
+        test_focus_pixels: bool = True,
+    ) -> None:
         self.page, self.name, self.fault = page, name, fault
+        self.test_focus_pixels = test_focus_pixels
         self.capture_locator: CaptureLocator | None = None
 
     @property
@@ -373,7 +403,11 @@ class CapturePage:
 
     def locator(self, selector: str) -> CaptureLocator:
         self.capture_locator = CaptureLocator(
-            self.page.locator(selector), self.page, self.name, self.fault
+            self.page.locator(selector),
+            self.page,
+            self.name,
+            self.fault,
+            test_focus_pixels=self.test_focus_pixels,
         )
         return self.capture_locator
 
@@ -639,7 +673,10 @@ async def exercise() -> None:
                 with contextlib.redirect_stdout(output):
                     try:
                         await capture(
-                            cast(Page, CapturePage(page, "evidence-quality")), "evidence-quality"
+                            cast(
+                                Page, CapturePage(page, "evidence-quality", test_focus_pixels=False)
+                            ),
+                            "evidence-quality",
                         )
                     except ValueError as error:
                         if error.args != (expected_reason,):
