@@ -1,8 +1,10 @@
 """Fixed synthetic UI crops and strict bounded transport; no raw page dumps."""
 
+import asyncio
 import base64
 import binascii
 import json
+import math
 import re
 import struct
 import zlib
@@ -15,6 +17,13 @@ if TYPE_CHECKING:
 ORIGIN = "app.example.test"
 CORE = ("plan", "evidence-quality", "export")
 PRIVACY = ("suppression", "deletion")
+MASK_COUNTS = {
+    "plan": 13,
+    "evidence-quality": 1,
+    "export": 4,
+    "suppression": 2,
+    "deletion": 2,
+}
 MAX_IMAGE = 131072
 CHUNK = 8192
 MAX_SIDE = 1800
@@ -156,10 +165,25 @@ SHAPE = r"""(root, config) => {
   root.__emCaptureMaskVerified = false;
   root.__emCaptureChangeKind = 'other';
   root.__emCaptureMaskKind = 'absent';
+  root.__emCaptureExpectedStyle = config.style;
+  root.__emCaptureSensitive = Object.freeze(
+    name === 'export' ? [...masks, root.children[3]] : [...masks]
+  );
   root.__emCaptureScroll = [
     window.scrollX, window.scrollY,
     all.map(e => [e,e.scrollLeft,e.scrollTop]), document.activeElement
   ];
+  root.__emCaptureVerifyMask = () => {
+    const masked = root.__emCaptureSensitive;
+    const target = getComputedStyle(root).visibility === 'visible';
+    const values = masked.every(e => getComputedStyle(e).visibility === 'hidden');
+    const outside = all.filter(e => !root.contains(e)).every(
+      e => getComputedStyle(e).visibility === 'hidden'
+    );
+    root.__emCaptureMaskKind = !target ? 'target' : !values ? 'values' :
+      !outside ? 'outside' : 'verified';
+    root.__emCaptureMaskVerified = target && values && outside;
+  };
   root.__emCaptureUnexpected = records => records.some(record => {
     if (record.type !== 'childList' || record.target !== document.documentElement) {
       root.__emCaptureChangeKind = record.type === 'attributes' ? 'attribute' :
@@ -168,20 +192,13 @@ SHAPE = r"""(root, config) => {
     }
     const nodes = [...record.addedNodes, ...record.removedNodes];
     if (!nodes.length || nodes.some(node => node.nodeType !== 1 ||
-        node.tagName !== 'STYLE' || node.textContent !== config.style)) {
+        node.tagName !== 'STYLE' || node.textContent !== config.style) ||
+        Array.from(record.removedNodes).includes(root.__emCaptureOwnedStyle)) {
       root.__emCaptureChangeKind = 'style';
       return true;
     }
     if (record.addedNodes.length) {
-      const masked = name === 'export' ? [...masks, root.children[3]] : masks;
-      const target = getComputedStyle(root).visibility === 'visible';
-      const values = masked.every(e => getComputedStyle(e).visibility === 'hidden');
-      const outside = all.filter(e => !root.contains(e)).every(
-        e => getComputedStyle(e).visibility === 'hidden'
-      );
-      root.__emCaptureMaskKind = !target ? 'target' : !values ? 'values' :
-        !outside ? 'outside' : 'verified';
-      root.__emCaptureMaskVerified = target && values && outside;
+      root.__emCaptureVerifyMask();
     }
     return false;
   });
@@ -194,14 +211,111 @@ SHAPE = r"""(root, config) => {
   return true;
 }"""
 
+INSTALL = """(root, style) => {
+  if (!root.__emCaptureObserver || root.__emCaptureOwnedStyle ||
+      style !== root.__emCaptureExpectedStyle) return false;
+  const node = document.createElement('style');
+  node.textContent = style;
+  root.__emCaptureOwnedStyle = node;
+  try {
+    document.documentElement.append(node);
+    root.__emCaptureStyleRules = JSON.stringify(Array.from(node.sheet.cssRules, r => r.cssText));
+    if (root.__emCaptureUnexpected(root.__emCaptureObserver.takeRecords()))
+      root.__emCaptureChanged = true;
+    root.__emCaptureVerifyMask();
+    return !root.__emCaptureChanged && root.__emCaptureMaskVerified;
+  } catch (_) { return false; }
+}"""
+
+GEOMETRY = """root => {
+  if (!root.__emCaptureObserver || !root.__emCaptureOwnedStyle ||
+      !root.__emCaptureOwnedStyle.isConnected ||
+      !window.visualViewport || window.visualViewport.scale !== 1) return null;
+  const rect = box => [box.left + window.scrollX, box.top + window.scrollY,
+    box.right + window.scrollX, box.bottom + window.scrollY];
+  const safe = (node, container = false) => {
+    const style = getComputedStyle(node);
+    return style.transform === 'none' && style.filter === 'none' &&
+      style.perspective === 'none' && (container || !['fixed','sticky'].includes(style.position));
+  };
+  const textSafe = node => {
+    const style = getComputedStyle(node);
+    const size = Number.parseFloat(style.fontSize);
+    return Number.isFinite(size) && size > 0 && size <= 32 && style.textShadow === 'none' &&
+      Number.parseFloat(style.webkitTextStrokeWidth || '0') === 0;
+  };
+  for (let node = root; node && node !== document.documentElement; node = node.parentElement)
+    if (!safe(node, true)) return null;
+  const rootBox = root.getBoundingClientRect();
+  if (rootBox.width <= 0 || rootBox.height <= 0 || rootBox.width > 1800 || rootBox.height > 1800)
+    return null;
+  if (!Array.isArray(root.__emCaptureSensitive) || !Object.isFrozen(root.__emCaptureSensitive))
+    return null;
+  const boxes = [];
+  let covered = 0;
+  for (const element of root.__emCaptureSensitive) {
+    if (!element.isConnected || !safe(element) || !textSafe(element)) return null;
+    let ancestor = element, depth = 0;
+    while (ancestor && ancestor !== root) {
+      if (++depth > 64 || !safe(ancestor)) return null;
+      ancestor = ancestor.parentElement;
+    }
+    if (ancestor !== root) return null;
+    const text = element.textContent.trim();
+    if (!text && element.tagName === 'UL' && element.children.length === 0) continue;
+    if (!text || text.length > 4096) return null;
+    covered += 1;
+    const block = element.getBoundingClientRect();
+    if (block.width <= 0 || block.height <= 0) return null;
+    boxes.push(rect(block));
+    for (const descendant of element.querySelectorAll('*')) {
+      if (!safe(descendant) || !textSafe(descendant)) return null;
+      const box = descendant.getBoundingClientRect();
+      if (box.width > 0 && box.height > 0) boxes.push(rect(box));
+    }
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) {
+      const node = walker.currentNode;
+      if (!node.textContent.trim()) continue;
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      const fragments = Array.from(range.getClientRects());
+      if (!fragments.length) return null;
+      for (const fragment of fragments) boxes.push(rect(fragment));
+      if (boxes.length > 256) return null;
+    }
+  }
+  if (!boxes.length || boxes.length > 256) return null;
+  return {root:rect(rootBox), boxes, count:root.__emCaptureSensitive.length, covered};
+}"""
+
 FINISH = """root => {
-  if (!root.__emCaptureObserver) return 'observer';
+  if (!root.__emCaptureObserver) {
+    if (root.__emCaptureOwnedStyle) root.__emCaptureOwnedStyle.remove();
+    return 'observer';
+  }
   const changed = root.__emCaptureChanged ||
     root.__emCaptureUnexpected(root.__emCaptureObserver.takeRecords());
+  const ownedStyle = root.__emCaptureOwnedStyle;
+  let styleIntact = false;
+  try {
+    styleIntact = !!ownedStyle && ownedStyle.isConnected &&
+      ownedStyle.parentNode === document.documentElement &&
+      ownedStyle.textContent === root.__emCaptureExpectedStyle &&
+      root.__emCaptureStyleRules === JSON.stringify(
+        Array.from(ownedStyle.sheet.cssRules, r => r.cssText)
+      );
+    if (styleIntact) root.__emCaptureVerifyMask();
+  } catch (_) { styleIntact = false; }
+  if (!styleIntact) {
+    root.__emCaptureMaskVerified = false;
+    root.__emCaptureMaskKind = 'absent';
+  }
   const maskVerified = root.__emCaptureMaskVerified;
   const changeKind = root.__emCaptureChangeKind;
   const maskKind = root.__emCaptureMaskKind;
   root.__emCaptureObserver.disconnect();
+  if (ownedStyle) ownedStyle.remove();
   const state = root.__emCaptureScroll;
   let restored = !!state && state[2].every(item => item[0].isConnected);
   let stateKind = 'detached';
@@ -222,6 +336,11 @@ FINISH = """root => {
   delete root.__emCaptureMaskVerified;
   delete root.__emCaptureChangeKind;
   delete root.__emCaptureMaskKind;
+  delete root.__emCaptureOwnedStyle;
+  delete root.__emCaptureExpectedStyle;
+  delete root.__emCaptureSensitive;
+  delete root.__emCaptureStyleRules;
+  delete root.__emCaptureVerifyMask;
   delete root.__emCaptureUnexpected;
   delete root.__emCaptureScroll;
   if (!root.isConnected) return 'detached';
@@ -270,8 +389,8 @@ def validate_png(data: bytes) -> None:
         if zlib.crc32(kind + chunk) & 0xFFFFFFFF != crc:
             raise ValueError("capture_png_refused")
         if kind == b"IHDR" and not seen and length == 13:
-            width, height, depth, color, compression, filtering, interlace = struct.unpack(
-                ">IIBBBBB", chunk
+            width, height, depth, color, compression, filtering, interlace = (
+                struct.unpack(">IIBBBBB", chunk)
             )
             if not (
                 1 <= width <= MAX_SIDE
@@ -297,7 +416,13 @@ def validate_png(data: bytes) -> None:
         ):
             # Exact constant color profiles carry no arbitrary metadata.
             pass
-        elif kind == b"IEND" and length == 0 and body and seen[-1] == b"IDAT" and end == len(data):
+        elif (
+            kind == b"IEND"
+            and length == 0
+            and body
+            and seen[-1] == b"IDAT"
+            and end == len(data)
+        ):
             seen.append(kind)
             break
         else:
@@ -323,38 +448,178 @@ def validate_png(data: bytes) -> None:
         raise ValueError("capture_png_refused") from None
 
 
-async def capture(page: "Page", name: str) -> None:
-    """Emit one fixed crop only after screenshot-only hiding and mutation checks."""
-    if name not in TARGETS:
-        raise ValueError("capture_checkpoint_refused")
-    parsed = urlsplit(page.url)
+def redaction_rectangles(
+    before: object, after: object, width: int, height: int, name: str
+) -> list[tuple[int, int, int, int]]:
+    """Bind stable CSS geometry to Playwright's integer CSS-pixel crop."""
     if (
-        parsed.scheme != "https"
-        or parsed.netloc != ORIGIN
-        or parsed.path not in ("", "/")
-        or parsed.query
-        or parsed.fragment
-    ):
-        raise ValueError("capture_origin_refused")
-    if not await page.evaluate("""() => {
-        const headings = document.querySelectorAll('.workspace-heading h2');
-        const links = Array.from(document.querySelectorAll('a'));
-        return headings.length === 1 && headings[0].textContent === 'Synthetic tenant 0' &&
-          !links.some(link => link.textContent === 'Sign in with configured identity');
-    }"""):
-        raise ValueError("capture_session_refused")
-    selector, _ = TARGETS[name]
-    locator = page.locator(selector)
-    if await locator.count() != 1:
-        raise ValueError("capture_region_refused")
-    handle = await locator.element_handle()
-    style = style_for(name)
-    if handle is None or not await handle.evaluate(SHAPE, {"name": name, "style": style}):
-        raise ValueError("capture_shape_refused")
-    try:
-        image = await handle.screenshot(
-            type="png", animations="allow", caret="initial", style=style, timeout=5000
+        type(before) is not dict
+        or before != after
+        or set(before) != {"root", "boxes", "count", "covered"}
+        or name not in MASK_COUNTS
+        or type(before["count"]) is not int
+        or before["count"] != MASK_COUNTS.get(name)
+        or type(before["covered"]) is not int
+        or before["covered"]
+        not in (
+            {MASK_COUNTS[name] - 1, MASK_COUNTS[name]}
+            if name == "export"
+            else {MASK_COUNTS[name]}
         )
+        or type(width) is not int
+        or type(height) is not int
+        or not 1 <= width <= MAX_SIDE
+        or not 1 <= height <= MAX_SIDE
+    ):
+        raise ValueError("capture_geometry_refused")
+    root, boxes = before["root"], before["boxes"]
+
+    def vector(value: object) -> list[float]:
+        if (
+            type(value) is not list
+            or len(value) != 4
+            or any(
+                type(n) not in (int, float) or abs(n) > 1e6 or not math.isfinite(n)
+                for n in value
+            )
+        ):
+            raise ValueError("capture_geometry_refused")
+        result = [float(n) for n in value]
+        if result[0] >= result[2] or result[1] >= result[3]:
+            raise ValueError("capture_geometry_refused")
+        return result
+
+    root_left, root_top, root_right, root_bottom = vector(root)
+    # Playwright 1.63 screenshotElement uses enclosingIntRect with this epsilon.
+    x0, y0 = math.floor(root_left + 0.001), math.floor(root_top + 0.001)
+    x1, y1 = math.ceil(root_right - 0.001), math.ceil(root_bottom - 0.001)
+    if (
+        (x1 - x0, y1 - y0) != (width, height)
+        or type(boxes) is not list
+        or not before["covered"] <= len(boxes) <= 256
+    ):
+        raise ValueError("capture_geometry_refused")
+    result: list[tuple[int, int, int, int]] = []
+    for box in boxes:
+        left, top, right, bottom = vector(box)
+        # Refuse overflowing or clipped source geometry instead of guessing.
+        if (
+            left < root_left - 0.001
+            or top < root_top - 0.001
+            or right > root_right + 0.001
+            or bottom > root_bottom + 0.001
+        ):
+            raise ValueError("capture_geometry_refused")
+        mask = (
+            max(0, math.floor(left) - x0 - 8),
+            max(0, math.floor(top) - y0 - 8),
+            min(width, math.ceil(right) - x0 + 8),
+            min(height, math.ceil(bottom) - y0 + 8),
+        )
+        if mask[0] >= mask[2] or mask[1] >= mask[3]:
+            raise ValueError("capture_geometry_refused")
+        result.append(mask)
+    return result
+
+
+def redact_png(data: bytes, rectangles: list[tuple[int, int, int, int]]) -> bytes:
+    """Irreversibly black out bounded pixels; raw screenshot never leaves the guest."""
+    validate_png(data)
+    width, height, _, color, _, _, _ = struct.unpack(">IIBBBBB", data[16:29])
+    channels = 3 if color == 2 else 4
+    if (
+        not rectangles
+        or len(rectangles) > 256
+        or any(
+            type(box) is not tuple
+            or len(box) != 4
+            or any(type(n) is not int for n in box)
+            or not (0 <= box[0] < box[2] <= width and 0 <= box[1] < box[3] <= height)
+            for box in rectangles
+        )
+    ):
+        raise ValueError("capture_geometry_refused")
+    offset, body = 8, bytearray()
+    while offset < len(data):
+        length = struct.unpack(">I", data[offset : offset + 4])[0]
+        kind = data[offset + 4 : offset + 8]
+        if kind == b"IDAT":
+            body.extend(data[offset + 8 : offset + 8 + length])
+        offset += 12 + length
+    stride = width * channels
+    raw = zlib.decompress(
+        bytes(body)
+    )  # validate_png already bounds and validates this stream.
+    previous = bytearray(stride)
+    output = bytearray()
+    black = bytes((0, 0, 0) if channels == 3 else (0, 0, 0, 255))
+    for y in range(height):
+        start = y * (stride + 1)
+        kind = raw[start]
+        row = bytearray(raw[start + 1 : start + 1 + stride])
+        if kind:
+            for i in range(stride):
+                left = row[i - channels] if i >= channels else 0
+                up = previous[i]
+                upper_left = previous[i - channels] if i >= channels else 0
+                if kind == 1:
+                    predictor = left
+                elif kind == 2:
+                    predictor = up
+                elif kind == 3:
+                    predictor = (left + up) // 2
+                else:
+                    p = left + up - upper_left
+                    distances = (abs(p - left), abs(p - up), abs(p - upper_left))
+                    predictor = (left, up, upper_left)[distances.index(min(distances))]
+                row[i] = (row[i] + predictor) & 255
+        previous = row[:]
+        intervals = sorted((x0, x1) for x0, y0, x1, y1 in rectangles if y0 <= y < y1)
+        merged: list[tuple[int, int]] = []
+        for left, right in intervals:
+            if merged and left <= merged[-1][1]:
+                merged[-1] = (merged[-1][0], max(merged[-1][1], right))
+            else:
+                merged.append((left, right))
+        for left, right in merged:
+            row[left * channels : right * channels] = black * (right - left)
+        output.append(0)
+        output.extend(row)
+
+    def chunk(kind: bytes, value: bytes) -> bytes:
+        return (
+            struct.pack(">I", len(value))
+            + kind
+            + value
+            + struct.pack(">I", zlib.crc32(kind + value))
+        )
+
+    sanitized = (
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", data[16:29])
+        + chunk(b"IDAT", zlib.compress(bytes(output)))
+        + chunk(b"IEND", b"")
+    )
+    validate_png(sanitized)
+    return sanitized
+
+
+async def _redacted_image(handle: Any, name: str, style: str) -> bytes:
+    try:
+        if await handle.evaluate(INSTALL, style) is not True:
+            raise ValueError("capture_mask_install_refused")
+        before = await handle.evaluate(GEOMETRY)
+        if before is None:
+            raise ValueError("capture_geometry_refused")
+        image = await handle.screenshot(
+            type="png",
+            animations="allow",
+            caret="initial",
+            style=style,
+            scale="css",
+            timeout=5000,
+        )
+        after = await handle.evaluate(GEOMETRY)
     except BaseException as error:
         try:
             await handle.evaluate(FINISH)
@@ -385,6 +650,93 @@ async def capture(page: "Page", name: str) -> None:
         )
         raise ValueError(reason)
     validate_png(image)
+    width, height = struct.unpack(">II", image[16:24])
+    return redact_png(image, redaction_rectangles(before, after, width, height, name))
+
+
+async def capture(page: "Page", name: str) -> None:
+    """Emit one fixed crop only after screenshot-only hiding and mutation checks."""
+    if name not in TARGETS:
+        raise ValueError("capture_checkpoint_refused")
+    parsed = urlsplit(page.url)
+    if (
+        parsed.scheme != "https"
+        or parsed.netloc != ORIGIN
+        or parsed.path not in ("", "/")
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise ValueError("capture_origin_refused")
+    if not await page.evaluate("""() => {
+        const headings = document.querySelectorAll('.workspace-heading h2');
+        const links = Array.from(document.querySelectorAll('a'));
+        return headings.length === 1 && headings[0].textContent === 'Synthetic tenant 0' &&
+          !links.some(link => link.textContent === 'Sign in with configured identity');
+    }"""):
+        raise ValueError("capture_session_refused")
+    selector, _ = TARGETS[name]
+    locator = page.locator(selector)
+    if await locator.count() != 1:
+        raise ValueError("capture_region_refused")
+    handle = await locator.element_handle()
+    style = style_for(name)
+    if handle is None or not await handle.evaluate(
+        SHAPE, {"name": name, "style": style}
+    ):
+        raise ValueError("capture_shape_refused")
+    reason: str | None = None
+    # Suppress internal traceback frames: they can contain the pre-redaction image.
+    # Preserve only the fixed, value-free categories understood by the host.
+    try:
+        image = await _redacted_image(handle, name, style)
+    except BaseException as exc:  # noqa: BLE001 - prevent raw pixels escaping in tracebacks
+        cancellation = (
+            "interrupt"
+            if isinstance(exc, KeyboardInterrupt)
+            else "exit"
+            if isinstance(exc, SystemExit)
+            else "cancelled"
+            if isinstance(exc, asyncio.CancelledError)
+            else "error"
+        )
+        safe_reasons = {
+            "capture_mask_install_refused",
+            "capture_geometry_refused",
+            "capture_png_refused",
+            "capture_observer_missing",
+            "capture_target_detached",
+            "capture_change_attribute",
+            "capture_change_text",
+            "capture_change_child",
+            "capture_change_style",
+            "capture_state_detached",
+            "capture_state_focus",
+            "capture_state_scroll",
+            "capture_mask_absent",
+            "capture_mask_target",
+            "capture_mask_values",
+            "capture_mask_outside",
+            "capture_mutated",
+        }
+        reason = (
+            exc.args[0]
+            if type(exc) is ValueError
+            and len(exc.args) == 1
+            and type(exc.args[0]) is str
+            and exc.args[0] in safe_reasons
+            else "capture_mutated"
+        )
+    else:
+        reason = None
+        cancellation = "error"
+    if reason is not None:
+        if cancellation == "interrupt":
+            raise KeyboardInterrupt() from None
+        if cancellation == "exit":
+            raise SystemExit(1) from None
+        if cancellation == "cancelled":
+            raise asyncio.CancelledError() from None
+        raise ValueError(reason) from None
     encoded = base64.b64encode(image).decode("ascii")
     parts = [encoded[index : index + CHUNK] for index in range(0, len(encoded), CHUNK)]
     for index, part in enumerate(parts):
@@ -470,7 +822,10 @@ def save_bundle(
 
     if tuple(core) != CORE or tuple(privacy) != PRIVACY:
         raise ValueError("capture_incomplete")
-    if any(not re.fullmatch(r"[0-9a-f]{40}", value) for value in (head, checked_out_commit, tree)):
+    if any(
+        not re.fullmatch(r"[0-9a-f]{40}", value)
+        for value in (head, checked_out_commit, tree)
+    ):
         raise ValueError("capture_source_refused")
     images = {**core, **privacy}
     for image in images.values():
@@ -495,12 +850,16 @@ def save_bundle(
         }
         for index, (name, image) in enumerate(images.items(), 1):
             destination = target / f"{index:02d}-{name}.png"
-            fd = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+            fd = os.open(
+                destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600
+            )
             files.append(destination)
             with os.fdopen(fd, "wb") as stream:
                 stream.write(image)
         destination = target / "manifest.json"
-        fd = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        fd = os.open(
+            destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600
+        )
         files.append(destination)
         with os.fdopen(fd, "w", encoding="utf-8") as stream:
             json.dump(manifest, stream, sort_keys=True)
@@ -519,7 +878,9 @@ def save_bundle(
         raise
 
 
-def verify_bundle(*, runner_temp: str, head: str, checked_out_commit: str, tree: str) -> None:
+def verify_bundle(
+    *, runner_temp: str, head: str, checked_out_commit: str, tree: str
+) -> None:
     """Recheck the exact output set before a workflow uploads it."""
     import os
     import stat
@@ -564,7 +925,8 @@ def verify_bundle(*, runner_temp: str, head: str, checked_out_commit: str, tree:
         "sessions": {"core": list(CORE), "privacy": list(PRIVACY)},
         "limitations": LIMITATIONS,
     } or any(
-        not re.fullmatch(r"[0-9a-f]{40}", value) for value in (head, checked_out_commit, tree)
+        not re.fullmatch(r"[0-9a-f]{40}", value)
+        for value in (head, checked_out_commit, tree)
     ):
         raise ValueError("capture_bundle_refused")
 
@@ -574,7 +936,10 @@ def main() -> None:
     import os
     import subprocess
 
-    if os.environ.get("GITHUB_ACTIONS") != "true" or os.environ.get("EM_OPERATOR_CAPTURE") != "1":
+    if (
+        os.environ.get("GITHUB_ACTIONS") != "true"
+        or os.environ.get("EM_OPERATOR_CAPTURE") != "1"
+    ):
         raise RuntimeError("Reviewed synthetic capture CI required")
 
     def git(*args: str) -> str:
