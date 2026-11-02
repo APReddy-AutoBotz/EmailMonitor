@@ -78,6 +78,46 @@ def test_added_case_does_not_relax_original_workflow_pin() -> None:
         assert hashlib.sha256(normalized).hexdigest() != expected
 
 
+@pytest.mark.parametrize(
+    ("before", "after"),
+    [
+        (b'EM_OPERATOR_CAPTURE: "1"', b'EM_OPERATOR_CAPTURE: "0"'),
+        (b"github.event.pull_request.head.sha || github.sha", b"github.sha"),
+        (b"Verify fixed synthetic screenshot bundle", b"Skip screenshot verification"),
+        (b"python scripts/isolation/operator_capture.py", b"python -c pass"),
+        (
+            b"actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+            b"actions/upload-artifact@unreviewed",
+        ),
+        (b"emailmonitor-synthetic-operator-captures/", b"unrestricted-output/"),
+        (b"retention-days: 1", b"retention-days: 90"),
+        (b"if-no-files-found: error", b"if-no-files-found: ignore"),
+    ],
+)
+def test_capture_workflow_pin_refuses_unreviewed_changes(before: bytes, after: bytes) -> None:
+    import hashlib
+    from pathlib import Path
+
+    from test_private_affiliation_diagnostic_workflow import (
+        PRESERVED_BOUNDARIES,
+        lifecycle_operator_baseline,
+    )
+
+    original = (
+        Path(__file__).resolve().parents[3] / ".github/workflows/operator-ui.yml"
+    ).read_bytes()
+    assert original.count(before) == 1
+    altered = original.replace(before, after)
+    try:
+        normalized = lifecycle_operator_baseline(altered)
+    except AssertionError:
+        return
+    assert (
+        hashlib.sha256(normalized).hexdigest()
+        != PRESERVED_BOUNDARIES[".github/workflows/operator-ui.yml"]
+    )
+
+
 @pytest.mark.parametrize("mode", ["delayed", "incomplete", "unsequenced"])
 def test_cancel_waits_for_resume_render_before_capturing_revision(mode: str) -> None:
     """Execute the authored sequence against a deterministic delayed reply model.

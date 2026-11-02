@@ -231,6 +231,30 @@ def test_workflow_has_no_extra_trigger_credentials_cache_or_data_sink(forbidden:
 
 def lifecycle_operator_baseline(content: bytes) -> bytes:
     """Allow exact lifecycle/metadata additions; pin every other original byte."""
+    # Normalize only the reviewed capture configuration and the two exact,
+    # success-gated, bounded artifact steps. Preserve the original digest.
+    capture_environment = (
+        b'      EM_OPERATOR_CAPTURE: "1"\n'
+        b"      EM_CAPTURE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}\n"
+        b"    steps:\n"
+    )
+    capture_steps = (
+        b"      - name: Verify fixed synthetic screenshot bundle\n"
+        b"        env:\n"
+        b"          PYTHONPATH: scripts/isolation\n"
+        b"        run: uv run --project services/backend python "
+        b"scripts/isolation/operator_capture.py\n"
+        b"      - name: Retain synthetic business crops for privacy review\n"
+        b"        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2\n"
+        b"        with:\n"
+        b"          name: emailmonitor-synthetic-business-crops-${{ github.sha }}\n"
+        b"          path: ${{ runner.temp }}/emailmonitor-synthetic-operator-captures/\n"
+        b"          retention-days: 1\n"
+        b"          if-no-files-found: error\n"
+    )
+    assert content.count(capture_environment) == 1
+    assert content.count(capture_steps) == 1 and content.endswith(capture_steps)
+    content = content.replace(capture_environment, b"    steps:\n")[: -len(capture_steps)]
     # Permit exactly the scoped, value-free guest metadata; keep the frozen digest.
     additions = (
         b"        id: operator-guest\n",
