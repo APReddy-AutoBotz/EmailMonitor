@@ -1,4 +1,4 @@
-name: Synthetic capture pixel regression
+name: Synthetic modal scroll control
 
 on:
   push:
@@ -18,18 +18,18 @@ jobs:
           fetch-depth: 0
       - name: Verify candidate source identity
         run: |
-          # Candidate 4ae8165520d43dc84a14f01a69d4a19918f65d87, tree bdb2389b76b4cdf97803b298dcd2e44f62f03472; Docker ignore adds only the diagnostic.
+          # Candidate 06c78c9f1271a02e6d6f52d43d9ad8d0b8e95ba4, tree 8f5bafd1f7ad1e5df8f311c0b37452b945035316.
           git merge-base --is-ancestor e3f068c8c93a72536922527969b8d7a3ed5d34be HEAD
           test "$(git rev-parse e3f068c8c93a72536922527969b8d7a3ed5d34be^{tree})" = 0756d919cf3f8aa9ca87a3251a6b97f87e1b287a
           while read -r expected path; do
             test "$(git rev-parse "HEAD:$path")" = "$expected"
           done <<'BLOBS'
-          5fcb3ddbcfe23773e00ecadf32d71cc7df4d5240 .dockerignore
+          1e55b8adeac907dc7c6a3aeb9ca5ab7bc6f960b4 .dockerignore
           849477dea406cb9d529e8d767d70e9b0c8705477 docs/41-offline-operator-ui-runbook.md
           ae285cdbd6b7e7d21cb7c6c6db736cd1446cc113 scripts/isolation/Dockerfile.operator-ui
           79df7f4a77c18238a91acfead0c071c99f55ed82 scripts/isolation/operator_capture.py
           452eaca0fe1b825d8bdfc34e273e0b87a15299a2 scripts/isolation/operator_ui_protocol.py
-          202be1db51c180ae4441b62cb9fbe5b195902d87 scripts/isolation/test_operator_capture_pixels.py
+          80f001da25e63d4880bbe0b3109f3589270bc4c5 scripts/isolation/test_operator_capture_pixels.py
           0354bedf45b8b29558ab6ed32554ffc696c96a8a services/backend/tests/test_operator_capture.py
           BLOBS
           git diff --quiet e3f068c8c93a72536922527969b8d7a3ed5d34be HEAD -- . \
@@ -42,7 +42,6 @@ jobs:
             ':(exclude)services/backend/tests/test_operator_capture.py' \
             ':(exclude).github/workflows/capture-pixel-regression.yml' \
             ':(exclude)scripts/isolation/Dockerfile.capture-pixel' \
-            ':(exclude)scripts/isolation/capture_pixel_diagnostic.py' \
             ':(exclude)scripts/isolation/run_capture_pixel_regression.py' \
             ':(exclude)services/backend/tests/test_capture_pixel_regression_runner.py'
       - name: Install pinned tooling and locked dependencies
@@ -51,7 +50,7 @@ jobs:
           "$RUNNER_TEMP/tooling/bin/python" -m pip install uv==0.12.23
           echo "$RUNNER_TEMP/tooling/bin" >> "$GITHUB_PATH"
           "$RUNNER_TEMP/tooling/bin/uv" sync --project services/backend --locked
-      - name: Run isolated synthetic Chromium pixel regression
+      - name: Run isolated synthetic Chromium modal scroll control
         env:
           PYTHONPATH: services/backend/src:tests:scripts/isolation
         run: uv run --project services/backend python scripts/isolation/run_capture_pixel_regression.py

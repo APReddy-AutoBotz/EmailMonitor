@@ -11,9 +11,15 @@ from emailmonitor.fetching.browser_fixture import validate_applied_profile
 from transport_topology import OWNER_LABEL, remove_owned, require_owner, resource
 
 BRANCH = "refs/heads/codex/capture-pixel-regression-20261102"
-COMMAND = ["python", "/app/capture_pixel_diagnostic.py"]
+COMMAND = [
+    "python",
+    "-c",
+    (
+        "from test_operator_capture_pixels import "
+        "test_actual_sandboxed_modal_scroll_guard as run; run()"
+    ),
+]
 PROXY_NAMES = {"http_proxy", "https_proxy", "all_proxy", "no_proxy"}
-FIXED_STAGES = frozenset((*range(21, 58), 59, *range(60, 74)))
 
 
 def validate_guest(value: dict[str, Any], image: str, owner: str, profile: Path) -> None:
@@ -141,12 +147,11 @@ def run() -> None:
         if guest is None:
             raise RuntimeError("capture_pixel_guest_missing")
         validate_guest(guest, image_id, owner, profile)
-        if guest["State"]["Running"] or guest["State"]["OOMKilled"]:
-            raise RuntimeError("capture_pixel_test_refused")
-        code = guest["State"]["ExitCode"]
-        if code != 0:
-            if type(code) is int and code in FIXED_STAGES:
-                raise RuntimeError(f"capture_pixel_stage_{code}")
+        if (
+            guest["State"]["Running"]
+            or guest["State"]["OOMKilled"]
+            or guest["State"]["ExitCode"] != 0
+        ):
             raise RuntimeError("capture_pixel_test_refused")
     finally:
         for kind, name in (("container", guest_name), ("image", image_name)):
@@ -163,20 +168,12 @@ def main() -> None:
     try:
         run()
     except BaseException as error:  # noqa: BLE001 - never emit guest or Docker output
-        fixed_stages = {f"capture_pixel_stage_{code}": f"stage_{code}" for code in FIXED_STAGES}
         if type(error) is RuntimeError and error.args == ("capture_pixel_cleanup_uncertain",):
-            print("capture_pixel_result=cleanup_uncertain")
-        elif (
-            type(error) is RuntimeError
-            and len(error.args) == 1
-            and type(error.args[0]) is str
-            and error.args[0] in fixed_stages
-        ):
-            print("capture_pixel_result=" + fixed_stages[error.args[0]])
+            print("capture_scroll_result=cleanup_uncertain")
         else:
-            print("capture_pixel_result=failed")
+            print("capture_scroll_result=failed")
         raise SystemExit(1) from None
-    print("capture_pixel_result=passed")
+    print("capture_scroll_result=passed")
 
 
 if __name__ == "__main__":
