@@ -176,7 +176,9 @@ SHAPE = r"""(root, config) => {
   );
   root.__emCaptureScroll = [
     window.scrollX, window.scrollY,
-    all.map(e => [e,e.scrollLeft,e.scrollTop]), document.activeElement
+    [document.documentElement, document.body, ...all].map(
+      e => [e,e.scrollLeft,e.scrollTop]
+    ), document.activeElement
   ];
   root.__emCaptureVerifyMask = () => {
     const masked = root.__emCaptureSensitive;
@@ -316,7 +318,7 @@ FINISH = """root => {
     }
     return 'observer';
   }
-  const changed = root.__emCaptureChanged ||
+  let changed = root.__emCaptureChanged ||
     root.__emCaptureUnexpected(root.__emCaptureObserver.takeRecords());
   const ownedStyle = root.__emCaptureOwnedStyle;
   let styleIntact = false;
@@ -334,9 +336,7 @@ FINISH = """root => {
     root.__emCaptureMaskKind = 'absent';
   }
   const maskVerified = root.__emCaptureMaskVerified;
-  const changeKind = root.__emCaptureChangeKind;
   const maskKind = root.__emCaptureMaskKind;
-  root.__emCaptureObserver.disconnect();
   let cleanup = true;
   if (ownedStyle) {
     try {
@@ -360,6 +360,10 @@ FINISH = """root => {
       );
     stateKind = document.activeElement !== state[3] ? 'focus' : 'scroll';
   }
+  changed = changed || root.__emCaptureChanged ||
+    root.__emCaptureUnexpected(root.__emCaptureObserver.takeRecords());
+  const changeKind = root.__emCaptureChangeKind;
+  root.__emCaptureObserver.disconnect();
   delete root.__emCaptureObserver;
   delete root.__emCaptureChanged;
   delete root.__emCaptureMaskVerified;
@@ -632,29 +636,65 @@ def redact_png(data: bytes, rectangles: list[tuple[int, int, int, int]]) -> byte
     return sanitized
 
 
+def _consume_cleanup_result(task: asyncio.Task[Any]) -> None:
+    """Consume late cleanup errors without sending exception text to the loop logger."""
+    try:
+        task.exception()
+    except BaseException:  # noqa: BLE001 - includes cancellation; never disclose task errors
+        pass
+
+
+async def _finish_capture(handle: Any) -> Any:
+    """Let one owned cleanup finish briefly if its caller is interrupted."""
+    task = asyncio.create_task(handle.evaluate(FINISH))
+    task.add_done_callback(_consume_cleanup_result)
+    try:
+        return await asyncio.shield(task)
+    except BaseException as error:
+        try:
+            await asyncio.wait_for(asyncio.shield(task), timeout=5)
+        except BaseException:  # noqa: BLE001 - retain the triggering exception
+            task.cancel()
+            error.add_note("capture_cleanup_unavailable")
+        raise
+
+
 async def _redacted_image(handle: Any, name: str, style: str) -> bytes:
+    finishing = False
     try:
         if await handle.evaluate(INSTALL, style) is not True:
             raise ValueError("capture_mask_install_refused")
-        before = await handle.evaluate(GEOMETRY)
-        if before is None:
-            raise ValueError("capture_geometry_refused")
-        image = await handle.screenshot(
-            type="png",
-            animations="allow",
-            caret="initial",
-            style=style,
-            scale="css",
-            timeout=5000,
-        )
-        after = await handle.evaluate(GEOMETRY)
+        # SHAPE saved the original focus and every element's scroll position.
+        # Prepare the fixed target before measuring: Playwright's screenshot
+        # otherwise scrolls an offscreen modal after our first geometry sample.
+        # Keep preparation and screenshot within the original five-second budget.
+        async with asyncio.timeout(5):
+            await handle.scroll_into_view_if_needed(timeout=5000)
+            before = await handle.evaluate(GEOMETRY)
+            if before is None:
+                raise ValueError("capture_geometry_refused")
+            image = await handle.screenshot(
+                type="png",
+                animations="allow",
+                caret="initial",
+                style=style,
+                scale="css",
+                timeout=5000,
+            )
+            after = await handle.evaluate(GEOMETRY)
+        validate_png(image)
+        width, height = struct.unpack(">II", image[16:24])
+        redacted = redact_png(image, redaction_rectangles(before, after, width, height, name))
+        del image
+        finishing = True
+        outcome = await _finish_capture(handle)
     except BaseException as error:
-        try:
-            await handle.evaluate(FINISH)
-        except BaseException:  # noqa: BLE001 - preserve the triggering failure
-            error.add_note("capture_cleanup_unavailable")
+        if not finishing:
+            try:
+                await _finish_capture(handle)
+            except BaseException:  # noqa: BLE001 - preserve the triggering failure
+                error.add_note("capture_cleanup_unavailable")
         raise
-    outcome = await handle.evaluate(FINISH)
     if outcome != "ok":
         reasons = {
             "observer": "capture_observer_missing",
@@ -677,9 +717,7 @@ async def _redacted_image(handle: Any, name: str, style: str) -> bytes:
             else "capture_mutated"
         )
         raise ValueError(reason)
-    validate_png(image)
-    width, height = struct.unpack(">II", image[16:24])
-    return redact_png(image, redaction_rectangles(before, after, width, height, name))
+    return redacted
 
 
 async def capture(page: "Page", name: str) -> None:

@@ -19,6 +19,7 @@ from typing import Any, cast
 
 from browser_acceptance import sandbox_status
 from operator_capture import (
+    FINISH,
     GEOMETRY,
     INSTALL,
     TARGETS,
@@ -352,6 +353,9 @@ class CaptureHandle:
             raise RuntimeError("Synthetic exposure was not established and restored")
         return cast(bytes, image)
 
+    async def scroll_into_view_if_needed(self, **options: Any) -> None:
+        await self.handle.scroll_into_view_if_needed(**options)
+
 
 class CaptureLocator:
     def __init__(
@@ -568,7 +572,11 @@ async def exercise() -> None:
                         raise RuntimeError("Synthetic focus pixels unavailable")
                     focus_images = [
                         base64.b64encode(item).decode("ascii")
-                        for item in (handle.focus_visible_image, handle.focus_hidden_image, image)
+                        for item in (
+                            handle.focus_visible_image,
+                            handle.focus_hidden_image,
+                            image,
+                        )
                     ]
                     result = await page.evaluate(FOCUS_ORACLE, focus_images)
                     if (
@@ -674,7 +682,8 @@ async def exercise() -> None:
                     try:
                         await capture(
                             cast(
-                                Page, CapturePage(page, "evidence-quality", test_focus_pixels=False)
+                                Page,
+                                CapturePage(page, "evidence-quality", test_focus_pixels=False),
                             ),
                             "evidence-quality",
                         )
@@ -715,3 +724,334 @@ def test_actual_sandboxed_chromium_redacts_temporarily_exposed_synthetic_values(
     if category == "cancelled":
         raise asyncio.CancelledError() from None
     raise RuntimeError("Synthetic Chromium regression refused") from None
+
+
+class ScrollCaptureHandle:
+    """Forward the original screenshot once; retain only synthetic test observations."""
+
+    def __init__(
+        self,
+        handle: Any,
+        page: Page,
+        *,
+        fail_restore: bool = False,
+        disturb_document: bool = False,
+        pause_finish: str = "",
+        entered: asyncio.Event | None = None,
+        release: asyncio.Event | None = None,
+    ) -> None:
+        self.handle, self.page = handle, page
+        self.fail_restore = fail_restore
+        self.disturb_document, self.pause_finish = disturb_document, pause_finish
+        self.entered, self.release = entered, release
+        self.document_disturbed = False
+        self.geometry: list[Any] = []
+        self.screenshot_count = 0
+        self.dialog_scroll_changed: bool | None = None
+        self.outer_scroll_changed: bool | None = None
+
+    async def evaluate(self, expression: str, *arguments: Any) -> Any:
+        if expression == FINISH:
+            self.dialog_scroll_changed = await self.page.evaluate("""() =>
+              document.querySelector('dialog').scrollTop !== window.__emOriginalDialogScroll
+            """)
+            self.outer_scroll_changed = await self.page.evaluate("""() =>
+              document.querySelector('.synthetic-outer').scrollTop !==
+                window.__emOriginalOuterScroll
+            """)
+            if self.fail_restore:
+                await self.page.evaluate("""() => {
+                  const dialog = document.querySelector('dialog');
+                  const current = dialog.scrollTop;
+                  Object.defineProperty(dialog, 'scrollTop', {
+                    configurable: true, get: () => current, set: () => {}
+                  });
+                }""")
+            if self.disturb_document:
+                self.document_disturbed = await self.page.evaluate("""() => {
+                  document.body.scrollTop += 23;
+                  document.documentElement.scrollTop += 21;
+                  return document.body.scrollTop !== window.__emBodyScroll &&
+                    document.documentElement.scrollTop !== window.__emDocumentScroll;
+                }""")
+            if self.pause_finish == "before" and self.entered and self.release:
+                self.entered.set()
+                await self.release.wait()
+        result = await self.handle.evaluate(expression, *arguments)
+        if expression == FINISH and self.pause_finish == "after" and self.entered and self.release:
+            self.entered.set()
+            await self.release.wait()
+        if expression == GEOMETRY:
+            self.geometry.append(result)
+        return result
+
+    async def screenshot(self, **options: Any) -> bytes:
+        self.screenshot_count += 1
+        return cast(bytes, await self.handle.screenshot(**options))
+
+    async def scroll_into_view_if_needed(self, **options: Any) -> None:
+        await self.handle.scroll_into_view_if_needed(**options)
+
+
+class ScrollCaptureLocator:
+    def __init__(self, locator: Any, page: Page, **options: Any) -> None:
+        self.locator, self.page = locator, page
+        self.options = options
+        self.handle: ScrollCaptureHandle | None = None
+
+    async def count(self) -> int:
+        return cast(int, await self.locator.count())
+
+    async def element_handle(self) -> ScrollCaptureHandle:
+        self.handle = ScrollCaptureHandle(
+            await self.locator.element_handle(),
+            self.page,
+            **self.options,
+        )
+        return self.handle
+
+
+class ScrollCapturePage:
+    def __init__(self, page: Page, **options: Any) -> None:
+        self.page = page
+        self.options = options
+        self.capture_locator: ScrollCaptureLocator | None = None
+
+    @property
+    def url(self) -> str:
+        return self.page.url
+
+    async def evaluate(self, expression: str) -> Any:
+        return await self.page.evaluate(expression)
+
+    def locator(self, selector: str) -> ScrollCaptureLocator:
+        self.capture_locator = ScrollCaptureLocator(
+            self.page.locator(selector), self.page, **self.options
+        )
+        return self.capture_locator
+
+
+async def exercise_scroll_guard() -> None:
+    """Controlled modal mechanism; all screenshot bytes stay inside the guest."""
+    html = (
+        fixture("evidence-quality")
+        .replace(
+            "<h2 id='evidence-title'>Evidence and review</h2>",
+            "<h2 id='evidence-title'>Evidence and review</h2>"
+            "<div class='synthetic-spacer'></div>"
+            "<div class='synthetic-outer'><div class='nested-spacer'></div>",
+        )
+        .replace("</section></dialog>", "</section></div></dialog>")
+        .replace("</body>", "<div class='body-spacer'></div></body>")
+    )
+    async with async_playwright() as playwright:
+        browser = await playwright.chromium.launch(
+            channel="chromium",
+            headless=True,
+            chromium_sandbox=True,
+            args=["--enable-automation"],
+        )
+        try:
+            if browser.version != "153.0.8010.12":
+                raise RuntimeError("Synthetic scroll control refused")
+            context = await browser.new_context(service_workers="block", accept_downloads=False)
+            page = await context.new_page()
+            await page.goto("chrome://sandbox", wait_until="domcontentloaded")
+            sandbox_status(
+                await page.locator("#sandbox-status").inner_text(),
+                await page.locator("#evaluation").inner_text(),
+            )
+            command = await (await context.new_cdp_session(page)).send(
+                "Browser.getBrowserCommandLine"
+            )
+            if "--no-sandbox" in command["arguments"]:
+                raise RuntimeError("Synthetic scroll control refused")
+
+            async def route_request(route: Route) -> None:
+                if route.request.method == "GET" and route.request.url == ORIGIN:
+                    await route.fulfill(status=200, content_type="text/html", body=html)
+                elif (
+                    route.request.method == "GET" and route.request.url == ORIGIN + "synthetic.css"
+                ):
+                    await route.fulfill(
+                        status=200,
+                        content_type="text/css",
+                        body="html{overflow-y:scroll} "
+                        "body{font:16px sans-serif;height:1200px;overflow:auto} "
+                        ".body-spacer{height:3000px} "
+                        "dialog{max-height:320px;overflow:auto} .synthetic-spacer{height:1000px} "
+                        ".synthetic-outer{height:210px;overflow:auto}.nested-spacer{height:500px}",
+                    )
+                else:
+                    await route.abort()
+
+            await page.route("**/*", route_request)
+            await page.goto(ORIGIN, wait_until="load")
+            await page.locator("dialog").evaluate(
+                "dialog => { dialog.removeAttribute('open'); dialog.showModal(); }"
+            )
+            await page.locator("dialog > button.close").focus()
+            initial = await page.evaluate("""() => {
+              const dialog = document.querySelector('dialog');
+              const quality = document.querySelector(
+                'section[aria-label="Article observation quality"]');
+              document.body.scrollTop = 41;
+              document.documentElement.scrollTop = 37;
+              window.__emBodyScroll = document.body.scrollTop;
+              window.__emDocumentScroll = document.documentElement.scrollTop;
+              dialog.scrollTop = 0;
+              document.querySelector('.synthetic-outer').scrollTop = 0;
+              window.__emOriginalOuterScroll = 0;
+              window.__emOriginalDialogScroll = dialog.scrollTop;
+              return window.__emBodyScroll === 41 && window.__emDocumentScroll === 37 &&
+                dialog.scrollTop === 0 && quality.getBoundingClientRect().top >=
+                dialog.getBoundingClientRect().bottom && document.activeElement ===
+                dialog.querySelector('button.close');
+            }""")
+            if initial is not True:
+                raise RuntimeError("Synthetic scroll control refused")
+            wrapped = ScrollCapturePage(page, disturb_document=True)
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                await capture(cast(Page, wrapped), "evidence-quality")
+            handle = wrapped.capture_locator.handle if wrapped.capture_locator else None
+            if (
+                not output.getvalue()
+                or handle is None
+                or handle.screenshot_count != 1
+                or handle.dialog_scroll_changed is not True
+                or handle.outer_scroll_changed is not True
+                or handle.document_disturbed is not True
+                or len(handle.geometry) != 2
+                or any(type(value) is not dict for value in handle.geometry)
+                or handle.geometry[0] != handle.geometry[1]
+            ):
+                raise RuntimeError("Synthetic scroll control refused")
+            frames = [json.loads(line) for line in output.getvalue().splitlines()]
+            if not frames or any(
+                set(frame) != {"kind", "name", "part", "parts", "data"}
+                or frame["kind"] != "capture"
+                or frame["name"] != "evidence-quality"
+                or frame["part"] != index
+                or frame["parts"] != len(frames)
+                for index, frame in enumerate(frames)
+            ):
+                raise RuntimeError("Synthetic scroll control refused")
+            image = base64.b64decode("".join(frame["data"] for frame in frames), validate=True)
+            width, height = struct.unpack(">II", image[16:24])
+            assert_black_rectangles(
+                image,
+                redaction_rectangles(
+                    handle.geometry[0], handle.geometry[1], width, height, "evidence-quality"
+                ),
+            )
+            restored = await page.evaluate("""() => {
+              const dialog = document.querySelector('dialog');
+              return dialog.scrollTop === 0 &&
+                document.querySelector('.synthetic-outer').scrollTop === 0 &&
+                document.body.scrollTop === window.__emBodyScroll &&
+                document.documentElement.scrollTop === window.__emDocumentScroll &&
+                document.activeElement ===
+                dialog.querySelector('button.close');
+            }""")
+            if restored is not True:
+                raise RuntimeError("Synthetic scroll control refused")
+
+            wrapped = ScrollCapturePage(page, fail_restore=True)
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                try:
+                    await capture(cast(Page, wrapped), "evidence-quality")
+                except ValueError as error:
+                    if error.args != ("capture_state_scroll",):
+                        raise RuntimeError("Synthetic scroll control refused") from None
+                else:
+                    raise RuntimeError("Synthetic scroll control refused")
+            if output.getvalue():
+                raise RuntimeError("Synthetic scroll control refused")
+            await page.evaluate("delete document.querySelector('dialog').scrollTop")
+            await page.evaluate("document.querySelector('dialog').scrollTop = 0")
+            await page.evaluate("document.querySelector('.synthetic-outer').scrollTop = 0")
+
+            for phase in ("before", "after"):
+                entered, release = asyncio.Event(), asyncio.Event()
+                wrapped = ScrollCapturePage(
+                    page, pause_finish=phase, entered=entered, release=release
+                )
+                output = io.StringIO()
+                with contextlib.redirect_stdout(output):
+                    task = asyncio.create_task(capture(cast(Page, wrapped), "evidence-quality"))
+                    try:
+                        await asyncio.wait_for(entered.wait(), timeout=20)
+                        task.cancel()
+                        await asyncio.sleep(0)
+                        release.set()
+                        try:
+                            await task
+                        except asyncio.CancelledError:
+                            pass
+                        else:
+                            raise RuntimeError("Synthetic interruption control refused")
+                    finally:
+                        release.set()
+                        if not task.done():
+                            task.cancel()
+                        try:
+                            await task
+                        except BaseException:  # noqa: BLE001 - retain the control's outcome
+                            pass
+                if output.getvalue() or not await page.evaluate("""() => {
+                  const dialog = document.querySelector('dialog');
+                  return dialog.scrollTop === 0 &&
+                    document.querySelector('.synthetic-outer').scrollTop === 0 &&
+                    document.body.scrollTop === window.__emBodyScroll &&
+                    document.documentElement.scrollTop === window.__emDocumentScroll &&
+                    document.activeElement === dialog.querySelector('button.close');
+                }"""):
+                    raise RuntimeError("Synthetic interruption control refused")
+
+            quality = page.locator('section[aria-label="Article observation quality"]')
+            await quality.scroll_into_view_if_needed(timeout=5000)
+            before_visible = await page.evaluate("""() => {
+              const dialog = document.querySelector('dialog');
+              window.__emOriginalDialogScroll = dialog.scrollTop;
+              window.__emOriginalOuterScroll = document.querySelector('.synthetic-outer').scrollTop;
+              return document.activeElement === dialog.querySelector('button.close');
+            }""")
+            if before_visible is not True:
+                raise RuntimeError("Synthetic scroll control refused")
+            wrapped = ScrollCapturePage(page)
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                await capture(cast(Page, wrapped), "evidence-quality")
+            handle = wrapped.capture_locator.handle if wrapped.capture_locator else None
+            if (
+                not output.getvalue()
+                or handle is None
+                or handle.screenshot_count != 1
+                or handle.dialog_scroll_changed is not False
+                or handle.outer_scroll_changed is not False
+                or len(handle.geometry) != 2
+                or handle.geometry[0] != handle.geometry[1]
+            ):
+                raise RuntimeError("Synthetic scroll control refused")
+            after_visible = await page.evaluate("""() => {
+              const dialog = document.querySelector('dialog');
+              return dialog.scrollTop === window.__emOriginalDialogScroll &&
+                document.querySelector('.synthetic-outer').scrollTop ===
+                  window.__emOriginalOuterScroll &&
+                document.activeElement === dialog.querySelector('button.close');
+            }""")
+            if after_visible is not True:
+                raise RuntimeError("Synthetic scroll control refused")
+            await context.close()
+        finally:
+            await browser.close()
+
+
+def test_actual_sandboxed_modal_scroll_guard() -> None:
+    require_existing_isolation()
+    try:
+        asyncio.run(asyncio.wait_for(exercise_scroll_guard(), timeout=180))
+    except BaseException:  # noqa: BLE001 - never emit screenshot data or guest traces
+        raise RuntimeError("Synthetic scroll control refused") from None
