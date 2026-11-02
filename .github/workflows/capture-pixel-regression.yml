@@ -1,4 +1,4 @@
-name: Synthetic capture pixel regression
+name: Synthetic capture focus control
 
 on:
   push:
@@ -24,7 +24,7 @@ jobs:
           while read -r expected path; do
             test "$(git rev-parse "HEAD:$path")" = "$expected"
           done <<'BLOBS'
-          1e55b8adeac907dc7c6a3aeb9ca5ab7bc6f960b4 .dockerignore
+          0ac84f9f0299daed434f5a774612a4318c80319e .dockerignore
           664bddf90d4ebb83c03a8784e60287793c571782 docs/41-offline-operator-ui-runbook.md
           ae285cdbd6b7e7d21cb7c6c6db736cd1446cc113 scripts/isolation/Dockerfile.operator-ui
           dd3c0477d23d09991eff6dd93d1cb31c08a1b9b0 scripts/isolation/operator_capture.py
@@ -42,6 +42,7 @@ jobs:
             ':(exclude)services/backend/tests/test_operator_capture.py' \
             ':(exclude).github/workflows/capture-pixel-regression.yml' \
             ':(exclude)scripts/isolation/Dockerfile.capture-pixel' \
+            ':(exclude)scripts/isolation/capture_focus_probe.py' \
             ':(exclude)scripts/isolation/run_capture_pixel_regression.py' \
             ':(exclude)services/backend/tests/test_capture_pixel_regression_runner.py'
       - name: Install pinned tooling and locked dependencies
@@ -50,7 +51,7 @@ jobs:
           "$RUNNER_TEMP/tooling/bin/python" -m pip install uv==0.12.23
           echo "$RUNNER_TEMP/tooling/bin" >> "$GITHUB_PATH"
           "$RUNNER_TEMP/tooling/bin/uv" sync --project services/backend --locked
-      - name: Run isolated synthetic Chromium pixel regression
+      - name: Run isolated synthetic Chromium focus control
         env:
           PYTHONPATH: services/backend/src:tests:scripts/isolation
         run: uv run --project services/backend python scripts/isolation/run_capture_pixel_regression.py
