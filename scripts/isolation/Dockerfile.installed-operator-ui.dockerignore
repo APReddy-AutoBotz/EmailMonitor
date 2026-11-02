@@ -9,6 +9,7 @@
 !scripts/isolation/
 !scripts/isolation/browser_acceptance.py
 !scripts/isolation/operator_ui_protocol.py
+!scripts/isolation/operator_capture.py
 !scripts/isolation/operator_ui_acceptance.py
 !scripts/isolation/installed_operator_browser.py
 !scripts/isolation/installed_operator_redirects.py

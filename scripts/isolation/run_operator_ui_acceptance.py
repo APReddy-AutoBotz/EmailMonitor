@@ -14,6 +14,7 @@ from typing import Any
 from emailmonitor.fetching.browser_fixture import validate_applied_profile, write_bounded_reply
 from fastapi import FastAPI
 from guest_outcome import guest_failure, guest_frame, guest_stage, observed_guest
+from operator_capture import CORE, PRIVACY, Collector
 from operator_ui_asgi import relay
 from operator_ui_protocol import DiagnosticFrame, RequestFrame, encoded_reply, stderr_summary
 from transport_topology import OWNER_LABEL, docker, remove_owned, require_owner, resource
@@ -113,6 +114,13 @@ def conversation(
         bufsize=0,
     )
     assert process.stdin and process.stdout and process.stderr
+    capture_enabled = os.environ.get("EM_OPERATOR_CAPTURE") == "1"
+    journey = setup.get("journey")
+    collector = (
+        Collector(CORE if journey is None else PRIVACY)
+        if capture_enabled and journey in (None, "controlled_privacy")
+        else None
+    )
     deadline = time.monotonic() + 180
     buffer, errors = bytearray(), bytearray()
     total, last_identifier = 0, 0
@@ -175,6 +183,11 @@ def conversation(
                         if len(line) > 32768:
                             raise RuntimeError("UI request frame exceeded")
                         value = json.loads(line)
+                        if value.get("kind") == "capture":
+                            if collector is None:
+                                raise RuntimeError("Capture frame not permitted")
+                            collector.accept(value)
+                            continue
                         if value.get("kind") in {"stage", "failure"}:
                             diagnostic = DiagnosticFrame.model_validate(value)
                             if diagnostic.kind == "failure":
@@ -296,6 +309,10 @@ def conversation(
         process.stdin.close()
         if process.wait(timeout=10) != 0 or result.get("diagnostic") != "synthetic-operator-ui":
             raise RuntimeError("Actual UI completion evidence missing")
+        if "_capture_images" in result:
+            raise RuntimeError("Unexpected capture result field")
+        if collector is not None:
+            result["_capture_images"] = collector.finish()
         return result
     finally:
         if process.poll() is None:
@@ -369,6 +386,12 @@ def run(
             "--env=XDG_CONFIG_HOME=/tmp/browser-config",
             "--env=CHROME_CONFIG_HOME=/tmp/browser-config",
             "--env=XDG_CACHE_HOME=/tmp/browser-cache",
+            *(
+                ["--env=EM_OPERATOR_CAPTURE=1"]
+                if os.environ.get("EM_OPERATOR_CAPTURE") == "1"
+                and setup.get("journey") in (None, "controlled_privacy")
+                else []
+            ),
             image_id,
             "python",
             "/app/operator_ui_acceptance.py",

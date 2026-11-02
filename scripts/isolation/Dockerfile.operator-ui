@@ -6,6 +6,7 @@ RUN python -m pip install --no-cache-dir uv==0.12.23 && uv sync --locked
 COPY services/backend/src ./src
 COPY scripts/isolation/browser_acceptance.py ./browser_acceptance.py
 COPY scripts/isolation/operator_ui_protocol.py ./operator_ui_protocol.py
+COPY scripts/isolation/operator_capture.py ./operator_capture.py
 COPY scripts/isolation/operator_ui_acceptance.py ./operator_ui_acceptance.py
 COPY apps/web/dist ./operator-web
 ENV PATH="/app/.venv/bin:$PATH" PYTHONPATH="/app/src" PYTHONDONTWRITEBYTECODE=1

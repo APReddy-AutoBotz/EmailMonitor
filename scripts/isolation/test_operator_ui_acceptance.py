@@ -28,6 +28,7 @@ from emailmonitor.results.broker import publish as publish_exports
 from emailmonitor.results.models import Filters
 from emailmonitor.results.service import Results
 from entitlement_sql_diagnostic import entitlement_diagnostic
+from operator_capture import save_bundle
 from operator_queue_probe import observe as observe_parse_queue
 from operator_ui_protocol import (
     RequestFrame,
@@ -450,6 +451,7 @@ WHERE i.organization_id=:org AND j.kind='extraction' LIMIT 33
             thread.start()
             source_commit, source_tree = operator_source_identity()
             evidence = run(app, setup, control, before_reply)
+            core_capture = evidence.pop("_capture_images", None)
             assert operator_source_identity() == (source_commit, source_tree)
             assert "source_tree" not in evidence and "source_commit" not in evidence
             evidence["source_commit"] = source_commit
@@ -496,6 +498,7 @@ WHERE i.organization_id=:org AND j.kind='extraction' LIMIT 33
             }
             assert operator_source_identity() == (source_commit, source_tree)
             privacy_evidence = run(app, privacy_setup, control, before_reply)
+            privacy_capture = privacy_evidence.pop("_capture_images", None)
             assert operator_source_identity() == (source_commit, source_tree)
             assert "source_tree" not in privacy_evidence and "source_commit" not in privacy_evidence
             privacy_evidence["source_commit"] = source_commit
@@ -590,3 +593,14 @@ WHERE i.organization_id=:org AND j.kind='extraction' LIMIT 33
             pass
         print("operator-entitlement-invocations " + json.dumps(observed), flush=True)
     assert observed["complete"] is True
+    if os.environ.get("EM_OPERATOR_CAPTURE") == "1":
+        if not isinstance(core_capture, dict) or not isinstance(privacy_capture, dict):
+            raise RuntimeError("Complete synthetic capture evidence required")
+        save_bundle(
+            core_capture,
+            privacy_capture,
+            runner_temp=os.environ["RUNNER_TEMP"],
+            head=os.environ["EM_CAPTURE_HEAD_SHA"],
+            checked_out_commit=source_commit,
+            tree=source_tree,
+        )

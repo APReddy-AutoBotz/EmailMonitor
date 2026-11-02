@@ -6,6 +6,7 @@ RUN python -m pip install --no-cache-dir uv==0.12.23 && uv sync --locked
 COPY services/backend/src ./src
 COPY scripts/isolation/browser_acceptance.py ./browser_acceptance.py
 COPY scripts/isolation/operator_ui_protocol.py ./operator_ui_protocol.py
+COPY scripts/isolation/operator_capture.py ./operator_capture.py
 COPY scripts/isolation/operator_ui_acceptance.py ./operator_ui_helpers.py
 COPY scripts/isolation/installed_xml_browser.py ./installed_xml_browser.py
 COPY scripts/isolation/installed_operator_browser.py ./operator_ui_acceptance.py

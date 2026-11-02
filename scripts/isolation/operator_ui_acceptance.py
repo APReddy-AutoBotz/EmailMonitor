@@ -16,6 +16,7 @@ from typing import Any, Literal, cast
 from urllib.parse import parse_qs, urlsplit
 
 from browser_acceptance import sandbox_status
+from operator_capture import capture as capture_business
 from operator_ui_protocol import (
     ERRORS,
     EVIDENCE_PHASES,
@@ -507,6 +508,8 @@ async def deletion_open_confirmation(
     await expect(confirmation).to_contain_text("all existing exports in this organization")
     mark(phases[4])
     await expect(confirmation).to_contain_text("Physical purge")
+    if os.environ.get("EM_OPERATOR_CAPTURE") == "1" and not commit:
+        await capture_business(page, "deletion")
     return confirmation
 
 
@@ -1789,6 +1792,9 @@ async def main() -> None:
     if setup.get("kind") != "bootstrap" or setup.get("origin") != ORIGIN:
         raise RuntimeError("Fixed synthetic UI origin required")
     validate_journey(setup)
+    capture_enabled = os.environ.get("EM_OPERATOR_CAPTURE") == "1"
+    if capture_enabled and setup.get("journey") not in (None, "controlled_privacy"):
+        raise RuntimeError("Capture is restricted to the two operator sessions")
     root = Path("/app/operator-web")
     manifest = asset_manifest(root)
     if manifest != setup.get("assets") or "index.html" not in manifest:
@@ -2097,6 +2103,8 @@ async def main() -> None:
                     confirmation = page.get_by_role("dialog")
                     await expect(confirmation).to_contain_text("throughout this organization")
                     await expect(confirmation).to_contain_text(selected_address)
+                    if capture_enabled and not commit:
+                        await capture_business(page, "suppression")
                     suppression_phase = "confirm_suppression" if commit else "cancel_confirmation"
                     await activate(
                         page,
@@ -2712,6 +2720,8 @@ async def main() -> None:
                 page, page.get_by_role("button", name="Create and validate plan", exact=True)
             )
             await page.get_by_role("region", name="Server source plan").wait_for()
+            if capture_enabled:
+                await capture_business(page, "plan")
             await activate(page, page.get_by_role("button", name="Open draft job", exact=True))
             saved_draft = (
                 await page.get_by_role(
@@ -2807,6 +2817,8 @@ async def main() -> None:
                 "Parser-specific reasons are not recorded for this route.", exact=True
             ).wait_for()
             await expect(quality).to_contain_text("Missing affiliations remain unobserved")
+            if capture_enabled:
+                await capture_business(page, "evidence-quality")
             metadata = page.get_by_role("region", name="Retained article metadata", exact=True)
             await expect(metadata).to_contain_text("Example Research Journal")
             await expect(metadata).to_contain_text("Content digest:")
@@ -2957,6 +2969,8 @@ async def main() -> None:
             paper_preview = page.get_by_role("region", name="Current export preview")
             await expect(paper_preview).to_contain_text("1 contacts; 1 separate article outcomes")
             await expect(paper_preview).to_contain_text("Paper DOI: 10.9999/synthetic.article-a")
+            if capture_enabled:
+                await capture_business(page, "export")
             await type_text(page, paper_input, "")
             await expect(paper_preview).not_to_be_visible()
             await activate(

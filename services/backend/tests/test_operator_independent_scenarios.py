@@ -164,6 +164,31 @@ def test_moved_privacy_sequence_preserves_every_original_statement() -> None:
         for node in ast.walk(main)
         if isinstance(node, ast.AsyncFunctionDef) and node.name == "privacy_journey"
     )
+    # Only the fixed capture checkpoint may be added; compare the remaining
+    # journey to the exact pre-capture sequence, including all assertions.
+    suppression_loop = next(
+        node
+        for node in function.body
+        if isinstance(node, ast.For)
+        and any("selected_address" in ast.unparse(item) for item in node.body)
+    )
+    checkpoints = [
+        (index, item)
+        for index, item in enumerate(suppression_loop.body)
+        if isinstance(item, ast.If) and "capture_business" in ast.unparse(item)
+    ]
+    assert len(checkpoints) == 1
+    index, checkpoint = checkpoints[0]
+    assert ast.unparse(checkpoint) == (
+        "if capture_enabled and (not commit):\n    await capture_business(page, 'suppression')"
+    )
+    assert ast.unparse(suppression_loop.body[index - 1]) == (
+        "await expect(confirmation).to_contain_text(selected_address)"
+    )
+    assert ast.unparse(suppression_loop.body[index + 1]).startswith(
+        "suppression_phase = 'confirm_suppression'"
+    )
+    del suppression_loop.body[index]
     # AST hash is the 27-statement sequence from the previously published head,
     # before the required session boundary; line numbers and formatting are excluded.
     moved = ast.Module(body=function.body[1:], type_ignores=[])

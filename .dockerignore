@@ -55,5 +55,6 @@ apps/web/dist/assets/**
 !apps/web/dist/assets/index-*.js
 !apps/web/dist/assets/index-*.css
 !scripts/isolation/operator_ui_protocol.py
+!scripts/isolation/operator_capture.py
 **/.env
 **/.env.*

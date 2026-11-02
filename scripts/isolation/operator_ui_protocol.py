@@ -801,6 +801,13 @@ class DiagnosticFrame(BaseModel):
             "route_headers_future_state",
             "route_headers_loop_state",
             "route_headers_iteration_state",
+            "capture_checkpoint_refused",
+            "capture_origin_refused",
+            "capture_session_refused",
+            "capture_region_refused",
+            "capture_shape_refused",
+            "capture_mutated",
+            "capture_png_refused",
         ]
         | InstalledReason
     ) = "unknown"
@@ -971,6 +978,17 @@ def export_assertion_line(error: BaseException) -> int | None:
 
 def failure_reason(error: BaseException) -> str:
     """Exact known source messages only; no substring or arbitrary exception text."""
+    if type(error) is ValueError and len(error.args) == 1 and type(error.args[0]) is str:
+        if error.args[0] in {
+            "capture_checkpoint_refused",
+            "capture_origin_refused",
+            "capture_session_refused",
+            "capture_region_refused",
+            "capture_shape_refused",
+            "capture_mutated",
+            "capture_png_refused",
+        }:
+            return error.args[0]
     if type(error) is not RuntimeError or len(error.args) != 1 or type(error.args[0]) is not str:
         return "unknown"
     return {
