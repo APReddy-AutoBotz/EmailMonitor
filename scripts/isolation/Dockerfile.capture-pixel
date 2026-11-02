@@ -7,6 +7,5 @@ COPY services/backend/src ./src
 COPY scripts/isolation/browser_acceptance.py ./browser_acceptance.py
 COPY scripts/isolation/operator_capture.py ./operator_capture.py
 COPY scripts/isolation/test_operator_capture_pixels.py ./test_operator_capture_pixels.py
-COPY scripts/isolation/capture_csp_probe.py ./capture_csp_probe.py
 ENV PATH="/app/.venv/bin:$PATH" PYTHONPATH="/app/src" PYTHONDONTWRITEBYTECODE=1
 USER 1000:1000

@@ -282,8 +282,9 @@ const root=new Element('DL',[0.2,0.3,100.2,100.3]); root.parentElement=html;
 const value=new Element('DD',[20.5,20.5,30.5,30.5],'synthetic value');
 const row=new Element('DIV',[20,20,40,40]); row.parentElement=root; value.parentElement=row;
 root.__emCaptureSensitive=Object.freeze([value]); root.__emCaptureObserver={};
-root.__emCaptureOwnedStyle={isConnected:true};
-global.document={documentElement:html,
+root.__emCaptureOwnedStyle={disabled:false,cssRules:Array.from({length:6},()=>({cssText:'fixed'}))};
+root.__emCaptureStyleRules=JSON.stringify(Array(6).fill('fixed'));
+global.document={documentElement:html,adoptedStyleSheets:[root.__emCaptureOwnedStyle],
   createTreeWalker() { let seen=false; return {currentNode:null,nextNode() {
     if(seen)return false; seen=true; this.currentNode=textNode; return true; }}; },
   createRange() {return {selectNodeContents(){},
@@ -300,7 +301,9 @@ value.position='fixed'; assert.equal(geometry(root),null); value.position='stati
 value.transform='matrix(1,0,0,1,0,0)'; assert.equal(geometry(root),null); value.transform='none';
 value.fontSize='64px'; assert.equal(geometry(root),null); value.fontSize='16px';
 value.textShadow='1px 1px red'; assert.equal(geometry(root),null); value.textShadow='none';
-root.__emCaptureOwnedStyle.isConnected=false; assert.equal(geometry(root),null);
+root.__emCaptureOwnedStyle.disabled=true; assert.equal(geometry(root),null);
+root.__emCaptureOwnedStyle.disabled=false; document.adoptedStyleSheets=[];
+assert.equal(geometry(root),null);
 """
     result = subprocess.run(
         ["node", "-e", script, GEOMETRY], capture_output=True, check=False, timeout=5
@@ -796,7 +799,8 @@ function setup() {
   const heading=new E('H2','Synthetic tenant 0');
   const body=new E('BODY','',[heading,root]);
   const html=new E('HTML','',[body]);
-  global.document={body,documentElement:html,activeElement:new E('BUTTON','go'),styleSheets:[],
+  global.document={body,documentElement:html,activeElement:new E('BUTTON','go'),
+    styleSheets:[],adoptedStyleSheets:[],
     querySelectorAll(selector) {
       if (selector === '.workspace-heading h2') return [heading];
       if (selector === 'a' || selector === 'dialog[open]') return [];
@@ -811,15 +815,14 @@ function applyStyle(root, masks, fault='') {
   if (fault === 'values') masks[0].visible=true;
   if (fault === 'target') root.visible=false;
   if (fault === 'outside') outside[0].visible=true;
-  const style=new E('STYLE','fixed'); style.nodeType=1;
-  style.parentNode=document.documentElement;
-  style.sheet={cssRules:[{cssText:'fixed rule'}]};
-  style.remove=()=>{style.isConnected=false;style.parentNode=null;
-    for (const e of [...outside,...masks]) e.visible=true; root.visible=true;};
+  const style={disabled:false,cssRules:Array.from({length:6},()=>({cssText:'fixed rule'}))};
   root.__emCaptureOwnedStyle=style;
-  root.__emCaptureStyleRules=JSON.stringify(['fixed rule']);
-  root.__emCaptureObserver.callback([{type:'childList',target:document.documentElement,
-    addedNodes:[style],removedNodes:[]}]);
+  root.__emCaptureStyleRules=JSON.stringify(Array(6).fill('fixed rule'));
+  let adopted=[style];
+  Object.defineProperty(document,'adoptedStyleSheets',{configurable:true,
+    get(){return adopted;},set(value){adopted=value;
+      if (!value.includes(style)) { for (const e of [...outside,...masks]) e.visible=true;
+        root.visible=true; }} });
 }
 {
   const {root,rows}=setup(); assert.equal(shape(root,config),true);
@@ -840,20 +843,36 @@ function applyStyle(root, masks, fault='') {
 {
   const {root,rows}=setup(); assert.equal(shape(root,config),true);
   applyStyle(root,rows.map(r => r.children[1]));
-  root.__emCaptureOwnedStyle.remove(); assert.equal(finish(root),'mask_absent');
+  document.adoptedStyleSheets=[]; assert.equal(finish(root),'mask_absent');
 }
 {
   const {root,rows}=setup(); assert.equal(shape(root,config),true);
   applyStyle(root,rows.map(r => r.children[1]));
-  const owned=root.__emCaptureOwnedStyle;
-  records.push({type:'childList',target:document.documentElement,addedNodes:[],removedNodes:[owned]},
-    {type:'childList',target:document.documentElement,addedNodes:[owned],removedNodes:[]});
-  assert.equal(finish(root),'changed_style');
+  const foreign={cssRules:[]}; document.adoptedStyleSheets=[root.__emCaptureOwnedStyle,foreign];
+  assert.equal(finish(root),'mask_absent');
+  assert.deepEqual(document.adoptedStyleSheets,[foreign]);
 }
 {
   const {root,rows}=setup(); assert.equal(shape(root,config),true);
   applyStyle(root,rows.map(r => r.children[1]));
-  root.__emCaptureOwnedStyle.sheet.cssRules[0].cssText='altered';
+  root.__emCaptureOwnedStyle.cssRules[0].cssText='altered';
+  assert.equal(finish(root),'mask_absent');
+}
+{
+  const {root}=setup(); document.adoptedStyleSheets=[{cssRules:[]}];
+  assert.equal(shape(root,config),false);
+}
+{
+  const {root,rows}=setup(); assert.equal(shape(root,config),true);
+  applyStyle(root,rows.map(r => r.children[1]));
+  root.__emCaptureOwnedStyle.disabled=true;
+  assert.equal(finish(root),'mask_absent'); assert.deepEqual(document.adoptedStyleSheets,[]);
+}
+{
+  const {root,rows}=setup(); assert.equal(shape(root,config),true);
+  applyStyle(root,rows.map(r => r.children[1]));
+  Object.defineProperty(document,'adoptedStyleSheets',{configurable:true,
+    get(){return [root.__emCaptureOwnedStyle];},set(){throw Error('cleanup failed');}});
   assert.equal(finish(root),'mask_absent');
 }
 {
@@ -954,19 +973,16 @@ const install = new Function('return (' + process.argv[3] + ')')();
 function installFixture(root,rows,failValues=false) {
   const masks=rows.map(r => r.children[1]);
   const outside=document.body.querySelectorAll('*').filter(e => !root.contains(e));
-  document.createElement=()=>{
-    const style=new E('STYLE'); style.nodeType=1;
-    style.sheet={cssRules:[{cssText:'fixed rule'}]};
-    style.remove=()=>{style.isConnected=false;style.parentNode=null;
-      for (const e of [...outside,...masks]) e.visible=true;};
-    return style;
+  global.CSSStyleSheet=class {
+    constructor(){this.disabled=false;this.cssRules=[];}
+    replaceSync(){this.cssRules=Array.from({length:6},()=>({cssText:'fixed rule'}));}
   };
-  document.documentElement.append=style=>{
-    style.parentNode=document.documentElement;
-    for (const e of [...outside,...masks]) e.visible=false;
-    if (failValues) masks[0].visible=true;
-    records.push({type:'childList',target:document.documentElement,addedNodes:[style],removedNodes:[]});
-  };
+  let adopted=[];
+  Object.defineProperty(document,'adoptedStyleSheets',{configurable:true,
+    get(){return adopted;},set(value){adopted=value;
+      for (const e of [...outside,...masks]) e.visible=value.length===0;
+      if (value.length && failValues) masks[0].visible=true;
+    }});
 }
 {
   const {root,rows}=setup(); assert.equal(shape(root,config),true);
@@ -975,14 +991,15 @@ function installFixture(root,rows,failValues=false) {
   const transient=new E('STYLE','fixed'); transient.nodeType=1;
   records.push({type:'childList',target:document.documentElement,addedNodes:[transient],removedNodes:[]},
     {type:'childList',target:document.documentElement,addedNodes:[],removedNodes:[transient]});
-  assert.equal(finish(root),'ok'); assert.equal(owned.isConnected,false);
+  assert.equal(finish(root),'ok'); assert.equal(document.adoptedStyleSheets.includes(owned),false);
   assert.ok(rows.every(row => row.children[1].visible));
 }
 {
   const {root,rows}=setup(); assert.equal(shape(root,config),true);
   installFixture(root,rows,true); assert.equal(install(root,'fixed'),false);
   const owned=root.__emCaptureOwnedStyle;
-  assert.equal(finish(root),'mask_values'); assert.equal(owned.isConnected,false);
+  assert.equal(finish(root),'mask_values');
+  assert.equal(document.adoptedStyleSheets.includes(owned),false);
 }
 """
     result = subprocess.run(
@@ -1089,7 +1106,8 @@ function setup(kind) {
   const heading=new E('H2','Synthetic tenant 0');
   const body=new E('BODY','',[heading,dialog || root]);
   const html=new E('HTML','',[body]);
-  global.document={body,documentElement:html,activeElement:new E('BUTTON','go'),styleSheets:[],
+  global.document={body,documentElement:html,activeElement:new E('BUTTON','go'),
+    styleSheets:[],adoptedStyleSheets:[],
     querySelectorAll(selector) {
       if (selector === '.workspace-heading h2') return [heading];
       if (selector === 'a') return [];
@@ -1105,15 +1123,10 @@ for (const kind of ['evidence-quality','export','suppression','deletion']) {
     [root.children[1],root.children[2]];
   const outside=document.body.querySelectorAll('*').filter(e => !root.contains(e));
   for (const e of [...outside,...masks]) e.visible=false;
-  const style=new E('STYLE','fixed'); style.nodeType=1;
-  style.parentNode=document.documentElement;
-  style.sheet={cssRules:[{cssText:'fixed rule'}]};
-  style.remove=()=>{style.isConnected=false;style.parentNode=null;
-    for (const e of [...outside,...masks]) e.visible=true;};
+  const style={disabled:false,cssRules:Array.from({length:6},()=>({cssText:'fixed rule'}))};
   root.__emCaptureOwnedStyle=style;
-  root.__emCaptureStyleRules=JSON.stringify(['fixed rule']);
-  root.__emCaptureObserver.callback([{type:'childList',target:document.documentElement,
-    addedNodes:[style],removedNodes:[]}]);
+  root.__emCaptureStyleRules=JSON.stringify(Array(6).fill('fixed rule'));
+  document.adoptedStyleSheets=[style];
   assert.equal(finish(root),'ok');
 }
 {
@@ -1258,3 +1271,19 @@ for kind in (asyncio.CancelledError, KeyboardInterrupt, SystemExit, RuntimeError
     assert result.returncode == 0
     assert marker not in result.stdout
     assert base64.b64encode(marker) not in result.stdout
+
+
+def test_browser_fixture_matches_production_csp_and_same_origin_stylesheet() -> None:
+    from test_operator_capture_pixels import fixture
+
+    root = Path(__file__).resolve().parents[3]
+    policy = (
+        "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; "
+        "connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"
+    )
+    assert policy in (root / "apps/web/vite.config.ts").read_text()
+    for name in ("plan", "evidence-quality", "export", "suppression", "deletion"):
+        html = fixture(name)
+        assert policy in html
+        assert '<link rel="stylesheet" href="/synthetic.css">' in html
+        assert "<style>" not in html
