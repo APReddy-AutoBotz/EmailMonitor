@@ -1,4 +1,4 @@
-name: Synthetic capture focus control
+name: Synthetic capture pixel regression
 
 on:
   push:
@@ -18,19 +18,19 @@ jobs:
           fetch-depth: 0
       - name: Verify candidate source identity
         run: |
-          # Candidate abba9e7d4499a00a5844cbd9de1fb95e66700d19, tree aa9fb77231f226b1ac82cf178380fe6ee02cdb6f.
+          # Candidate b1979d1a21fc063fbe723f70695965b096a723f5, tree e1852716619cdda465aaa838d0cc17f810e7c85a.
           git merge-base --is-ancestor e3f068c8c93a72536922527969b8d7a3ed5d34be HEAD
           test "$(git rev-parse e3f068c8c93a72536922527969b8d7a3ed5d34be^{tree})" = 0756d919cf3f8aa9ca87a3251a6b97f87e1b287a
           while read -r expected path; do
             test "$(git rev-parse "HEAD:$path")" = "$expected"
           done <<'BLOBS'
-          0ac84f9f0299daed434f5a774612a4318c80319e .dockerignore
-          664bddf90d4ebb83c03a8784e60287793c571782 docs/41-offline-operator-ui-runbook.md
+          1e55b8adeac907dc7c6a3aeb9ca5ab7bc6f960b4 .dockerignore
+          849477dea406cb9d529e8d767d70e9b0c8705477 docs/41-offline-operator-ui-runbook.md
           ae285cdbd6b7e7d21cb7c6c6db736cd1446cc113 scripts/isolation/Dockerfile.operator-ui
-          dd3c0477d23d09991eff6dd93d1cb31c08a1b9b0 scripts/isolation/operator_capture.py
+          79df7f4a77c18238a91acfead0c071c99f55ed82 scripts/isolation/operator_capture.py
           452eaca0fe1b825d8bdfc34e273e0b87a15299a2 scripts/isolation/operator_ui_protocol.py
-          530219fd1c13a42b7e680ff549f8405149234d0b scripts/isolation/test_operator_capture_pixels.py
-          ae6194e904e969a659c3ce6a2633ac0a295dc1f5 services/backend/tests/test_operator_capture.py
+          82a904c7d8fab90136820cd6675c89453ce7ac83 scripts/isolation/test_operator_capture_pixels.py
+          64a075ef969585ba64c58858857d609ad5417aa5 services/backend/tests/test_operator_capture.py
           BLOBS
           git diff --quiet e3f068c8c93a72536922527969b8d7a3ed5d34be HEAD -- . \
             ':(exclude).dockerignore' \
@@ -42,7 +42,6 @@ jobs:
             ':(exclude)services/backend/tests/test_operator_capture.py' \
             ':(exclude).github/workflows/capture-pixel-regression.yml' \
             ':(exclude)scripts/isolation/Dockerfile.capture-pixel' \
-            ':(exclude)scripts/isolation/capture_focus_probe.py' \
             ':(exclude)scripts/isolation/run_capture_pixel_regression.py' \
             ':(exclude)services/backend/tests/test_capture_pixel_regression_runner.py'
       - name: Install pinned tooling and locked dependencies
@@ -51,7 +50,7 @@ jobs:
           "$RUNNER_TEMP/tooling/bin/python" -m pip install uv==0.12.23
           echo "$RUNNER_TEMP/tooling/bin" >> "$GITHUB_PATH"
           "$RUNNER_TEMP/tooling/bin/uv" sync --project services/backend --locked
-      - name: Run isolated synthetic Chromium focus control
+      - name: Run isolated synthetic Chromium pixel regression
         env:
           PYTHONPATH: services/backend/src:tests:scripts/isolation
         run: uv run --project services/backend python scripts/isolation/run_capture_pixel_regression.py

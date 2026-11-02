@@ -79,8 +79,8 @@ def test_source_workflow_is_branch_only_and_has_no_artifact_delivery() -> None:
     assert "branches: [codex/capture-pixel-regression-20261102]" in workflow
     assert "pull_request:" not in workflow and "workflow_dispatch:" not in workflow
     assert "upload-artifact" not in workflow and "EM_OPERATOR_CAPTURE" not in workflow
-    assert "abba9e7d4499a00a5844cbd9de1fb95e66700d19" in workflow
-    assert "aa9fb77231f226b1ac82cf178380fe6ee02cdb6f" in workflow
+    assert "b1979d1a21fc063fbe723f70695965b096a723f5" in workflow
+    assert "e1852716619cdda465aaa838d0cc17f810e7c85a" in workflow
     assert "git diff --quiet" in workflow
     dockerfile = (ROOT / "scripts/isolation/Dockerfile.capture-pixel").read_text()
     assert "sha256:96b39581c89131729a7ecb8d532314af54c7f9bcc7a61fe15c7a9e77602acf59" in dockerfile
@@ -95,7 +95,7 @@ def test_failure_output_is_fixed_and_does_not_echo_exception(monkeypatch: Any, c
     with pytest.raises(SystemExit) as stopped:
         runner.main()
     assert stopped.value.code == 1
-    assert capsys.readouterr().out == "capture_focus_result=failed\n"
+    assert capsys.readouterr().out == "capture_pixel_result=failed\n"
 
 
 def test_owned_resources_cleaned_and_guest_success_verified(monkeypatch: Any) -> None:
@@ -144,7 +144,7 @@ def test_cleanup_uncertainty_is_reported_without_exception_details(
     monkeypatch.setattr(runner, "run", fail)
     with pytest.raises(SystemExit):
         runner.main()
-    assert capsys.readouterr().out == "capture_focus_result=cleanup_uncertain\n"
+    assert capsys.readouterr().out == "capture_pixel_result=cleanup_uncertain\n"
 
 
 def test_cleanup_attempted_when_daemon_create_fails(monkeypatch: Any) -> None:
@@ -170,12 +170,3 @@ def test_cleanup_attempted_when_daemon_create_fails(monkeypatch: Any) -> None:
     with pytest.raises(RuntimeError, match="^capture_pixel_cleanup_uncertain$"):
         runner.run()
     assert removed == ["container", "image"]
-
-
-def test_focus_probe_matches_app_close_button_and_uses_capture_refusal() -> None:
-    source = (ROOT / "scripts/isolation/capture_focus_probe.py").read_text()
-    app = (ROOT / "apps/web/src/views.tsx").read_text()
-    assert 'className="close" autoFocus' in app
-    assert "capture_state_focus" in source
-    assert "dialog.showModal()" in source
-    assert "from capture_focus_probe import run" in runner.COMMAND[2]

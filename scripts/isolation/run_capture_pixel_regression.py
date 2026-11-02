@@ -11,7 +11,14 @@ from emailmonitor.fetching.browser_fixture import validate_applied_profile
 from transport_topology import OWNER_LABEL, remove_owned, require_owner, resource
 
 BRANCH = "refs/heads/codex/capture-pixel-regression-20261102"
-COMMAND = ["python", "-c", "from capture_focus_probe import run; run()"]
+COMMAND = [
+    "python",
+    "-c",
+    (
+        "from test_operator_capture_pixels import "
+        "test_actual_sandboxed_chromium_redacts_temporarily_exposed_synthetic_values as run; run()"
+    ),
+]
 PROXY_NAMES = {"http_proxy", "https_proxy", "all_proxy", "no_proxy"}
 
 
@@ -162,11 +169,11 @@ def main() -> None:
         run()
     except BaseException as error:  # noqa: BLE001 - never emit guest or Docker output
         if type(error) is RuntimeError and error.args == ("capture_pixel_cleanup_uncertain",):
-            print("capture_focus_result=cleanup_uncertain")
+            print("capture_pixel_result=cleanup_uncertain")
         else:
-            print("capture_focus_result=failed")
+            print("capture_pixel_result=failed")
         raise SystemExit(1) from None
-    print("capture_focus_result=passed")
+    print("capture_pixel_result=passed")
 
 
 if __name__ == "__main__":

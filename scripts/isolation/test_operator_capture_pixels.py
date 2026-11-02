@@ -104,7 +104,9 @@ def fixture(name: str) -> str:
         target = f"<dl aria-label='Plan summary'>{rows}</dl>"
     elif name == "evidence-quality":
         target = (
-            "<dialog open aria-labelledby='evidence-title'><h2 id='evidence-title'>Evidence</h2>"
+            "<dialog open aria-labelledby='evidence-title'>"
+            "<button class='close' autofocus>Close evidence</button>"
+            "<h2 id='evidence-title'>Evidence and review</h2>"
             f"{quality}</dialog>"
         )
     elif name == "export":
@@ -180,6 +182,59 @@ RESTORE = """spec => {
   return true;
 }"""
 
+FOCUS_EXPOSE = """() => {
+  const root = document.querySelector('section[aria-label="Article observation quality"]');
+  const sheet = root && root.__emCaptureOwnedStyle;
+  const close = document.querySelector('dialog[open] > button.close:first-child');
+  if (!sheet || document.adoptedStyleSheets.length !== 1 ||
+      document.adoptedStyleSheets[0] !== sheet || document.activeElement !== close) return false;
+  window.__syntheticFocusRules = sheet.cssRules.length;
+  sheet.insertRule(':root dialog[open][aria-labelledby="evidence-title"] > '
+    + 'button.close:first-child:focus{opacity:1!important}', sheet.cssRules.length);
+  return getComputedStyle(close).opacity === '1';
+}"""
+
+FOCUS_RESTORE = """() => {
+  const root = document.querySelector('section[aria-label="Article observation quality"]');
+  const sheet = root && root.__emCaptureOwnedStyle;
+  const close = document.querySelector('dialog[open] > button.close:first-child');
+  const initial = window.__syntheticFocusRules;
+  if (!sheet || !Number.isInteger(initial) || sheet.cssRules.length !== initial + 1) return false;
+  sheet.deleteRule(initial);
+  delete window.__syntheticFocusRules;
+  return document.activeElement === close && getComputedStyle(close).opacity === '0';
+}"""
+
+FOCUS_ORACLE = """async images => {
+  const decoded = [];
+  for (const encoded of images) {
+    const bytes = Uint8Array.from(atob(encoded), c => c.charCodeAt(0));
+    const bitmap = await createImageBitmap(new Blob([bytes], {type:'image/png'}));
+    const canvas = document.createElement('canvas');
+    canvas.width = bitmap.width; canvas.height = bitmap.height;
+    const context = canvas.getContext('2d', {willReadFrequently:true});
+    if (!context) return null;
+    context.drawImage(bitmap, 0, 0);
+    decoded.push({width:bitmap.width,height:bitmap.height,
+      pixels:context.getImageData(0,0,bitmap.width,bitmap.height).data});
+    bitmap.close();
+  }
+  if (decoded.length !== 3 || decoded.some(x => x.width !== decoded[0].width ||
+      x.height !== decoded[0].height)) return null;
+  const [visible, transparent, sanitized] = decoded.map(x => x.pixels);
+  let changed = 0, leaked = 0;
+  for (let i=0; i<visible.length; i+=4) {
+    if (visible[i] !== transparent[i] || visible[i+1] !== transparent[i+1] ||
+        visible[i+2] !== transparent[i+2] || visible[i+3] !== transparent[i+3]) {
+      changed += 1;
+      if (sanitized[i] !== transparent[i] || sanitized[i+1] !== transparent[i+1] ||
+          sanitized[i+2] !== transparent[i+2] || sanitized[i+3] !== transparent[i+3]) leaked += 1;
+    }
+  }
+  return {changed, leaked};
+}"""
+
+
 PIXEL_ORACLE = """async images => {
   const decoded = [];
   for (const encoded of images) {
@@ -243,6 +298,8 @@ class CaptureHandle:
         self.exposure_verified = False
         self.exposed_image: bytes | None = None
         self.control_image: bytes | None = None
+        self.focus_visible_image: bytes | None = None
+        self.focus_hidden_image: bytes | None = None
 
     async def evaluate(self, expression: str, *arguments: Any) -> Any:
         result = await self.handle.evaluate(expression, *arguments)
@@ -267,6 +324,13 @@ class CaptureHandle:
             raise RuntimeError("Synthetic exposure was not established")
         try:
             image = await self.handle.screenshot(**options)
+            if self.name == "evidence-quality":
+                if await self.page.evaluate(FOCUS_EXPOSE) is not True:
+                    raise RuntimeError("Synthetic focus exposure unavailable")
+                self.focus_visible_image = await self.handle.screenshot(**options)
+                if await self.page.evaluate(FOCUS_RESTORE) is not True:
+                    raise RuntimeError("Synthetic focus restoration unavailable")
+                self.focus_hidden_image = await self.handle.screenshot(**options)
             if await self.page.evaluate(CONTROL, spec) is not True:
                 raise RuntimeError("Synthetic control was not established")
             self.control_image = await self.handle.screenshot(**options)
@@ -379,7 +443,8 @@ async def exercise() -> None:
                         content_type="text/css",
                         body="body{font:16px sans-serif} "
                         "dl{display:grid;grid-template-columns:repeat(3,1fr);gap:8px} "
-                        "dd{margin:0;overflow-wrap:anywhere}",
+                        "dd{margin:0;overflow-wrap:anywhere} "
+                        "button:focus{outline:3px solid #087f70;outline-offset:3px}",
                     )
                 else:
                     await route.abort()
@@ -388,6 +453,32 @@ async def exercise() -> None:
             for name in TARGETS:
                 current["name"] = name
                 await page.goto(ORIGIN, wait_until="load")
+                if name == "evidence-quality":
+                    await page.locator("dialog").evaluate(
+                        "dialog => { dialog.removeAttribute('open'); dialog.showModal(); }"
+                    )
+                    await page.locator("dialog > button.close").focus()
+                    overlap = await page.evaluate("""() => {
+                      const button = document.querySelector('dialog > button.close');
+                      const heading = document.querySelector(
+                        'section[aria-label="Article observation quality"] > h4');
+                      const box = heading.getBoundingClientRect();
+                      button.style.position = 'fixed'; button.style.left = box.left + 'px';
+                      button.style.top = box.top + 'px'; button.style.zIndex = '9999';
+                      const b = button.getBoundingClientRect();
+                      const intersects = r => b.left < r.right && b.right > r.left &&
+                        b.top < r.bottom && b.bottom > r.top;
+                      const masks = Array.from(heading.parentElement.querySelectorAll('p'));
+                      const clear = r => b.left - 8 >= r.right || b.right + 8 <= r.left ||
+                        b.top - 8 >= r.bottom || b.bottom + 8 <= r.top;
+                      return intersects(box) && masks.every(e => clear(e.getBoundingClientRect()));
+                    }""")
+                    if overlap is not True:
+                        raise RuntimeError("Synthetic focus overlap unavailable")
+                    focused = await page.evaluate("""() => document.activeElement ===
+                      document.querySelector('dialog > button.close')""")
+                    if focused is not True:
+                        raise RuntimeError("Synthetic evidence focus unavailable")
                 wrapped = CapturePage(page, name)
                 output = io.StringIO()
                 with contextlib.redirect_stdout(output):
@@ -433,8 +524,31 @@ async def exercise() -> None:
                     or oracle["leaked"] != 0
                 ):
                     raise RuntimeError("Synthetic independent pixel oracle refused")
+                if name == "evidence-quality":
+                    if handle.focus_visible_image is None or handle.focus_hidden_image is None:
+                        raise RuntimeError("Synthetic focus pixels unavailable")
+                    focus_images = [
+                        base64.b64encode(item).decode("ascii")
+                        for item in (handle.focus_visible_image, handle.focus_hidden_image, image)
+                    ]
+                    result = await page.evaluate(FOCUS_ORACLE, focus_images)
+                    if (
+                        not isinstance(result, dict)
+                        or set(result) != {"changed", "leaked"}
+                        or type(result["changed"]) is not int
+                        or result["changed"] <= 0
+                        or result["leaked"] != 0
+                    ):
+                        raise RuntimeError("Synthetic focus pixel oracle refused")
                 handle.exposed_image = None
                 handle.control_image = None
+                handle.focus_visible_image = None
+                handle.focus_hidden_image = None
+                if name == "evidence-quality":
+                    focused = await page.evaluate("""() => document.activeElement ===
+                      document.querySelector('dialog > button.close')""")
+                    if focused is not True:
+                        raise RuntimeError("Synthetic evidence focus changed")
             current["name"] = "plan"
             reasons = {
                 "preexisting": "capture_shape_refused",
@@ -478,6 +592,57 @@ async def exercise() -> None:
                 elif fault != "cleanup":
                     if await page.evaluate("document.adoptedStyleSheets.length") != 0:
                         raise RuntimeError("Synthetic owned sheet remained")
+            current["name"] = "evidence-quality"
+            focus_faults = {
+                "wrong_text": "capture_mask_install_refused",
+                "extra_dialog": "capture_shape_refused",
+                "active_other": "capture_state_focus",
+                "animation": "capture_mask_install_refused",
+                "opacity_override": "capture_mask_install_refused",
+            }
+            for fault, expected_reason in focus_faults.items():
+                await page.goto(ORIGIN, wait_until="load")
+                await page.locator("dialog").evaluate(
+                    "dialog => { dialog.removeAttribute('open'); dialog.showModal(); }"
+                )
+                await page.locator("dialog > button.close").focus()
+                applied = await page.evaluate(
+                    """fault => {
+                  const close = document.querySelector('dialog > button.close');
+                  if (fault === 'wrong_text') close.textContent = 'Other';
+                  else if (fault === 'extra_dialog') {
+                    const dialog = document.createElement('dialog');
+                    dialog.setAttribute('open', ''); document.body.append(dialog);
+                  } else if (fault === 'active_other') {
+                    const button = document.createElement('button');
+                    button.textContent = 'Other'; close.parentElement.append(button);
+                    button.focus();
+                  } else if (fault === 'animation') {
+                    close.animate([{opacity: 0}, {opacity: 1}], {duration: 30000});
+                  } else if (fault === 'opacity_override') {
+                    document.styleSheets[0].insertRule(
+                      'html body dialog[open][aria-labelledby="evidence-title"] > '
+                      + 'button.close:first-child:focus{opacity:1!important}', 0);
+                  } else return false;
+                  return true;
+                }""",
+                    fault,
+                )
+                if applied is not True:
+                    raise RuntimeError("Synthetic focus fault unavailable")
+                output = io.StringIO()
+                with contextlib.redirect_stdout(output):
+                    try:
+                        await capture(
+                            cast(Page, CapturePage(page, "evidence-quality")), "evidence-quality"
+                        )
+                    except ValueError as error:
+                        if error.args != (expected_reason,):
+                            raise RuntimeError("Synthetic focus refusal category refused") from None
+                    else:
+                        raise RuntimeError("Synthetic focus refusal missing")
+                if output.getvalue():
+                    raise RuntimeError("Synthetic focus refusal emitted output")
             await context.close()
         finally:
             await browser.close()

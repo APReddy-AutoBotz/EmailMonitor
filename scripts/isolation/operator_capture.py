@@ -166,6 +166,11 @@ SHAPE = r"""(root, config) => {
   root.__emCaptureChangeKind = 'other';
   root.__emCaptureMaskKind = 'absent';
   root.__emCaptureExpectedStyle = config.style;
+  root.__emCaptureExpectedRules = name === 'evidence-quality' ? 7 : 6;
+  const close = name === 'evidence-quality' ? dialogs[0].firstElementChild : null;
+  root.__emCaptureFocusException = close && close === active &&
+    close.matches('button.close:first-child') && close.textContent === 'Close evidence' &&
+    close.children.length === 0 ? close : null;
   root.__emCaptureSensitive = Object.freeze(
     name === 'export' ? [...masks, root.children[3]] : [...masks]
   );
@@ -177,9 +182,16 @@ SHAPE = r"""(root, config) => {
     const masked = root.__emCaptureSensitive;
     const target = getComputedStyle(root).visibility === 'visible';
     const values = masked.every(e => getComputedStyle(e).visibility === 'hidden');
-    const outside = all.filter(e => !root.contains(e)).every(
-      e => getComputedStyle(e).visibility === 'hidden'
-    );
+    const outside = all.filter(e => !root.contains(e)).every(e => {
+      const style = getComputedStyle(e);
+      if (e === root.__emCaptureFocusException) {
+        return document.activeElement === e && style.visibility === 'visible' &&
+          style.opacity === '0' && !e.getAnimations().some(
+            animation => animation.pending || !['finished','idle'].includes(animation.playState)
+          );
+      }
+      return style.visibility === 'hidden';
+    });
     root.__emCaptureMaskKind = !target ? 'target' : !values ? 'values' :
       !outside ? 'outside' : 'verified';
     root.__emCaptureMaskVerified = target && values && outside;
@@ -217,7 +229,7 @@ INSTALL = """(root, style) => {
   try {
     const sheet = new CSSStyleSheet();
     sheet.replaceSync(style);
-    if (sheet.disabled || sheet.cssRules.length !== 6) return false;
+    if (sheet.disabled || sheet.cssRules.length !== root.__emCaptureExpectedRules) return false;
     root.__emCaptureOwnedStyle = sheet;
     root.__emCaptureStyleRules = JSON.stringify(Array.from(sheet.cssRules, r => r.cssText));
     document.adoptedStyleSheets = [sheet];
@@ -232,9 +244,12 @@ GEOMETRY = """root => {
   const sheet = root.__emCaptureOwnedStyle;
   if (!root.__emCaptureObserver || !sheet || sheet.disabled ||
       document.adoptedStyleSheets.length !== 1 || document.adoptedStyleSheets[0] !== sheet ||
-      sheet.cssRules.length !== 6 || root.__emCaptureStyleRules !== JSON.stringify(
+      sheet.cssRules.length !== root.__emCaptureExpectedRules ||
+      root.__emCaptureStyleRules !== JSON.stringify(
         Array.from(sheet.cssRules, r => r.cssText)
       ) || !window.visualViewport || window.visualViewport.scale !== 1) return null;
+  try { root.__emCaptureVerifyMask(); } catch (_) { return null; }
+  if (!root.__emCaptureMaskVerified) return null;
   const rect = box => [box.left + window.scrollX, box.top + window.scrollY,
     box.right + window.scrollX, box.bottom + window.scrollY];
   const safe = (node, container = false) => {
@@ -308,7 +323,8 @@ FINISH = """root => {
   try {
     styleIntact = !!ownedStyle && !ownedStyle.disabled &&
       document.adoptedStyleSheets.length === 1 && document.adoptedStyleSheets[0] === ownedStyle &&
-      ownedStyle.cssRules.length === 6 && root.__emCaptureStyleRules === JSON.stringify(
+      ownedStyle.cssRules.length === root.__emCaptureExpectedRules &&
+      root.__emCaptureStyleRules === JSON.stringify(
         Array.from(ownedStyle.cssRules, r => r.cssText)
       );
     if (styleIntact) root.__emCaptureVerifyMask();
@@ -351,6 +367,8 @@ FINISH = """root => {
   delete root.__emCaptureMaskKind;
   delete root.__emCaptureOwnedStyle;
   delete root.__emCaptureExpectedStyle;
+  delete root.__emCaptureExpectedRules;
+  delete root.__emCaptureFocusException;
   delete root.__emCaptureSensitive;
   delete root.__emCaptureStyleRules;
   delete root.__emCaptureVerifyMask;
@@ -378,6 +396,13 @@ def style_for(name: str) -> str:
         "content:none!important;}"
         + "*{background-image:none!important;list-style-image:none!important;"
         "text-shadow:none!important;}"
+        + (
+            'dialog[open][aria-labelledby="evidence-title"] > button.close:first-child:focus'
+            "{visibility:visible!important;opacity:0!important;"
+            "transition:none!important;animation:none!important;}"
+            if name == "evidence-quality"
+            else ""
+        )
     )
 
 
