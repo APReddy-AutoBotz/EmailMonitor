@@ -284,6 +284,8 @@ const row=new Element('DIV',[20,20,40,40]); row.parentElement=root; value.parent
 root.__emCaptureSensitive=Object.freeze([value]); root.__emCaptureObserver={};
 root.__emCaptureOwnedStyle={disabled:false,cssRules:Array.from({length:6},()=>({cssText:'fixed'}))};
 root.__emCaptureStyleRules=JSON.stringify(Array(6).fill('fixed'));
+root.__emCaptureExpectedRules=6;
+root.__emCaptureVerifyMask=()=>{root.__emCaptureMaskVerified=true;};
 global.document={documentElement:html,adoptedStyleSheets:[root.__emCaptureOwnedStyle],
   createTreeWalker() { let seen=false; return {currentNode:null,nextNode() {
     if(seen)return false; seen=true; this.currentNode=textNode; return true; }}; },
@@ -1069,6 +1071,10 @@ class E {
   contains(other) { return this === other || this.querySelectorAll('*').includes(other); }
   hasAttribute(name) { return name === 'style' && this.inline; }
   getAttribute(name) { return name === 'aria-labelledby' ? this.label : null; }
+  get firstElementChild() { return this.children[0]; }
+  matches(selector) { return selector === 'button.close:first-child' &&
+    this.className === 'close'; }
+  getAnimations() { return this.animations || []; }
   getBoundingClientRect() { return {width:this.visible ? 10:0,height:10}; }
 }
 class Observer {
@@ -1078,7 +1084,7 @@ class Observer {
   takeRecords() { return []; }
 }
 global.MutationObserver=Observer;
-global.getComputedStyle=e => ({visibility:e.visible ? 'visible':'hidden'});
+global.getComputedStyle=e => ({visibility:e.visible ? 'visible':'hidden',opacity:e.opacity || '1'});
 global.window={scrollX:0,scrollY:0,scrollTo(x,y){this.scrollX=x;this.scrollY=y;}};
 function setup(kind) {
   const last = 'Missing affiliations remain unobserved, not confirmed absent. ' +
@@ -1123,11 +1129,34 @@ for (const kind of ['evidence-quality','export','suppression','deletion']) {
     [root.children[1],root.children[2]];
   const outside=document.body.querySelectorAll('*').filter(e => !root.contains(e));
   for (const e of [...outside,...masks]) e.visible=false;
-  const style={disabled:false,cssRules:Array.from({length:6},()=>({cssText:'fixed rule'}))};
+  const count=kind === 'evidence-quality' ? 7 : 6;
+  const style={disabled:false,cssRules:Array.from({length:count},()=>({cssText:'fixed rule'}))};
   root.__emCaptureOwnedStyle=style;
-  root.__emCaptureStyleRules=JSON.stringify(Array(6).fill('fixed rule'));
+  root.__emCaptureStyleRules=JSON.stringify(Array(count).fill('fixed rule'));
   document.adoptedStyleSheets=[style];
   assert.equal(finish(root),'ok');
+}
+for (const fault of ['none','opacity','animation','paused','pending','focus']) {
+  const {root}=setup('evidence-quality'); const dialog=document.body.children[1];
+  const close=new E('BUTTON','Close evidence'); close.className='close'; close.opacity='0';
+  dialog.children.unshift(close); dialog.childNodes=dialog.children; document.activeElement=close;
+  assert.equal(shape(root,{name:'evidence-quality',style:'fixed'}),true);
+  const outside=document.body.querySelectorAll('*').filter(e => !root.contains(e));
+  for (const e of outside) if (e !== close) e.visible=false;
+  root.children[1].visible=false;
+  const sheet={disabled:false,cssRules:Array.from({length:7},()=>({cssText:'fixed rule'}))};
+  root.__emCaptureOwnedStyle=sheet;
+  root.__emCaptureStyleRules=JSON.stringify(Array(7).fill('fixed rule'));
+  document.adoptedStyleSheets=[sheet];
+  if (fault === 'opacity') close.opacity='1';
+  if (fault === 'animation') close.animations=[{playState:'running'}];
+  if (fault === 'paused') close.animations=[{playState:'paused'}];
+  if (fault === 'pending') close.animations=[{playState:'finished',pending:true}];
+  if (fault === 'focus') document.activeElement=new E('BUTTON','other');
+  const result=finish(root);
+  assert.equal(result, fault === 'none' ? 'ok' :
+    fault === 'focus' ? 'state_focus' : 'mask_outside');
+  assert.deepEqual(document.adoptedStyleSheets,[]);
 }
 {
   const {root}=setup('export'); root.children.push(new E('P','unexpected'));
@@ -1287,3 +1316,42 @@ def test_browser_fixture_matches_production_csp_and_same_origin_stylesheet() -> 
         assert policy in html
         assert '<link rel="stylesheet" href="/synthetic.css">' in html
         assert "<style>" not in html
+
+
+@pytest.mark.parametrize("enabled", [True, False])
+def test_focus_pixel_oracle_flag_flows_to_actual_screenshot_wrapper(enabled: bool) -> None:
+    from test_operator_capture_pixels import FOCUS_EXPOSE, FOCUS_RESTORE, CapturePage
+
+    class Handle:
+        calls = 0
+
+        async def screenshot(self, **options: Any) -> bytes:
+            self.calls += 1
+            return image()
+
+    class Locator:
+        def __init__(self) -> None:
+            self.handle = Handle()
+
+        async def element_handle(self) -> Handle:
+            return self.handle
+
+    class PageStub:
+        def __init__(self) -> None:
+            self.locator_value = Locator()
+            self.expressions: list[str] = []
+
+        def locator(self, selector: str) -> Locator:
+            return self.locator_value
+
+        async def evaluate(self, expression: str, *args: Any) -> bool:
+            self.expressions.append(expression)
+            return True
+
+    page = PageStub()
+    wrapper = CapturePage(cast(Page, page), "evidence-quality", test_focus_pixels=enabled)
+    handle = asyncio.run(wrapper.locator("synthetic").element_handle())
+    asyncio.run(handle.screenshot())
+    assert (FOCUS_EXPOSE in page.expressions) is enabled
+    assert (FOCUS_RESTORE in page.expressions) is enabled
+    assert page.locator_value.handle.calls == (4 if enabled else 2)
