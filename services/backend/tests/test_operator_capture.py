@@ -454,6 +454,10 @@ class FakeHandle:
             raise RuntimeError("synthetic screenshot failure")
         return image(pixel=b"\x00\x89\xab\xcd")
 
+    async def scroll_into_view_if_needed(self, **options: Any) -> None:
+        self.calls.append("prepare_scroll")
+        assert options == {"timeout": 5000}
+
 
 class FakePage:
     url = "https://app.example.test/"
@@ -481,9 +485,117 @@ def test_capture_sends_only_after_unchanged_masked_screenshot(capsys: Any) -> No
     payload = base64.b64decode(value["data"], validate=True)
     length = struct.unpack(">I", payload[33:37])[0]
     assert zlib.decompress(payload[41 : 41 + length]) == b"\x00\x00\x00\x00"
-    assert handle.calls == ["shape", "install", "geometry", "screenshot", "geometry", "finish"]
+    assert handle.calls == [
+        "shape",
+        "install",
+        "prepare_scroll",
+        "geometry",
+        "screenshot",
+        "geometry",
+        "finish",
+    ]
     assert "visibility:hidden!important" in style_for("plan")
     assert "::before" in style_for("plan") and "::backdrop" in style_for("plan")
+
+
+@pytest.mark.parametrize("interrupted", [False, True])
+def test_failed_or_interrupted_scroll_preparation_cleans_up_without_emission(
+    interrupted: bool, capsys: Any
+) -> None:
+    class FailedScroll(FakeHandle):
+        async def scroll_into_view_if_needed(self, **options: Any) -> None:
+            self.calls.append("prepare_scroll")
+            if interrupted:
+                raise asyncio.CancelledError()
+            raise RuntimeError("synthetic preparation failure")
+
+    handle = FailedScroll()
+    with pytest.raises((ValueError, asyncio.CancelledError)):
+        asyncio.run(capture(cast(Page, FakePage(handle)), "plan"))
+    assert handle.calls == ["shape", "install", "prepare_scroll", "finish"]
+    assert capsys.readouterr().out == ""
+
+
+@pytest.mark.parametrize("side_effect_first", [False, True])
+@pytest.mark.parametrize("fail_cleanup", [False, True])
+def test_interrupted_finish_waits_for_owned_cleanup_without_emission(
+    side_effect_first: bool, fail_cleanup: bool, capsys: Any
+) -> None:
+    from operator_capture import FINISH
+
+    class InterruptedFinish(FakeHandle):
+        def __init__(self) -> None:
+            super().__init__()
+            self.started = asyncio.Event()
+            self.release = asyncio.Event()
+            self.restored = False
+
+        async def evaluate(self, source: str, *args: Any) -> Any:
+            if source != FINISH:
+                return await super().evaluate(source, *args)
+            self.calls.append("finish")
+            if side_effect_first:
+                self.restored = True
+            self.started.set()
+            await self.release.wait()
+            if fail_cleanup:
+                raise RuntimeError("synthetic cleanup failure")
+            self.restored = True
+            return "ok"
+
+    async def scenario() -> None:
+        handle = InterruptedFinish()
+        task = asyncio.create_task(capture(cast(Page, FakePage(handle)), "plan"))
+        await handle.started.wait()
+        task.cancel()
+        await asyncio.sleep(0)
+        assert not task.done()
+        handle.release.set()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert handle.restored is (side_effect_first or not fail_cleanup)
+        assert handle.calls.count("finish") == 1
+
+    asyncio.run(scenario())
+    assert capsys.readouterr().out == ""
+
+
+def test_repeated_cleanup_interruption_consumes_late_exception(capsys: Any) -> None:
+    from operator_capture import FINISH
+
+    class InterruptedFinish(FakeHandle):
+        def __init__(self) -> None:
+            super().__init__()
+            self.started = asyncio.Event()
+
+        async def evaluate(self, source: str, *args: Any) -> Any:
+            if source != FINISH:
+                return await super().evaluate(source, *args)
+            self.started.set()
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                raise RuntimeError("synthetic private cleanup marker") from None
+
+    async def scenario() -> None:
+        loop = asyncio.get_running_loop()
+        events: list[dict[str, Any]] = []
+        loop.set_exception_handler(lambda _loop, context: events.append(context))
+        handle = InterruptedFinish()
+        task = asyncio.create_task(capture(cast(Page, FakePage(handle)), "plan"))
+        await handle.started.wait()
+        task.cancel()
+        await asyncio.sleep(0)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        for _ in range(3):
+            await asyncio.sleep(0)
+        assert events == []
+
+    asyncio.run(scenario())
+    captured = capsys.readouterr()
+    assert captured.out == "" and "synthetic private cleanup marker" not in captured.err
 
 
 @pytest.mark.parametrize(
@@ -523,7 +635,14 @@ def test_capture_refuses_and_never_emits_on_missing_or_changed_guard(
         asyncio.run(capture(cast(Page, page), "plan"))
     assert capsys.readouterr().out == ""
     if case == "screenshot":
-        assert handle.calls == ["shape", "install", "geometry", "screenshot", "finish"]
+        assert handle.calls == [
+            "shape",
+            "install",
+            "prepare_scroll",
+            "geometry",
+            "screenshot",
+            "finish",
+        ]
     if case == "install":
         assert handle.calls == ["shape", "install", "finish"]
 
@@ -829,9 +948,19 @@ function applyStyle(root, masks, fault='') {
 {
   const {root,rows}=setup(); assert.equal(shape(root,config),true);
   applyStyle(root,rows.map(r => r.children[1]));
-  rows[0].scrollTop=9; window.scrollY=7;
+  rows[0].scrollTop=9; rows[0].children[1].scrollLeft=4; window.scrollY=7;
+  document.body.scrollTop=11; document.documentElement.scrollLeft=13;
   assert.equal(finish(root),'ok');
-  assert.equal(rows[0].scrollTop,0); assert.equal(window.scrollY,0);
+  assert.equal(rows[0].scrollTop,0); assert.equal(rows[0].children[1].scrollLeft,0);
+  assert.equal(document.body.scrollTop,0); assert.equal(document.documentElement.scrollLeft,0);
+  assert.equal(window.scrollY,0);
+}
+{
+  const {root,rows}=setup(); assert.equal(shape(root,config),true);
+  applyStyle(root,rows.map(r => r.children[1]));
+  const restore=window.scrollTo;
+  window.scrollTo=(x,y)=>{restore(x,y); records.push({type:'attributes',target:rows[0]});};
+  assert.equal(finish(root),'changed_attribute'); window.scrollTo=restore;
 }
 {
   const {root,rows}=setup(); assert.equal(shape(root,config),true);
@@ -1208,6 +1337,7 @@ SECRET = bytes.fromhex("53454e54494e454c5f505249564154455f504958454c53")
 
 class Handle:
     def __init__(self): self.calls = 0
+    async def scroll_into_view_if_needed(self, **kwargs): pass
     async def evaluate(self, source, *args):
         if source == oc.SHAPE or source == oc.INSTALL: return True
         if source == oc.FINISH: return "ok"
