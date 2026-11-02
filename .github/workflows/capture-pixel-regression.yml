@@ -1,0 +1,56 @@
+name: Synthetic capture pixel regression
+
+on:
+  push:
+    branches: [codex/capture-pixel-regression-20261102]
+
+permissions:
+  contents: read
+
+jobs:
+  capture-pixel:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Verify candidate source identity
+        run: |
+          # Candidate a6da31194cb48228a7927d2313f5429d317593a4, tree c384bd4b77ea0996d3536acb4b0394ddbf27c138.
+          git merge-base --is-ancestor e3f068c8c93a72536922527969b8d7a3ed5d34be HEAD
+          test "$(git rev-parse e3f068c8c93a72536922527969b8d7a3ed5d34be^{tree})" = 0756d919cf3f8aa9ca87a3251a6b97f87e1b287a
+          while read -r expected path; do
+            test "$(git rev-parse "HEAD:$path")" = "$expected"
+          done <<'BLOBS'
+          1e55b8adeac907dc7c6a3aeb9ca5ab7bc6f960b4 .dockerignore
+          88620a6c80e57bf1d51d5795420793dff7d02aa7 docs/41-offline-operator-ui-runbook.md
+          ae285cdbd6b7e7d21cb7c6c6db736cd1446cc113 scripts/isolation/Dockerfile.operator-ui
+          cefb3088f81ec874ba567f63ec596da0d1f898cc scripts/isolation/operator_capture.py
+          452eaca0fe1b825d8bdfc34e273e0b87a15299a2 scripts/isolation/operator_ui_protocol.py
+          38d68be17ffdea0d8a81b9db989d446fc0710696 scripts/isolation/test_operator_capture_pixels.py
+          dadd1c840edbf4515df146346727feb6f6b12717 services/backend/tests/test_operator_capture.py
+          BLOBS
+          git diff --quiet e3f068c8c93a72536922527969b8d7a3ed5d34be HEAD -- . \
+            ':(exclude).dockerignore' \
+            ':(exclude)docs/41-offline-operator-ui-runbook.md' \
+            ':(exclude)scripts/isolation/Dockerfile.operator-ui' \
+            ':(exclude)scripts/isolation/operator_capture.py' \
+            ':(exclude)scripts/isolation/operator_ui_protocol.py' \
+            ':(exclude)scripts/isolation/test_operator_capture_pixels.py' \
+            ':(exclude)services/backend/tests/test_operator_capture.py' \
+            ':(exclude).github/workflows/capture-pixel-regression.yml' \
+            ':(exclude)scripts/isolation/Dockerfile.capture-pixel' \
+            ':(exclude)scripts/isolation/run_capture_pixel_regression.py' \
+            ':(exclude)services/backend/tests/test_capture_pixel_regression_runner.py'
+      - name: Install pinned tooling and locked dependencies
+        run: |
+          python3 -m venv "$RUNNER_TEMP/tooling"
+          "$RUNNER_TEMP/tooling/bin/python" -m pip install uv==0.12.23
+          echo "$RUNNER_TEMP/tooling/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/tooling/bin/uv" sync --project services/backend --locked
+      - name: Run isolated synthetic Chromium pixel regression
+        env:
+          PYTHONPATH: services/backend/src:tests:scripts/isolation
+        run: uv run --project services/backend python scripts/isolation/run_capture_pixel_regression.py
