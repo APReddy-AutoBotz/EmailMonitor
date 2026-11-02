@@ -18,13 +18,13 @@ jobs:
           fetch-depth: 0
       - name: Verify candidate source identity
         run: |
-          # Candidate b1979d1a21fc063fbe723f70695965b096a723f5, tree e1852716619cdda465aaa838d0cc17f810e7c85a.
+          # Candidate b1979d1a21fc063fbe723f70695965b096a723f5, tree e1852716619cdda465aaa838d0cc17f810e7c85a; Docker ignore adds only the diagnostic.
           git merge-base --is-ancestor e3f068c8c93a72536922527969b8d7a3ed5d34be HEAD
           test "$(git rev-parse e3f068c8c93a72536922527969b8d7a3ed5d34be^{tree})" = 0756d919cf3f8aa9ca87a3251a6b97f87e1b287a
           while read -r expected path; do
             test "$(git rev-parse "HEAD:$path")" = "$expected"
           done <<'BLOBS'
-          1e55b8adeac907dc7c6a3aeb9ca5ab7bc6f960b4 .dockerignore
+          5fcb3ddbcfe23773e00ecadf32d71cc7df4d5240 .dockerignore
           849477dea406cb9d529e8d767d70e9b0c8705477 docs/41-offline-operator-ui-runbook.md
           ae285cdbd6b7e7d21cb7c6c6db736cd1446cc113 scripts/isolation/Dockerfile.operator-ui
           79df7f4a77c18238a91acfead0c071c99f55ed82 scripts/isolation/operator_capture.py
@@ -42,6 +42,7 @@ jobs:
             ':(exclude)services/backend/tests/test_operator_capture.py' \
             ':(exclude).github/workflows/capture-pixel-regression.yml' \
             ':(exclude)scripts/isolation/Dockerfile.capture-pixel' \
+            ':(exclude)scripts/isolation/capture_pixel_diagnostic.py' \
             ':(exclude)scripts/isolation/run_capture_pixel_regression.py' \
             ':(exclude)services/backend/tests/test_capture_pixel_regression_runner.py'
       - name: Install pinned tooling and locked dependencies
