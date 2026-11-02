@@ -18,7 +18,7 @@ jobs:
           fetch-depth: 0
       - name: Verify candidate source identity
         run: |
-          # Candidate b1979d1a21fc063fbe723f70695965b096a723f5, tree e1852716619cdda465aaa838d0cc17f810e7c85a; Docker ignore adds only the diagnostic.
+          # Candidate 477c260e692bdde8691e6dc69ad0e1b1cd0f484b, tree 233fee2bf058fce4f34cee9ac32881ed1f0cc60c; Docker ignore adds only the diagnostic.
           git merge-base --is-ancestor e3f068c8c93a72536922527969b8d7a3ed5d34be HEAD
           test "$(git rev-parse e3f068c8c93a72536922527969b8d7a3ed5d34be^{tree})" = 0756d919cf3f8aa9ca87a3251a6b97f87e1b287a
           while read -r expected path; do
@@ -29,7 +29,7 @@ jobs:
           ae285cdbd6b7e7d21cb7c6c6db736cd1446cc113 scripts/isolation/Dockerfile.operator-ui
           79df7f4a77c18238a91acfead0c071c99f55ed82 scripts/isolation/operator_capture.py
           452eaca0fe1b825d8bdfc34e273e0b87a15299a2 scripts/isolation/operator_ui_protocol.py
-          82a904c7d8fab90136820cd6675c89453ce7ac83 scripts/isolation/test_operator_capture_pixels.py
+          ae454232af1e1f459f65201dbd960f99dc766237 scripts/isolation/test_operator_capture_pixels.py
           64a075ef969585ba64c58858857d609ad5417aa5 services/backend/tests/test_operator_capture.py
           BLOBS
           git diff --quiet e3f068c8c93a72536922527969b8d7a3ed5d34be HEAD -- . \

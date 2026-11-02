@@ -463,8 +463,13 @@ async def exercise() -> None:
                       const heading = document.querySelector(
                         'section[aria-label="Article observation quality"] > h4');
                       const box = heading.getBoundingClientRect();
-                      button.style.position = 'fixed'; button.style.left = box.left + 'px';
-                      button.style.top = box.top + 'px'; button.style.zIndex = '9999';
+                      if (box.width < 96 || box.height < 16) return false;
+                      button.style.position = 'fixed'; button.style.left = (box.left + 8) + 'px';
+                      button.style.top = (box.top + 2) + 'px'; button.style.zIndex = '9999';
+                      button.style.width = Math.min(80, box.width - 16) + 'px';
+                      button.style.height = Math.min(12, box.height - 4) + 'px';
+                      button.style.fontSize = '8px'; button.style.lineHeight = '8px';
+                      button.style.padding = '0'; button.style.borderWidth = '1px';
                       const b = button.getBoundingClientRect();
                       const intersects = r => b.left < r.right && b.right > r.left &&
                         b.top < r.bottom && b.bottom > r.top;

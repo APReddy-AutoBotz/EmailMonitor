@@ -79,8 +79,8 @@ def test_source_workflow_is_branch_only_and_has_no_artifact_delivery() -> None:
     assert "branches: [codex/capture-pixel-regression-20261102]" in workflow
     assert "pull_request:" not in workflow and "workflow_dispatch:" not in workflow
     assert "upload-artifact" not in workflow and "EM_OPERATOR_CAPTURE" not in workflow
-    assert "b1979d1a21fc063fbe723f70695965b096a723f5" in workflow
-    assert "e1852716619cdda465aaa838d0cc17f810e7c85a" in workflow
+    assert "477c260e692bdde8691e6dc69ad0e1b1cd0f484b" in workflow
+    assert "233fee2bf058fce4f34cee9ac32881ed1f0cc60c" in workflow
     assert "git diff --quiet" in workflow
     dockerfile = (ROOT / "scripts/isolation/Dockerfile.capture-pixel").read_text()
     assert "sha256:96b39581c89131729a7ecb8d532314af54c7f9bcc7a61fe15c7a9e77602acf59" in dockerfile
