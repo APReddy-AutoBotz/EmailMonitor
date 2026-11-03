@@ -1,0 +1,223 @@
+"""Synthetic loopback broker harness. This is not a production worker identity design."""
+
+import os
+import time
+from pathlib import Path
+from typing import Any
+from urllib.parse import urlsplit
+from uuid import UUID
+
+from celery import Celery
+from kombu import Exchange, Queue
+from pydantic import Field, model_validator
+
+from emailmonitor.config import Settings
+from emailmonitor.discovery.broker import process as discover_process
+from emailmonitor.discovery.service import Discovery
+from emailmonitor.jobs.callback_wake import FixtureCallbackWake
+from emailmonitor.jobs.diagnostics import TASK, WorkerDiagnostics, emit
+from emailmonitor.jobs.entitlement_diagnostics import EntitlementDiagnostics
+from emailmonitor.jobs.ledger import Ledger, Work
+from emailmonitor.jobs.models import StrictModel
+from emailmonitor.jobs.queues import owned_queues
+from emailmonitor.organizations.database import Database
+from emailmonitor.progress.broker import process as execute_process
+from emailmonitor.progress.execution import ExecutionDispatcher, ExecutorFactory
+from emailmonitor.progress.service import Progress
+from emailmonitor.results.broker import process as export_process
+from emailmonitor.results.service import Results
+
+
+class FixtureWorkerConfig(StrictModel):
+    environment: str
+    database_url: str
+    broker_url: str
+    organization: str
+    session_token: str = Field(min_length=16, max_length=200)
+    queue: str = Field(pattern=r"^em-fixture-[a-z0-9-]{1,60}$")
+    lease_seconds: int = Field(default=30, ge=1, le=300)
+    diagnostic_delay_seconds: int = Field(default=0, ge=0, le=30)
+    exit_after_commit: bool = False
+    exit_after_observation: bool = False
+    ui_diagnostics: bool = False
+
+    @model_validator(mode="after")
+    def synthetic_boundary(self) -> "FixtureWorkerConfig":
+        if self.environment != "test":
+            raise ValueError("Worker is unavailable outside explicit synthetic test mode")
+        for url, scheme in ((self.database_url, "postgresql+pg8000"), (self.broker_url, "pyamqp")):
+            parsed = urlsplit(url)
+            if (
+                parsed.scheme != scheme
+                or parsed.hostname != "127.0.0.1"
+                or parsed.query
+                or parsed.fragment
+            ):
+                raise ValueError("Disposable loopback dependencies required")
+        UUID(self.organization)
+        return self
+
+
+def create_worker(
+    config: FixtureWorkerConfig, *, executor_factory: ExecutorFactory = ExecutionDispatcher
+) -> tuple[Any, Ledger]:
+    """No global tenant grant: every transaction resolves the current configured test session."""
+    if not callable(executor_factory):
+        raise TypeError("Trusted Python executor factory required")
+    ledger = Ledger(
+        Database(config.database_url),
+        config.session_token,
+        Settings(environment="test", fixture_mode=True),
+    )
+    application = Celery("emailmonitor_fixture", broker=config.broker_url, backend=None)
+    application.steps["consumer"].add(FixtureCallbackWake)
+    application.conf.update(
+        task_serializer="json",
+        accept_content=["json"],
+        result_serializer="json",
+        task_ignore_result=True,
+        task_acks_late=True,
+        task_reject_on_worker_lost=True,
+        worker_prefetch_multiplier=1,
+        task_default_queue=config.queue,
+        task_default_exchange=config.queue,
+        task_default_routing_key=config.queue,
+        worker_detect_quorum_queues=True,
+        task_queues=tuple(
+            Queue(
+                name,
+                Exchange(name, type="direct", durable=True),
+                routing_key=name,
+                durable=True,
+                queue_arguments={"x-queue-type": "quorum"},
+            )
+            for name in owned_queues(config.queue)
+        ),
+        task_default_delivery_mode="persistent",
+        task_create_missing_queues=False,
+        broker_transport_options={"confirm_publish": True},
+        broker_connection_timeout=3,
+        broker_connection_retry_on_startup=False,
+        task_publish_retry=False,
+        worker_enable_remote_control=False,
+        worker_send_task_events=False,
+        worker_hijack_root_logger=False,
+    )
+
+    diagnostic = WorkerDiagnostics(application, config.queue) if config.ui_diagnostics else None
+    if diagnostic is not None:
+        diagnostic.connect()
+        try:
+            EntitlementDiagnostics().connect(ledger.database.engine)
+        except Exception:
+            # Optional observation cannot change worker construction or authority.
+            pass
+
+    def persist(body: dict[str, object]) -> None:
+        work = Work.parse(body)
+        if str(work.organization) != config.organization:
+            raise ValueError("Unexpected diagnostic organization")
+        lease = ledger.claim(work, config.lease_seconds)
+        if lease is None:
+            return
+        if config.diagnostic_delay_seconds:
+            time.sleep(config.diagnostic_delay_seconds)
+        committed = ledger.commit(lease)
+        if committed and config.exit_after_commit:
+            # Explicit disposable fixture failure injection, unavailable in production.
+            os._exit(73)
+
+    def discover(body: dict[str, object]) -> None:
+        discovery = Discovery(ledger.database, config.session_token, ledger.settings)
+        discover_process(discovery, UUID(config.organization), body)
+
+    def execute(body: dict[str, object]) -> None:
+        task = application.tasks[TASK]
+        callback = (
+            diagnostic.record
+            if diagnostic is not None and diagnostic.matches(task, task.request)
+            else None
+        )
+        emit("execute_enter", callback)
+        progress = Progress(ledger.database, config.session_token, ledger.settings)
+
+        def after_observation() -> None:
+            if config.diagnostic_delay_seconds:
+                time.sleep(config.diagnostic_delay_seconds)
+            if config.exit_after_observation:
+                os._exit(74)
+
+        committed = execute_process(
+            progress,
+            UUID(config.organization),
+            body,
+            seconds=min(config.lease_seconds, 120),
+            diagnostic=callback,
+            executor_factory=executor_factory,
+            after_observation=after_observation
+            if config.exit_after_observation or config.diagnostic_delay_seconds
+            else None,
+        )
+        if committed and config.exit_after_commit:
+            os._exit(73)
+
+    def export(body: dict[str, object]) -> None:
+        results = Results(ledger.database, config.session_token, ledger.settings)
+
+        def stop_after_claim() -> None:
+            os._exit(74)
+
+        committed = export_process(
+            results,
+            UUID(config.organization),
+            body,
+            seconds=min(config.lease_seconds, 120),
+            after_claim=stop_after_claim if config.exit_after_observation else None,
+        )
+        if committed and config.exit_after_commit:
+            os._exit(73)
+
+    def retention(body: dict[str, object]) -> None:
+        from emailmonitor.lifecycle.broker import process
+        from emailmonitor.lifecycle.service import Lifecycle
+
+        process(
+            Lifecycle(ledger.database, config.session_token, ledger.settings),
+            UUID(config.organization),
+            body,
+        )
+
+    # These closures own one config/session/ledger, never another app's worker identity.
+    application.task(name="emailmonitor.fixture.retention", typing=False, shared=False)(retention)
+    application.task(name="emailmonitor.fixture.export", typing=False, shared=False)(export)
+    application.task(name="emailmonitor.fixture.execute", typing=False, shared=False)(execute)
+    application.task(name="emailmonitor.fixture.discover", typing=False, shared=False)(discover)
+    application.task(name="emailmonitor.fixture.persist", typing=False, shared=False)(persist)
+    return application, ledger
+
+
+def publish(application: Any, ledger: Ledger, organization: UUID) -> int:
+    """Confirm broker acceptance before marking outbox; uncertain delivery can be replayed."""
+    count = 0
+    for work in ledger.outbox(organization):
+        application.send_task(
+            "emailmonitor.fixture.persist",
+            args=[ledger.envelope(work)],
+            queue=application.conf.task_default_queue,
+            routing_key=application.conf.task_default_queue,
+            delivery_mode=2,
+            mandatory=True,
+            retry=False,
+        )
+        ledger.confirmed(work)
+        count += 1
+    return count
+
+
+def from_environment() -> Any:
+    if os.environ.get("EM_FIXTURE_WORKER") != "true":
+        raise ValueError("Synthetic worker harness must be explicitly selected")
+    config = FixtureWorkerConfig.model_validate_json(
+        Path(os.environ["EM_FIXTURE_WORKER_CONFIG"]).read_text()
+    )
+    return create_worker(config)[0]

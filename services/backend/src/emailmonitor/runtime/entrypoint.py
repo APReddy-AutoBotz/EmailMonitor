@@ -1,0 +1,151 @@
+"""Installed service worker/publisher entrypoints for preprovisioned test systems.
+
+No login, schema, grants, credentials or source approvals are created here. The
+configuration file is operator-supplied, bounded, and never printed. Production
+configuration remains refused until its separate identity/deployment gates pass.
+"""
+
+import argparse
+import os
+import sys
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from emailmonitor.runtime.service_config import ServiceRuntimeConfig
+
+
+def load_config(path: Path) -> "ServiceRuntimeConfig":
+    if path.is_symlink() or not path.is_file() or path.stat().st_size > 16_384:
+        raise ValueError("Bounded explicit service configuration required")
+    with path.open("rb") as source:
+        body = source.read(16_385)
+    if len(body) > 16_384:
+        raise ValueError("Bounded explicit service configuration required")
+    from emailmonitor.runtime.service_config import ServiceRuntimeConfig
+
+    return ServiceRuntimeConfig.model_validate_json(body)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="EmailMonitor bounded service runtime")
+    parser.add_argument(
+        "command", choices=("api", "worker", "publish-once", "reconcile-once", "check")
+    )
+    parser.add_argument("--config", type=Path, required=True)
+    options = parser.parse_args()
+    worker = controller = None
+    status = 0
+    try:
+        if options.command == "api":
+            path = options.config
+            if path.is_symlink() or not path.is_file() or path.stat().st_size > 65_536:
+                raise ValueError("Bounded API configuration required")
+            with path.open("rb") as source:
+                body = source.read(65_537)
+            if len(body) > 65_536:
+                raise ValueError("Bounded API configuration required")
+            from emailmonitor.runtime.api_entrypoint import ReferenceAPI, run_api
+
+            run_api(ReferenceAPI.model_validate_json(body))
+        else:
+            config = load_config(options.config)
+            if options.command == "publish-once":
+                from emailmonitor.runtime.service_publisher import publish_service_once
+
+                if os.environ.get("EM_SYNTHETIC_PUBLISHER_STAGE") == "1":
+                    count = publish_service_once(config, diagnostic=True)
+                else:
+                    count = publish_service_once(config)
+                print(f"published={count}")
+            elif options.command == "check":
+                from emailmonitor.runtime.database import ServiceDatabase
+
+                database = ServiceDatabase(config.database_url, config.process)
+                try:
+                    if database.organization != config.organization:
+                        raise ValueError("Service tenant mismatch")
+                finally:
+                    database.engine.dispose()
+                print("service_identity_ready")
+            else:
+                from emailmonitor.runtime.worker import ServiceWorker
+
+                worker = ServiceWorker(config)
+                if options.command == "reconcile-once":
+                    print(f"reconciled={worker.reconcile()}")
+                else:
+                    # Closed options: no prefork sockets, remote control, embedded
+                    # beat, arbitrary queues, plugins or caller-selected task module.
+                    controller = worker.application.Worker(
+                        pool="solo",
+                        concurrency=1,
+                        loglevel="CRITICAL",
+                        without_gossip=True,
+                        without_mingle=True,
+                        without_heartbeat=True,
+                        redirect_stdouts=False,
+                        quiet=True,
+                    )
+                    controller.start()
+                    if controller.exitcode not in (None, 0):
+                        raise RuntimeError("Worker stopped unsuccessfully")
+                    # Celery bootstep teardown logs and swallows exceptions.
+                    # A wake ownership/cleanup failure must still fail the CLI.
+                    worker.signal_wake.require_clean()
+    except Exception as error:
+        # Optional, fixed synthetic acceptance receipt. Preserve the ordinary
+        # suppressed exception, return status and default stderr exactly.
+        if (
+            options.command == "publish-once"
+            and os.environ.get("EM_SYNTHETIC_PUBLISHER_STAGE") == "1"
+        ):
+            try:
+                from emailmonitor.runtime.publisher import PublisherCleanupError, PublisherError
+
+                stage = getattr(error, "_em_publisher_stage", None)
+                if (
+                    type(error) not in (PublisherError, PublisherCleanupError)
+                    or type(stage) is not str
+                    or stage
+                    not in (
+                        "pending",
+                        "broker_connect",
+                        "claim",
+                        "broker_send",
+                        "confirm",
+                        "cleanup",
+                    )
+                ):
+                    stage = "startup"
+                print(f"service_publisher_stage={stage}", file=sys.stderr)
+                if stage == "claim":
+                    from emailmonitor.runtime.claim_diagnostics import valid_claim_receipt
+
+                    claim = getattr(error, "_em_publisher_claim", None)
+                    if valid_claim_receipt(claim):
+                        print(f"service_publisher_claim={claim}", file=sys.stderr)
+            except Exception:
+                pass
+        print("service_runtime_failed", file=sys.stderr)
+        status = 1
+    finally:
+        cleanup_failed = False
+        if controller is not None:
+            try:
+                controller.stop()
+            except Exception:
+                cleanup_failed = True
+        if worker is not None:
+            try:
+                worker.close()
+            except Exception:
+                cleanup_failed = True
+        if cleanup_failed:
+            print("service_runtime_cleanup_failed", file=sys.stderr)
+            status = 1
+    return status
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

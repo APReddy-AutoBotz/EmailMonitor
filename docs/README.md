@@ -1,9 +1,10 @@
 # Documentation map
 
-**Design baseline v0.1 — 2026-10-08.** All application capabilities below are specified, not implemented. [Status ledger](22-implementation-status.md) is the authority for delivery progress.
+**Design baseline v0.1 — 2026-10-08.** Core extraction capabilities below remain specified, not implemented; EM-001 scaffold evidence is in the status ledger. [Status ledger](22-implementation-status.md) is the authority for delivery progress.
 
 | Document | Purpose |
 |---|---|
+| [87 Local sibling integration](87-sibling-integration.md) | Unpublished PR58/61/62 reconciliation and remaining validation |
 | [00 Product charter](00-product-charter.md) | User-approved purpose, boundaries, product principles |
 | [01 Business requirements](01-business-requirements.md) | Buyers, outcomes, business rules, commercial validation |
 | [02 Product requirements](02-product-requirements.md) | Prioritized functional and non-functional requirements |
@@ -27,6 +28,8 @@
 | [20 References](20-references.md) | Primary sources checked for this baseline and limitations |
 | [21 Configuration catalog](21-configuration-catalog.md) | Safe defaults, allowed settings and override precedence |
 | [22 Implementation status](22-implementation-status.md) | Honest progress ledger and evidence requirements |
+| [26 Tenant foundation runbook](26-tenant-foundation-runbook.md) | Offline OIDC/session/RBAC/RLS proof, migration and production gates |
+| [25 Development runbook](25-development-runbook.md) | Tested EM-001 setup, version/license matrix and rollback |
 | [23 Source onboarding playbook](23-source-onboarding-playbook.md) | Site certification procedure and candidate-source register |
 
 Architecture decisions are in [ADR-0001](adr/0001-architecture-and-stack.md), [ADR-0002](adr/0002-isolation-and-deployment.md), [ADR-0003](adr/0003-evidence-and-network-policy.md), [ADR-0004](adr/0004-durable-execution.md), and [ADR-0005](adr/0005-ai-and-dependency-licensing.md).
@@ -38,3 +41,40 @@ Machine-readable proposal contracts are in `contracts/`; examples are in `contra
 The user-approved priority is contact extraction from keyword/source or URL input, for many organizations. The rest of this pack supplies implementation decisions and explicit hypotheses. Treat security/source restrictions as invariants; treat throughput, pricing and coverage as targets to test. Change incompatible contracts and requirements together in a reviewed PR, add an ADR for architectural changes, and never overwrite measured results with design targets.
 
 Versioning: documents use Git history; public API uses `/api/v1`; event/schema revisions use a `schema_version`; connectors and source policies have independent versions. Every result stores the extraction, association and policy versions used. Dates are ISO 8601; persisted times are UTC; UI renders the user's selected timezone.
+
+- [27 — Offline source-policy runbook](27-source-policy-runbook.md)
+
+- [28 — Partial offline fetch runbook](28-offline-fetch-runbook.md)
+
+- [Durable offline jobs runbook](29-durable-offline-jobs-runbook.md)
+
+[30 Isolated fixture diagnostics](30-isolated-fixture-runbook.md) documents partial real-TLS/parser work and the unmet browser gate.
+
+[31 Synthetic browser diagnostics](31-synthetic-browser-boundary.md) records the approved temporary profile, actual acceptance requirements and remaining release gates.
+
+[38 — Offline association and review](38-offline-association-runbook.md).
+
+[49 — Disabled provider request and parser binding](49-disabled-provider-binding.md) describes the unregistered ScienceDirect acquisition prerequisites and versioned network-none XML protocol.
+
+- [39 Offline execution and progress](39-offline-progress-runbook.md) — durable synthetic lifecycle, counters, authorized SSE and replay
+
+[65 — Retained article quality during review](65-observation-quality-review.md)
+
+[66 — Bounded durable service reference runtime](66-durable-service-reference-runtime.md)
+
+- [Installed controlled XML architecture](adr/0007-installed-controlled-xml.md)
+  and [candidate validation](../reports/em017-installed-controlled-xml-validation.md).
+
+- [67 — Closed synthetic service-authority restore seal](67-closed-service-authority-restore.md)
+
+- [68 — Retained job outcome investigation](68-retained-job-outcome-investigation.md)
+
+- [69 — Exact retained article selection and candidate presence](69-retained-article-filters.md)
+
+- [78 — Retained article metadata in review](78-retained-article-metadata.md)
+- [84 — Retained article details from contact results](84-contact-article-details.md)
+- [85 — Source search filter contract](85-source-filter-contract.md)
+- [86 — Transient review context](86-transient-review-context.md)
+
+- [81 — Retained job timing](81-retained-job-timing.md)
+- [80 — Contextual contact suppression](80-contextual-contact-suppression.md)

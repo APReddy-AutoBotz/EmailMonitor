@@ -1,6 +1,6 @@
 # 16 — Dependency-ordered delivery backlog
 
-**Baseline:** 2026-10-08. All implementation tasks are unstarted. Only EM-001 is initially READY. Complexity labels are relative planning estimates, not calendar commitments. One reviewable PR per task or smaller accepted slice.
+**Baseline:** 2026-10-08. **Current implementation checkpoint:** scoped synthetic/offline foundations EM-001–014 are independently reviewed and exact-head CI-verified in unmerged Drafts. Earlier partial EM-004 records remain historical in the reports; its scoped protected-fetch/sandbox acceptance and dependency gates subsequently closed. EM-015/016 require real-source permissions and authorized samples. A bounded partial EM-017 disposable synthetic restore exercise can proceed independently on EM-013/014; full staging/deployment acceptance remains unmet. Complexity labels are relative planning estimates, not calendar commitments. One reviewable PR per task or smaller accepted slice.
 
 ## Core tasks
 
@@ -89,3 +89,25 @@ No extension is part of the first Codex prompt. Exact task dates are intentional
 ## Task completion discipline
 
 Update docs/22-implementation-status.md with status, commit/PR, commands/results and gaps. Map delivered requirements to test evidence in document 17. A task is Done only when its acceptance boundary is met; skipped tests, missing external approval and mock-only demonstrations remain explicit. Architectural deviations require an ADR, not silent stack expansion.
+
+### EM-011/012 accepted-results handoff candidate
+
+[Local handoff implementation](72-accepted-selection-handoff.md) connects Review, accepted Contacts and explicit export preview/create. No schema or authority changes; hosted keyboard acceptance and final review remain pending.
+
+### EM-003/006/011/012 retained source-selection local candidate
+
+FR-003/004/023/024/025: [existing registered source workflow](73-retained-source-selection.md).
+Catalog-backed keyword choice and current retained-source selection connect planning,
+Review, accepted Contacts and immutable exports. Single synthetic source only;
+actual hosted acceptance and publication remain pending, with no new acquisition authority.
+
+### EM-005/010/012 connected operator lifecycle acceptance candidate
+
+[Fixture-only lifecycle journey](74-connected-operator-lifecycle.md) connects
+existing controls to retained review/export and continuation recovery. No new
+runtime policy or migration; hosted acceptance remains pending until executed.
+
+Retained metadata review slice (FR-010/017, EM-007/008/009/012): expose existing
+article metadata and citations through the current-authorized read path and
+connected review panel. Scope and acceptance are in `docs/78-retained-article-metadata.md`;
+no search-filter or reuse semantics, migration or acquisition authority are added.

@@ -1,0 +1,10 @@
+{
+  "job_id": null,
+  "format": "xlsx",
+  "purpose": "academic_contact_research",
+  "include_unresolved": false,
+  "include_article_outcomes": true,
+  "author_target": "all",
+  "query": "",
+  "ttl_seconds": 86400
+}

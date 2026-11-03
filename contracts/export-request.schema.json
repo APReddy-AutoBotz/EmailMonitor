@@ -1,0 +1,159 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "job_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Job Id"
+    },
+    "format": {
+      "enum": [
+        "csv",
+        "xlsx"
+      ],
+      "title": "Format",
+      "type": "string"
+    },
+    "purpose": {
+      "const": "academic_contact_research",
+      "title": "Purpose",
+      "type": "string"
+    },
+    "include_unresolved": {
+      "default": false,
+      "title": "Include Unresolved",
+      "type": "boolean"
+    },
+    "include_article_outcomes": {
+      "default": true,
+      "title": "Include Article Outcomes",
+      "type": "boolean"
+    },
+    "author_target": {
+      "default": "all",
+      "enum": [
+        "all",
+        "first",
+        "corresponding"
+      ],
+      "title": "Author Target",
+      "type": "string"
+    },
+    "query": {
+      "default": "",
+      "maxLength": 100,
+      "title": "Query",
+      "type": "string"
+    },
+    "ttl_seconds": {
+      "default": 86400,
+      "maximum": 86400,
+      "minimum": 1,
+      "title": "Ttl Seconds",
+      "type": "integer"
+    },
+    "optional_contact_fields": {
+      "default": [
+        "affiliations",
+        "article_title"
+      ],
+      "items": {
+        "enum": [
+          "affiliations",
+          "article_title"
+        ],
+        "type": "string"
+      },
+      "maxItems": 2,
+      "title": "Optional Contact Fields",
+      "type": "array",
+      "uniqueItems": true
+    },
+    "item_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Item Id",
+      "description": "Exact retained article item; job_id is required when non-null."
+    },
+    "article_outcome_presence": {
+      "type": "string",
+      "enum": [
+        "all",
+        "observed_candidate",
+        "completed_without_candidate",
+        "unresolved"
+      ],
+      "default": "all",
+      "title": "Article Outcome Presence",
+      "description": "Filters only separate article outcomes; does not prune Contacts."
+    },
+    "paper_doi": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 256,
+      "pattern": "^10\\.[0-9]{4,9}/[A-Za-z0-9._;():-]+(?:/[A-Za-z0-9._;():-]+)*$",
+      "description": "Optional observed bare DOI; canonicalized to lowercase. Unsupported or conflicting source facts never establish identity.",
+      "not": {
+        "type": "string",
+        "pattern": "(^|/)\\.{1,2}(/|$)|\\s"
+      }
+    },
+    "source_id": {
+      "enum": [
+        "synthetic-publisher",
+        null
+      ],
+      "description": "Exact existing registered provenance identity; omitted or null preserves the legacy unfiltered selection."
+    }
+  },
+  "required": [
+    "format",
+    "purpose"
+  ],
+  "title": "ExportInput",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "allOf": [
+    {
+      "if": {
+        "required": [
+          "item_id"
+        ],
+        "properties": {
+          "item_id": {
+            "type": "string"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "job_id"
+        ],
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      }
+    }
+  ]
+}

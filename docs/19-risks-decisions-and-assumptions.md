@@ -67,3 +67,53 @@ A-06: optional organization branding is useful; white-label/resale rights are no
 | Sending countries, provider, templates and mailboxes | EM-EXT-04 | Sending off |
 
 Do not ask the product owner to reapprove already specified core input modes or multi-organization scope. Surface only actual implementation/production blockers; continue independent offline work.
+
+## EM-002 offline privilege separation decision
+
+The authentication verifier and tenant SQL runtime are separate database principals and pools. Only the verifier principal may execute login-flow/session-creation functions; tenant runtime has no role-membership or SET ROLE path to it or the owner. This corrects the initial unshipped shared-role grant identified in independent review. Defensive catalog checks and normal synthetic login regressions cover the correction. A verifier-process compromise and production credential/process isolation remain staging security-review requirements; the test-only single-process assembly is not a deployment certification. No external authentication grant or production role was created.
+
+## Approved synthetic browser profile scope (2026-10-11)
+
+The project owner approved a temporary per-container browser security profile for synthetic CI only. The current official Moby default is preserved with two extra argument-unfiltered allow blocks for clone/setns/unshare and separately approved chroot for one controlled attempt; it does not prove flags are confined to user-namespace creation or chroot attempts confined to a particular pathname/process. The chroot exception expands syscall surface; kernel namespace-capability/path/LSM checks remain. No added capabilities, privileged mode, host networking/security changes, secret/host socket mounts, root browser or no-sandbox fallback. Actual sandbox support is an acceptance dependency, not assumed from configuration. Full EM004 stays partial and live/production remain disabled. Browser/base-image SBOM/license/vulnerability gates and Playwright's bundled proxy-agent-negotiate missing MIT text remain release limitations.
+
+
+## EM-014 bounded lifecycle interpretation
+
+Synthetic contact/domain privacy matching is conservative ASCII case-folded matching, never identity dedup. Matching content fences a whole job and invalidates all tenant exports; withdrawal cannot restore old content. Existing-member support contexts provide audited metadata only, with current authority and max4h expiry; external support grants are unsupported. Raw retention is only an archive ceiling because no raw archive exists. Content-free root/accounting/tombstones remain for idempotence/restore; real backup expiry/restore/legal holds require EM-017 and separate decisions. These limits are documented rather than represented as full production compliance.
+
+
+EM-014's scoped synthetic foundation is independently VERIFIED IN DRAFT at73a1043f/tree73dea867:1386/no-skip application, controlled14 and actual UI/browser/parser/docs. [Exact evidence](../reports/em014-validation.md) retains one alias-batch_id warning and historical/intermittent causes; source review and passing samples do not close EM-WARN-01 or establish production reliability/compliance. Current isolation/cap/deadline assertions were not widened to obtain acceptance. Real-source onboarding remains blocked on concrete publisher selection and genuine permission/access/usage/retention/certification inputs; no credential or production authorization is inferred.
+
+
+EM-017a restore-profile limitation: the independent partial task permits a quiesced same-version synthetic restore with existing job/policy anchors and current privacy/same-version revocation replay. It must refuse unrepresented post-backup jobs, policy versions, changed authentication/support/control state or accounting instead of silently rolling authority or settlement backward. Private digests/keys/archives remain inside the disposable exercise. This does not provide arbitrary point-in-time recovery, production RPO/RTO, real-data erasure or staging infrastructure; those remain actual EM-017 acceptance work. EM-WARN-01 stays historical/open.
+
+EM-017b packaging limitation: the fixture-free metadata image is an engineering prerequisite, not the assembled extraction runtime. Two deterministic source archives and image-content manifests do not establish bit-identical OCI exports, signed provenance, whole-image attribution/security certification, commercial licensing or deployment readiness. Existing base/locks are reused; no new dependency or customer data is introduced. Actual two-build/network-none CI evidence is required; pure helpers and a retry passing an intermittent UI timeout do not close broader runtime or reliability gaps.
+
+Closed service restore candidate: existing principal/delegation revocation may be
+replayed only under the narrow [service seal contract](67-closed-service-authority-restore.md).
+Broader principal history, new authority or business transactions refuse. The target
+never opens; SQL role-behavior probes are distinct from login authentication and
+serving recovery. Quiescence is a fixture-owned prerequisite, not something a
+repeatable-read snapshot alone proves.
+
+### 2026-10-23 — Bounded retained article filter decision
+
+Use exact retained `(job_id,item_id)` identity, not URL/DOI equivalence. Candidate
+presence is a three-way retained-observation classification and filters only
+article outcomes. Do not equate empty Contacts, rejected associations or execution
+status with complete negative extraction. Resolve continuation source evidence
+through the original batch and exact inherited chain. Preserve the legacy outcome
+row shape and omitted default keys. Owner-private exact-export revalidation may
+inspect captured source/child authority only behind existing export permission;
+it must never broaden shared service visibility or invent membership. Fixed bounds
+and current privacy/retention remain mandatory; see [document 69](69-retained-article-filters.md).
+
+### Receipt concurrency proof limit
+
+Controlled SQL reproduction established publisher receipt/worker authority self-contention. Candidate 0017 uses a shared job lock for receipts only. Existing extraction jobs leave `jobs.source_id` null, so the unchanged permission fence does not acquire source/policy locks via that field; both original and candidate reproduce this limitation. No source-authority repair is included. Full disabling/revocation/deletion linearization remains a proof gate before publication.
+
+### Delegated date, reuse and unlink defaults
+
+The selected conservative product semantics and current implementation limits are recorded in `docs/82-evidence-date-reuse-decisions.md`. In particular, the existing generic HTML `time` parser label does not itself prove an explicit source publication-date declaration, and the current search fixture cannot apply date filtering. Do not infer complete filter support from an accepted request shape.
+
+ScienceDirect's general quota page lists 200 results per page, while its V2 migration guide specifies 10, 25, 50 or 100. The inactive request description uses the narrower V2 set and refuses a page crossing 6,000 results. Publication-year range endpoint inclusivity and journal/book title matching remain unspecified. Provider-native search terms cannot satisfy the product's day-inclusive or exact-journal filters. Applicable retention/contact rights remain unestablished; see [source filter contract](85-source-filter-contract.md).

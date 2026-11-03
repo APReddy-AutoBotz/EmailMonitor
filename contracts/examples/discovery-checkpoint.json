@@ -1,0 +1,16 @@
+{
+  "schema_version": "1.0",
+  "status": "pending",
+  "reason": "first_page",
+  "next_url": "https://synthetic.publisher.example/search-page-1.html",
+  "pages": [],
+  "digests": [],
+  "articles": [],
+  "raw_entries": 0,
+  "duplicates": 0,
+  "reported_total": null,
+  "completeness": "unknown",
+  "api_fallback": "unavailable_not_attempted",
+  "discovery_complete": false,
+  "extraction_implemented": false
+}

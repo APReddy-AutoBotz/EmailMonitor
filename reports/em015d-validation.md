@@ -1,0 +1,37 @@
+# EM-015d — Disabled provider request/response and generalized parser prerequisite
+
+Status: local candidate, partial EM-015. This report records code prerequisites, not live acquisition or production acceptance. No publisher request, real user/researcher data, credential use, source activation, migration, dependency, merge or deployment.
+
+## Baseline and bounded change
+
+The local starting commit is `38c64c5bfda0429f70273bc2e76efda8ebde71bb`, tree `8a9b1c1364893ab5cca911db81471a17b22e3916`. The coordinating review reconciled this exact tree with accepted remote Draft [PR25](https://github.com/APReddy-AutoBotz/EmailMonitor/pull/25), head `9a5c8f12054502fbfeaccd12d3c0364847143228`. PR25's final body holds its authoritative all-seven-gate record, 1878 application cases without service skips and actual same-container XML→database→human review→CSV/XLSX proof. Earlier in-tree pending entries remain historical. This new candidate requires its own gates.
+
+Feature branch: `feat/em015d-disabled-provider-binding`. The new provider boundary rebuilds canonical existing search/article plans, binds full trusted dispatch context to capped supplied bytes, shares the existing hop planner, defaults to inactive admission and has no live transport. The XML worker now consumes a bounded versioned frame with identifier/digest/profile expectations, and the existing synthetic pipeline uses that frame. A separate host composition binds generalized parsed output back to its exact supplied acquisition and current scope. Fixed synthetic retention/database/source gates are unchanged.
+
+Files: new `fetching/sciencedirect.py`, `parsing/xml_protocol.py`, `extraction/provider_xml.py`, focused provider-boundary tests; existing XML channel/worker and isolated acceptance diagnostic; runbook49, status, traceability, changelog and internal-contract notes. No existing external JSON schema is broadened. Full contract and missing-runtime obligations are in [runbook49](../docs/49-disabled-provider-binding.md).
+
+## Review corrections and local checks
+
+Independent read-only scoping identified the loose existing `RequestPlan`, GET-only synthetic gateway and percent-path incompatibility. The candidate rebuilds typed plans, rejects every redirect and retains the narrower shared URL refusal.
+
+Incremental review found and corrected an important same-URL dispatch gap: URL-only response comparison could misbind query/tenant/job/lease responses. `ProviderResponse` now carries its transport-owned full dispatch binding, checked before any iterator access. It is explicitly not publisher-authored authority. Separate tests reject same-URL swaps before consuming data. Review also caught iterator-construction exceptions outside the safe-error wrapper; both iterator construction and iteration now emit only fixed refusal reasons.
+
+An early focused run passed 336 with 3 explicit actual-container skips in 1.86s. An intermediate normal aggregate passed 1723 with 245 explicit service/container skips in 33.18s, 31 React, docs/schema/examples, lint/format, mypy 212 files, dependency inventory, locked Python/frontend installation, peer checks, TypeScript, ESLint and frontend build. Those receipts predate the final response-binding regression additions and are not final candidate evidence. Initial formatting/import-order failures were corrected with the repository's explicit Ruff configuration before this aggregate.
+
+A further defensive review caught invalid copied Pydantic bindings comparing boolean values equal to integer revisions. Revalidation now uses strict Python-mode dictionaries, because JSON-mode model serialization can normalize the invalid boolean to an integer before validation. Five regressions cover current and response bindings; the initial attempted JSON-mode fix failed those five tests and was corrected. The final focused selection passes 346 with 3 actual-container skips in 1.81s.
+
+## Final local verification receipts
+
+- Focused provider/XML/parser selection: 346 passed, 3 actual-container skips in 1.81s. Command: `UV_CACHE_DIR=/tmp/emailmonitor-uv-cache uv run --project services/backend pytest services/backend/tests/test_provider_boundary.py services/backend/tests/test_xml_pipeline.py services/backend/tests/test_sciencedirect_article.py services/backend/tests/test_sciencedirect_adapter.py -q`. Log: `/tmp/em015d-focused.log`.
+- Normal aggregate: `UV_CACHE_DIR=/tmp/emailmonitor-uv-cache scripts/check.sh`; 1733 passed, 245 explicit skips in 32.85s, plus 31 React tests and all repository checks. Log: `/tmp/em015d-normal.log`.
+- Genuinely new Python environment `/tmp/emailmonitor-em015d-empty-9RNYEl/venv`, verified absent before sync: `UV_CACHE_DIR=/tmp/emailmonitor-uv-cache UV_PROJECT_ENVIRONMENT=/tmp/emailmonitor-em015d-empty-9RNYEl/venv scripts/check.sh`; 1733 passed, 245 explicit skips in 34.21s, plus 31 React and all repository checks. The log records environment creation and installation of 63 locked packages. Log: `/tmp/em015d-empty.log`.
+- Both aggregates used local Python 3.12.14, passed Ruff lint/format (214 files), mypy (212 files), locked dependency/peer checks, inventory covering 64 Python/159 JavaScript locked packages, TypeScript, ESLint and frontend build. Documentation check: 67 Markdown documents, 259 local link targets, 56 JSON files, 24 schemas and 27 valid examples. No local pytest warning summary appeared; historical EM-WARN-01 and the earlier UI-stall cause remain unresolved.
+- Independent corrected-source review found no remaining blocking issue and separately ran the provider/XML/adapter/shared-hop/protected-transport selection: 425 passed, 3 actual-container skips in 2.25s. `git diff --check` passed. Final immutable-tree identity is reported in the commit handoff; this report does not self-reference its own tree hash.
+
+Docker and disposable database/broker services are unavailable locally. The 245 skips are 242 inherited service cases plus 3 new actual-container cases. The new slice adds 100 cases, so the own-head application gate must run 1978 cases without service skips. Actual generalized DOI/PII channel/refusal execution, inherited same-container→database proof, parser isolation/resource/OOM, controlled transport, browser, UI, packaging and documentation gates are still required. Exact-head remote CI has not run for this candidate locally; no local skip is counted as actual runtime acceptance.
+
+## Remaining acceptance and next work
+
+The provider can neither acquire bytes nor authenticate. Pure supplied-byte checks do not prove actual DNS, TLS, peer, egress, current-source database admission, read deadlines or cleanup in a live transport. Controlled current-binding callbacks do not establish source permission. Actual isolated execution, existing tenant/database integration and all seven own-head gates remain required. The Article Retrieval wrapper namespace remains an unverified compatibility assumption. Real source rights/entitlement and approved samples remain unverified, not assumed absent or granted.
+
+Next: close this candidate's immutable review and own-head gates; then implement remaining protected transport/admission prerequisites only within the existing authorization boundaries. Any real source pilot, credential access, new source grant, production packaging or deployment requires its separate applicable prerequisites. Rollback is a source revert plus rebuilding the matching parser image; no durable migration or data rollback is needed.

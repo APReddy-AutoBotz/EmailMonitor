@@ -1,0 +1,189 @@
+"""Draft extraction requests and authorized durable controls; planning remains gated."""
+
+from collections.abc import Callable
+from typing import Literal
+from uuid import UUID
+
+from fastapi import APIRouter, HTTPException, Request
+from pydantic import Field
+from sqlalchemy import text
+
+from emailmonitor.config import Settings
+from emailmonitor.discovery.fixture import step_fixture
+from emailmonitor.discovery.service import Discovery
+from emailmonitor.extraction.service import Extraction
+from emailmonitor.jobs.ledger import Ledger
+from emailmonitor.jobs.models import JobRequest, StrictModel
+from emailmonitor.organizations.database import AuthorizationDenied, Database
+from emailmonitor.organizations.roles import Capability
+
+
+class Revision(StrictModel):
+    expected_revision: int = Field(ge=1)
+
+
+class ArticleRequest(Revision):
+    article_url: Literal[
+        "https://synthetic.publisher.example/article-a.html",
+        "https://synthetic.publisher.example/article-b.html",
+        "https://synthetic.publisher.example/tooltip.html",
+        "https://synthetic.publisher.example/no-contact.html",
+    ]
+
+
+def job_router(
+    database: Database,
+    token: Callable[[Request], str],
+    csrf: Callable[[Request], str],
+    settings: Settings,
+) -> APIRouter:
+    router = APIRouter()
+
+    @router.post("/organizations/{organization_id}/jobs", status_code=201)
+    def create(request: Request, organization_id: UUID, body: JobRequest) -> dict[str, object]:
+        key = request.headers.get("Idempotency-Key", "")
+        try:
+            job = Ledger(database, csrf(request), settings).create(organization_id, body, key)
+        except ValueError as error:
+            raise HTTPException(422, "Bounded Idempotency-Key required") from error
+        return {
+            "id": str(job),
+            "state": "draft",
+            "planning_available": settings.environment == "test" and settings.fixture_mode,
+            "extraction_implemented": False,
+        }
+
+    @router.get("/organizations/{organization_id}/jobs")
+    def jobs(request: Request, organization_id: UUID) -> list[dict[str, object]]:
+        with database.tenant(token(request), organization_id, Capability.READ_ORGANIZATION) as (
+            c,
+            _,
+        ):
+            return [
+                dict(r)
+                for r in c.execute(
+                    text("""SELECT id,kind,state,generation,row_version,
+discovery_complete,created_at FROM emailmonitor.jobs WHERE organization_id=:org
+ORDER BY created_at DESC LIMIT 100"""),
+                    {"org": organization_id},
+                ).mappings()
+            ]
+
+    @router.get("/organizations/{organization_id}/jobs/{job_id}")
+    def job(request: Request, organization_id: UUID, job_id: UUID) -> dict[str, object]:
+        with database.tenant(token(request), organization_id, Capability.READ_ORGANIZATION) as (
+            c,
+            _,
+        ):
+            row = (
+                c.execute(
+                    text("SELECT * FROM emailmonitor.jobs WHERE organization_id=:org AND id=:job"),
+                    {"org": organization_id, "job": job_id},
+                )
+                .mappings()
+                .first()
+            )
+            if row is None:
+                raise AuthorizationDenied()
+            result = dict(row)
+            result["counts"] = {
+                str(r["state"]): int(r["count"])
+                for r in c.execute(
+                    text("""SELECT state,count(*) AS count FROM emailmonitor.job_items
+WHERE organization_id=:org AND job_id=:job GROUP BY state"""),
+                    {"org": organization_id, "job": job_id},
+                ).mappings()
+            }
+            return result
+
+    @router.get("/organizations/{organization_id}/jobs/{job_id}/items")
+    def items(request: Request, organization_id: UUID, job_id: UUID) -> list[dict[str, object]]:
+        with database.tenant(token(request), organization_id, Capability.READ_ORGANIZATION) as (
+            c,
+            _,
+        ):
+            rows = c.execute(
+                text("""SELECT id,state,attempts,result FROM emailmonitor.job_items
+WHERE organization_id=:org AND job_id=:job ORDER BY id LIMIT 100"""),
+                {"org": organization_id, "job": job_id},
+            ).mappings()
+            return [dict(r) for r in rows]
+
+    @router.post("/organizations/{organization_id}/jobs/{job_id}/plan")
+    def plan(
+        request: Request, organization_id: UUID, job_id: UUID, body: Revision
+    ) -> dict[str, object]:
+        if not settings.fixture_mode:
+            raise HTTPException(409, "Synthetic fixture planning requires explicit test mode")
+        session = csrf(request)
+        planned = Discovery(database, session, settings).plan(
+            organization_id, job_id, body.expected_revision
+        )
+        plan_data = planned.get("plan")
+        if isinstance(plan_data, dict) and plan_data.get("reason") == "retained_reuse_authored":
+            from emailmonitor.associations.reuse_materialization import materialize_draft
+            from emailmonitor.associations.service import Associations
+
+            url = plan_data.get("start_url")
+            if not isinstance(url, str):
+                raise HTTPException(409, "Retained reuse plan unavailable")
+            materialize_draft(
+                Associations(database, session, settings), organization_id, job_id, url
+            )
+        return planned
+
+    @router.post("/organizations/{organization_id}/jobs/{job_id}/discover-fixture-page")
+    def discover_page(
+        request: Request, organization_id: UUID, job_id: UUID, body: Revision
+    ) -> dict[str, object]:
+        if not settings.fixture_mode:
+            raise HTTPException(409, "Synthetic fixture discovery requires explicit test mode")
+        try:
+            return step_fixture(
+                Discovery(database, csrf(request), settings),
+                organization_id,
+                job_id,
+                body.expected_revision,
+            )
+        except ValueError as error:
+            raise HTTPException(409, "Discovery revision conflict or stopped") from error
+
+    @router.get("/organizations/{organization_id}/jobs/{job_id}/discovery")
+    def discovery(request: Request, organization_id: UUID, job_id: UUID) -> dict[str, object]:
+        if not settings.fixture_mode:
+            raise HTTPException(409, "Synthetic fixture planning requires explicit test mode")
+        return Discovery(database, token(request), settings).read(organization_id, job_id)
+
+    @router.post("/organizations/{organization_id}/jobs/{job_id}/extract-fixture-article")
+    def extract_article(
+        request: Request, organization_id: UUID, job_id: UUID, body: ArticleRequest
+    ) -> dict[str, object]:
+        if not settings.fixture_mode:
+            raise HTTPException(409, "Authored fixture extraction requires explicit test mode")
+        return Extraction(database, csrf(request), settings).fixture(
+            organization_id, job_id, body.article_url, body.expected_revision
+        )
+
+    @router.get("/organizations/{organization_id}/jobs/{job_id}/article-observations")
+    def article_observations(
+        request: Request, organization_id: UUID, job_id: UUID
+    ) -> list[dict[str, object]]:
+        if not settings.fixture_mode:
+            raise HTTPException(409, "Authored fixture extraction requires explicit test mode")
+        return Extraction(database, token(request), settings).read(organization_id, job_id)
+
+    @router.post("/organizations/{organization_id}/jobs/{job_id}/{action}")
+    def control(
+        request: Request, organization_id: UUID, job_id: UUID, action: str, body: Revision
+    ) -> dict[str, bool]:
+        if action not in {"pause", "resume", "cancel"}:
+            raise HTTPException(
+                409,
+                "Extraction start and continuation are unavailable until extraction is implemented",
+            )
+        Ledger(database, csrf(request), settings).control(
+            organization_id, job_id, action, body.expected_revision
+        )
+        return {"updated": True}
+
+    return router

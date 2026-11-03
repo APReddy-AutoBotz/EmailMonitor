@@ -1,0 +1,15 @@
+{
+  "organization_id": "b0000000-0000-4000-8000-000000000001",
+  "contacts": 1,
+  "article_outcomes": 2,
+  "optional_contact_fields": [
+    "affiliations",
+    "article_title"
+  ],
+  "counts_may_change": true,
+  "excluded_reasons": [
+    "unaccepted_excluded_by_default",
+    "rejected_and_suppressed_excluded",
+    "unavailable_records_not_disclosed"
+  ]
+}

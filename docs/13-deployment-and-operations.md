@@ -61,3 +61,37 @@ Provision owner, region, entitlements, identity connection, source policies/cred
 ## Support model
 
 Maintain severity definitions, named responsibility, response targets and supported version window in customer contracts. The baseline does not promise 24/7 staffing. No remote access by default. Customer-specific failures are reproduced with sanitized fixtures, not copied production contact lists.
+
+## Code-only service reference candidate
+
+[Document 66](66-durable-service-reference-runtime.md) specifies the installed
+API/web, worker and finite publisher commands, exact service schema readiness,
+HTML-only synthetic profile and external activation boundary. Migration 0014 does
+not create login credentials or enroll historical jobs. Legacy restore refuses
+service-authority state pending a revocation-aware seal; production activation and
+measured recovery acceptance remain separate gates.
+
+## Controlled XML installed reference candidate
+
+The code-only controlled XML profile requires the owned supervisor composition in
+[ADR0007](adr/0007-installed-controlled-xml.md). Do not start it through the plain
+service worker CLI: the fixed installed container entrypoint must receive its
+bounded private bootstrap and byte capability from the verified launcher.
+
+The supervisor verifies immutable installed service/parser artifacts and the
+controlled gateway topology, and supplies only disposable synthetic configuration
+in acceptance. The worker has no host mounts or Docker socket. Its host networking
+retains the existing loopback SQL/broker transport; this is not an egress-isolation
+claim. Startup refuses an unverifiable local Docker endpoint or listener ownership,
+any dockerd TCP listener, unsupported confinement, or mismatched artifact/profile.
+The trusted host must not introduce Docker proxies or change listeners during the
+session. No script changes host security settings to make this prerequisite pass.
+
+The launcher owns actual worker and parser container identities and cleanup; the
+outer supervisor owns gateway/image cleanup after the launcher releases them.
+Finite gateway budgets are unchanged. Exhaustion, uncertain protocol state,
+revocation or failed cleanup requires a failed session and explicit supervised
+fresh provisioning, not an in-place retry or counter reset. Durable committed XML
+observations support recovery without repeating acquisition or parsing. No new
+migration, permanent login, provider credential, production activation or rollout
+is part of this reference candidate.

@@ -1,0 +1,369 @@
+{
+  "$defs": {
+    "Evidence": {
+      "additionalProperties": false,
+      "properties": {
+        "locator": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Locator",
+          "type": "string"
+        },
+        "excerpt": {
+          "maxLength": 300,
+          "title": "Excerpt",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "structured_metadata",
+            "article_dom",
+            "mailto",
+            "public_attribute",
+            "browser_dom"
+          ],
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "locator",
+        "excerpt",
+        "kind"
+      ],
+      "title": "Evidence",
+      "type": "object"
+    },
+    "MetadataFact": {
+      "additionalProperties": false,
+      "properties": {
+        "field": {
+          "enum": [
+            "title",
+            "journal",
+            "publication_date",
+            "doi"
+          ],
+          "title": "Field",
+          "type": "string"
+        },
+        "value": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Value",
+          "type": "string"
+        },
+        "date_type": {
+          "default": "unspecified",
+          "enum": [
+            "published",
+            "unspecified"
+          ],
+          "title": "Date Type",
+          "type": "string"
+        },
+        "evidence": {
+          "$ref": "#/$defs/Evidence"
+        }
+      },
+      "required": [
+        "field",
+        "value",
+        "evidence"
+      ],
+      "title": "MetadataFact",
+      "type": "object"
+    },
+    "MetadataValues": {
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Title"
+        },
+        "journal": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Journal"
+        },
+        "publication_date": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Publication Date"
+        },
+        "doi": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Doi"
+        }
+      },
+      "title": "MetadataValues",
+      "type": "object"
+    },
+    "PdfEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "page": {
+          "maximum": 4,
+          "minimum": 1,
+          "title": "Page",
+          "type": "integer"
+        },
+        "locator": {
+          "pattern": "^page:[1-4]:fragment:[0-9]{1,3}$",
+          "title": "Locator",
+          "type": "string"
+        },
+        "anchor": {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Anchor",
+          "type": "array"
+        },
+        "region": {
+          "maxItems": 4,
+          "minItems": 4,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Region",
+          "type": "array"
+        },
+        "coordinate_units": {
+          "const": "pdf_points",
+          "default": "pdf_points",
+          "title": "Coordinate Units",
+          "type": "string"
+        },
+        "coordinate_origin": {
+          "const": "bottom_left",
+          "default": "bottom_left",
+          "title": "Coordinate Origin",
+          "type": "string"
+        },
+        "region_precision": {
+          "const": "full_cropbox_not_glyph_bbox",
+          "default": "full_cropbox_not_glyph_bbox",
+          "title": "Region Precision",
+          "type": "string"
+        },
+        "excerpt": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Excerpt",
+          "type": "string"
+        }
+      },
+      "required": [
+        "page",
+        "locator",
+        "anchor",
+        "region",
+        "excerpt"
+      ],
+      "title": "PdfEvidence",
+      "type": "object"
+    },
+    "PdfMetadata": {
+      "additionalProperties": false,
+      "properties": {
+        "date_type": {
+          "const": "unspecified",
+          "default": "unspecified",
+          "title": "Date Type",
+          "type": "string"
+        },
+        "field": {
+          "enum": [
+            "title",
+            "journal",
+            "publication_date",
+            "doi"
+          ],
+          "title": "Field",
+          "type": "string"
+        },
+        "value": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Value",
+          "type": "string"
+        },
+        "evidence": {
+          "$ref": "#/$defs/PdfEvidence"
+        }
+      },
+      "required": [
+        "field",
+        "value",
+        "evidence"
+      ],
+      "title": "PdfMetadata",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "view_version": {
+      "const": "article-metadata-v1",
+      "default": "article-metadata-v1",
+      "title": "View Version",
+      "type": "string"
+    },
+    "scope": {
+      "const": "article",
+      "default": "article",
+      "title": "Scope",
+      "type": "string"
+    },
+    "organization_id": {
+      "format": "uuid",
+      "title": "Organization Id",
+      "type": "string"
+    },
+    "batch_id": {
+      "format": "uuid",
+      "title": "Batch Id",
+      "type": "string"
+    },
+    "source_url": {
+      "maxLength": 2048,
+      "minLength": 1,
+      "title": "Source Url",
+      "type": "string"
+    },
+    "content_digest": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Content Digest",
+      "type": "string"
+    },
+    "parser_version": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Parser Version",
+      "type": "string"
+    },
+    "observation_route": {
+      "enum": [
+        "html",
+        "browser_dom",
+        "pdf",
+        "article_xml"
+      ],
+      "title": "Observation Route",
+      "type": "string"
+    },
+    "preferred_metadata": {
+      "$ref": "#/$defs/MetadataValues"
+    },
+    "facts": {
+      "items": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/MetadataFact"
+          },
+          {
+            "$ref": "#/$defs/PdfMetadata"
+          }
+        ]
+      },
+      "maxItems": 100,
+      "title": "Facts",
+      "type": "array"
+    },
+    "fact_availability": {
+      "enum": [
+        "recorded",
+        "not_recorded"
+      ],
+      "title": "Fact Availability",
+      "type": "string"
+    },
+    "multiple_value_fields": {
+      "items": {
+        "enum": [
+          "title",
+          "journal",
+          "publication_date",
+          "doi"
+        ],
+        "type": "string"
+      },
+      "title": "Multiple Value Fields",
+      "type": "array"
+    },
+    "date_interpretation": {
+      "const": "retained_text_and_recorded_type_only",
+      "default": "retained_text_and_recorded_type_only",
+      "title": "Date Interpretation",
+      "type": "string"
+    }
+  },
+  "required": [
+    "organization_id",
+    "batch_id",
+    "source_url",
+    "content_digest",
+    "parser_version",
+    "observation_route",
+    "preferred_metadata",
+    "facts",
+    "fact_availability",
+    "multiple_value_fields"
+  ],
+  "title": "ArticleMetadata",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

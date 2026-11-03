@@ -1,0 +1,128 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "organization_id": {
+      "format": "uuid",
+      "title": "Organization Id",
+      "type": "string"
+    },
+    "id": {
+      "format": "uuid",
+      "title": "Id",
+      "type": "string"
+    },
+    "requested_by": {
+      "format": "uuid",
+      "title": "Requested By",
+      "type": "string"
+    },
+    "format": {
+      "enum": [
+        "csv",
+        "xlsx"
+      ],
+      "title": "Format",
+      "type": "string"
+    },
+    "purpose": {
+      "const": "academic_contact_research",
+      "title": "Purpose",
+      "type": "string"
+    },
+    "state": {
+      "enum": [
+        "queued",
+        "running",
+        "ready",
+        "failed",
+        "revoked",
+        "expired"
+      ],
+      "title": "State",
+      "type": "string"
+    },
+    "reason": {
+      "enum": [
+        "scheduled",
+        "rendering",
+        "complete",
+        "unsafe_csv_cell",
+        "snapshot_changed",
+        "worker_failure",
+        "unsupported_text",
+        "render_limit",
+        "user_revoked",
+        "expired"
+      ],
+      "title": "Reason",
+      "type": "string"
+    },
+    "revision": {
+      "minimum": 1,
+      "title": "Revision",
+      "type": "integer"
+    },
+    "generation": {
+      "minimum": 1,
+      "title": "Generation",
+      "type": "integer"
+    },
+    "download_available": {
+      "default": false,
+      "title": "Download Available",
+      "type": "boolean"
+    },
+    "contacts": {
+      "maximum": 2000,
+      "minimum": 0,
+      "title": "Contacts",
+      "type": "integer"
+    },
+    "article_outcomes": {
+      "maximum": 2000,
+      "minimum": 0,
+      "title": "Article Outcomes",
+      "type": "integer"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "expires_at": {
+      "format": "date-time",
+      "title": "Expires At",
+      "type": "string"
+    },
+    "synthetic": {
+      "const": true,
+      "default": true,
+      "title": "Synthetic",
+      "type": "boolean"
+    },
+    "production_enabled": {
+      "const": false,
+      "default": false,
+      "title": "Production Enabled",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "organization_id",
+    "id",
+    "requested_by",
+    "format",
+    "purpose",
+    "state",
+    "reason",
+    "revision",
+    "generation",
+    "contacts",
+    "article_outcomes",
+    "created_at",
+    "expires_at"
+  ],
+  "title": "ExportState",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

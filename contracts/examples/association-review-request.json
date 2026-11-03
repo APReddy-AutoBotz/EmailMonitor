@@ -1,0 +1,13 @@
+{
+  "batch_id": "a0000000-0000-4000-8000-000000000002",
+  "association_id": "a28f561b-fe0a-5f59-a7ac-712c8b214413",
+  "expected_revision": 1,
+  "action": "accept",
+  "author_id": null,
+  "evidence_ids": [
+    "214ac248-ad8d-59ae-a974-c24d563f340a",
+    "998663fa-317b-5a01-b201-a00bf965cf52",
+    "8baf7149-549a-539a-a14a-9925545de6f3"
+  ],
+  "reason": "Synthetic explicit correspondence evidence"
+}

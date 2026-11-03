@@ -1,0 +1,192 @@
+{
+  "$defs": {
+    "DeletionRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "job_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Job Id"
+        },
+        "reason": {
+          "enum": [
+            "privacy_request",
+            "retention_expired",
+            "owner_request"
+          ],
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "job_id",
+        "reason"
+      ],
+      "title": "DeletionRequest",
+      "type": "object"
+    },
+    "Retention": {
+      "additionalProperties": false,
+      "properties": {
+        "raw_hours": {
+          "default": 24,
+          "maximum": 24,
+          "minimum": 0,
+          "title": "Raw Hours",
+          "type": "integer"
+        },
+        "excerpt_days": {
+          "default": 30,
+          "maximum": 30,
+          "minimum": 0,
+          "title": "Excerpt Days",
+          "type": "integer"
+        },
+        "contact_days": {
+          "default": 90,
+          "maximum": 90,
+          "minimum": 0,
+          "title": "Contact Days",
+          "type": "integer"
+        },
+        "export_hours": {
+          "default": 24,
+          "maximum": 24,
+          "minimum": 0,
+          "title": "Export Hours",
+          "type": "integer"
+        },
+        "audit_days": {
+          "default": 365,
+          "maximum": 365,
+          "minimum": 1,
+          "title": "Audit Days",
+          "type": "integer"
+        },
+        "idempotency_hours": {
+          "default": 24,
+          "maximum": 24,
+          "minimum": 1,
+          "title": "Idempotency Hours",
+          "type": "integer"
+        }
+      },
+      "title": "Retention",
+      "type": "object"
+    },
+    "RetentionUpdate": {
+      "additionalProperties": false,
+      "properties": {
+        "expected_revision": {
+          "minimum": 1,
+          "title": "Expected Revision",
+          "type": "integer"
+        },
+        "retention": {
+          "$ref": "#/$defs/Retention"
+        }
+      },
+      "required": [
+        "expected_revision",
+        "retention"
+      ],
+      "title": "RetentionUpdate",
+      "type": "object"
+    },
+    "SupportCreate": {
+      "additionalProperties": false,
+      "properties": {
+        "grantee_id": {
+          "format": "uuid",
+          "title": "Grantee Id",
+          "type": "string"
+        },
+        "job_id": {
+          "format": "uuid",
+          "title": "Job Id",
+          "type": "string"
+        },
+        "minutes": {
+          "maximum": 240,
+          "minimum": 1,
+          "title": "Minutes",
+          "type": "integer"
+        },
+        "reason": {
+          "enum": [
+            "synthetic_incident",
+            "synthetic_privacy_check"
+          ],
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "grantee_id",
+        "job_id",
+        "minutes",
+        "reason"
+      ],
+      "title": "SupportCreate",
+      "type": "object"
+    },
+    "SuppressionCreate": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "source",
+            "domain",
+            "contact"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "value": {
+          "maxLength": 254,
+          "minLength": 1,
+          "title": "Value",
+          "type": "string"
+        },
+        "reason": {
+          "enum": [
+            "privacy_request",
+            "source_restriction"
+          ],
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "value",
+        "reason"
+      ],
+      "title": "SuppressionCreate",
+      "type": "object"
+    }
+  },
+  "anyOf": [
+    {
+      "$ref": "#/$defs/RetentionUpdate"
+    },
+    {
+      "$ref": "#/$defs/SuppressionCreate"
+    },
+    {
+      "$ref": "#/$defs/DeletionRequest"
+    },
+    {
+      "$ref": "#/$defs/SupportCreate"
+    }
+  ],
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://emailmonitor.example/contracts/lifecycle-request.schema.json"
+}

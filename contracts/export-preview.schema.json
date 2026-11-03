@@ -1,0 +1,61 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "organization_id": {
+      "format": "uuid",
+      "title": "Organization Id",
+      "type": "string"
+    },
+    "contacts": {
+      "maximum": 2000,
+      "minimum": 0,
+      "title": "Contacts",
+      "type": "integer"
+    },
+    "article_outcomes": {
+      "maximum": 2000,
+      "minimum": 0,
+      "title": "Article Outcomes",
+      "type": "integer"
+    },
+    "optional_contact_fields": {
+      "items": {
+        "enum": [
+          "affiliations",
+          "article_title"
+        ],
+        "type": "string"
+      },
+      "title": "Optional Contact Fields",
+      "type": "array"
+    },
+    "counts_may_change": {
+      "const": true,
+      "default": true,
+      "title": "Counts May Change",
+      "type": "boolean"
+    },
+    "excluded_reasons": {
+      "items": {
+        "enum": [
+          "unaccepted_excluded_by_default",
+          "rejected_and_suppressed_excluded",
+          "unavailable_records_not_disclosed"
+        ],
+        "type": "string"
+      },
+      "title": "Excluded Reasons",
+      "type": "array"
+    }
+  },
+  "required": [
+    "organization_id",
+    "contacts",
+    "article_outcomes",
+    "optional_contact_fields",
+    "excluded_reasons"
+  ],
+  "title": "ExportPreview",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

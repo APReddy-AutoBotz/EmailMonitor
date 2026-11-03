@@ -1,0 +1,105 @@
+%PDF-1.3
+%‚„œ”
+1 0 obj
+<<
+/Producer (pypdf)
+/Title (Authored contact\055research fixture)
+/Author (Synthetic fixture)
+>>
+endobj
+2 0 obj
+<<
+/Type /Pages
+/Count 2
+/Kids [ 5 0 R 7 0 R ]
+>>
+endobj
+3 0 obj
+<<
+/Type /Catalog
+/Pages 2 0 R
+>>
+endobj
+4 0 obj
+<<
+/Type /Font
+/Subtype /Type1
+/BaseFont /Courier
+/Encoding /WinAnsiEncoding
+>>
+endobj
+5 0 obj
+<<
+/Type /Page
+/Resources <<
+/Font <<
+/F1 4 0 R
+>>
+>>
+/MediaBox [ 0.0 0.0 612 792 ]
+/Parent 2 0 R
+/Contents 6 0 R
+>>
+endobj
+6 0 obj
+<<
+/Length 550
+>>
+stream
+BT /F1 16 Tf 1 0 0 1 50 745 Tm (Title: Synthetic article A) Tj ET
+BT /F1 11 Tf 1 0 0 1 50 715 Tm (Authors: Mira Rao) Tj ET
+BT /F1 7 Tf 1 0 0 1 162 721 Tm (1) Tj ET
+BT /F1 11 Tf 1 0 0 1 172 715 Tm (; Alex Chen) Tj ET
+BT /F1 7 Tf 1 0 0 1 249 721 Tm (2) Tj ET
+BT /F1 9 Tf 1 0 0 1 50 680 Tm (Journal: Synthetic Research Journal) Tj ET
+BT /F1 10 Tf 1 0 0 1 50 650 Tm (Left column: harmless scientific text.) Tj ET
+BT /F1 10 Tf 1 0 0 1 320 650 Tm (Right column: no author contact here.) Tj ET
+BT /F1 8 Tf 1 0 0 1 50 30 Tm (Support: help@example.org) Tj ET
+
+endstream
+endobj
+7 0 obj
+<<
+/Type /Page
+/Resources <<
+/Font <<
+/F1 4 0 R
+>>
+>>
+/MediaBox [ 0.0 0.0 612 792 ]
+/Parent 2 0 R
+/Contents 8 0 R
+>>
+endobj
+8 0 obj
+<<
+/Length 272
+>>
+stream
+BT /F1 10 Tf 1 0 0 1 50 720 Tm (Continued research text.) Tj ET
+BT /F1 8 Tf 1 0 0 1 50 110 Tm (Correspondence [2]: Alex Chen; alex.chen@example.org) Tj ET
+BT /F1 8 Tf 1 0 0 1 50 70 Tm (References) Tj ET
+BT /F1 8 Tf 1 0 0 1 50 58 Tm (Cited author: cited@example.org) Tj ET
+
+endstream
+endobj
+xref
+0 9
+0000000000 65535 f 
+0000000015 00000 n 
+0000000128 00000 n 
+0000000193 00000 n 
+0000000242 00000 n 
+0000000337 00000 n 
+0000000469 00000 n 
+0000001070 00000 n 
+0000001202 00000 n 
+trailer
+<<
+/Size 9
+/Root 3 0 R
+/Info 1 0 R
+>>
+startxref
+1525
+%%EOF

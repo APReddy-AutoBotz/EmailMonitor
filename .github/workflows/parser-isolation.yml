@@ -1,0 +1,40 @@
+name: Synthetic parser isolation checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: parser-isolation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  parser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Actual network-none and bounded-memory parser checks
+        id: parser-test
+        env:
+          EM_PARSER_STAGE_REPORT: "true"
+        run: python3 scripts/isolation/run_parser_acceptance.py
+      - name: "Parser stage: ${{ steps.parser-test.outputs.parser_stage || 'unavailable' }}"
+        if: ${{ !cancelled() && steps.parser-test.outcome != 'skipped' }}
+        run: ':'
+      - name: "Parser memory phase: ${{ steps.parser-test.outputs.parser_oom_phase || 'unavailable' }}"
+        if: ${{ !cancelled() && steps.parser-test.outcome != 'skipped' }}
+        run: ':'
+      - name: "Parser memory state: ${{ steps.parser-test.outputs.parser_oom_state || 'unavailable' }}"
+        if: ${{ !cancelled() && steps.parser-test.outcome != 'skipped' }}
+        run: ':'
+      - name: "Parser memory cleanup: ${{ steps.parser-test.outputs.parser_oom_cleanup || 'unavailable' }}"
+        if: ${{ !cancelled() && steps.parser-test.outcome != 'skipped' }}
+        run: ':'

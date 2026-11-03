@@ -1,0 +1,185 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "pending",
+        "completed",
+        "partial",
+        "needs_refinement",
+        "unsupported"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "reason": {
+      "maxLength": 100,
+      "minLength": 1,
+      "title": "Reason",
+      "type": "string"
+    },
+    "next_url": {
+      "anyOf": [
+        {
+          "maxLength": 2048,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Next Url"
+    },
+    "pages": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 1000,
+      "title": "Pages",
+      "type": "array",
+      "uniqueItems": true
+    },
+    "digests": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 1000,
+      "title": "Digests",
+      "type": "array"
+    },
+    "articles": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 500,
+      "title": "Articles",
+      "type": "array",
+      "uniqueItems": true
+    },
+    "raw_entries": {
+      "default": 0,
+      "maximum": 500000,
+      "minimum": 0,
+      "title": "Raw Entries",
+      "type": "integer"
+    },
+    "duplicates": {
+      "default": 0,
+      "maximum": 500000,
+      "minimum": 0,
+      "title": "Duplicates",
+      "type": "integer"
+    },
+    "reported_total": {
+      "anyOf": [
+        {
+          "maximum": 1000000,
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reported Total"
+    },
+    "completeness": {
+      "default": "unknown",
+      "enum": [
+        "unknown",
+        "partial",
+        "pagination_exhausted",
+        "single_article"
+      ],
+      "title": "Completeness",
+      "type": "string"
+    },
+    "api_fallback": {
+      "const": "unavailable_not_attempted",
+      "default": "unavailable_not_attempted",
+      "title": "Api Fallback",
+      "type": "string"
+    },
+    "discovery_complete": {
+      "default": false,
+      "title": "Discovery Complete",
+      "type": "boolean"
+    },
+    "extraction_implemented": {
+      "const": false,
+      "default": false,
+      "title": "Extraction Implemented",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "status",
+    "reason"
+  ],
+  "title": "DiscoveryState",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.org/emailmonitor/schemas/discovery-checkpoint.schema.json",
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "completed"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "discovery_complete": {
+            "const": true
+          }
+        },
+        "required": [
+          "discovery_complete"
+        ]
+      },
+      "else": {
+        "properties": {
+          "discovery_complete": {
+            "const": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "pending"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "next_url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "next_url"
+        ]
+      },
+      "else": {
+        "properties": {
+          "next_url": {
+            "const": null
+          }
+        }
+      }
+    }
+  ]
+}

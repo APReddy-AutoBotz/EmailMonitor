@@ -88,11 +88,38 @@ def main() -> int:
             errors.append(f'{path.name}: invalid schema: {exc}')
 
     examples = {
+        'lifecycle-retention.json': 'lifecycle-request.schema.json',
+        'lifecycle-suppression.json': 'lifecycle-request.schema.json',
+        'lifecycle-deletion.json': 'lifecycle-request.schema.json',
+        'lifecycle-support.json': 'lifecycle-request.schema.json',
+        'lifecycle-receipt.json': 'lifecycle-receipt.schema.json',
         'keyword-job.json': 'job-request.schema.json',
         'url-job.json': 'job-request.schema.json',
         'contact-record.json': 'contact-record.schema.json',
         'source-policy.json': 'source-policy.schema.json',
+        'source-filter-capability.json': 'source-filter-capability.schema.json',
         'event.json': 'event.schema.json',
+        'discovery-event.json': 'discovery-event.schema.json',
+        'discovery-checkpoint.json': 'discovery-checkpoint.schema.json',
+        'article-observation.json': 'article-observation.schema.json',
+        'pdf-observation.json': 'pdf-observation.schema.json',
+        'observation-quality.json': 'observation-quality.schema.json',
+        'article-metadata.json': 'article-metadata.schema.json',
+        'article-metadata-precision.json': 'article-metadata-precision.schema.json',
+        'association-bundle.json': 'association-bundle.schema.json',
+        'association-review-request.json': 'association-review-request.schema.json',
+        'review-context-view-request.json': 'review-context-view-request.schema.json',
+        'progress-snapshot.json': 'progress-snapshot.schema.json',
+        'progress-event.json': 'progress-event.schema.json',
+        'progress-item.json': 'progress-item.schema.json',
+        'result-contacts.json': 'result-contacts.schema.json',
+        'result-outcomes.json': 'result-outcomes.schema.json',
+        'export-request.json': 'export-request.schema.json',
+        'export-state.json': 'export-state.schema.json',
+        'export-preview.json': 'export-preview.schema.json',
+        'tenant-configuration.json': 'tenant-configuration.schema.json',
+        'tenant-configuration-update.json': 'tenant-configuration-update.schema.json',
+        'resource-usage.json': 'resource-usage.schema.json',
     }
     loaded = {}
     for name, schema_name in examples.items():
@@ -114,6 +141,12 @@ def main() -> int:
             errors.append(f'negative contract case incorrectly accepted: {label}')
         negative_count += 1
 
+    bad = copy.deepcopy(loaded['tenant-configuration-update.json']); bad['entitlements']['max_running_jobs'] = 3
+    rejects('tenant-configuration-update.schema.json', bad, 'entitlement expands platform')
+    bad = copy.deepcopy(loaded['tenant-configuration-update.json']); bad['branding']['logo_reference'] = 'https://external.example/logo'
+    rejects('tenant-configuration-update.schema.json', bad, 'external branding asset')
+    bad = copy.deepcopy(loaded['tenant-configuration-update.json']); bad['support_access_grant'] = True
+    rejects('tenant-configuration-update.schema.json', bad, 'configuration expands support access')
     bad = copy.deepcopy(loaded['keyword-job.json']); del bad['input']['source_id']
     rejects('job-request.schema.json', bad, 'keyword missing source')
     bad = copy.deepcopy(loaded['keyword-job.json']); bad['organization_id'] = 'client-must-not-grant-tenant-access'
@@ -138,6 +171,9 @@ def main() -> int:
     rejects('source-policy.schema.json', bad, 'approved policy without permission reference')
     bad = copy.deepcopy(loaded['event.json']); bad['payload']['email'] = 'private@example.org'
     rejects('event.schema.json', bad, 'PII field in event payload')
+
+    bad = json.loads((ROOT / 'contracts/negative/source-policy-credential.json').read_text())
+    rejects('source-policy.schema.json', bad, 'synthetic source cannot carry a credential reference')
 
     prd = (ROOT / 'docs/02-product-requirements.md').read_text(encoding='utf-8')
     trace = (ROOT / 'docs/17-acceptance-and-traceability.md').read_text(encoding='utf-8')

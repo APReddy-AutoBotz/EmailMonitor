@@ -1,10 +1,12 @@
+> Current implementation: unmerged synthetic/offline foundations are verified through EM-013. EM-014 lifecycle work is a pending candidate. See [status ledger](docs/22-implementation-status.md), [operator runbook](docs/41-offline-operator-ui-runbook.md) and [lifecycle runbook](docs/43-offline-lifecycle-runbook.md) for current capabilities and limits; older milestone summaries below are historical.
+
 # EmailMonitor
 
 **Academic contact discovery and extraction for multiple organizations.**
 
 A user enters a keyword and a publisher/source, or pastes a search-results, article, or PDF URL. EmailMonitor discovers the eligible articles, follows pagination, opens article pages and permitted full text, and returns author names, author roles, professional email addresses, affiliations, and evidence.
 
-> **Status: design baseline v0.1 — 2026-10-08.** This repository contains implementation documentation, proposed contracts, and synthetic fixtures. There is no working application, live connector certification, deployment, or measured extraction benchmark yet. Requirements and targets are not claims of achieved capability.
+> **Status: synthetic/offline EM-007 HTML/browser observations verified in Draft — 2026-10-12.** Actual authored article parsing and ordinary tooltip reveal have passed independent source/evidence review, 599 application tests without skips, real tenant observation persistence, and controlled/browser/parser/docs CI. The default metadata-only API/UI remain disconnected from extraction, with disabled controls. Accepted associations, exports, sending, live sources and deployment remain unavailable. That checkpoint passed its own five CI gates (the existing alias-body warning remains tracked). Bounded offline PDF observations passed independent source/evidence review, 664 application tests without skips and actual nine-PDF network-none parser/resource/OOM checks in Draft PR13. The standard-font/simple-Tj/coarse-region profile is verified; its documentation checkpoint needs its own CI before offline association/review work begins. See the [status ledger](docs/22-implementation-status.md) and [HTML observation runbook](docs/36-offline-html-observation-runbook.md). Requirements and targets are not achieved-capability claims.
 
 ## Start here
 
@@ -50,7 +52,18 @@ The documentation check is available now:
 python scripts/validate_docs.py
 ```
 
-Application commands will be introduced and tested by EM-001; none are implied by this README.
+The tested scaffold setup requires Python 3.12, Node 24.19.0, uv 0.12.23 and pnpm 11.25.0:
+
+```sh
+uv sync --project services/backend --locked
+pnpm --dir apps/web install --frozen-lockfile --strict-peer-dependencies
+scripts/check.sh
+# Separate terminals:
+uv run --project services/backend uvicorn emailmonitor.api:app --app-dir services/backend/src --host 127.0.0.1 --port 8000
+pnpm --dir apps/web dev
+```
+
+Open the loopback URL printed by Vite. The API exposes `/healthz`, `/api/v1/capabilities` and `/openapi.json`; it exposes no contact or tenant-data endpoints. Read the [development runbook](docs/25-development-runbook.md) for configuration, dependency/license obligations and limitations. Dependency installation downloads official registry packages; fixture checks make no publisher requests.
 
 ## Public repository and licensing
 

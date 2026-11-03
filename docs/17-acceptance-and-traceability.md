@@ -1,5 +1,7 @@
 # 17 — Acceptance scenarios and requirements traceability
 
+The local sibling integration candidate maps FR-006/020/021/025/029 and NFR-011 to saved-draft, history and selected-job-staging unit tests, plus authored real-SQL and keyboard cases pending actual execution. See [integration scope](87-sibling-integration.md).
+
 **Baseline:** 2026-10-08. Test IDs below are planned test families. They are not tests that have already passed. Actual evidence is recorded in document 22 and implementation reports.
 
 ## Functional traceability
@@ -58,7 +60,7 @@
 | NFR-009 | EM-004, EM-006, EM-011 | LIMITS URL/page/byte/query/export resource tests |
 | NFR-010 | EM-013, EM-016 | PERF-FAIR multi-tenant blocked-source scenario |
 | NFR-011 | EM-012 | UX-A11Y keyboard and automated/manual accessibility report |
-| NFR-012 | EM-009, EM-012 | DATA-UNICODE/TIME round-trip tests |
+| NFR-012 | EM-009, EM-012 | DATA-UNICODE/TIME round-trip tests; render-level timezone evidence in `reports/nfr012-timezone-validation.md` |
 | NFR-013 | EM-017 | OPS-RESTORE timed recovery report |
 | NFR-014 | EM-018 | SEC-RELEASE findings and dispositions |
 | NFR-015 | EM-001, EM-017, EM-018 | REL-ARTIFACT dependency/license/migration evidence |
@@ -67,6 +69,8 @@
 | NFR-018 | EM-003, EM-013 | CONFIG-PARITY server/UI/worker tests |
 
 Business mapping: BR-01 → FR-004/005; BR-02 → FR-007/009/021; BR-03 → FR-016/017; BR-04 → FR-015; BR-05 → FR-001/030; BR-06 → FR-032; BR-07 → FR-024/025; BR-08 → FR-022/026; BR-09 → FR-021/026; BR-10 → FR-030; BR-11 → FR-028/029; BR-12 → FR-035/036 and NFR-016.
+
+FR-004 retained-date precision is a partial supporting slice: authored supplied date text, conflicting cited facts, invalid/partial dates and current-authorized metadata presentation are exercised by `test_retained_date_precision.py`, `test_article_metadata.py` and `articleMetadata.test.tsx`. These checks do not prove source-side date filtering, complete discovery or live-source support.
 
 ## Core UAT scenarios
 
@@ -97,3 +101,516 @@ Business mapping: BR-01 → FR-004/005; BR-02 → FR-007/009/021; BR-03 → FR-0
 ## Acceptance evidence rule
 
 A feature's UAT screenshot is not its security/contract test. Each completed requirement needs actual test artifact or human acceptance reference, code/connector version and date. Real customer contact evidence stays in private approved storage; repository reports use synthetic/redacted examples. Release cannot be marked complete while its required task is only scaffolded or mocked.
+
+## EM-001 delivered test boundary (2026-10-10)
+
+REL-ARTIFACT: `scripts/check_inventory.py` verifies both lock digests, exact inventory membership and reviewed declared-license set. Local frozen clean installs and frontend build are in [EM-001 evidence](../reports/em001-validation.md). This is dependency/scaffold evidence, not signed release or vulnerability certification.
+
+OFFLINE-E2E: `tests/test_fixture_transport.py` checks all six committed fixture byte payloads through an in-memory allowlisted transport while socket/DNS functions are denied; hostile host, scheme, port, credentials, query and path cases have no network fallback. `tests/test_contracts.py` validates five examples; the documentation validator independently checks fixture links/counts and twelve negative cases. These tests do not run extraction or the core UAT workflow.
+
+Configuration/metadata: `services/backend/tests/test_scaffold.py` verifies real FastAPI handlers/OpenAPI, unavailable tenant endpoints for two forged tenant headers, strict configuration and production-entrypoint rejection of fixture/identity-stub modes. This is not an RLS or authentication test. `apps/web/src/App.test.tsx` renders the actual component and checks disabled inputs plus honest empty/unavailable status; browser accessibility/UAT remains EM-012.
+
+## EM-002 offline evidence boundary (2026-10-10)
+
+FR-001/NFR-001/AT-01/SEC-TENANT: `test_tenant_foundation.py` uses a direct non-owner PostgreSQL login for two-tenant API/SQL/pool tests, forged context/body rejection, missing context and restricted identity/session tables. `test_oidc_boundary.py` and browser-flow integration tests verify the protocol/session boundary using a synthetic provider. This is not certification of a real provider or production infrastructure.
+
+FR-002/AT-02: six roles, membership changes, CSRF/revision guards, session revocation, last-owner/atomic transfer/concurrent removal and lifecycle tests are implemented. NFR-003 evidence here is secure cookie/session/no-secret bootstrap behavior, not production TLS/at-rest encryption. REL-ARTIFACT extends the inventory and real first migration; destructive rollback limits are explicit. Actual aggregate and remaining gates are in [EM-002 validation](../reports/em002-validation.md).
+
+## EM-003 offline source-policy evidence boundary (2026-10-10)
+
+FR-003/AT-03 and FR-026/SEC-TENANT: `test_source_foundation.py` covers actual PostgreSQL/API source policy creation, owner/steward capability and denial for other roles, tenant isolation/RLS/pool reset, immutable current versions, permission review, stale revisions, suspension/revocation/expiry, platform disable and a concurrent proposal race through separate pools. Catalog fixture paths match committed files. Actual policy responses validate against the source-policy contract. `test_source_policy.py` rejects live mode, host/region/operation expansions, secret-like URL permission references, any synthetic credential, unknown fields and weaker rates/retention. Approved policy returns `execution_available=false`: these tests do not claim legal permission, protected network enforcement, extraction or export implementation.
+
+EM-003 review correction: source-policy schema explicitly requires null credentials for synthetic-publisher; the committed negative credential fixture is rejected by pytest and documentation validation. No secret resolver or credentialed real source is enabled.
+
+## EM-004a partial evidence boundary (2026-10-10)
+
+SEC-NET/AT-04/NFR-002 remain partial. `test_fetch_safety.py` tests strict fixture URL classification, all-record public IP validation, scripted connection-peer pinning/certificate-required contracts, per-hop fixture redirect/scope checks, bounded bytes/observed absolute deadline, socket/DNS-free synthetic transport, refusal/no retry for source status and unsupported compression/media, and unconditional live/browser entrypoint denial. `test_fixture_gateway_tenant.py` tests actual PostgreSQL tenant/capability/current-version authorization and policy revocation before bytes are released. These are not actual DNS/socket/OS egress/browser isolation tests. The denied disposable sandbox probe and unmet full gates are documented in [EM-004a evidence](../reports/em004a-validation.md). No EM-004 production/security completion is claimed.
+
+## EM-005 offline durability evidence boundary (2026-10-10)
+
+AT-05/UAT-07/SEC-TENANT/FR-025: `test_durable_jobs.py` uses actual non-owner PostgreSQL for unique effects/usage and transactional completion outbox, lease expiry/recovery, pause/cancel fencing, actor/tenant denial, quota rollback/release, bounded retries, revocation/lifecycle barriers and defensive catalog permissions. `test_job_contracts.py` checks original-request/event parity and test-only loopback worker configuration. `test_real_broker_jobs.py` requires actual RabbitMQ/Celery subprocesses for duplicates, termination before commit, exit after commit before acknowledgement and broker application outage/recovery. Broker absence is an explicit skip/failure in required CI, not acceptance. These diagnostic markers are not extraction associations or full UAT-07 evidence; actual extraction and full deletion/artifact workflows remain dependent tasks. [Evidence](../reports/em005-validation.md).
+
+## EM-004b partial diagnostic boundary (2026-10-10)
+
+SEC-EGRESS/LIMITS: test_tls_fixture.py exercises actual pinned loopback TLS, verified CA/hostname, redirect/release authorization, credential-free requests and bounded deadline/header/body framing. This explicit test-only endpoint is not production DNS/public-egress certification. test_fixture_parser.py covers inert bounded UTF-8 HTML observations only; no contact/PDF extraction. test_isolation_configuration.py statically checks the restrictive container/CI definition. Actual parser network/OOM acceptance requires the separate exact-head parser job, currently pending; browser isolation is absent and full EM-004 remains partial. [Runbook](30-isolated-fixture-runbook.md) and [evidence](../reports/em004b-validation.md).
+
+## EM-004c approved browser diagnostic boundary (2026-10-11)
+
+SEC-EGRESS/LIMITS: bounded test-only browser IPC and profile semantic-delta tests pass without browser execution. Eighteen new protocol/configuration cases include one actual TLS mediation case; actual Chromium namespace/seccomp sandbox, network-path/subresource/WebSocket/service-worker/popup/download and credential-forwarding acceptance requires the separately reviewed browser workflow. Production/live entrypoints remain unavailable, full EM004 PARTIAL and EM006 gated. [Runbook](31-synthetic-browser-boundary.md) / [evidence](../reports/em004c-validation.md).
+
+## EM-004d synthetic DNS/pinning boundary (2026-10-12)
+
+SEC-NET/AT-04/NFR-002: `test_dns_fixture.py` adds actual loopback UDP/TLS validation, immutable route/peer behavior, changed DNS across requests/redirects, mixed/IPv6/duplicate/missing answers, bounded malformed/compressed/authority records, wrong owned UDP source, shared deadline, permission recheck and production refusal. `test_fixture_gateway_tenant.py` adds actual SQL/API current-policy browser mediation with synthetic DNS/TLS and no extra receipts for another tenant or revoked policy. Browser CI uses the same DNS-gated host TLS transport; the guest remains network-none with unchanged sandbox/profile/IPC gates. These establish only the declared synthetic diagnostic after actual CI, not public-DNS/firewall/production egress. Full EM-004 remains PARTIAL/EM-006 gated; see [EM-004d validation](../reports/em004d-validation.md).
+
+
+## EM-004e planning-only boundary (2026-10-12)
+
+SEC-NET/AT-04/NFR-002: `test_fetch_plan.py` covers immutable tenant/source/version/operation binding, complete public A/AAAA snapshot and exact selected-peer matching, absolute deadline, fresh authorization callback stages and bounded redirect re-planning. These are pure invariants with network denied, not actual DNS/socket/TLS/current-tenant or non-bypassable egress evidence. No existing transport is enabled or changed. Actual generalized transport and a reviewed controlled synthetic acceptance network remain required for full EM-004; EM-006 stays gated. See [validation](../reports/em004e-validation.md).
+
+## EM-004f controlled protected transport boundary (2026-10-12)
+
+SEC-NET/AT-04/NFR-002: `test_protected_transport.py`, `test_transport_topology_contract.py` and `test_transport_rpc_contract.py` cover bounded A/AAAA framing, full public snapshot selection, current authorization/redirect stages, production refusal, fixed isolated IPAM/route/resource checks and exact tenant scope/owned byte protocol. These are pure contracts, not actual isolation evidence. The distinct controlled transport job requires 12 actual synthetic DNS-selected IPv4/IPv6/TLS/redirect/rebinding/failure and current SQL tenant/browser cases; existing application/browser/parser/docs CI remains required. Full EM-004 is PARTIAL and EM-006 gated until exact-tree review and actual CI acceptance. See [runbook](34-controlled-transport-acceptance.md) and [validation](../reports/em004f-validation.md).
+
+## EM-006 candidate traceability (2026-10-12)
+
+Document16 EM-006 is mapped to `test_discovery.py` (input/suggestion/URL/caps/selectors/loops/dedup/schema), `test_discovery_tenant.py` (real SQL/RLS/current source/generation/deletion/replay/API/outbox) and `test_discovery_broker.py` (actual worker restart and duplicate delivery). Parser CI executes the same two search pages inside network-none and requires four unique articles/five entries/one duplicate; existing sandbox/OOM/transport checks remain required. This candidate is not accepted until independent exact-tree review and actual published-head no-skip CI pass. See [runbook](35-offline-discovery-runbook.md).
+
+## EM-006 verified synthetic/offline checkpoint (2026-10-12)
+
+Independent evidence review mapped document16/document06 criteria to exact head3bc8f234/tree80431dfb and merge34501136: application543/no skips/no pytest warnings includes real SQL policy/replay/cap/outbox and broker restart/duplicate tests; actual parser emits4 unique articles/5 entries/1 duplicate inside network-none with observed OOM enforcement; controlled12/browser/docs also pass. Original/effective query, explicit spelling confirmation, homepage refinement, explicit unsupported modes/API fallback, loops/selectors/exact caps and atomic checkpoint dedup have verified scoped coverage. This is VERIFIED IN DRAFT, unmerged; bounded offline EM-007 follows after this documentation checkpoint passes its own CI. See [full immutable evidence](../reports/em006-validation.md).
+
+## EM-007 candidate traceability (2026-10-12)
+
+FR-010/011/012 and document 16 EM-007 map to `test_html_extraction.py` (actual authored static facts/roles/negatives/budgets), `test_html_extraction_contracts.py` (observed-not-accepted/schema parity) and `test_html_extraction_tenant.py` (actual runtime SQL/RLS/current source/purpose/retention/replay/API). Existing controlled browser test additionally requires actual authored hover/DOM evidence and current-tenant persistence/replay; parser CI uses the same four article bytes under network-none. Existing network/sandbox/cleanup gates remain mandatory. Candidate review and actual new-head CI are pending; [runbook](36-offline-html-observation-runbook.md) / [validation](../reports/em007-validation.md).
+
+## EM-007 verified synthetic/offline traceability (2026-10-12)
+
+Independent authoritative evidence review mapped document 16 EM-007/document 07 and FR-010/011/012 to exact head 98208a9a / tree 4c58b53a and merge fe43d40c. Application 599/no skips/no pytest warnings includes eleven actual runtime SQL cases covering permission/purpose/retention, replay, forced RLS, viewer/operator, cross-tenant and current job/source/deletion barriers. Controlled 12 demonstrates actual authored tooltip reveal plus current-tenant persistence/replay and refusal after revocation; standalone browser preserves sandbox/subresource/credential controls. Parser observes all four pinned articles under network-none with actual OOM enforcement. Article A/B author roles and address evidence, unresolved static tooltip and explicit no-contact outcomes are verified; support/footer/reference/form/script content remains excluded, and ambiguous identities remain unresolved. This is VERIFIED IN DRAFT, unmerged. Accepted author-email associations and conservative normalization remain EM-009; bounded PDF evidence remains EM-008. The documentation checkpoint requires its own CI. See [immutable evidence and limitations](../reports/em007-validation.md).
+
+## EM-008 candidate traceability (2026-10-12)
+
+Document 16 EM-008, FR-013 and PDF portions of FR-010/017 map to `test_pdf_extraction.py` (actual authored byte/layout/page/role/evidence and refusal cases), `test_pdf_contracts.py` (unavailable claims and stronger runtime semantic checks), `test_pdf_dependency_boundary.py` (exact artifact/effective license/notices/unchanged isolation) and mandatory parser CI (actual pinned PDF outcomes within network-none/memory enforcement). First/corresponding observations, same-name uncertainty, line-wrap evidence and page-cap completeness remain distinct from accepted EM-009 associations. No new acquisition/persistence grant or migration is introduced. Full validation/review/actual new-head CI remain pending; [runbook](37-offline-pdf-observation-runbook.md) / [evidence](../reports/em008-validation.md).
+
+## EM-008 verified synthetic/offline checkpoint (2026-10-12)
+
+Independent evidence review mapped document 16 EM-008/document 07 and FR-013 to head 5e6568dc / tree 99f0257f and merge a9d584d: application 664/no skips/no pytest warnings; actual network-none nine-PDF parser outcomes and page/region/correspondence assertions; bounded stream/byte refusal and actual OOM enforcement; controlled 12/browser/docs success. The nine PDFs demonstrate two-page footnotes, raised markers, two columns, line wraps, unresolved same-name ambiguity, no-contact, encrypted/corrupt/image-only refusal and partial page cap. Nondefault or adjusted text state refuses instead of fabricating visible adjacency. Exact dependency/effective BSD-3-Clause AND Unicode-3.0 inventory and notices pass. This is VERIFIED IN DRAFT for the declared simple-Tj/standard-font/coarse-CropBox profile, with no OCR/acquisition/universal-layout or accepted-identity claim. Bounded EM-009 remains conditional on this documentation checkpoint's own CI. See [evidence](../reports/em008-validation.md).
+
+## EM-009 candidate traceability
+
+FR-015/016/017: test_associations.py covers separate first/corresponding roles, multiple correspondence, ambiguous same names, actual HTML/PDF provenance and conservative accepted evidence. FR-018/019 and DATA-UNICODE: normalization retains raw Unicode/local-part case/plus/dots, uses explicit IDNA domains, refuses unsupported SMTPUTF8, groups repeated tenant/batch candidates and flags normalization collisions. FR-020: test_association_review.py and test_association_tenant.py cover source-backed corrections, expected revisions, immutable history/outbox, role matrix, cross-tenant RLS, current source/session/deletion barriers and concurrent review. test_association_contracts.py checks actual API/schema shape and stronger runtime semantics. These are implemented test cases, not a claim that locally skipped PostgreSQL cases passed. [Runbook](38-offline-association-runbook.md).
+
+## EM-009 independently verified scoped foundation
+
+Independent authoritative reconciliation confirmed reviewed treea3ea255d, exact headbeae5deb/merge0073291d and all five actual CI job logs. Application748/no skips includes20 association SQL cases: role/CSRF, forced tenant RLS and current policy replacement, source/session/deletion barriers, replay preserving review, concurrent expected revision, atomic rollback/history/outbox and original observation/citation relationships. Pure actual HTML/PDF mapping and IDNA/Unicode/collision/probability negatives cover FR-015 through FR-020 and DATA-EVIDENCE/UNICODE. Controlled12/browser/parser/docs passed; one existing Pydantic alias-body warning remains disclosed. No scoped document16 EM-009 criterion is missing. [Evidence](../reports/em009-validation.md) preserves initial review/SQL failures and corrections. Scope is tenant/batch dedup, actual PDF pure mapping and retained HTML/browser persistence, with pending atomic review outbox. Documentation checkpoint-own CI remains required before EM-010.
+
+## EM-010 candidate mapping
+
+Document16 EM-010 and document10 lifecycle/progress/recovery requirements map to migration0007, progress state/binding/service/broker/models/stream/API, test_progress modules and the actual controlled tooltip composition. Current-policy/RLS/deletion and identity boundaries map to document05; IDs-only events and revision controls map to document09. Pure invariants do not certify real SQL/broker/SSE or browser integration; [runbook](39-offline-progress-runbook.md) and [candidate validation](../reports/em010-validation.md) retain exact-head acceptance gates.
+
+## EM-010 verified synthetic/offline checkpoint (2026-10-13)
+
+Independent authoritative reconciliation maps document16 EM-010/document10 to reviewed head16bb590e/tree58a708d8 and merge7a2130b: application862/no skips/no pytest warning summary;22 actual SQL cases and four actual broker cases; controlled12 with current leased tooltip persistence and durable item/job completion; browser/parser/docs success. Actual regressions establish unknown/capped totals remain truthful, all-no-contact completion, source-cap partial outcomes, interrupted checkpoint recovery, original-message redelivery and confirmed-message loss reconstruction, immutable effects, cancellation frontier conservation, auditable continuation/inherited quality invalidation and revoked-tenant replay refusal. Source review findings and actual-CI corrections remain in the [validation report](../reports/em010-validation.md). This is the declared synthetic foundation in Draft, unmerged; UI/live/production and commercial controls remain later tasks. The checkpoint's own exact-head gates precede bounded offline EM-011.
+
+## EM-011 candidate traceability (2026-10-13)
+
+Document16 EM-011 and documents03/05/08/09/12 map to migration0008, results models/cursor/service/API/broker/render and test_result/test_results modules. Composite tenant references/current owner-definer fences and revision members protect private snapshots/downloads. Pure adversarial format/cursor/envelope/role/schema tests are separate from18 required actual PostgreSQL/four real-broker cases. No independent source-review or actual acceptance claim is made yet; [runbook](40-offline-results-export-runbook.md) and [validation](../reports/em011-validation.md) preserve all exact-head gates.
+
+
+## EM-011 independently verified scoped foundation
+
+Independent authoritative reconciliation maps document16 EM-011 to reviewed head660e0dc5/treeca84f013 and merge45377b5: actual1035/no-skip application includes18 results SQL/four broker cases, covering role/CSRF/current tenant and source, immutable atomic snapshots/idempotency, private artifact permissions/integrity, revision/expiry/revoke/deletion and original-message recovery. Pure CSV control/formula refusal, literal XLSX/OPC and canonical cursor scope/parity cases complement actual server tests. Controlled12/browser/parser/docs passed at the same merge. One existing alias warning remains disclosed. Contacts/outcomes, accepted association, technical checks and outreach eligibility remain independent facts. No scoped document16 criterion was missing; UI/export previews and external event delivery are not claimed. [Evidence](../reports/em011-validation.md) preserves failures/corrections, limits and checkpoint-own CI before EM-012.
+
+## EM-012 UI candidate traceability (historical pre-publication snapshot)
+
+Document03 screens and EM-012 keyboard/error/empty/partial/tenant-cache acceptance map to actual React views, client/session pure regressions, operator models/tenant tests and the dedicated actual keyboard CI. All mutation permissions remain server-side. Migration0009 preview/field selection has current-runtime SQL regressions; client filters never authorize records. [Runbook41](41-offline-operator-ui-runbook.md) records unsupported screens/features and the diagnostic buffered-SSE/cancelled-download boundaries; [report](../reports/em012-validation.md) tracks six pending exact-head gates. Neither fixture expectations nor service skips prove working end-to-end UI.
+
+
+## EM-012 independently verified synthetic operator foundation
+
+Document16/document03 criteria reconcile to reviewed head6a3c607c/treea513d96c and merge8d2ad475. Application1132/no skips includes ten actual operator SQL/session/profile/role/cross-tenant/preview cases;25 React client/session tests include interrupted-frame cursor checkpoint and closed-scope refusal. Actual keyboard UI1/64.12s executes both input modes, partial/no-contact/empty/stale retry, source approval, evidence/native focus/review, async preview/download and actual usage/audit/settings with PostgreSQL/broker effects; delayed old-tenant contact/replay bodies and viewer-only scope cannot repopulate results or authorize writes. Controlled12/browser/parser/docs pass at the same merge. No scoped document16 EM-012 criterion is missing. [Evidence](../reports/em012-validation.md) retains failures and fixes, one alias-body warning and real-IdP/live/production/static-browser-acquisition/native-SSE-latency/disk-save exclusions. This checkpoint requires its own six exact-head gates before EM-013.
+
+
+## EM-013 candidate traceability
+
+Shared admission and usage (documents10/15/21; document16 EM-013) map to `test_admission_tenant.py`, `test_administration_tenant.py`, `test_admission_broker.py` and the required controlled transport source-contention case. Configuration/branding/support metadata map to strict model/schema/API tests, `branding.test.ts` and the existing keyboard CI. Pure tests do not establish actual source throttling, SQL atomicity/fairness or real broker separation. [Runbook42](42-offline-admission-runbook.md) and [validation report](../reports/em013-validation.md) preserve those pending acceptance gates and synthetic limits.
+
+
+## EM-013 independently verified synthetic admission foundation
+
+Document16 fairness, documents10/21 shared source controls and document15 usage reconcile to reviewed216a8c3b/treebb37d8e7 and exact merge84673c51. Actual application1267/no skips includes five administration SQL,19 admission-tenant and two broker cases; controlled13 proves real source spacing/admission and four other-tenant settled resolutions/private export during held source I/O. Current owner/revision/CSRF/policy/expiry/private-accounting guards, captured/current limits, duplicate/crash/cancellation settlement and discovery-only phase permission are exercised. Actual keyboard UI1 verifies configuration/usage/audit/settings and tenant-cleared branding. Browser/parser/docs remain affirmative. [Report](../reports/em013-validation.md) records no missing scoped criterion, unresolved warning/route-error causes and excluded live/production/commercial/support-grant/lifecycle features. This checkpoint requires its own six gates before EM-014.
+
+
+## EM-014 candidate traceability
+
+Document16 EM-014 and document12/document21 lifecycle criteria map to `test_lifecycle_contracts.py`, actual `test_lifecycle_tenant.py`, real `test_lifecycle_broker.py` and the receipt-backed deletion-before-release case in controlled transport. Current role/CSRF/cross-tenant, keyed privacy/withdrawal/no-resurrection, generation/parse/export fences, bounded purge/retention/replay and support expiry/revocation are separate assertions. [Report](../reports/em014-validation.md) and [runbook43](43-offline-lifecycle-runbook.md) preserve pending actual proof and scoped limits. No pure fixture or skipped test establishes lifecycle acceptance.
+
+
+## EM-014 independently verified synthetic lifecycle foundation
+
+Document16/document12/document21 acceptance reconciles to reviewed73a1043f/tree73dea867 and exact merge9ac9b930. Application1386/no skips includes30 lifecycle SQL and one real-broker tick: HMAC parity/tenant separation, conservative SQL/Python grammar, current owner/steward/CSRF/identity contention, both final-release/tombstone lock orders, stale parse/export refusal, permanent suppression/tombstones, bounded purge/retention/replay, denied private downloads and expiring/revoked existing-member metadata support. Controlled14 independently proves actual response-before-tombstone with no released bytes or post-deletion DNS. Actual UI1 and retained browser/parser/docs pass unchanged boundaries;31 frontend tests include cancelled current-scope search scheduling. Backup tombstone replay is specified, with actual restore deferred to EM-017 as document16 directs. [Evidence](../reports/em014-validation.md) discloses one alias-batch_id warning, historical failures and scoped limits. No scoped criterion is missing; this checkpoint needs its own six gates before dependent progression, and EM-015 still needs real source permissions.
+
+
+## EM-017a partial restore candidate traceability
+
+Document13 backup ordering, document21 retention/override invariants and document16 EM-017 restore/two-tenant criteria map to `test_restore_contracts.py` (exact disposable context, unsupported authority/accounting/history refusal, readiness/archive grammar) and required actual `test_restore_tenant.py` (same-version pg_dump/pg_restore, closed target before coherent privacy replay, physical no-resurrection/current artifact refusal, unaffected artifact hash, runtime cross-tenant RLS, job/accounting reconciliation and identifier-only broker reconstruction). These are candidate tests, not verified restore outcomes yet. Actual staging RPO/RTO and regional/encrypted infrastructure remain outside this partial exercise; no replacement prerequisite is invented. [Runbook](44-synthetic-restore-exercise.md) / [evidence](../reports/em017a-validation.md).
+
+## EM-017b packaging prerequisite traceability
+
+Documents13/16/21 reproducible packaging inputs map to `scripts/packaging/artifacts.py` bounded manifest/tar/chain helpers, `Metadata.Dockerfile` existing locked metadata-only runtime, `probe.py` in-process metadata/production-refusal/kernel checks and `run_acceptance.py` two uncached builds/owned cleanup. `test_metadata_packaging.py` supplies pure deterministic/tamper/link/path/marker/ownership/profile/minimal-import regressions; actual image evidence requires the separate packaging workflow. Existing tenant/worker/isolation/UI tests retain full synthetic assembly checks after deferred default API imports. This is partial EM-017, with no working service, staging, IdP, storage, signing/commercial-release or production RPO/RTO claim; see [runbook45](45-offline-packaging-prerequisite.md).
+
+## EM-015a ScienceDirect prerequisite traceability
+
+Partial document16 EM-015/document23 onboarding maps to `sources/sciencedirect.py` and `test_sciencedirect_adapter.py`: native request semantics, narrow DOI/PII inputs, bounded JSON, ordered authors, explicit missing contact fields, digest/row provenance, alias dedup/conflict and truthful pagination caps. Network-denied tests and unchanged configuration refusal are independent of live source certification. No public contract/schema, tenant persistence, HTTP authentication, full-text extraction or source-policy grant changes. [Runbook46](46-sciencedirect-adapter-prerequisite.md) and [evidence](../reports/em015a-validation.md) define the acceptance boundary; full EM-015/016 remain unmet.
+
+## EM-015b XML contact observation prerequisite
+
+Partial document16 EM-015, document07 roles/identity/evidence and document11 hostile-XML controls map to `extraction/sciencedirect.py`, `test_sciencedirect_article.py` and the newly authored `fixtures/xml/sciencedirect-article.xml`. Tests cover requested-article identity, original digest/element/attribute provenance, separate first/corresponding roles, direct published addresses, group/explicit affiliations, same-name/shared-address separation, missing/unsupported outcomes, namespace spoofing, duplicate IDs, DTD/XXE/encoding/resource refusals and no I/O. These are parser observations, not accepted identities, tenant persistence or live acquisition. [Runbook47](47-sciencedirect-xml-observations.md) and [report](../reports/em015b-validation.md) distinguish verified native documentation from the pinned wrapper assumption, and pure tests from pending actual XML isolation/integration. No full AT-32/source certification or benchmark claim.
+
+## Owned held-response acceptance cleanup and diagnostics
+
+NFR-009/LIMITS and NFR-010/PERF-FAIR retain the actual blocked-source processing/export test, with failure-safe fixed fixture release and bounded future collection in `scripts/isolation/transport_cleanup.py`. `test_transport_cleanup_contract.py` covers success ordering, once-only/exact acknowledgement, original assertion/cancellation preservation, send/receive/deadline/future/marker failures, poisoned fixture zero-send and poisoned-gateway/healthy-fixture separation, and composed already-successful/failed/cancelled future paths with exactly one final result collection. `test_browser_isolation_configuration.py` exercises the actual route-registration source statements to verify fixed start/completion marker ordering and failure/cancellation stopping before navigation. These pure contracts do not establish browser execution, repair admission/UI stalls, or replace exact-head controlled/UI/service CI. [Evidence and limits](../reports/owned-test-cleanup-validation.md).
+
+## EM-015c synthetic XML integration candidate
+
+AT-03/05/06 explicit source/media admission, AT-10/15/17/18 observed roles/provenance, AT-20 review, AT-21/22 recovery, AT-24 export and NFR tenant/isolation/privacy controls map to `test_xml_pipeline.py` and required actual `test_xml_pipeline_tenant.py`. The latter feeds the fixed network-none container’s returned observation into PostgreSQL, human review and CSV/XLSX, with tenant-B refusal, current authority changes during parse, generation/item/revision binding, locator-only review denial and once-only recovery. `parser_acceptance.py` adds actual hostile XML/resource cases to the unchanged network-none/OOM profile. Migration0012 extends latest0011 guards without grant/RLS changes; schema/example parity covers retained XML, explicit fixture-only source operation and progress reasons. Local service skips remain unmet execution evidence until own-head CI passes. [Runbook48](48-synthetic-xml-pipeline.md) / [report](../reports/em015c-validation.md); no real-source certification, wrapper verification, production or sending claim.
+
+The EM-015c parser-build boundary also maps to `test_discovery.py::test_parser_build_context_includes_only_authored_copy_fixtures`: all fixture `COPY` sources must match the exact deny-all context allowlist, with missing-exception and overbroad-directory mutation sensitivity. This is static packaging evidence, not actual parser isolation.
+
+Bounded opt-in UI worker observations map to `test_worker_diagnostics.py`: current-app/task/owned-queue signal filtering, observational callback return/exception identity, default-off behavior, closed cumulative counters and strict bounded-tail validation. This extends timeout evidence without changing readiness or completion criteria and does not certify a stall cause or broker acknowledgement.
+
+The subsequent diagnostic-routing regression uses real `progress.publish`/pinned Celery message metadata and genuine Request/trace signals, covering both phases and success/empty/error outcomes without sockets. Catalog parity explicitly includes only the XML acquisition route; the decisive XML integration replays its original durable event and separately requires forged-event denial before emitting acceptance proof.
+
+## EM-015d disabled provider-binding prerequisite traceability
+
+Documents04/06/11 transport and source/evidence boundaries map to `test_provider_boundary.py`: canonical closed requests; exact transport-owned dispatch binding including same-URL query/tenant/job/lease swaps; fixed origin/no redirects; unchanged shared URL/DNS/peer planning; status/media/encoding/byte/chunk/length/deadline refusals; current binding checks before/after stream and parser; and default live refusal. These tests consume supplied synthetic bytes and cannot establish real protected acquisition or source authorization.
+
+Documents07/11 isolated parsing map to the versioned `xml_protocol.py`, generalized XML channel/worker, second synthetic DOI/native PII pure tests, three required actual-container cases and updated actual `parser_acceptance.py`. Existing `test_xml_pipeline_tenant.py` remains the actual same-container persistence/review/export gate. Existing source-policy/settings/retained-schema tests prove no new provider activation or generalized persistence permission. See [runbook49](49-disabled-provider-binding.md) / [evidence](../reports/em015d-validation.md); all seven own-head gates remain required, and full EM-015/016 acceptance remains partial.
+
+## Synthetic worker callback wake correction
+
+AT-21/22 worker recovery and NFR bounded execution map to `test_worker_callback_wake.py`: actual pinned fixture app/Worker/handler/strategy/registered task/solo and scheduled transport-reader execution; a genuine idle 10-second baseline poll with pending original ACK versus immediate self-pipe readability with the identical timeout; diagnostics off/on and successful/empty/error task paths; unchanged next-iteration ACK semantics; one-byte/two-descriptor limits; exact solo selection; idle/no-spin, reconnect/reset, repeated stop/shutdown, partial registration and I/O/close failure cleanup. No network connection or external broker is used in this mechanism regression. Existing real RabbitMQ recovery, actual operator UI and isolation CI remain distinct required acceptance. Private hub fields are explicit pinned compatibility obligations, not a generic Celery modification. [Runbook41](41-offline-operator-ui-runbook.md) and [validation](../reports/worker-callback-wake-validation.md) preserve the earlier UI failures and their unproven exact cause.
+
+## EM-015e controlled executable provider prerequisite
+
+Documents04/06/11 protected transport and source-bound acquisition map to `test_provider_transport.py`: canonical native PUT/GET bytes, opaque reference/header confinement, status/media/framing/byte/time checks, revocation before/after I/O, safe errors, cancellation and once-only resource/credential release. `test_provider_boundary.py` retains full request/tenant/job/lease comparison and parser binding. The controlled transport workflow requires 31 actual cases including IPv4/IPv6 PUT query and GET XML into the unchanged isolated parser, hostile HTTPS response refusals and post-response lease/policy/deletion changes. Existing database/browser/parser/UI gates remain required. No mock, collection result or synthetic permission becomes real-source authorization. [Runbook50](50-controlled-provider-gateway.md) and [evidence](../reports/em015e-validation.md) list the unimplemented live admission, DNS/egress, credential-store, source sample/entitlement and persistence/registration boundaries.
+
+## EM-015f connected controlled provider journey
+
+AT-03/05/06/10/15/17/18/20/21/22/24 and tenant/privacy/limit controls map to `test_provider_journey.py`, `test_provider_journey_tenant.py` and required actual `test_provider_journey_acceptance.py`. The actual gate joins one native PUT keyword search to registry-bound DOI/PII FULL GETs, acquired-byte isolated parsing, same tenant SQL, explicit evidence review and both exports on IPv4/IPv6. It checks duplicate aliases, no-refetch crash recovery, exactly two effects, three completed SQL source tickets, SQL admission spacing, tenant-B denial, article caps and response/parse authority races. Pure and SQL suites separately cover exact-view/fingerprint semantics, registry conflicts/forgery, locator-only review refusal and session/pause/lease fences. `test_provider_rpc.py` requires exactly one owned resource lifecycle in durable mode and poison-before-cleanup-error behavior. Migration0013 preserves complete latest0012 fences; default worker refuses implicit dispatch. [Runbook51](51-controlled-provider-journey.md) / [report](../reports/em015f-validation.md) distinguish local skips from required actual41/all-seven gates, and controlled synthetic permission from real source entitlement.
+
+## Opt-in worker failure evidence
+
+NFR-003/017 privacy and bounded telemetry map to `test_worker_diagnostics.py`: exact exception-type and fixed reason mapping, malicious/unknown objects and strings, exact task/queue refusal, default-off actual traces, original errors/returns, failed observers, metadata persistence, saturation and truncated/incomplete tails. Strict schema regressions reject stale records, unknown/nested fields, duplicate keys, inconsistent phase/counter/class/reason combinations and failure metadata changes without a failure record. Pinned `send_task` publication, Kombu `Message`, Celery `Request` and actual `trace_task` signals prove metadata for both owned routes and claim/process failures, including non-pickleable wrapper fallback. These tests do not establish the historical UI exception or replace actual own-head UI/service gates. [Runbook41](41-offline-operator-ui-runbook.md) / [preserved evidence](../reports/em015f-validation.md).
+
+## EM-015g normal controlled operator composition
+
+AT-03/05/06/10/15/17/18/20/21/22/24 and tenant/isolation controls map to `test_execution_dispatcher.py`, `test_operator_provider_worker.py` and required actual `test_operator_provider_acceptance.py`. Pure tests cover Python-only factory/config/event boundaries, current claim/generation ordering, exact registered routing, default refusal/no fallback and thread-owned revocable pipe cleanup. Actual acceptance requires keyboard create/plan/start, durable publication, genuine registered RabbitMQ task, protected HTTPS, two verified isolated parser profiles, tenant SQL/evidence review, distinct CSV/XLSX downloads and tenant-B denial. Existing static UI8s and controlled41 gates remain separate. [Runbook52](52-controlled-provider-operator.md) and [evidence](../reports/em015g-validation.md) distinguish candidate/local tests from actual own-head execution. No live certification or production activation claim.
+
+## EM-WARN-01 compatibility regression
+
+AT-02's actual concurrent last-owner-removal test retains two independent pools, two authenticated request threads, barrier and one200/one409 result. Serial app assembly avoids the causally reproduced pinned-framework warning-context race. `test_app_construction_warning.py` supplies subprocess controls for three historical aliases and a setup-structure guard; these pure cases are not database concurrency evidence. See [validation](../reports/em-warn01-validation.md) for exact scope and required own-head gates.
+
+## Missing-popup failure evidence
+
+The actual browser acceptance retains its exact three-second popup-close/download-cancel predicate. `test_popup_failure_evidence.py` verifies fixed-category non-disclosure, verified synthetic-parent scoping, bounded read-only diagnostic collection and sticky failure when events arrive late. Pure mocked CDP is not actual browser or cause-fix evidence. [Validation](../reports/browser-popup-evidence-validation.md) preserves the original failure and unchanged successful repeat.
+
+## EM-017c isolated XML worker artifact
+
+EM-017/document13 worker-packaging requirements map to the explicit XML source manifest, additive packaging workflow and pure `test_xml_packaging.py` cases. Own-head actual acceptance must verify two uncached builds with equal defined content, absent fixture assets, exact source/dependency inventory, unchanged worker protocol and synthetic-only guard, actual network-none kernel restrictions and owned cleanup. Existing metadata/parser/controlled/operator gates remain mandatory. [Runbook53](53-isolated-xml-worker-package.md) and [validation](../reports/em017c-validation.md) distinguish artifact preparation from production/live activation.
+
+## EM-017d controlled curated XML consumption
+
+[Runbook54](54-curated-xml-integration.md) binds the prepared XML artifact to actual application/provider/operator parser metadata, retaining prior tenant/source/protocol controls. New identity and orchestration tests require normal/new-empty aggregates, independent source review and all seven own-head workflows; actual image consumption cannot be inferred from local mocks/skips. [Validation](../reports/em017d-validation.md).
+
+## EM-017e packaged-base inventory
+
+[Runbook55](55-packaged-base-inventory.md) adds bounded observed system-package/interpreter attribution evidence and canonical equality to the existing metadata/XML probes. Strict schema/path/size/refusal tests, normal/new-empty aggregates, independent review and all seven own-head gates are required. It does not certify whole-image security/licensing. [Validation](../reports/em017e-validation.md).
+
+## EM-017f owned test runtime composition
+
+The [runtime prerequisite](56-owned-test-runtime.md) maps EM-017 composition/lifecycle to pure startup/cleanup/refusal tests, actual SQL role/session/tenant checks and the existing normal controlled operator journey. [Evidence](../reports/em017f-validation.md) keeps local skips distinct from seven required actual own-head workflows. No production/runtime/source gate is inferred from test-only composition.
+
+## EM-017g owned test outbox publisher
+
+The [publisher prerequisite](57-owned-test-publisher.md) maps EM-017 lifecycle and EM-005/010/011 durable replay to pure boundary/cleanup/protocol tests, actual SQL/RabbitMQ partial-publication and duplicate-effect checks, and unchanged normal controlled operator acceptance. [Evidence](../reports/em017g-validation.md) must distinguish local service skips from actual own-head execution. No production identity or source certification follows from this test-only composition.
+
+## EM-003 / EM-012 operator synthetic policy profiles
+
+[Runbook58](58-operator-synthetic-policy-profiles.md) maps closed HTML/XML selection and actual-record approval to seven frontend cases, nine real SQL/API governance cases, and the actual provider keyboard journey starting without a policy. Browser request/SQL/audit checks must precede existing normal-worker review/export acceptance. The original static HTML path and all deadlines/isolation remain unchanged. [Validation](../reports/operator-xml-policy-validation.md) separates local skips from required own-head actual gates.
+
+## EM-006 / EM-012 direct controlled XML URL
+
+[Direct-URL validation](../reports/operator-direct-url-validation.md) tests the normal operator path for the existing catalog article URL. A separate keyboard case requires exact URL request/plan, one protected GET/parser/effect/review/source ticket, no search/PII work, safe exports and tenant denial. Eighteen pure selector/gate regressions and four frontend help cases complement actual services; the shell gate requires both original keyword and new direct-URL proofs.
+
+## EM-007 / EM-010 / EM-012 normal-worker tooltip
+
+[Runbook59](59-operator-tooltip-browser.md) maps explicit policy/job browser opt-in,
+trusted claimed execution, current tenant/source/lease fences, no-I/O replay and
+owned guest/pipe lifecycle to pure and SQL tests. A separate actual keyboard
+journey requires durable outbox/RabbitMQ, protected HTTPS/browser evidence,
+review/export, source accounting and tenant denial. Original cases and deadlines
+remain required. [Validation](../reports/operator-tooltip-validation.md).
+
+## Combined fixture operator demonstration and separate replay
+
+The original first-product demonstration in CODEX_START_HERE and EM-005–012 map
+to a separate combined keyword/browser operator case: two pages, duplicate
+suppression, four article outcomes, four evidence-backed associations, human
+review, exports and complete tenant-negative access checks. Static/search reads
+remain authored fixture transport; only the tooltip uses protected HTTPS and
+an isolated browser. An independent existing subprocess-worker case checks
+accepted-contact identity/accounting after post-effect crash and original
+unacknowledged delivery. It is not combined browser crash recovery.
+[Runbook60](60-combined-fixture-demonstration.md) /
+[validation](../reports/operator-combined-fixture-validation.md).
+
+## EM-015 private offline sample admission prerequisite
+
+[Runbook61](61-private-offline-sample-admission.md) maps bounded authorized sample
+handling to strict provenance/rights decisions, immutable byte/identity binding,
+existing isolated parser controls and redacted evaluation summaries. Public
+regressions and actual private-entry isolation checks use synthetic input only.
+[Validation](../reports/private-sample-admission-validation.md) distinguishes this
+harness prerequisite from unperformed real extraction and live access.
+
+
+## One scoped sample evaluation acceptance
+
+Partial EM-015/runbook62 adds a dedicated acceptance-only one-file composition.
+AT-03/AT-09 and NFR security/privacy controls require refusal of wrong event,
+PR/ref/repository/attempt/head/base, credential/proxy overrides, unsafe DNS/peer,
+TLS failure, redirects, changed size/digest and deadline exhaustion. Build/probe
+failure must precede any sample request. Tests exercise these paths using authored
+synthetic bytes only; normal CI never calls the real acquisition runner.
+
+AT-10/AT-17 require the existing private manifest/rights binding and unchanged
+network-none protocol, plus exact owned-image verification. AT-21 operational
+acceptance requires file removal before resource reconciliation and no successful
+result until cleanup is verified. Public output is limited to closed categories
+and bounded counts. Actual one-sample compatibility remains pending, and counts do
+not prove author/contact correctness. [Evidence](../reports/elsevier-one-sample-validation.md)
+records the separate pure and actual gates and their limitations.
+
+## Private affiliation diagnostic candidate
+
+AT-09/AT-10/AT-17 and privacy controls map to authored affiliation counterfactuals,
+full guest parser/provenance validation, strict bounded fixed-counter output and
+separate diagnostic admission/worker isolation. Existing one-shot acquisition and
+association remain unchanged. See [design](63-affiliation-diagnostic-design.md)
+and [validation](../reports/affiliation-diagnostic-validation.md); actual isolated
+synthetic acceptance and final exact-tree gates remain required.
+
+## Separately scoped one-sample fixed-counter diagnostic
+
+AT-03/AT-09/AT-10/AT-17 require exact new PR44 initial-event admission, immutable
+source/rights binding, original guest/profile preservation and invocation-owned
+image validation. AT-21 requires bounded independent private-file and Docker
+cleanup before success/counters. Only the four-key closed schema may be emitted.
+Authored synthetic runner/workflow regressions cover refusals and failure cleanup;
+[scope](64-one-sample-affiliation-diagnostic-plan.md) and
+[evidence](../reports/one-sample-affiliation-diagnostic-validation.md) distinguish
+local tests from the separately authorized single actual attempt.
+
+## Retained article quality in association review
+
+EM-010/EM-012: `test_observation_quality.py` covers article-only fixed reasons,
+missing-affiliation uncertainty, acceptance/replay compatibility, profile/source
+mismatch refusal, closed values and empty-candidate outcomes.
+`test_observation_quality_tenant.py` requires actual runtime RLS/API reads,
+tenant denial, session/policy/privacy/deletion refusal and no-contact batch access.
+The actual XML pipeline compares retained reasons before and after review.
+`observationQuality.test.tsx` covers honest HTML/no-reason/partial text and unavailable
+or mismatched reads. Required keyboard operator CI holds and aborts quality reads
+across refresh and checks XML review presentation. [Runbook](65-observation-quality-review.md)
+records the contact-row reachability limit and unchanged storage/parser contracts.
+
+## Bounded durable service reference candidate
+
+ADR 0006 and document 66 map the EM-017 service runtime to AT-01, AT-21/22,
+AT-24/25, AT-29/30 and SEC-TENANT, SEC-SECRETS/TLS, REL-REPLAY, REL-ARTIFACT.
+`test_service_authority_tenant.py` covers actual service SQL identity, exact scope,
+revocation, export separation and contention; `test_service_runtime_broker.py`
+covers installed worker/recovery and confirmed publisher races. Pure contract,
+packaging and TLS tests remain distinct from actual service acceptance. All actual
+service-dependent skips are reported as pending evidence, not satisfied criteria.
+
+## Installed controlled XML candidate
+
+EM-012/015/017 extends the installed reference workflow under FR-003/004/005/006,
+FR-010/015/016/017/020/021/022/024/025/027/029/030. The closed profile, bounded
+capability protocol, immutable parser owner and daemon-exposure refusal unit
+checks are not actual infrastructure acceptance. Required keyword/direct URL
+keyboard review/export and post-observation crash recovery run in the installed
+XML consumer of the existing owned packaging wrapper; inherited tenant,
+revocation, source, parser, browser and cleanup gates remain required.
+[Current evidence and gaps](../reports/em017-installed-controlled-xml-validation.md).
+
+## EM-017 closed service-authority restore candidate
+
+FR-001/021/022/024/025/029/030 and NFR-001/003/006/008/013/015/016/018 map to
+[the closed restore contract](67-closed-service-authority-restore.md). Pure service
+restore contracts cover immutable authority, monotonic revocation, coherent audit
+and security/export drift refusal; actual service restore tenant tests must prove
+populated dump/restore, no revived work and closed target cleanup. Legacy restore,
+actual service-login/broker and installed operator tests remain mandatory.
+[Evidence](../reports/em017-service-restore-validation.md) separates pending actual
+acceptance from local skips; no production RPO/RTO or serving restore is claimed.
+
+## Retained job outcome investigation
+
+EM-010/011/012 and FR-021/023/025, existing FR-017 presentation, NFR-001/009/011
+map to the [job investigation scope](68-retained-job-outcome-investigation.md).
+Authored pagination/quality UI cases and actual runtime-role SQL tests remain
+separate from hosted keyboard operator acceptance. Required checks cover more
+than 100 outcomes, no-contact quality without associations, missing batches,
+inherited lineage, current visibility, stale response suppression and keyboard
+focus restoration. This slice does not complete all FR-023 filters.
+[Candidate evidence](../reports/job-outcome-investigation-validation.md).
+
+The long 104-outcome SQL traversal shares the existing mandatory SQL job with
+29 exact retained-filter SQL cases. The backend complement contains every collected
+test outside the explicit 30-node manifest. `test_application_test_partition.py`
+covers collection multisets, exact execution, zero-skip refusal and cross-job
+source/configuration/manifest equality. `test_application_check_phases.py` covers
+unchanged full local commands, retained infrastructure prerequisites and the
+always-evaluated three-success join. Existing XML wrapper contracts cover the new
+closed mode with unchanged timeouts and owned cleanup. These pure checks do not
+replace actual hosted SQL execution.
+
+### FR-023 exact retained article selector and outcomes-only presence
+
+[Document 69](69-retained-article-filters.md) maps this increment to
+`test_retained_article_filters.py`, `test_retained_article_filters_tenant.py`,
+`test_retained_article_filters_service_tenant.py` and
+`retainedArticleFilters.test.tsx`. Required cases include HTML/XML partial and
+unsupported semantics, independent review/syntax, exact original-batch binding,
+two continuations, corrupt/expired/deleted source authority, cursor mismatches,
+pre-limit paging, legacy snapshots and preview/idempotency. Actual narrow-worker
+completion must prove no-contact and inherited contacts-only exports without
+expanded read authority, with claim/finish/download race denials. Operator acceptance
+adds keyboard selection, paging reset, exact-item navigation and preview invalidation.
+The unchanged 104-outcome traversal, 29 exact retained-filter SQL cases and complete
+backend complement remain mandatory with matched receipts at the existing join.
+[Evidence and pending gates](../reports/retained-article-filters-validation.md).
+
+The owned installed XML harness records fixed export substeps on failure and a
+failure-only publisher/export/outbox receipt scoped to its synthetic organization
+and owner. The separate read-only SQL connection has bounded connect, statement
+and lock waits; unavailable diagnostics preserve the original failure. Closed
+vocabulary and ownership tests are in `test_installed_xml_harness.py` and
+`test_operator_ui_protocol.py`. These observations do not change runtime behavior
+or establish complete hosted acceptance; no migration or grants are required.
+
+The owned browser-isolation host records bounded monotonic receipt-time buckets
+for its existing fixed guest checkpoints, including startup and route registration.
+Partial lines are bounded; duplicate and unknown stages are ignored. Batched
+markers share their host receipt time. Success and deadline-failure evidence
+retain these observations without changing mediation, browser behavior or limits.
+`test_browser_isolation_configuration.py` covers these diagnostic boundaries;
+complete exact-source hosted acceptance remains required.
+
+A successful result can arrive before trailing stderr markers are drained; an
+absent timing marker alone is not evidence of a guest failure.
+
+The full timing-enabled host has an exact byte seal. Removing only the sealed
+diagnostic additions must reconstruct the historical host byte digest, preserving
+its original behavior fence alongside all fixture and migration digests.
+
+The owned operator harness now observes the URL job from creation through terminal
+SSE replay. Readiness requires current stream acknowledgment, matching job and
+progress generation/sequence, successful current response delivery, replacement
+of the pre-replay request-owned page, and a connected matching outcome opener.
+The synchronization and original visibility check share the existing ten-second
+budget; the 180-second journey limit and content/focus assertions remain unchanged.
+`test_operator_replay_readiness.py` covers reordered, stale, incomplete and refused
+observations. A separate hosted proof holds actual terminal replay, demonstrates
+premature-dialog invalidation after release, then verifies synchronized inspection.
+Events are forwarded unchanged; production lifecycle and permission rules are not
+modified. Exact-head hosted acceptance remains required.
+
+### Execution receipt lock candidate
+
+`test_execution_receipt_lock_tenant.py` exercises actual claimed-worker authorization while a receipt transaction is held, incompatible control locks, reverse-order refusal/wait behavior, concurrent receipts, duplicate receipts and rollback. Missing SQL remains an explicit skip. These checks do not establish all lifecycle interleavings or installed broker acceptance. Existing extraction jobs have null `jobs.source_id`; the original and candidate receipt fences do not lock source catalog/policy rows through that field. No stronger source serialization guarantee is claimed.
+
+
+### Durable authored PDF candidate — acceptance incomplete
+
+The explicit opt-in fixture-only implementation and acceptance inventory are in
+[design70](70-durable-fixture-pdf-design.md). Pure retained/protocol checks and actual
+SQL journeys are distinct from isolated parser acceptance. The parser-only client configuration prevents automatic proxy injection
+without changing the environment guard. Standard packaging and complete installed
+acceptance remain pending; see the current design for validation limits.
+Published PR50 stays unchanged. No live fetching, grants or deployment are enabled.
+
+The controlled PDF candidate now composes the worker's bounded byte-parser capability
+with the supervisor-selected immutable image. Nine actual isolated RPC cases and
+two actual tenant SQL cases cover fixture-only transport, replay/review/export and
+cancellation-before-commit. This is not installed artifact/broker certification.
+The controller timeout now has failure-only phase/stack diagnostics with its original
+20-second deadline; the historical timeout is not claimed repaired.
+
+Authored PDF installed acceptance: `test_installed_controlled_xml_operator[authored-pdf]`
+requires keyboard policy/job opt-in, page evidence, review, exports and tenant switch.
+`test_installed_controlled_xml_post_observation_crash_recovery[authored-pdf]` requires
+actual installed service-principal broker recovery after SIGKILL with one retained
+observation/effect and no reparse. Both remain pending genuine CI execution.
+
+Retained paper identity candidate: AT-08/19/23/24/25/29 cover tenant-local observed
+DOI grouping, unchanged observation/review relationships, filtered cursors and
+immutable exports with current authority. See [bounded plan](71-retained-paper-identity.md).
+Execution evidence is pending; this does not close general FR-019 observation reuse.
+
+### Accepted-results selection handoff
+
+FR-023/024/025, EM-011/012, NFR-011, UX03: [bounded handoff](72-accepted-selection-handoff.md). Frontend selector/generation cases and actual SQL CSV/XLSX membership tests accompany the authored installed keyboard journey. Hosted execution remains pending.
+
+### Existing source selection
+
+FR-003/004/023/024/025 → [source selection](73-retained-source-selection.md),
+`test_retained_source_selection.py`, `test_retained_source_selection_tenant.py`,
+source presentation/workflow and wizard handler tests, and the authored operator
+keyboard journey. Migration0020 preserves omitted-default identities and all
+current fences. Positive multi-publisher isolation is not claimed; hosted proof pending.
+
+Connected FR-021/022/025/026 lifecycle acceptance candidate:
+[confirmed cancellation, continuation and retained exports](74-connected-operator-lifecycle.md).
+Actual SQL/broker receipts and genuine hosted keyboard results remain distinct.
+
+Retained metadata view: FR-010/017 use `test_article_metadata.py`, the metadata
+variants in `test_observation_quality_tenant.py`, `articleMetadata.test.tsx`, and
+the existing hosted operator evidence-review journey. See `docs/78-retained-article-metadata.md`
+for the distinction between authored coverage and actual executed acceptance.
+
+NFR-017 / FR-021 retained queue-to-terminal timing: `test_job_timing.py`,
+`test_job_timing_tenant.py`, current progress-authority refusals,
+`jobTiming.test.tsx` and the existing hosted lifecycle cancellation journey.
+See `docs/81-retained-job-timing.md`; authored/skipped checks remain pending.
+EM-014/EM-012 contextual contact suppression: `contactSuppression.test.tsx` covers
+explicit confirmation, capability and current-contact binding, stale scope and
+refused/uncertain outcomes. `test_contextual_suppression_api_uses_existing_management_capability`
+authors real SQL role, CSRF, tenant and contact-fencing checks. The installed
+operator journey authors keyboard cancel then confirmation after retained-data
+journeys. The eight normal/fresh SQL cases passed; browser acceptance remains
+incomplete after a preceding outcome-keyboard failure. See
+[the bounded scope](80-contextual-contact-suppression.md).
+
+Installed XML failure localization uses `test_installed_xml_outcome.py` and
+`test_backend_outcome_metadata.py` for fixed categories, numeric case ordinals
+and unchanged success/failure/signal/deadline propagation. These owned synthetic
+tests do not substitute for genuine installed XML execution or close historical
+aggregate timing failures.
+
+Retained observation reuse candidate: FR-019/020/023/024/025 map to the
+[source-bound reuse decisions](82-evidence-date-reuse-decisions.md),
+`test_staged_reuse_sql_tenant.py`, `test_reuse_preparation.py`, and
+`test_reuse_no_fallback.py`. Synthetic SQL tests cover original binding,
+independent review, explicit freshness, tenant and lifecycle refusals,
+CSV/XLSX membership, and source-deletion cleanup for the declared authored
+routes. Their host-parser setup does not prove parser isolation. Guarded
+`test_service_reuse_tenant.py`, `test_service_reuse_broker.py`, installed browser
+and populated restore acceptance require their real infrastructure and must not
+be counted from local skips. The CI-only migration baseline also applies 0022
+in an owned database and probes its installed disabled-link check expression;
+that probe is not a substitute for the prior full 0022 runtime refusal receipt.
+
+FR-010/017/023 and NFR-011: the local [contact article-details candidate](84-contact-article-details.md)
+maps to `contactArticleDetails.test.tsx`, `contactArticleDetailsFlow.test.tsx`,
+`contactArticleDetailsFocus.test.tsx` and `articleMetadata.test.tsx`. These exercise the existing current-authorized
+metadata path, date text and citations, selection ownership and fail-closed UI
+states with synthetic component fixtures. Installed keyboard/browser and exact-head
+hosted acceptance remain pending; these local tests do not prove source filtering
+or change the existing endpoint's authority.
+
+FR-004/006: the local [source-filter contract](85-source-filter-contract.md) maps to
+`test_synthetic_source_filter_contract.py`, `test_sciencedirect_filter_plan.py`,
+`test_discovery.py`, `test_reuse_adapters.py` and `wizardBrowser.test.tsx`.
+The offline fixture and inert provider-native request description do not enable
+source-side product filters or prove publisher entitlement. Four real disposable
+PostgreSQL planner-refusal cases passed. Installed browser and exact-head hosted
+acceptance remain pending.
+
+FR-020/028: the local [transient context view](86-transient-review-context.md)
+maps to `test_review_context_view.py` and `reviewContext.test.tsx`. It records
+fixed metadata-only read audit events and has no durable attachment or review
+effect. Disposable PostgreSQL cases cover selected RLS, audit, deletion,
+revocation and concurrency paths; hosted and installed browser proof is pending.

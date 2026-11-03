@@ -5,7 +5,7 @@
   "article": {
     "id": "00000000-0000-4000-8000-000000000201",
     "title": "Synthetic myocardial infarction study A",
-    "doi": null,
+    "doi": "10.9999/synthetic.article-a",
     "journal": "Example Research Journal",
     "publication_date": "2026-01-15",
     "source_url": "https://publisher.example.org/article-a.html"
@@ -40,7 +40,7 @@
     "method": "mailto",
     "excerpt": "* Corresponding author: Alex Chen. alex.chen@example.org",
     "locator": "#correspondence",
-    "content_sha256": "33c3bddb62834da34acb300b7c0bd7bb4c8728fb57e5ece43b8fc4e81920c3f0",
+    "content_sha256": "a776106710399f4aa596f42430b5a5283b0d0ea8efafd55460ef2c83782884df",
     "connector_version": "synthetic-1.0",
     "policy_version": 1
   }],

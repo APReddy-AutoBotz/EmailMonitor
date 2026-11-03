@@ -1,0 +1,285 @@
+{
+  "schema_version": "1.0",
+  "parser_version": "pypdf-6.20.1-synthetic-v1",
+  "route": "pdf",
+  "url": "https://synthetic.publisher.example/article-a.pdf",
+  "content_digest": "a216f8bde348256ee912f592956dfc66ea83b106e2f4c05b3c6a28f5e6cfd9cc",
+  "status": "observed",
+  "reason": "complete",
+  "pages_total": 2,
+  "pages_inspected": 2,
+  "complete_scan": true,
+  "authors": [
+    {
+      "position": 1,
+      "display_name": "Mira Rao",
+      "marker": "1",
+      "first": true,
+      "affiliations": [],
+      "corresponding": null,
+      "evidence": [
+        {
+          "page": 1,
+          "locator": "page:1:fragment:2",
+          "anchor": [
+            50.0,
+            715.0
+          ],
+          "region": [
+            0.0,
+            0.0,
+            612.0,
+            792.0
+          ],
+          "coordinate_units": "pdf_points",
+          "coordinate_origin": "bottom_left",
+          "region_precision": "full_cropbox_not_glyph_bbox",
+          "excerpt": "Authors: Mira Rao"
+        },
+        {
+          "page": 1,
+          "locator": "page:1:fragment:3",
+          "anchor": [
+            162.0,
+            721.0
+          ],
+          "region": [
+            0.0,
+            0.0,
+            612.0,
+            792.0
+          ],
+          "coordinate_units": "pdf_points",
+          "coordinate_origin": "bottom_left",
+          "region_precision": "full_cropbox_not_glyph_bbox",
+          "excerpt": "1"
+        },
+        {
+          "page": 1,
+          "locator": "page:1:fragment:4",
+          "anchor": [
+            172.0,
+            715.0
+          ],
+          "region": [
+            0.0,
+            0.0,
+            612.0,
+            792.0
+          ],
+          "coordinate_units": "pdf_points",
+          "coordinate_origin": "bottom_left",
+          "region_precision": "full_cropbox_not_glyph_bbox",
+          "excerpt": "; Alex Chen"
+        },
+        {
+          "page": 1,
+          "locator": "page:1:fragment:5",
+          "anchor": [
+            249.0,
+            721.0
+          ],
+          "region": [
+            0.0,
+            0.0,
+            612.0,
+            792.0
+          ],
+          "coordinate_units": "pdf_points",
+          "coordinate_origin": "bottom_left",
+          "region_precision": "full_cropbox_not_glyph_bbox",
+          "excerpt": "2"
+        }
+      ]
+    },
+    {
+      "position": 2,
+      "display_name": "Alex Chen",
+      "marker": "2",
+      "first": false,
+      "affiliations": [],
+      "corresponding": true,
+      "evidence": [
+        {
+          "page": 1,
+          "locator": "page:1:fragment:2",
+          "anchor": [
+            50.0,
+            715.0
+          ],
+          "region": [
+            0.0,
+            0.0,
+            612.0,
+            792.0
+          ],
+          "coordinate_units": "pdf_points",
+          "coordinate_origin": "bottom_left",
+          "region_precision": "full_cropbox_not_glyph_bbox",
+          "excerpt": "Authors: Mira Rao"
+        },
+        {
+          "page": 1,
+          "locator": "page:1:fragment:3",
+          "anchor": [
+            162.0,
+            721.0
+          ],
+          "region": [
+            0.0,
+            0.0,
+            612.0,
+            792.0
+          ],
+          "coordinate_units": "pdf_points",
+          "coordinate_origin": "bottom_left",
+          "region_precision": "full_cropbox_not_glyph_bbox",
+          "excerpt": "1"
+        },
+        {
+          "page": 1,
+          "locator": "page:1:fragment:4",
+          "anchor": [
+            172.0,
+            715.0
+          ],
+          "region": [
+            0.0,
+            0.0,
+            612.0,
+            792.0
+          ],
+          "coordinate_units": "pdf_points",
+          "coordinate_origin": "bottom_left",
+          "region_precision": "full_cropbox_not_glyph_bbox",
+          "excerpt": "; Alex Chen"
+        },
+        {
+          "page": 1,
+          "locator": "page:1:fragment:5",
+          "anchor": [
+            249.0,
+            721.0
+          ],
+          "region": [
+            0.0,
+            0.0,
+            612.0,
+            792.0
+          ],
+          "coordinate_units": "pdf_points",
+          "coordinate_origin": "bottom_left",
+          "region_precision": "full_cropbox_not_glyph_bbox",
+          "excerpt": "2"
+        },
+        {
+          "page": 2,
+          "locator": "page:2:fragment:2",
+          "anchor": [
+            50.0,
+            110.0
+          ],
+          "region": [
+            0.0,
+            0.0,
+            612.0,
+            792.0
+          ],
+          "coordinate_units": "pdf_points",
+          "coordinate_origin": "bottom_left",
+          "region_precision": "full_cropbox_not_glyph_bbox",
+          "excerpt": "Correspondence [2]: Alex Chen; alex.chen@example.org"
+        }
+      ]
+    }
+  ],
+  "candidates": [
+    {
+      "raw_address": "alex.chen@example.org",
+      "author_positions": [
+        2
+      ],
+      "association_status": "needs_review",
+      "technical_status": "not_checked",
+      "delivery_status": "unverified",
+      "outreach_eligibility": "not_assessed",
+      "reconstruction": "literal",
+      "evidence": [
+        {
+          "page": 2,
+          "locator": "page:2:fragment:2",
+          "anchor": [
+            50.0,
+            110.0
+          ],
+          "region": [
+            0.0,
+            0.0,
+            612.0,
+            792.0
+          ],
+          "coordinate_units": "pdf_points",
+          "coordinate_origin": "bottom_left",
+          "region_precision": "full_cropbox_not_glyph_bbox",
+          "excerpt": "Correspondence [2]: Alex Chen; alex.chen@example.org"
+        }
+      ]
+    }
+  ],
+  "metadata": [
+    {
+      "date_type": "unspecified",
+      "field": "title",
+      "value": "Synthetic article A",
+      "evidence": {
+        "page": 1,
+        "locator": "page:1:fragment:1",
+        "anchor": [
+          50.0,
+          745.0
+        ],
+        "region": [
+          0.0,
+          0.0,
+          612.0,
+          792.0
+        ],
+        "coordinate_units": "pdf_points",
+        "coordinate_origin": "bottom_left",
+        "region_precision": "full_cropbox_not_glyph_bbox",
+        "excerpt": "Title: Synthetic article A"
+      }
+    },
+    {
+      "date_type": "unspecified",
+      "field": "journal",
+      "value": "Synthetic Research Journal",
+      "evidence": {
+        "page": 1,
+        "locator": "page:1:fragment:6",
+        "anchor": [
+          50.0,
+          680.0
+        ],
+        "region": [
+          0.0,
+          0.0,
+          612.0,
+          792.0
+        ],
+        "coordinate_units": "pdf_points",
+        "coordinate_origin": "bottom_left",
+        "region_precision": "full_cropbox_not_glyph_bbox",
+        "excerpt": "Journal: Synthetic Research Journal"
+      }
+    }
+  ],
+  "preferred_metadata": {
+    "title": "Synthetic article A",
+    "journal": "Synthetic Research Journal",
+    "publication_date": null,
+    "doi": null
+  },
+  "identity_association_implemented": false,
+  "ocr_implemented": false
+}

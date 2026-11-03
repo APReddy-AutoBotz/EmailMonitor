@@ -1,0 +1,19 @@
+{
+  "expected_revision": 1,
+  "entitlements": {
+    "max_running_jobs": 2,
+    "max_parallel_parse": 2,
+    "max_parallel_export": 1,
+    "max_parallel_browser": 1,
+    "max_articles_per_job": 20,
+    "monthly_resolution_units": 5000,
+    "max_export_bytes": 8388608,
+    "browser_enabled": true,
+    "exports_enabled": true
+  },
+  "branding": {
+    "accent_color": "#155e63",
+    "label": null,
+    "logo_reference": null
+  }
+}

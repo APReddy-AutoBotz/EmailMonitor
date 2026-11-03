@@ -1,0 +1,121 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "view_version": {
+      "const": "job-timing-v1",
+      "default": "job-timing-v1",
+      "title": "View Version",
+      "type": "string"
+    },
+    "organization_id": {
+      "format": "uuid",
+      "title": "Organization Id",
+      "type": "string"
+    },
+    "job_id": {
+      "format": "uuid",
+      "title": "Job Id",
+      "type": "string"
+    },
+    "revision": {
+      "minimum": 1,
+      "title": "Revision",
+      "type": "integer"
+    },
+    "generation": {
+      "minimum": 1,
+      "title": "Generation",
+      "type": "integer"
+    },
+    "state": {
+      "enum": [
+        "draft",
+        "awaiting_approval",
+        "ready",
+        "queued",
+        "running",
+        "pausing",
+        "paused",
+        "cancelling",
+        "cancelled",
+        "completed",
+        "completed_partial",
+        "failed"
+      ],
+      "title": "State",
+      "type": "string"
+    },
+    "basis": {
+      "const": "first_queued_to_current_terminal_event",
+      "default": "first_queued_to_current_terminal_event",
+      "title": "Basis",
+      "type": "string"
+    },
+    "availability": {
+      "enum": [
+        "recorded",
+        "not_started",
+        "not_terminal",
+        "not_recorded",
+        "inconsistent"
+      ],
+      "title": "Availability",
+      "type": "string"
+    },
+    "queued_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Queued At"
+    },
+    "terminal_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Terminal At"
+    },
+    "elapsed_seconds": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Elapsed Seconds"
+    },
+    "includes_waiting_and_pauses": {
+      "const": true,
+      "default": true,
+      "title": "Includes Waiting And Pauses",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "organization_id",
+    "job_id",
+    "revision",
+    "generation",
+    "state",
+    "availability"
+  ],
+  "title": "JobTiming",
+  "type": "object"
+}
