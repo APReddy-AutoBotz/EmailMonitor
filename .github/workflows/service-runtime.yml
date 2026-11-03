@@ -151,6 +151,9 @@ jobs:
       - name: "Installed reuse publisher: ${{ steps.installed-operator-test.outputs.reuse_publisher_order || 'unavailable' }} / ${{ steps.installed-operator-test.outputs.reuse_publisher_stage || 'unavailable' }}"
         if: ${{ !cancelled() && steps.installed-operator-test.outcome != 'skipped' }}
         run: ':'
+      - name: "Installed reuse publisher claim: ${{ steps.installed-operator-test.outputs.reuse_publisher_claim || 'unavailable' }}"
+        if: ${{ !cancelled() && steps.installed-operator-test.outcome != 'skipped' }}
+        run: ':'
       - name: "Installed publisher failure: ${{ steps.installed-operator-test.outputs.installed_publisher_failure || 'unavailable' }}"
         if: ${{ !cancelled() && steps.installed-operator-test.outcome != 'skipped' }}
         run: ':'

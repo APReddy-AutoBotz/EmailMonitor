@@ -116,8 +116,9 @@ def test_actual_journey_wires_publisher_and_browser_observation() -> None:
 
 
 @pytest.mark.parametrize("enabled", [False, True])
+@pytest.mark.parametrize("retained_reuse", [False, True])
 def test_actual_nested_publisher_reports_fixed_failure_stage(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, enabled: bool
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, enabled: bool, retained_reuse: bool
 ) -> None:
     tree = ast.parse(inspect.getsource(acceptance.installed_journey))
     publish = next(
@@ -141,7 +142,8 @@ def test_actual_nested_publisher_reports_fixed_failure_stage(
     def finite(*args: object, publisher_diagnostics: bool) -> str:
         calls.append(publisher_diagnostics)
         if publisher_diagnostics:
-            original._em_publisher_stage = "confirm"  # type: ignore[attr-defined]
+            original._em_publisher_stage = "claim" if retained_reuse else "confirm"  # type: ignore[attr-defined]
+            original._em_publisher_claim = "claim_sql.sql_55p03.export"  # type: ignore[attr-defined]
         raise original
 
     class Stop:
@@ -170,15 +172,20 @@ def test_actual_nested_publisher_reports_fixed_failure_stage(
             "finite": finite,
             "publisher_failure_observed": event,
             "errors": errors,
+            "retained_reuse": retained_reuse,
         }
     )
     exec(compile(factory, "actual-publisher", "exec"), namespace)
     worker, stage = namespace["factory"]()
     worker()
-    assert calls == [enabled] and stage() == ("confirm" if enabled else None)
+    assert calls == [enabled] and stage() == (
+        ("claim" if retained_reuse else "confirm") if enabled else None
+    )
     assert event.is_set() and stop.stopped and errors == ["RuntimeError"]
     if enabled:
-        assert (tmp_path / "output").read_text() == "installed_publisher_failure=exit_nonzero\n"
+        assert (tmp_path / "output").read_text() == "installed_publisher_failure=exit_nonzero\n" + (
+            "reuse_publisher_claim=claim_sql.sql_55p03.export\n" if retained_reuse else ""
+        )
     else:
         assert not (tmp_path / "output").exists()
 

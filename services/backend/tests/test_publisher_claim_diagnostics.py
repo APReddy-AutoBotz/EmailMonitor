@@ -305,3 +305,92 @@ def test_installed_diagnostic_failure_never_replaces_original_error(
         installed.finite(tmp_path, "publish-once", tmp_path / "config", publisher_diagnostics=True)
     assert getattr(caught.value, "_em_publisher_claim", None) is None
     assert "private" not in str(caught.value)
+
+
+@pytest.mark.parametrize(
+    ("stage", "claim", "expected"),
+    [
+        ("claim", "claim_sql.sql_55p03.export", "claim_sql.sql_55p03.export"),
+        ("claim", "authority_or_cleanup.sql_em017.export", "authority_or_cleanup.sql_em017.export"),
+        ("claim", "phase_validation.non_db.extraction", "phase_validation.non_db.extraction"),
+        ("claim", "claim_sql.private.export", "unavailable"),
+        ("claim", "claim_sql.sql_55p03.export\ninjected=1", "unavailable"),
+        ("confirm", "claim_sql.sql_55p03.export", "unavailable"),
+        (None, {"private": "value"}, "unavailable"),
+    ],
+)
+def test_reuse_claim_receipt_is_closed_and_preserves_first(
+    tmp_path: Path, stage: object, claim: object, expected: str
+) -> None:
+    error = RuntimeError("private original")
+    cast(Any, error)._em_publisher_stage = stage
+    cast(Any, error)._em_publisher_claim = claim
+    output = tmp_path / "output"
+    installed.report_reuse_publisher_claim(error, output)
+    installed.report_reuse_publisher_claim(RuntimeError("private later"), output)
+    text = output.read_text()
+    assert text == "reuse_publisher_claim=" + expected + "\n"
+    assert "private" not in text and "injected" not in text
+
+
+@pytest.mark.parametrize(
+    ("enabled", "retained_reuse"), [(False, False), (False, True), (True, False), (True, True)]
+)
+def test_reuse_claim_reporting_is_opt_in_and_never_replaces_failure(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, enabled: bool, retained_reuse: bool
+) -> None:
+    monkeypatch.setenv("EM_INSTALLED_STAGE_REPORT", "true" if enabled else "false")
+    monkeypatch.setenv("GITHUB_OUTPUT", str(tmp_path / "output"))
+    reporter = MagicMock(side_effect=OSError("private diagnostic"))
+    monkeypatch.setattr(installed, "report_reuse_publisher_claim", reporter)
+    original = RuntimeError("private original")
+    try:
+        raise original
+    except RuntimeError as error:
+        installed.report_reuse_claim_if_enabled(error, retained_reuse=retained_reuse)
+        assert error is original
+    assert reporter.call_count == int(enabled and retained_reuse)
+    assert not (tmp_path / "output").exists()
+
+
+def test_reuse_claim_reserves_first_before_concurrent_report(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from emailmonitor.runtime import claim_diagnostics
+
+    first, second = RuntimeError("private first"), RuntimeError("private second")
+    cast(Any, first)._em_publisher_stage = cast(Any, second)._em_publisher_stage = "claim"
+    cast(Any, first)._em_publisher_claim = "claim_sql.sql_55p03.export"
+    cast(Any, second)._em_publisher_claim = "claim_sql.sql_em017.export"
+    entered, release = threading.Event(), threading.Event()
+    validate = claim_diagnostics.valid_claim_receipt
+
+    def delayed(value: object) -> bool:
+        entered.set()
+        if not release.wait(timeout=2):
+            raise RuntimeError("synthetic test deadline")
+        return validate(value)
+
+    monkeypatch.setattr(claim_diagnostics, "valid_claim_receipt", delayed)
+    output = tmp_path / "output"
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(installed.report_reuse_publisher_claim, first, output)
+        try:
+            assert entered.wait(timeout=2)
+            installed.report_reuse_publisher_claim(second, output)
+        finally:
+            release.set()
+        future.result(timeout=2)
+    assert output.read_text() == "reuse_publisher_claim=claim_sql.sql_55p03.export\n"
+
+
+def test_reuse_claim_failed_first_report_cannot_be_overwritten(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    output = tmp_path / "output"
+    with monkeypatch.context() as scoped:
+        scoped.setattr(Path, "open", MagicMock(side_effect=OSError("private")))
+        with pytest.raises(OSError):
+            installed.report_reuse_publisher_claim(RuntimeError("private first"), output)
+    installed.report_reuse_publisher_claim(RuntimeError("private later"), output)
+    assert not output.exists()

@@ -92,6 +92,39 @@ def report_reuse_export_failure(
 
 
 _first_publisher_failure: set[str] = set()
+_first_reuse_publisher_claim: set[str] = set()
+_first_reuse_publisher_claim_lock = threading.Lock()
+
+
+def report_reuse_publisher_claim(error: Exception, destination: Path) -> None:
+    """Retain only the first installed reuse publisher's closed claim category."""
+    target = str(destination)
+    with _first_reuse_publisher_claim_lock:
+        if target in _first_reuse_publisher_claim:
+            return
+        # A failed first report must not allow a later failure to replace it.
+        _first_reuse_publisher_claim.add(target)
+    from emailmonitor.runtime.claim_diagnostics import valid_claim_receipt
+
+    stage = getattr(error, "_em_publisher_stage", None)
+    claim = getattr(error, "_em_publisher_claim", None)
+    fixed = (
+        claim
+        if type(stage) is str and stage == "claim" and valid_claim_receipt(claim)
+        else "unavailable"
+    )
+    with destination.open("a", encoding="ascii") as output:
+        output.write("reuse_publisher_claim=" + str(fixed) + "\n")
+
+
+def report_reuse_claim_if_enabled(error: Exception, *, retained_reuse: bool) -> None:
+    """Never change the existing publisher failure or its stop behavior."""
+    if not retained_reuse or os.environ.get("EM_INSTALLED_STAGE_REPORT") != "true":
+        return
+    try:
+        report_reuse_publisher_claim(error, Path(os.environ["GITHUB_OUTPUT"]))
+    except BaseException:  # noqa: BLE001 - the diagnostic must not replace the failure
+        pass
 
 
 def report_operator_publisher_order(
@@ -725,6 +758,7 @@ def installed_journey(
                                     )
                                 except Exception:
                                     pass
+                            report_reuse_claim_if_enabled(error, retained_reuse=retained_reuse)
 
                 def control(action: str) -> None:
                     nonlocal expiry_observed
