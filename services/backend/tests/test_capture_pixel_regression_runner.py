@@ -1,6 +1,7 @@
 """Synthetic fixed-output guest contract; does not start Docker or a browser."""
 
 import copy
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -76,12 +77,31 @@ def test_guest_accepts_exact_profile_and_refuses_exfiltration_or_relaxation() ->
 
 def test_source_workflow_is_branch_only_and_has_no_artifact_delivery() -> None:
     workflow = (ROOT / ".github/workflows/capture-pixel-regression.yml").read_text()
+    assert runner.COMMAND == [
+        "python",
+        "-c",
+        "from test_operator_capture_pixels import "
+        "test_actual_sandboxed_chromium_redacts_temporarily_exposed_synthetic_values as run; run()",
+    ]
     assert "branches: [codex/capture-pixel-regression-20261102]" in workflow
     assert "pull_request:" not in workflow and "workflow_dispatch:" not in workflow
     assert "upload-artifact" not in workflow and "EM_OPERATOR_CAPTURE" not in workflow
     assert "06c78c9f1271a02e6d6f52d43d9ad8d0b8e95ba4" in workflow
     assert "8f5bafd1f7ad1e5df8f311c0b37452b945035316" in workflow
     assert "git diff --quiet" in workflow
+    lines = workflow.splitlines()
+    start = next(i for i, line in enumerate(lines) if line.strip() == "done <<'BLOBS'")
+    end = next(i for i in range(start + 1, len(lines)) if lines[i].strip() == "BLOBS")
+    pins = [line.strip() for line in lines[start + 1 : end]]
+    for path in (
+        "scripts/isolation/operator_capture.py",
+        "scripts/isolation/test_operator_capture_pixels.py",
+        "services/backend/tests/test_operator_capture.py",
+    ):
+        content = (ROOT / path).read_bytes()
+        blob = b"blob " + str(len(content)).encode("ascii") + b"\0" + content
+        digest = hashlib.sha1(blob, usedforsecurity=False).hexdigest()
+        assert pins.count(f"{digest} {path}") == 1
     dockerfile = (ROOT / "scripts/isolation/Dockerfile.capture-pixel").read_text()
     assert "sha256:96b39581c89131729a7ecb8d532314af54c7f9bcc7a61fe15c7a9e77602acf59" in dockerfile
     assert "test_operator_capture_pixels.py" in dockerfile
@@ -95,7 +115,7 @@ def test_failure_output_is_fixed_and_does_not_echo_exception(monkeypatch: Any, c
     with pytest.raises(SystemExit) as stopped:
         runner.main()
     assert stopped.value.code == 1
-    assert capsys.readouterr().out == "capture_scroll_result=failed\n"
+    assert capsys.readouterr().out == "capture_focus_result=failed\n"
 
 
 def test_owned_resources_cleaned_and_guest_success_verified(monkeypatch: Any) -> None:
@@ -144,7 +164,7 @@ def test_cleanup_uncertainty_is_reported_without_exception_details(
     monkeypatch.setattr(runner, "run", fail)
     with pytest.raises(SystemExit):
         runner.main()
-    assert capsys.readouterr().out == "capture_scroll_result=cleanup_uncertain\n"
+    assert capsys.readouterr().out == "capture_focus_result=cleanup_uncertain\n"
 
 
 def test_cleanup_attempted_when_daemon_create_fails(monkeypatch: Any) -> None:
