@@ -67,6 +67,8 @@ from xml_image_evidence import require_packaged_image
 
 ROOT = Path(__file__).resolve().parents[2]
 _first_xml_publisher_order: set[str] = set()
+_first_xml_publisher_claim: set[str] = set()
+_first_xml_publisher_claim_lock = threading.Lock()
 
 
 def report_publisher_order(observed: bool, stage: object, destination: Path) -> None:
@@ -81,6 +83,27 @@ def report_publisher_order(observed: bool, stage: object, destination: Path) -> 
         output.write("installed_xml_publisher_order=" + category + "\n")
         output.write("installed_xml_publisher_stage=" + fixed_stage + "\n")
     _first_xml_publisher_order.add(target)
+
+
+def report_publisher_claim(error: Exception, destination: Path) -> None:
+    """Report the first publisher handler's fixed claim receipt, if available."""
+    target = str(destination)
+    with _first_xml_publisher_claim_lock:
+        if target in _first_xml_publisher_claim:
+            return
+        # A failed write must not permit a later failure to replace the first.
+        _first_xml_publisher_claim.add(target)
+    from emailmonitor.runtime.claim_diagnostics import valid_claim_receipt
+
+    stage = getattr(error, "_em_publisher_stage", None)
+    claim = getattr(error, "_em_publisher_claim", None)
+    fixed = (
+        claim
+        if type(stage) is str and stage == "claim" and valid_claim_receipt(claim)
+        else "unavailable"
+    )
+    with destination.open("a", encoding="ascii") as output:
+        output.write("installed_xml_publisher_claim=" + str(fixed) + "\n")
 
 
 @contextmanager
@@ -526,6 +549,10 @@ def test_installed_controlled_xml_operator(
                                         error, Path(os.environ["GITHUB_OUTPUT"])
                                     )
                                 except Exception:
+                                    pass
+                                try:
+                                    report_publisher_claim(error, Path(os.environ["GITHUB_OUTPUT"]))
+                                except BaseException:  # noqa: BLE001 - preserve existing stop behavior
                                     pass
 
                 def control(action: str) -> None:

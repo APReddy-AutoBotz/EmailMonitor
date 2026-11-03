@@ -17,7 +17,16 @@ from emailmonitor.runtime.publisher import PublisherCleanupError, PublisherError
 from emailmonitor.runtime.worker import ServiceRuntimeConfig, broker_application
 
 
-def publish_service_once(config: ServiceRuntimeConfig) -> int:
+def _claim_receipt(failure: Exception, operation: str, purpose: str | None) -> str | None:
+    try:
+        from emailmonitor.runtime.claim_diagnostics import claim_receipt
+
+        return claim_receipt(failure, operation, purpose)
+    except BaseException:  # noqa: BLE001 - diagnostics must not replace the original failure
+        return None
+
+
+def publish_service_once(config: ServiceRuntimeConfig, *, diagnostic: bool = False) -> int:
     if config.process.kind != "publisher":
         raise ValueError("Publisher principal required")
     database = ServiceDatabase(config.database_url, config.process)
@@ -26,6 +35,10 @@ def publish_service_once(config: ServiceRuntimeConfig) -> int:
     count = 0
     started = time.monotonic()
     stage = "pending"
+    claim_operation = "authority_or_cleanup"
+    claim_purpose: str | None = None
+    first_claim_receipt: str | None = None
+    first_claim_failure_observed = False
     try:
         if database.organization != config.organization:
             raise ValueError("Registered service tenant must match queue tenant")
@@ -105,15 +118,31 @@ def publish_service_once(config: ServiceRuntimeConfig) -> int:
                 else Capability.EXPORT_RESULTS
             )
             stage = "claim"
+            claim_operation = "authority_or_cleanup"
+            claim_purpose = scope.purpose
+            first_claim_receipt = None
+            first_claim_failure_observed = False
             with database.tenant(scope, scope.organization, capability) as (c, _):
-                phase: str | None = c.execute(statement, params).scalar_one()
-                if phase is None:
-                    continue
-                if phase not in {"fixture_io", "parse", "export"}:
-                    raise ValueError("Closed publication phase required")
-                queue = phase_queue(
-                    config.queue, cast(Literal["fixture_io", "parse", "export"], phase)
-                )
+                try:
+                    claim_operation = "claim_sql"
+                    phase: str | None = c.execute(statement, params).scalar_one()
+                    if phase is None:
+                        claim_operation = "authority_finalize"
+                        continue
+                    claim_operation = "phase_validation"
+                    if phase not in {"fixture_io", "parse", "export"}:
+                        raise ValueError("Closed publication phase required")
+                    claim_operation = "queue_selection"
+                    queue = phase_queue(
+                        config.queue, cast(Literal["fixture_io", "parse", "export"], phase)
+                    )
+                except Exception as first_failure:
+                    if diagnostic:
+                        first_claim_failure_observed = True
+                        first_claim_receipt = _claim_receipt(
+                            first_failure, claim_operation, claim_purpose
+                        )
+                    raise
                 stage = "broker_send"
                 application.send_task(
                     name,
@@ -138,10 +167,23 @@ def publish_service_once(config: ServiceRuntimeConfig) -> int:
                     raise PublisherError("Publication receipt changed")
             count += 1
         return count
-    except Exception:
+    except Exception as failure:
         failed = True
         error = PublisherError("Service publication failed")
         error._em_publisher_stage = stage  # type: ignore[attr-defined]
+        if diagnostic and stage == "claim":
+            try:
+                # An inner observation precedes any exception from transaction
+                # rollback; it is not a claim about the final outward failure.
+                receipt = (
+                    first_claim_receipt
+                    if first_claim_failure_observed
+                    else _claim_receipt(failure, claim_operation, claim_purpose)
+                )
+                if receipt is not None:
+                    error._em_publisher_claim = receipt  # type: ignore[attr-defined]
+            except BaseException:  # noqa: BLE001 - never replace the original failure
+                pass
         raise error from None
     except BaseException:
         failed = True

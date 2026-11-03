@@ -53,7 +53,10 @@ def main() -> int:
             if options.command == "publish-once":
                 from emailmonitor.runtime.service_publisher import publish_service_once
 
-                count = publish_service_once(config)
+                if os.environ.get("EM_SYNTHETIC_PUBLISHER_STAGE") == "1":
+                    count = publish_service_once(config, diagnostic=True)
+                else:
+                    count = publish_service_once(config)
                 print(f"published={count}")
             elif options.command == "check":
                 from emailmonitor.runtime.database import ServiceDatabase
@@ -116,6 +119,12 @@ def main() -> int:
                 ):
                     stage = "startup"
                 print(f"service_publisher_stage={stage}", file=sys.stderr)
+                if stage == "claim":
+                    from emailmonitor.runtime.claim_diagnostics import valid_claim_receipt
+
+                    claim = getattr(error, "_em_publisher_claim", None)
+                    if valid_claim_receipt(claim):
+                        print(f"service_publisher_claim={claim}", file=sys.stderr)
             except Exception:
                 pass
         print("service_runtime_failed", file=sys.stderr)

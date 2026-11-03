@@ -428,6 +428,26 @@ def finite(
                 if result.stderr == expected:
                     error._em_publisher_stage = stage  # type: ignore[attr-defined]
                     break
+            else:
+                # Accept only the exact claim grammar; never forward raw stderr.
+                try:
+                    if len(result.stderr) <= 1024:
+                        from emailmonitor.runtime.claim_diagnostics import valid_claim_receipt
+
+                        lines = result.stderr.decode("ascii").splitlines(keepends=True)
+                        prefix = "service_publisher_claim="
+                        if (
+                            len(lines) == 3
+                            and lines[0] == "service_publisher_stage=claim\n"
+                            and lines[1].startswith(prefix)
+                            and lines[1].endswith("\n")
+                            and lines[2] == "service_runtime_failed\n"
+                            and valid_claim_receipt(lines[1][len(prefix) : -1])
+                        ):
+                            error._em_publisher_stage = "claim"  # type: ignore[attr-defined]
+                            error._em_publisher_claim = lines[1][len(prefix) : -1]  # type: ignore[attr-defined]
+                except BaseException:  # noqa: BLE001 - never replace the original failure
+                    pass
         raise error
     return result.stdout.decode().strip()
 
