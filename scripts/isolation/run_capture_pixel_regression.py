@@ -4,6 +4,7 @@ import json
 import os
 import secrets
 import subprocess
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +21,20 @@ COMMAND = [
     ),
 ]
 PROXY_NAMES = {"http_proxy", "https_proxy", "all_proxy", "no_proxy"}
+FAILURE_PHASE: ContextVar[str] = ContextVar("capture_failure_phase", default="admission")
+FAILURE_PHASES = frozenset(
+    {
+        "admission",
+        "build",
+        "image_inspection",
+        "create",
+        "guest_preflight",
+        "start",
+        "wait",
+        "guest_outcome",
+        "guest_status",
+    }
+)
 
 
 def validate_guest(value: dict[str, Any], image: str, owner: str, profile: Path) -> None:
@@ -77,6 +92,7 @@ def quiet_docker(*args: str, timeout: int) -> None:
 
 
 def run() -> None:
+    FAILURE_PHASE.set("admission")
     if os.environ.get("GITHUB_ACTIONS") != "true" or os.environ.get("GITHUB_REF") != BRANCH:
         raise RuntimeError("capture_pixel_ci_refused")
     root = Path(__file__).resolve().parents[2]
@@ -86,6 +102,7 @@ def run() -> None:
     operation_uncertain = True
     clean = True
     try:
+        FAILURE_PHASE.set("build")
         quiet_docker(
             "build",
             "--platform=linux/amd64",
@@ -99,12 +116,14 @@ def run() -> None:
             timeout=600,
         )
         operation_uncertain = False
+        FAILURE_PHASE.set("image_inspection")
         image = resource("image", image_name)
         if image is None:
             raise RuntimeError("capture_pixel_image_refused")
         require_owner("image", image, owner)
         image_id = str(image["Id"])
         operation_uncertain = True
+        FAILURE_PHASE.set("create")
         quiet_docker(
             "create",
             "--name",
@@ -135,18 +154,23 @@ def run() -> None:
             timeout=120,
         )
         operation_uncertain = False
+        FAILURE_PHASE.set("guest_preflight")
         guest = resource("container", guest_name)
         if guest is None:
             raise RuntimeError("capture_pixel_guest_missing")
         validate_guest(guest, image_id, owner, profile)
         operation_uncertain = True
+        FAILURE_PHASE.set("start")
         quiet_docker("start", guest_name, timeout=30)
         operation_uncertain = False
+        FAILURE_PHASE.set("wait")
         quiet_docker("wait", guest_name, timeout=190)
+        FAILURE_PHASE.set("guest_outcome")
         guest = resource("container", guest_name)
         if guest is None:
             raise RuntimeError("capture_pixel_guest_missing")
         validate_guest(guest, image_id, owner, profile)
+        FAILURE_PHASE.set("guest_status")
         if (
             guest["State"]["Running"]
             or guest["State"]["OOMKilled"]
@@ -165,15 +189,24 @@ def run() -> None:
 
 
 def main() -> None:
+    FAILURE_PHASE.set("admission")
     try:
         run()
     except BaseException as error:  # noqa: BLE001 - never emit guest or Docker output
         if type(error) is RuntimeError and error.args == ("capture_pixel_cleanup_uncertain",):
-            print("capture_focus_result=cleanup_uncertain")
+            result = "capture_focus_result=cleanup_uncertain"
         else:
-            print("capture_focus_result=failed")
-        raise SystemExit(1) from None
-    print("capture_focus_result=passed")
+            phase = FAILURE_PHASE.get()
+            result = "capture_focus_result=failed\ncapture_focus_phase=" + (
+                phase if phase in FAILURE_PHASES else "unavailable"
+            )
+    else:
+        print("capture_focus_result=passed")
+        return
+    # Write only after the triggering exception is cleared, so even a broken
+    # output sink cannot chain its traceback to potentially sensitive details.
+    print(result)
+    raise SystemExit(1) from None
 
 
 if __name__ == "__main__":

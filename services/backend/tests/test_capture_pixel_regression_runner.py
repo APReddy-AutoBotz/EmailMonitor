@@ -115,7 +115,58 @@ def test_failure_output_is_fixed_and_does_not_echo_exception(monkeypatch: Any, c
     with pytest.raises(SystemExit) as stopped:
         runner.main()
     assert stopped.value.code == 1
-    assert capsys.readouterr().out == "capture_focus_result=failed\n"
+    assert capsys.readouterr().out == (
+        "capture_focus_result=failed\ncapture_focus_phase=admission\n"
+    )
+
+
+@pytest.mark.parametrize("phase", sorted(runner.FAILURE_PHASES))
+def test_failure_phase_is_fixed_and_contains_no_error_detail(
+    monkeypatch: Any, capsys: Any, phase: str
+) -> None:
+    def fail() -> None:
+        runner.FAILURE_PHASE.set(phase)
+        raise RuntimeError("private synthetic marker")
+
+    monkeypatch.setattr(runner, "run", fail)
+    with pytest.raises(SystemExit) as stopped:
+        runner.main()
+    assert stopped.value.code == 1
+    assert capsys.readouterr().out == (
+        f"capture_focus_result=failed\ncapture_focus_phase={phase}\n"
+    )
+
+
+def test_unknown_failure_phase_is_not_emitted(monkeypatch: Any, capsys: Any) -> None:
+    def fail() -> None:
+        runner.FAILURE_PHASE.set("private synthetic marker")
+        raise RuntimeError("another private synthetic marker")
+
+    monkeypatch.setattr(runner, "run", fail)
+    with pytest.raises(SystemExit) as stopped:
+        runner.main()
+    assert stopped.value.code == 1
+    assert capsys.readouterr().out == (
+        "capture_focus_result=failed\ncapture_focus_phase=unavailable\n"
+    )
+
+
+def test_output_failure_cannot_chain_the_triggering_exception(monkeypatch: Any) -> None:
+    def fail() -> None:
+        raise RuntimeError("private synthetic marker")
+
+    calls: list[str] = []
+
+    def failed_output(value: str) -> None:
+        calls.append(value)
+        raise BrokenPipeError("output unavailable")
+
+    monkeypatch.setattr(runner, "run", fail)
+    monkeypatch.setattr(runner, "print", failed_output, raising=False)
+    with pytest.raises(BrokenPipeError) as stopped:
+        runner.main()
+    assert calls == ["capture_focus_result=failed\ncapture_focus_phase=admission"]
+    assert stopped.value.__context__ is None
 
 
 def test_owned_resources_cleaned_and_guest_success_verified(monkeypatch: Any) -> None:
@@ -189,4 +240,59 @@ def test_cleanup_attempted_when_daemon_create_fails(monkeypatch: Any) -> None:
     monkeypatch.setattr(runner, "remove_owned", lambda kind, name, owner: removed.append(kind))
     with pytest.raises(RuntimeError, match="^capture_pixel_cleanup_uncertain$"):
         runner.run()
+    assert removed == ["container", "image"]
+
+
+def test_guest_failure_records_outcome_without_changing_cleanup_or_error(monkeypatch: Any) -> None:
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.setenv("GITHUB_REF", runner.BRANCH)
+    monkeypatch.setattr(runner.secrets, "token_hex", lambda _: "owner")
+    monkeypatch.setattr(runner, "quiet_docker", lambda *args, **kwargs: None)
+    failing_guest = guest()
+    failing_guest["State"]["ExitCode"] = 1
+    monkeypatch.setattr(
+        runner,
+        "resource",
+        lambda kind, name: (
+            {"Id": "sha256:test", "Config": {"Labels": {runner.OWNER_LABEL: "owner"}}}
+            if kind == "image"
+            else failing_guest
+        ),
+    )
+    removed: list[str] = []
+    monkeypatch.setattr(runner, "remove_owned", lambda kind, name, owner: removed.append(kind))
+    with pytest.raises(RuntimeError, match="^capture_pixel_test_refused$"):
+        runner.run()
+    assert runner.FAILURE_PHASE.get() == "guest_status"
+    assert removed == ["container", "image"]
+
+
+@pytest.mark.parametrize("failure", ["image_inspection", "guest_preflight", "wait"])
+def test_actual_failure_stage_and_cleanup_are_preserved(monkeypatch: Any, failure: str) -> None:
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.setenv("GITHUB_REF", runner.BRANCH)
+    monkeypatch.setattr(runner.secrets, "token_hex", lambda _: "owner")
+    marker = RuntimeError("private synthetic marker")
+
+    def docker(*args: str, **kwargs: Any) -> None:
+        if failure == "wait" and args[0] == "wait":
+            raise marker
+
+    def inspect(kind: str, name: str) -> dict[str, Any]:
+        if kind == "image":
+            if failure == "image_inspection":
+                raise marker
+            return {"Id": "sha256:test", "Config": {"Labels": {runner.OWNER_LABEL: "owner"}}}
+        if failure == "guest_preflight":
+            raise marker
+        return guest()
+
+    monkeypatch.setattr(runner, "quiet_docker", docker)
+    monkeypatch.setattr(runner, "resource", inspect)
+    removed: list[str] = []
+    monkeypatch.setattr(runner, "remove_owned", lambda kind, name, owner: removed.append(kind))
+    with pytest.raises(RuntimeError) as error:
+        runner.run()
+    assert error.value is marker
+    assert runner.FAILURE_PHASE.get() == failure
     assert removed == ["container", "image"]
