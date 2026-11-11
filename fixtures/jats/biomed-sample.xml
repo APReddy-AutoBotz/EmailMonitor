@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<article xmlns:xlink="http://www.w3.org/1999/xlink" article-type="research-article">
+  <front>
+    <journal-meta>
+      <journal-title>BMC Genomics</journal-title>
+    </journal-meta>
+    <article-meta>
+      <article-id pub-id-type="doi">10.1186/s12864-026-09123-x</article-id>
+      <title-group>
+        <article-title>High-throughput transcriptomic profiling of drought-tolerant wheat</article-title>
+      </title-group>
+      <contrib-group>
+        <contrib contrib-type="author" corresp="yes">
+          <name>
+            <surname>Kim</surname>
+            <given-names>Soo-Jin</given-names>
+          </name>
+          <email>kim.soojin@cropgenomics.ac.kr</email>
+          <aff>National Institute of Crop Science, Suwon, Republic of Korea</aff>
+        </contrib>
+      </contrib-group>
+      <pub-date>
+        <year>2026</year>
+        <month>01</month>
+      </pub-date>
+    </article-meta>
+  </front>
+  <body>
+    <p>Sample body text.</p>
+  </body>
+</article>
