@@ -7,7 +7,7 @@ and literal email evidence with full cryptographic provenance.
 import hashlib
 import re
 from dataclasses import dataclass, field
-from typing import Annotated, Literal, NoReturn
+from typing import Literal
 from xml.parsers import expat
 
 from pydantic import Field, model_validator
@@ -60,7 +60,9 @@ class JatsObservation(Fact):
                     raise ValueError(f"Author at position {a.position} has incorrect first flag")
         if self.status in ("observed", "no_contact"):
             if (self.status == "observed") != bool(self.candidates):
-                raise ValueError("Status 'observed' requires candidates; 'no_contact' forbids candidates")
+                raise ValueError(
+                    "Status 'observed' requires candidates; 'no_contact' forbids candidates"
+                )
         return self
 
 
@@ -87,7 +89,7 @@ class JatsNode:
         return " ".join("".join(self.text_chunks).split())
 
     def find_all(self, tag: str) -> list["JatsNode"]:
-        results: list["JatsNode"] = []
+        results: list[JatsNode] = []
         for child in self.children:
             if child.tag == tag:
                 results.append(child)
@@ -311,10 +313,12 @@ def parse_jats_xml(data: bytes, requested_identifier: OpenAccessIdentifier) -> J
             # ORCID
             orcid: str | None = None
             contrib_id_node = contrib.find_first("contrib-id")
-            if contrib_id_node and "orcid" in contrib_id_node.attrs.get("contrib-id-type", "").lower():
-                orcid_match = ORCID_PATTERN.search(contrib_id_node.text())
-                if orcid_match:
-                    orcid = orcid_match.group(1)
+            if contrib_id_node:
+                cid_type = contrib_id_node.attrs.get("contrib-id-type", "").lower()
+                if "orcid" in cid_type:
+                    orcid_match = ORCID_PATTERN.search(contrib_id_node.text())
+                    if orcid_match:
+                        orcid = orcid_match.group(1)
 
             # Correspondence flags
             is_corresp = contrib.attrs.get("corresp", "").lower() == "yes"
@@ -427,7 +431,7 @@ def parse_jats_xml(data: bytes, requested_identifier: OpenAccessIdentifier) -> J
 
     # 3. Default author notes emails if not yet associated
     corresp_authors = [i + 1 for i, flag in enumerate(author_corresp_flags) if flag]
-    for corresp_id, email_list in corresp_by_id.items():
+    for _corresp_id, email_list in corresp_by_id.items():
         for em, locator in email_list:
             if em in seen_addresses:
                 continue

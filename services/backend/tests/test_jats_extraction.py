@@ -1,6 +1,7 @@
 """Tests for high-precision NISO JATS XML extraction in Open Access articles."""
 
 from pathlib import Path
+
 import pytest
 
 from emailmonitor.extraction.jats import parse_jats_xml
