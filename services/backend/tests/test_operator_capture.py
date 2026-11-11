@@ -1241,7 +1241,7 @@ function setup(kind) {
   const heading=new E('H2','Synthetic tenant 0');
   const body=new E('BODY','',[heading,dialog || root]);
   const html=new E('HTML','',[body]);
-  global.document={body,documentElement:html,activeElement:new E('BUTTON','go'),
+  global.document={body,documentElement:html,activeElement:body,
     styleSheets:[],adoptedStyleSheets:[],
     querySelectorAll(selector) {
       if (selector === '.workspace-heading h2') return [heading];
@@ -1258,7 +1258,7 @@ for (const kind of ['evidence-quality','export','suppression','deletion']) {
     [root.children[1],root.children[2]];
   const outside=document.body.querySelectorAll('*').filter(e => !root.contains(e));
   for (const e of [...outside,...masks]) e.visible=false;
-  const count=kind === 'evidence-quality' ? 7 : 6;
+  const count=['evidence-quality','export'].includes(kind) ? 7 : 6;
   const style={disabled:false,cssRules:Array.from({length:count},()=>({cssText:'fixed rule'}))};
   root.__emCaptureOwnedStyle=style;
   root.__emCaptureStyleRules=JSON.stringify(Array(count).fill('fixed rule'));
@@ -1485,3 +1485,77 @@ def test_focus_pixel_oracle_flag_flows_to_actual_screenshot_wrapper(enabled: boo
     assert (FOCUS_EXPOSE in page.expressions) is enabled
     assert (FOCUS_RESTORE in page.expressions) is enabled
     assert page.locator_value.handle.calls == (4 if enabled else 2)
+
+
+def test_export_preview_focus_exception_is_fixed_and_fail_closed() -> None:
+    """Exercise the actual mask guard with authored DOM substitutes, not Chromium."""
+    import ast
+    import re
+
+    from operator_capture import FINISH, SHAPE
+
+    source = ast.parse(Path(__file__).read_text())
+    fixture = next(
+        node
+        for node in source.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "test_other_crop_guards_with_synthetic_node_substitutes"
+    )
+    script = next(
+        ast.literal_eval(node.value)
+        for node in fixture.body
+        if isinstance(node, ast.Assign)
+        and any(isinstance(target, ast.Name) and target.id == "script" for target in node.targets)
+    )
+    script += r"""
+for (const fault of [
+  'none','text','inline','nested','type','disabled','detached','not_form',
+  'opacity','animation','focus'
+]) {
+  const {root}=setup('export');
+  const button=new E('BUTTON','Preview eligible export counts');
+  const form=new E('FORM','',[button]);
+  Object.defineProperty(form,'lastElementChild',{get(){return this.children.at(-1);}});
+  button.getAttribute=name=>name === 'type' ? (fault === 'type' ? 'button' : 'submit') : null;
+  if (fault === 'text') button.textContent='private';
+  if (fault === 'inline') button.inline=true;
+  if (fault === 'disabled') button.disabled=true;
+  if (fault === 'detached') button.isConnected=false;
+  if (fault === 'not_form') form.tagName='DIV';
+  if (fault === 'nested') {
+    button.children=[new E('SPAN','private')]; button.childNodes=button.children;
+  }
+  root.previousElementSibling=form; document.body.children.splice(1,0,form);
+  document.body.childNodes=document.body.children; document.activeElement=button;
+  const allowed=!['text','inline','nested','type','disabled','detached','not_form'].includes(fault);
+  assert.equal(shape(root,{name:'export',style:'fixed'}),allowed);
+  if (!allowed) continue;
+  assert.equal(root.__emCaptureFocusException,allowed ? button : null);
+  const masks=[root.children[1],root.children[2],root.children[3],root.children[4]];
+  for (const e of document.body.querySelectorAll('*').filter(e=>!root.contains(e))) e.visible=false;
+  for (const e of masks) e.visible=false;
+  button.visible=true; button.opacity=fault === 'opacity' ? '1' : '0';
+  if (fault === 'animation') button.animations=[{playState:'running'}];
+  if (fault === 'focus') document.activeElement=new E('BUTTON','other');
+  const sheet={disabled:false,cssRules:Array.from({length:7},()=>({cssText:'fixed rule'}))};
+  root.__emCaptureOwnedStyle=sheet;
+  root.__emCaptureStyleRules=JSON.stringify(Array(7).fill('fixed rule'));
+  document.adoptedStyleSheets=[sheet];
+  const result=finish(root);
+  assert.equal(result,fault === 'none' ? 'ok' : fault === 'focus' ? 'state_focus' : 'mask_outside');
+}
+"""
+    result = subprocess.run(
+        ["node", "-e", script, SHAPE, FINISH], capture_output=True, check=False, timeout=8
+    )
+    assert result.returncode == 0, result.stderr.decode()
+    style = style_for("export")
+    assert 'form:has(+ section[aria-label="Current export preview"])' in style
+    assert "opacity:0!important" in style
+    root = Path(__file__).resolve().parents[3]
+    source_view = (root / "apps/web/src/views.tsx").read_text()
+    assert re.search(
+        r'<button type="submit">Preview eligible export counts</button></form>\s*'
+        r'\{preview\?\.[^\n]*<section aria-label="Current export preview">',
+        source_view,
+    )
