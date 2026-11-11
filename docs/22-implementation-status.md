@@ -31,6 +31,13 @@ The repository documentation validator checks local Markdown targets, JSON synta
 | EM-016 | NOT STARTED | Test benchmark protocol defined in document 14; held-out publisher UAT pending live source connector integration. |
 | EM-017 | CANDIDATE IN DRAFT PR | Staged in PRs #48, #51; packaging runbooks, synthetic backup restore exercises and disposable DB tests passing; production container deployment pending. |
 | EM-018 | NOT STARTED | Commercial readiness, final license decision, and production release packaging pending PR #70 merge and UAT signoff. |
+| OA-001 | VERIFIED IN DRAFT PR | Europe PMC JATS XML full-text gateway, cryptographic response digest and error boundaries verified in PR #71. |
+| OA-002 | VERIFIED IN DRAFT PR | Deterministic JATS XML author, correspondence, and institutional affiliation parser verified in PR #71. |
+| OA-003 | VERIFIED IN DRAFT PR | OpenAlex REST query planner, work parser, and JATS routing bridge verified in PR #71. |
+| OA-004 | VERIFIED IN DRAFT PR | Instantly & Smartlead cold outreach presets, author recency scoring, and GDPR provenance verified in PR #71. |
+| OA-005 | VERIFIED IN DRAFT PR | UI outreach export presets, configuration helpers, and filter alignment verified in PR #71. |
+| OA-006 | VERIFIED IN DRAFT PR | Crossref REST connector, DOI query planner, and full-text resolver verified in PR #71. |
+| OA-007 | VERIFIED IN DRAFT PR | Multi-source scholarly discovery orchestrator & enterprise UI/UX elevation (Navy/Amber, 2-column layout, compact disclosures) verified in PR #71. |
 | EM-EXT-01–05 | DEFERRED | Post-core extensions (OCR adapter, institutional enrichment, recurring searches, direct outreach). |
 
 ## What has been done vs what remains
