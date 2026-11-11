@@ -161,16 +161,25 @@ SHAPE = r"""(root, config) => {
   } else return false;
   if (masks.some(e => !visible(e) || !e.textContent.trim())) return false;
   if (root.__emCaptureObserver || document.adoptedStyleSheets.length !== 0) return false;
+  const close = name === 'evidence-quality' ? dialogs[0].firstElementChild : null;
+  const form = name === 'export' ? root.previousElementSibling : null;
+  const preview = form && form.tagName === 'FORM' ? form.lastElementChild : null;
+  const safeClose = close && close === active &&
+    close.matches('button.close:first-child') && close.textContent === 'Close evidence' &&
+    close.children.length === 0 ? close : null;
+  const safePreview = preview && preview === active && preview.tagName === 'BUTTON' &&
+    preview.isConnected && preview.getAttribute('type') === 'submit' && !preview.disabled &&
+    !preview.hasAttribute('style') && preview.textContent === 'Preview eligible export counts' &&
+    preview.children.length === 0 ? preview : null;
+  if (name === 'export' && active && active !== document.body &&
+      active !== document.documentElement && !root.contains(active) && !safePreview) return false;
   root.__emCaptureChanged = false;
   root.__emCaptureMaskVerified = false;
   root.__emCaptureChangeKind = 'other';
   root.__emCaptureMaskKind = 'absent';
   root.__emCaptureExpectedStyle = config.style;
-  root.__emCaptureExpectedRules = name === 'evidence-quality' ? 7 : 6;
-  const close = name === 'evidence-quality' ? dialogs[0].firstElementChild : null;
-  root.__emCaptureFocusException = close && close === active &&
-    close.matches('button.close:first-child') && close.textContent === 'Close evidence' &&
-    close.children.length === 0 ? close : null;
+  root.__emCaptureExpectedRules = ['evidence-quality','export'].includes(name) ? 7 : 6;
+  root.__emCaptureFocusException = safeClose || safePreview;
   root.__emCaptureSensitive = Object.freeze(
     name === 'export' ? [...masks, root.children[3]] : [...masks]
   );
@@ -405,6 +414,11 @@ def style_for(name: str) -> str:
             "{visibility:visible!important;opacity:0!important;"
             "transition:none!important;animation:none!important;}"
             if name == "evidence-quality"
+            else 'form:has(+ section[aria-label="Current export preview"]) '
+            '> button[type="submit"]:last-child:focus'
+            "{visibility:visible!important;opacity:0!important;"
+            "transition:none!important;animation:none!important;}"
+            if name == "export"
             else ""
         )
     )

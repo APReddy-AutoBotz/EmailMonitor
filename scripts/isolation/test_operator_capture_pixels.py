@@ -112,6 +112,7 @@ def fixture(name: str) -> str:
         )
     elif name == "export":
         target = (
+            "<form><button type='submit'>Preview eligible export counts</button></form>"
             "<section aria-label='Current export preview'><h4>Current eligible preview</h4>"
             "<p>synthetic sentinel selection</p><p>synthetic sentinel count</p>"
             "<ul><li>synthetic sentinel reason</li></ul><p>synthetic sentinel detail</p>"
@@ -204,6 +205,29 @@ FOCUS_RESTORE = """() => {
   sheet.deleteRule(initial);
   delete window.__syntheticFocusRules;
   return document.activeElement === close && getComputedStyle(close).opacity === '0';
+}"""
+
+EXPORT_FOCUS_EXPOSE = """() => {
+  const root = document.querySelector('section[aria-label="Current export preview"]');
+  const sheet = root && root.__emCaptureOwnedStyle;
+  const button = root?.previousElementSibling?.lastElementChild;
+  if (!sheet || document.adoptedStyleSheets.length !== 1 ||
+      document.adoptedStyleSheets[0] !== sheet || document.activeElement !== button) return false;
+  window.__syntheticFocusRules = sheet.cssRules.length;
+  sheet.insertRule(':root form:has(+ section[aria-label="Current export preview"]) > '
+    + 'button[type="submit"]:last-child:focus{opacity:1!important}', sheet.cssRules.length);
+  return getComputedStyle(button).opacity === '1';
+}"""
+
+EXPORT_FOCUS_RESTORE = """() => {
+  const root = document.querySelector('section[aria-label="Current export preview"]');
+  const sheet = root && root.__emCaptureOwnedStyle;
+  const button = root?.previousElementSibling?.lastElementChild;
+  const initial = window.__syntheticFocusRules;
+  if (!sheet || !Number.isInteger(initial) || sheet.cssRules.length !== initial + 1) return false;
+  sheet.deleteRule(initial);
+  delete window.__syntheticFocusRules;
+  return document.activeElement === button && getComputedStyle(button).opacity === '0';
 }"""
 
 FOCUS_ORACLE = """async images => {
@@ -334,11 +358,17 @@ class CaptureHandle:
             raise RuntimeError("Synthetic exposure was not established")
         try:
             image = await self.handle.screenshot(**options)
-            if self.name == "evidence-quality" and self.test_focus_pixels:
-                if await self.page.evaluate(FOCUS_EXPOSE) is not True:
+            if self.name in {"evidence-quality", "export"} and self.test_focus_pixels:
+                expose_focus = (
+                    FOCUS_EXPOSE if self.name == "evidence-quality" else EXPORT_FOCUS_EXPOSE
+                )
+                restore_focus = (
+                    FOCUS_RESTORE if self.name == "evidence-quality" else EXPORT_FOCUS_RESTORE
+                )
+                if await self.page.evaluate(expose_focus) is not True:
                     raise RuntimeError("Synthetic focus exposure unavailable")
                 self.focus_visible_image = await self.handle.screenshot(**options)
-                if await self.page.evaluate(FOCUS_RESTORE) is not True:
+                if await self.page.evaluate(restore_focus) is not True:
                     raise RuntimeError("Synthetic focus restoration unavailable")
                 self.focus_hidden_image = await self.handle.screenshot(**options)
             if await self.page.evaluate(CONTROL, spec) is not True:
@@ -522,6 +552,33 @@ async def exercise() -> None:
                       document.querySelector('dialog > button.close')""")
                     if focused is not True:
                         raise RuntimeError("Synthetic evidence focus unavailable")
+                elif name == "export":
+                    await page.locator("form > button[type=submit]:last-child").focus()
+                    overlap = await page.evaluate("""() => {
+                      const root = document.querySelector(
+                        'section[aria-label="Current export preview"]');
+                      const button = root?.previousElementSibling?.lastElementChild;
+                      const heading = root?.querySelector('h4');
+                      if (!button || document.activeElement !== button || !heading) return false;
+                      const box = heading.getBoundingClientRect();
+                      if (box.width < 96 || box.height < 16) return false;
+                      document.styleSheets[0].insertRule(
+                        'form:has(+ section[aria-label="Current export preview"]) > '
+                        + 'button[type="submit"]:last-child{position:fixed;left:' + (box.left + 8)
+                        + 'px;top:' + (box.top + 2) + 'px;z-index:9999;width:'
+                        + Math.min(80, box.width - 16) + 'px;height:'
+                        + Math.min(12, box.height - 4) + 'px;font-size:8px;line-height:8px;'
+                        + 'padding:0;border-width:1px}', 0);
+                      const b = button.getBoundingClientRect();
+                      const intersects = r => b.left < r.right && b.right > r.left &&
+                        b.top < r.bottom && b.bottom > r.top;
+                      const clear = r => b.left - 8 >= r.right || b.right + 8 <= r.left ||
+                        b.top - 8 >= r.bottom || b.bottom + 8 <= r.top;
+                      return intersects(box) && Array.from(root.querySelectorAll('p, ul')).every(
+                        e => clear(e.getBoundingClientRect()));
+                    }""")
+                    if overlap is not True:
+                        raise RuntimeError("Synthetic export focus overlap unavailable")
                 wrapped = CapturePage(page, name)
                 output = io.StringIO()
                 with contextlib.redirect_stdout(output):
@@ -567,7 +624,7 @@ async def exercise() -> None:
                     or oracle["leaked"] != 0
                 ):
                     raise RuntimeError("Synthetic independent pixel oracle refused")
-                if name == "evidence-quality":
+                if name in {"evidence-quality", "export"}:
                     if handle.focus_visible_image is None or handle.focus_hidden_image is None:
                         raise RuntimeError("Synthetic focus pixels unavailable")
                     focus_images = [
@@ -596,6 +653,15 @@ async def exercise() -> None:
                       document.querySelector('dialog > button.close')""")
                     if focused is not True:
                         raise RuntimeError("Synthetic evidence focus changed")
+                elif name == "export":
+                    focused = await page.evaluate("""() => {
+                      const root = document.querySelector(
+                        'section[aria-label="Current export preview"]');
+                      return document.activeElement ===
+                        root?.previousElementSibling?.lastElementChild;
+                    }""")
+                    if focused is not True:
+                        raise RuntimeError("Synthetic export focus changed")
             current["name"] = "plan"
             reasons = {
                 "preexisting": "capture_shape_refused",
@@ -694,6 +760,56 @@ async def exercise() -> None:
                         raise RuntimeError("Synthetic focus refusal missing")
                 if output.getvalue():
                     raise RuntimeError("Synthetic focus refusal emitted output")
+            current["name"] = "export"
+            export_focus_faults = {
+                "wrong_text": "capture_shape_refused",
+                "inline": "capture_shape_refused",
+                "nested": "capture_shape_refused",
+                "wrong_type": "capture_shape_refused",
+                "active_other": "capture_shape_refused",
+                "animation": "capture_mask_install_refused",
+                "opacity_override": "capture_mask_install_refused",
+            }
+            for fault, expected_reason in export_focus_faults.items():
+                await page.goto(ORIGIN, wait_until="load")
+                await page.locator("form > button[type=submit]:last-child").focus()
+                applied = await page.evaluate(
+                    """fault => {
+                  const root = document.querySelector(
+                    'section[aria-label="Current export preview"]');
+                  const button = root?.previousElementSibling?.lastElementChild;
+                  if (!button || document.activeElement !== button) return false;
+                  if (fault === 'wrong_text') button.textContent = 'Other';
+                  else if (fault === 'inline') button.style.color = 'red';
+                  else if (fault === 'nested') button.append(document.createElement('span'));
+                  else if (fault === 'wrong_type') { button.type = 'button'; button.focus(); }
+                  else if (fault === 'active_other') {
+                    const other = document.createElement('button');
+                    other.textContent = 'Other'; document.body.append(other); other.focus();
+                  } else if (fault === 'animation') {
+                    button.animate([{opacity: 0}, {opacity: 1}], {duration: 30000});
+                  } else if (fault === 'opacity_override') {
+                    document.styleSheets[0].insertRule(
+                      'html body form:has(+ section[aria-label="Current export preview"]) > '
+                      + 'button[type="submit"]:last-child:focus{opacity:1!important}', 0);
+                  } else return false;
+                  return true;
+                }""",
+                    fault,
+                )
+                if applied is not True:
+                    raise RuntimeError("Synthetic export focus fault unavailable")
+                output = io.StringIO()
+                with contextlib.redirect_stdout(output):
+                    try:
+                        await capture(cast(Page, CapturePage(page, "export")), "export")
+                    except ValueError as error:
+                        if error.args != (expected_reason,):
+                            raise RuntimeError("Synthetic export focus refusal refused") from None
+                    else:
+                        raise RuntimeError("Synthetic export focus refusal missing")
+                if output.getvalue():
+                    raise RuntimeError("Synthetic export focus refusal emitted output")
             await context.close()
         finally:
             await browser.close()
