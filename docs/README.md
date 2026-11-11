@@ -28,6 +28,7 @@
 | [21 Configuration catalog](21-configuration-catalog.md) | Safe defaults, allowed settings and override precedence |
 | [22 Implementation status](22-implementation-status.md) | Honest progress ledger and evidence requirements |
 | [23 Source onboarding playbook](23-source-onboarding-playbook.md) | Site certification procedure and candidate-source register |
+| [25 Open Access strategic roadmap](25-open-access-strategic-roadmap.md) | Strategic feature blueprint & delivery plan for Open Access publishers |
 
 Architecture decisions are in [ADR-0001](adr/0001-architecture-and-stack.md), [ADR-0002](adr/0002-isolation-and-deployment.md), [ADR-0003](adr/0003-evidence-and-network-policy.md), [ADR-0004](adr/0004-durable-execution.md), and [ADR-0005](adr/0005-ai-and-dependency-licensing.md).
 

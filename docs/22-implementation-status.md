@@ -1,10 +1,11 @@
 # 22 — Implementation status and evidence ledger
 
-**Baseline date:** 2026-10-08. **Product state:** design/documentation baseline; no application implementation or deployment.
+**Baseline date:** 2026-10-08. **Updated:** 2026-11-11.  
+**Product state:** Staging integration candidate on branch `codex/checkpoint-recovered-focus-20261111` (PR #70) encompasses 299 commits across 70 pull requests with synthetic/offline verification through EM-013, candidate work on EM-014/EM-017, and isolated XML prototypes for EM-015. `main` currently hosts the normative design, schema contracts, and documentation baseline. See [Open Access strategic roadmap](25-open-access-strategic-roadmap.md) for target-market production plan.
 
 ## Documentation deliverables
 
-Product charter, BRD, PRD, UX specification, architecture, tenant/RBAC design, connector/extraction specification, data model, proposed contracts, job lifecycle, security/privacy, deployment/operations, test benchmark, commercial/onboarding plan, backlog, traceability, ADRs, synthetic fixtures and Codex handoff are included in this baseline.
+Product charter, BRD, PRD, UX specification, architecture, tenant/RBAC design, connector/extraction specification, data model, proposed contracts, job lifecycle, security/privacy, deployment/operations, test benchmark, commercial/onboarding plan, backlog, traceability, ADRs, synthetic fixtures, open access strategic roadmap and Codex handoff are included in this baseline.
 
 The repository documentation validator checks local Markdown targets, JSON syntax, schema/example consistency and requirement traceability as implemented by the script. It does not certify business viability, legal compliance, extraction precision or application security. Final publication verification belongs in the handoff report/commit history.
 
@@ -12,29 +13,31 @@ The repository documentation validator checks local Markdown targets, JSON synta
 
 | Task | Status | Evidence / next dependency |
 |---|---|---|
-| EM-001 | READY — not started | Documentation baseline available; no app scaffold yet |
-| EM-002 | NOT STARTED | EM-001 |
-| EM-003 | NOT STARTED | EM-002 |
-| EM-004 | NOT STARTED | EM-003 |
-| EM-005 | NOT STARTED | EM-002/003 |
-| EM-006 | NOT STARTED | EM-004/005 |
-| EM-007 | NOT STARTED | EM-006 |
-| EM-008 | NOT STARTED | EM-004/005/007 |
-| EM-009 | NOT STARTED | EM-007/008 |
-| EM-010 | NOT STARTED | EM-006/009 |
-| EM-011 | NOT STARTED | EM-009/010 |
-| EM-012 | NOT STARTED | Required UI/API dependencies |
-| EM-013 | NOT STARTED | EM-005/010/012 |
-| EM-014 | NOT STARTED | EM-009/011/013 |
-| EM-015 | NOT STARTED | Technical gates plus actual source permissions |
-| EM-016 | NOT STARTED | EM-012/015 and authorized benchmark |
-| EM-017 | NOT STARTED | EM-013/014 plus approved staging infrastructure |
-| EM-018 | NOT STARTED | EM-016/017 and commercial/legal owner decisions |
-| EM-EXT-01–05 | DEFERRED | Separate post-core gates |
+| EM-001 | VERIFIED IN DRAFT PR | Staged in PR #1 / branch `feat/em-001-scaffold`; clean install/build/smoke and offline fixture harness verified. |
+| EM-002 | VERIFIED IN DRAFT PR | Staged in PR #2 / branch `feat/em-002-tenant-foundation`; OIDC boundary, PostgreSQL runtime RLS and multi-tenant authorization verified. |
+| EM-003 | VERIFIED IN DRAFT PR | Staged in PR #3 / branch `feat/em-003-source-policy`; source registry, fail-closed policy evaluation and synthetic governance verified. |
+| EM-004 | VERIFIED IN DRAFT PR | Staged in PRs #4–#10 / branch `feat/em-004f-protected-transport`; SSRF prevention, synthetic DNS pinning, redirect restrictions and transport isolation verified. |
+| EM-005 | VERIFIED IN DRAFT PR | Staged in PR #11 / branch `feat/em-005-durable-offline-jobs`; Celery/RabbitMQ transactional outbox, idempotent lease fencing, pause/cancel verified. |
+| EM-006 | VERIFIED IN DRAFT PR | Staged in PR #12 / branch `feat/em-006-offline-discovery`; keyword/URL preflight, article URL deduplication and pagination caps verified. |
+| EM-007 | VERIFIED IN DRAFT PR | Staged in PR #13 / branch `feat/em-007-offline-html-extraction`; HTML metadata, author role markers, ordinary tooltip and click-to-reveal verified. |
+| EM-008 | VERIFIED IN DRAFT PR | Staged in PR #14 / branch `feat/em-008-offline-pdf-observations`; isolated synthetic PDF parser, standard fonts and layout regions verified without GPL/MuPDF. |
+| EM-009 | VERIFIED IN DRAFT PR | Staged in PR #15, #64 / branch `feat/em-009-offline-associations`; deterministic candidate mapping, author-email evidence linking and audited unlink verified. |
+| EM-010 | VERIFIED IN DRAFT PR | Staged in PR #16 / branch `feat/em-010-offline-progress`; durable counters, authorized SSE streams, resumable checkpoints and partial completeness verified. |
+| EM-011 | VERIFIED IN DRAFT PR | Staged in PR #17, #53 / branch `feat/em-011-offline-results`; cursor pagination, cryptographic evidence digests and formula-safe CSV/XLSX exports verified. |
+| EM-012 | VERIFIED IN DRAFT PR | Staged in PR #18 / branch `feat/em-012-offline-operator-ui`; full React/Vite operator SPA, keyboard navigation, evidence drawer and review screens verified. |
+| EM-013 | VERIFIED IN DRAFT PR | Staged in PR #19 / branch `feat/em-013-offline-admission`; multi-tenant fair admission, shared throttles and quota enforcement verified. |
+| EM-014 | CANDIDATE IN DRAFT PR | Staged in PRs #20, #60, #61; staged deletion, generation fences, contact suppression and audit logging implemented; automated vacuum review pending. |
+| EM-015 | PARTIAL PROTOTYPE | Staged in PRs #21–#47; ScienceDirect XML parser and isolated Elsevier sample adapter prototyped; live Open Access connectors (Crossref/OpenAlex/Europe PMC) pending. |
+| EM-016 | NOT STARTED | Test benchmark protocol defined in document 14; held-out publisher UAT pending live source connector integration. |
+| EM-017 | CANDIDATE IN DRAFT PR | Staged in PRs #48, #51; packaging runbooks, synthetic backup restore exercises and disposable DB tests passing; production container deployment pending. |
+| EM-018 | NOT STARTED | Commercial readiness, final license decision, and production release packaging pending PR #70 merge and UAT signoff. |
+| EM-EXT-01–05 | DEFERRED | Post-core extensions (OCR adapter, institutional enrichment, recurring searches, direct outreach). |
 
-## What has not been done
+## What has been done vs what remains
 
-No real researcher emails collected; no source search executed; no live source connector implemented/certified; no tenant database/API/frontend deployed; no AI/mail API keys configured; no emails sent; no benchmark/latency/accuracy results; no customer license or infrastructure purchased; no repository visibility change or open-source license selection.
+- **Done in Draft Staging:** Complete modular FastAPI backend and React/Vite frontend implemented across 299 commits and 70 PRs. Core isolation, durability, extraction, and operator workflows pass synthetic/offline CI.
+- **Pending Merge:** Resolving isolated Chromium headless CI runner flakiness before merging PR #70 into `main`.
+- **Pending for Open Access Production:** Real-world Open Access API connectors (OpenAlex, Europe PMC JATS XML, Crossref), author recency scoring, deliverability checks, and cold outreach export presets.
 
 ## How implementers update this ledger
 
