@@ -1,0 +1,127 @@
+{
+  "status": "ok",
+  "message-type": "work-list",
+  "message-version": "1.0.0",
+  "message": {
+    "total-results": 1420,
+    "items-per-page": 2,
+    "query": {
+      "search-terms": "CRISPR gene therapy",
+      "start-index": 0
+    },
+    "items": [
+      {
+        "DOI": "10.1038/s41587-026-01824-x",
+        "title": [
+          "In vivo base editing rescues sensory defects in Usher syndrome mice"
+        ],
+        "container-title": [
+          "Nature Biotechnology"
+        ],
+        "publisher": "Springer Science and Business Media LLC",
+        "published-online": {
+          "date-parts": [
+            [2026, 3, 15]
+          ]
+        },
+        "author": [
+          {
+            "given": "David",
+            "family": "Liu",
+            "sequence": "first",
+            "affiliation": [
+              {
+                "name": "Broad Institute of MIT and Harvard, Cambridge, MA, USA"
+              }
+            ],
+            "ORCID": "http://orcid.org/0000-0002-1825-0097"
+          },
+          {
+            "given": "Nicole",
+            "family": "Gaudelli",
+            "sequence": "additional",
+            "affiliation": [
+              {
+                "name": "Department of Chemistry and Chemical Biology, Harvard University, Cambridge, MA, USA"
+              }
+            ]
+          }
+        ],
+        "is-referenced-by-count": 48,
+        "license": [
+          {
+            "URL": "https://creativecommons.org/licenses/by/4.0/",
+            "start": {
+              "date-parts": [
+                [2026, 3, 15]
+              ]
+            },
+            "content-version": "vor"
+          }
+        ],
+        "link": [
+          {
+            "URL": "https://www.nature.com/articles/s41587-026-01824-x.pdf",
+            "content-type": "application/pdf",
+            "content-version": "vor",
+            "intended-application": "text-mining"
+          },
+          {
+            "URL": "https://www.nature.com/articles/s41587-026-01824-x.xml",
+            "content-type": "application/xml",
+            "content-version": "vor",
+            "intended-application": "text-mining"
+          }
+        ]
+      },
+      {
+        "DOI": "10.1016/j.cell.2025.11.020",
+        "title": [
+          "Compact Cas12f nucleases enable scalable multiplex gene regulation in human T cells"
+        ],
+        "container-title": [
+          "Cell"
+        ],
+        "publisher": "Elsevier BV",
+        "published-print": {
+          "date-parts": [
+            [2025, 12, 1]
+          ]
+        },
+        "author": [
+          {
+            "given": "Jennifer",
+            "family": "Doudna",
+            "sequence": "first",
+            "affiliation": [
+              {
+                "name": "Innovative Genomics Institute, University of California, Berkeley, Berkeley, CA, USA"
+              }
+            ],
+            "ORCID": "http://orcid.org/0000-0001-9161-999X"
+          }
+        ],
+        "is-referenced-by-count": 112,
+        "license": [
+          {
+            "URL": "https://creativecommons.org/licenses/by/4.0/",
+            "start": {
+              "date-parts": [
+                [2025, 12, 1]
+              ]
+            },
+            "content-version": "vor"
+          }
+        ],
+        "link": [
+          {
+            "URL": "https://api.elsevier.com/content/article/doi/10.1016/j.cell.2025.11.020?httpAccept=text/xml",
+            "content-type": "text/xml",
+            "content-version": "vor",
+            "intended-application": "text-mining"
+          }
+        ]
+      }
+    ]
+  }
+}

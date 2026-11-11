@@ -16,5 +16,11 @@ export default defineConfig(({ command }) => ({
       }]
     },
   }],
-  server: { host: '127.0.0.1' },
+  server: {
+    host: '127.0.0.1',
+    proxy: {
+      '/api': 'http://127.0.0.1:8000',
+      '/healthz': 'http://127.0.0.1:8000',
+    },
+  },
 }))
