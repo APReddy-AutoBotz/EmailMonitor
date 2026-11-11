@@ -31,6 +31,7 @@
 | [26 Tenant foundation runbook](26-tenant-foundation-runbook.md) | Offline OIDC/session/RBAC/RLS proof, migration and production gates |
 | [25 Development runbook](25-development-runbook.md) | Tested EM-001 setup, version/license matrix and rollback |
 | [23 Source onboarding playbook](23-source-onboarding-playbook.md) | Site certification procedure and candidate-source register |
+| [25 Open Access strategic roadmap](25-open-access-strategic-roadmap.md) | Strategic feature blueprint & delivery plan for Open Access publishers |
 
 Architecture decisions are in [ADR-0001](adr/0001-architecture-and-stack.md), [ADR-0002](adr/0002-isolation-and-deployment.md), [ADR-0003](adr/0003-evidence-and-network-policy.md), [ADR-0004](adr/0004-durable-execution.md), and [ADR-0005](adr/0005-ai-and-dependency-licensing.md).
 
