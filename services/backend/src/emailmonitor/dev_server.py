@@ -6,13 +6,14 @@ academic Open Access extraction datasets for local exploration.
 
 from __future__ import annotations
 
-import os
 from typing import Any
-from uuid import UUID
 
-from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.responses import JSONResponse
+
+from emailmonitor.discovery.mesh_search import match_mesh_terms
+from emailmonitor.discovery.openaccess_orchestrator import OpenAccessOrchestrator
 
 app = FastAPI(title="EmailMonitor Dev & Preview Server", version="0.1.0")
 
@@ -582,3 +583,51 @@ def get_members(org_id: str) -> list[dict[str, Any]]:
             "row_version": 1,
         }
     ]
+
+
+@app.post("/api/v1/organizations/{org_id}/open-access/discover")
+async def open_access_discover(org_id: str, request: Request) -> dict[str, Any]:
+    body = await request.json()
+    query = body.get("query", "CRISPR")
+    source = body.get("source", "auto")
+    max_results = int(body.get("max_results", 25))
+    target_roles = body.get("target_roles", "both")
+
+    orchestrator = OpenAccessOrchestrator()
+    result = orchestrator.discover_and_extract(
+        query=query,
+        source=source,
+        max_results=max_results,
+        target_roles=target_roles,
+    )
+    return result.model_dump()
+
+
+@app.post("/api/v1/organizations/{org_id}/open-access/export")
+async def open_access_export(org_id: str, request: Request) -> Response:
+    body = await request.json()
+    query = body.get("query", "CRISPR")
+    source = body.get("source", "auto")
+    preset = body.get("preset", "instantly")
+
+    orchestrator = OpenAccessOrchestrator()
+    result = orchestrator.discover_and_extract(query=query, source=source)
+
+    if preset == "smartlead":
+        content = result.export_smartlead_csv()
+        filename = "emailmonitor-smartlead-export.csv"
+    else:
+        content = result.export_instantly_csv()
+        filename = "emailmonitor-instantly-export.csv"
+
+    return Response(
+        content=content,
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.get("/api/v1/organizations/{org_id}/open-access/mesh")
+def get_mesh_suggestions(org_id: str, q: str = "") -> list[dict[str, Any]]:
+    matches = match_mesh_terms(q)
+    return [m.model_dump() for m in matches]

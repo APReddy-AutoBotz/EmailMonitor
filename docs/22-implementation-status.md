@@ -40,6 +40,8 @@ The repository documentation validator checks local Markdown targets, JSON synta
 | OA-007 | VERIFIED IN DRAFT PR | Multi-source scholarly discovery orchestrator & enterprise UI/UX elevation (Navy/Amber, 2-column layout, compact disclosures) verified in PR #71. |
 | OA-008 | VERIFIED IN DRAFT PR | bioRxiv & medRxiv pre-print REST connector, query planner, and early-stage manuscript discovery verified in PR #71. |
 | OA-009 | VERIFIED IN DRAFT PR | ORCID ISO 7064 MOD 11-2 researcher checksum verification and institutional profile disambiguation verified in PR #71. |
+| OA-010 | VERIFIED IN DRAFT PR | Medical Subject Headings (MeSH) descriptor mapping, Boolean query generation, and journal exclusion filters verified in PR #71. |
+| OA-011 | VERIFIED IN DRAFT PR | Interactive Open Access discovery and cold outreach export API endpoints (`/open-access/discover`, `/open-access/export`) verified in PR #71. |
 | EM-EXT-01–05 | DEFERRED | Post-core extensions (OCR adapter, institutional enrichment, recurring searches, direct outreach). |
 
 ## What has been done vs what remains
