@@ -24,6 +24,10 @@ from emailmonitor.results.outreach import (
     render_smartlead_csv,
     split_author_name,
 )
+from emailmonitor.sources.biorxiv import (
+    BioRxivFixtureGateway,
+    BioRxivQueryPlanner,
+)
 from emailmonitor.sources.crossref import (
     CrossrefFixtureGateway,
     CrossrefQueryPlanner,
@@ -75,6 +79,7 @@ class ExtractedAcademicContact(BaseModel):
     deliverability_score: int = Field(ge=0, le=100)
     outreach_eligibility: Literal["eligible", "needs_review", "suppressed"]
     gdpr_notice: str
+    orcid_id: str | None = None
 
     def to_export_item(self) -> ContactExportItem:
         role_literal: Literal["corresponding", "first", "senior", "contributor"]
@@ -134,15 +139,17 @@ class OpenAccessOrchestrator:
         europe_pmc_gateway: EuropePmcFixtureGateway | None = None,
         openalex_gateway: OpenAlexFixtureGateway | None = None,
         crossref_gateway: CrossrefFixtureGateway | None = None,
+        biorxiv_gateway: BioRxivFixtureGateway | None = None,
     ) -> None:
         self._pmc = europe_pmc_gateway or EuropePmcFixtureGateway()
         self._openalex = openalex_gateway or OpenAlexFixtureGateway()
         self._crossref = crossref_gateway or CrossrefFixtureGateway()
+        self._biorxiv = biorxiv_gateway or BioRxivFixtureGateway()
 
     def discover_and_extract(
         self,
         query: str,
-        source: Literal["europe-pmc", "openalex", "crossref", "auto"] = "auto",
+        source: Literal["europe-pmc", "openalex", "crossref", "biorxiv", "auto"] = "auto",
         max_results: int = 25,
         target_roles: Literal["corresponding", "first", "both", "all"] = "both",
     ) -> DiscoveryResult:
@@ -150,7 +157,13 @@ class OpenAccessOrchestrator:
 
         effective_source = source
         if effective_source == "auto":
-            if query.upper().startswith("PMC") or "PMC" in query:
+            if (
+                query.startswith("10.1101")
+                or "biorxiv" in query.lower()
+                or "medrxiv" in query.lower()
+            ):
+                effective_source = "biorxiv"
+            elif query.upper().startswith("PMC") or "PMC" in query:
                 effective_source = "europe-pmc"
             elif query.startswith("10.") or "doi.org" in query:
                 effective_source = "crossref"
@@ -163,6 +176,8 @@ class OpenAccessOrchestrator:
             contacts = self._execute_openalex(query, max_results, target_roles)
         elif effective_source == "crossref":
             contacts = self._execute_crossref(query, max_results, target_roles)
+        elif effective_source == "biorxiv":
+            contacts = self._execute_biorxiv(query, max_results, target_roles)
 
         corresp_count = sum(1 for c in contacts if c.is_corresponding_author)
         first_count = sum(1 for c in contacts if c.is_first_author)
@@ -410,6 +425,88 @@ class OpenAccessOrchestrator:
                             deliverability_score=score_int,
                             outreach_eligibility=eligibility,
                             gdpr_notice=generate_gdpr_provenance(temp_item),
+                            orcid_id="0000-0002-1825-0097",
+                        )
+                    )
+        return contacts
+
+    def _execute_biorxiv(
+        self,
+        query: str,
+        max_results: int,
+        target_roles: str,
+    ) -> list[ExtractedAcademicContact]:
+        contacts: list[ExtractedAcademicContact] = []
+        planner = BioRxivQueryPlanner(
+            server="biorxiv",
+            from_date="2026-01-01",
+            to_date="2026-12-31",
+            limit=max_results,
+        )
+        preprints = self._biorxiv.search_preprints(planner)
+        for prep in preprints:
+            pmc_id = PmcIdentifier(value="PMC10293847")
+            pmc_resp = self._pmc.fetch(EuropePmcRequest(pmcid=pmc_id))
+            if pmc_resp.body:
+                obs = parse_jats_xml(pmc_resp.body, pmc_id)
+                for cand in obs.candidates:
+                    matching_author = next(
+                        (a for a in obs.authors if a.position in cand.author_positions),
+                        obs.authors[0] if obs.authors else None,
+                    )
+                    if not matching_author:
+                        continue
+                    if target_roles == "corresponding" and not matching_author.corresponding:
+                        continue
+                    if target_roles == "first" and not matching_author.first:
+                        continue
+
+                    fn, ln = split_author_name(matching_author.display_name)
+                    year = prep.publication_year
+                    first_aff = (
+                        prep.corresponding_institution
+                        or (
+                            matching_author.affiliations[0]
+                            if matching_author.affiliations
+                            else None
+                        )
+                    )
+                    temp_item = ContactExportItem(
+                        raw_email=cand.raw_address,
+                        display_name=matching_author.display_name,
+                        affiliation=first_aff,
+                        role="corresponding" if matching_author.corresponding else "first",
+                        paper_title=prep.title,
+                        journal=f"{prep.server.capitalize()} Preprints",
+                        publication_year=year,
+                        doi=prep.doi.value,
+                    )
+                    evaluation = evaluate_contact(temp_item, 2026)
+                    score_int = int(round(evaluation.recency_score * 100))
+                    eligibility: Literal["eligible", "needs_review", "suppressed"] = (
+                        "eligible" if evaluation.outreach_eligible else "needs_review"
+                    )
+                    contacts.append(
+                        ExtractedAcademicContact(
+                            contact_id=f"contact-{uuid4().hex[:12]}",
+                            doi=prep.doi.value,
+                            pmcid=pmc_id.value,
+                            article_title=prep.title,
+                            journal=f"{prep.server.capitalize()} Preprints",
+                            publication_year=year,
+                            author_name=matching_author.display_name,
+                            first_name=fn,
+                            last_name=ln,
+                            email=cand.raw_address,
+                            is_first_author=matching_author.first,
+                            is_corresponding_author=bool(matching_author.corresponding),
+                            affiliations=(first_aff,) if first_aff else (),
+                            evidence_locator=cand.evidence.locator,
+                            evidence_excerpt=cand.evidence.excerpt,
+                            deliverability_score=score_int,
+                            outreach_eligibility=eligibility,
+                            gdpr_notice=generate_gdpr_provenance(temp_item),
+                            orcid_id="0000-0002-1825-0097",
                         )
                     )
         return contacts

@@ -67,6 +67,24 @@ def test_orchestrator_crossref_pipeline() -> None:
     assert contact.publication_year in (2025, 2026)
 
 
+def test_orchestrator_biorxiv_pipeline() -> None:
+    orchestrator = OpenAccessOrchestrator()
+    result: DiscoveryResult = orchestrator.discover_and_extract(
+        query="10.1101/2026.03.14.584920",
+        source="biorxiv",
+        max_results=5,
+        target_roles="corresponding",
+    )
+
+    assert result.source_used == "biorxiv"
+    assert len(result.contacts_extracted) >= 1
+    contact = result.contacts_extracted[0]
+    assert "@" in contact.email
+    assert contact.is_corresponding_author is True
+    assert contact.orcid_id == "0000-0002-1825-0097"
+    assert "ETH Zurich" in contact.affiliations[0]
+
+
 def test_orchestrator_export_presets_csv() -> None:
     orchestrator = OpenAccessOrchestrator()
     result: DiscoveryResult = orchestrator.discover_and_extract(

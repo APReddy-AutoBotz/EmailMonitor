@@ -1,0 +1,42 @@
+{
+  "messages": [
+    {
+      "status": "ok",
+      "route": "details",
+      "count": 2,
+      "total": 2
+    }
+  ],
+  "collection": [
+    {
+      "doi": "10.1101/2026.03.14.584920",
+      "title": "Precision Base Editing via Modified Cas9 Variants in Hematopoietic Progenitor Cells",
+      "authors": "Elena Rostova; Marcus Vance",
+      "author_corresponding": "Marcus Vance",
+      "author_corresponding_institution": "Institute of Biotechnology, ETH Zurich, Zurich, Switzerland",
+      "date": "2026-03-14",
+      "version": "1",
+      "type": "new result",
+      "license": "cc_by",
+      "category": "genomics",
+      "server": "biorxiv",
+      "jatsxml": "https://www.biorxiv.org/content/10.1101/2026.03.14.584920v1.source.xml",
+      "abstract": "We report high-fidelity base editing strategies with minimal off-target cleavage."
+    },
+    {
+      "doi": "10.1101/2026.02.10.579112",
+      "title": "Targeted Gene Disruption in Agricultural Crops Using Engineered Nucleases",
+      "authors": "Soojin Kim; Dae-Hyun Park",
+      "author_corresponding": "Soojin Kim",
+      "author_corresponding_institution": "Center for Genome Engineering, Seoul National University, Seoul, South Korea",
+      "date": "2026-02-10",
+      "version": "2",
+      "type": "revision",
+      "license": "cc_by_nc",
+      "category": "plant biology",
+      "server": "biorxiv",
+      "jatsxml": "https://www.biorxiv.org/content/10.1101/2026.02.10.579112v2.source.xml",
+      "abstract": "Enhanced agricultural yields demonstrated through multiplexed plant genome editing."
+    }
+  ]
+}

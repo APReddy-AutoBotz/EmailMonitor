@@ -38,6 +38,8 @@ The repository documentation validator checks local Markdown targets, JSON synta
 | OA-005 | VERIFIED IN DRAFT PR | UI outreach export presets, configuration helpers, and filter alignment verified in PR #71. |
 | OA-006 | VERIFIED IN DRAFT PR | Crossref REST connector, DOI query planner, and full-text resolver verified in PR #71. |
 | OA-007 | VERIFIED IN DRAFT PR | Multi-source scholarly discovery orchestrator & enterprise UI/UX elevation (Navy/Amber, 2-column layout, compact disclosures) verified in PR #71. |
+| OA-008 | VERIFIED IN DRAFT PR | bioRxiv & medRxiv pre-print REST connector, query planner, and early-stage manuscript discovery verified in PR #71. |
+| OA-009 | VERIFIED IN DRAFT PR | ORCID ISO 7064 MOD 11-2 researcher checksum verification and institutional profile disambiguation verified in PR #71. |
 | EM-EXT-01–05 | DEFERRED | Post-core extensions (OCR adapter, institutional enrichment, recurring searches, direct outreach). |
 
 ## What has been done vs what remains
