@@ -20,5 +20,15 @@ export function ArticlePresenceFilter({ value, change, disabled = false }: { val
 }
 
 export function ArticlePresenceHelp() {
-  return <p>Candidate presence filters only the separate article-outcome dataset. Contact association, author and text filters remain independent. An observed candidate may be invalid, unmatched or rejected. Only a current complete supported observation with zero candidates counts as completed without a candidate; unavailable or incomplete observations are unresolved.</p>
+  return (
+    <details className="governance-disclosure">
+      <summary>
+        <span className="disclosure-title">Article Outcome Governance &amp; Presence Rules</span>
+        <span className="disclosure-badge">Filter Rules</span>
+      </summary>
+      <div className="field-hint">
+        <p>Candidate presence filters only the separate article-outcome dataset. Contact association, author and text filters remain independent. An observed candidate may be invalid, unmatched or rejected. Only a current complete supported observation with zero candidates counts as completed without a candidate; unavailable or incomplete observations are unresolved.</p>
+      </div>
+    </details>
+  )
 }

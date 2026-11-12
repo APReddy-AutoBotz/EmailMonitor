@@ -1,0 +1,108 @@
+{
+  "meta": {
+    "count": 2,
+    "page": 1,
+    "per_page": 25
+  },
+  "results": [
+    {
+      "id": "https://openalex.org/W3029182736",
+      "doi": "https://doi.org/10.1371/journal.pbio.3002145",
+      "title": "Advances in CRISPR-Cas9 Target Specificity",
+      "publication_year": 2026,
+      "publication_date": "2026-03-15",
+      "ids": {
+        "openalex": "https://openalex.org/W3029182736",
+        "doi": "https://doi.org/10.1371/journal.pbio.3002145",
+        "pmcid": "https://pubmed.ncbi.nlm.nih.gov/pmc/articles/PMC10293847"
+      },
+      "primary_location": {
+        "is_oa": true,
+        "landing_page_url": "https://journals.plos.org/plosbiology/article?id=10.1371/journal.pbio.3002145",
+        "pdf_url": "https://journals.plos.org/plosbiology/article/file?id=10.1371/journal.pbio.3002145&type=printable",
+        "source": {
+          "id": "https://openalex.org/S12345678",
+          "display_name": "PLOS Biology",
+          "issn_l": "1545-7885",
+          "type": "journal"
+        }
+      },
+      "open_access": {
+        "is_oa": true,
+        "oa_status": "gold",
+        "oa_url": "https://journals.plos.org/plosbiology/article/file?id=10.1371/journal.pbio.3002145&type=printable"
+      },
+      "authorships": [
+        {
+          "author_position": "first",
+          "author": {
+            "id": "https://openalex.org/A5012345678",
+            "display_name": "Elena Rostova",
+            "orcid": "https://orcid.org/0000-0002-1825-0097"
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I24174996",
+              "display_name": "University of Cambridge",
+              "country_code": "GB"
+            }
+          ],
+          "is_corresponding": false
+        },
+        {
+          "author_position": "last",
+          "author": {
+            "id": "https://openalex.org/A5087654321",
+            "display_name": "Marcus Vance",
+            "orcid": null
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I12345678",
+              "display_name": "ETH Zurich",
+              "country_code": "CH"
+            }
+          ],
+          "is_corresponding": true
+        }
+      ]
+    },
+    {
+      "id": "https://openalex.org/W4019283746",
+      "doi": "https://doi.org/10.1186/s12864-026-09123-x",
+      "title": "High-throughput transcriptomic profiling of drought-tolerant wheat",
+      "publication_year": 2026,
+      "publication_date": "2026-01-20",
+      "ids": {
+        "openalex": "https://openalex.org/W4019283746",
+        "doi": "https://doi.org/10.1186/s12864-026-09123-x"
+      },
+      "primary_location": {
+        "is_oa": true,
+        "source": {
+          "display_name": "BMC Genomics",
+          "issn_l": "1471-2164"
+        }
+      },
+      "open_access": {
+        "is_oa": true,
+        "oa_status": "gold"
+      },
+      "authorships": [
+        {
+          "author_position": "first",
+          "author": {
+            "id": "https://openalex.org/A5099887766",
+            "display_name": "Soo-Jin Kim"
+          },
+          "institutions": [
+            {
+              "display_name": "National Institute of Crop Science"
+            }
+          ],
+          "is_corresponding": true
+        }
+      ]
+    }
+  ]
+}

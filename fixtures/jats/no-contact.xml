@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<article xmlns:xlink="http://www.w3.org/1999/xlink" article-type="review-article">
+  <front>
+    <journal-meta>
+      <journal-title>Frontiers in Immunology</journal-title>
+    </journal-meta>
+    <article-meta>
+      <article-id pub-id-type="doi">10.3389/fimmu.2026.887766</article-id>
+      <title-group>
+        <article-title>Mechanisms of Memory T-Cell Persistence</article-title>
+      </title-group>
+      <contrib-group>
+        <contrib contrib-type="author">
+          <name>
+            <surname>Dubois</surname>
+            <given-names>Claire</given-names>
+          </name>
+          <aff>Pasteur Institute, Paris, France</aff>
+        </contrib>
+      </contrib-group>
+      <pub-date>
+        <year>2026</year>
+      </pub-date>
+    </article-meta>
+  </front>
+  <body>
+    <p>Sample body text.</p>
+  </body>
+</article>
