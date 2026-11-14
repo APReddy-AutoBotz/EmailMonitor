@@ -154,6 +154,10 @@ Seven reproduced issues, all fixed with `test_review4_regressions.py` and two ne
 * **Running text is not a person:** given names keep their capital ("may" is not "May") and only name-like tokens may sit between given name and surname ("Kate Brown and John Smith" is not "Kate Smith").
 * **Mixed-case domains kept:** only a case change in the top-level label ("eduTel") marks a run-on; `LaTrobe.edu.au` and `cs.McGill.ca` are valid.
 
+## Fifth review: regression check of the fourth-round fixes (2026-11-15)
+
+A fifth review compared each change with its parent and found 7 places where the stricter rules lost valid results (no wrong-person, altered address or crash). All restored with `test_review5_regressions.py`: abbreviations and titles ("Prof.", "Dr.", "St.", "Inc.", "et al.") do not end a sentence; a mail label needs its colon and is never matched inside "e-mail" or in link text reading "Email"; "Courriel:" is recognised; lowercase name particles ("Maria do Carmo Silva") may sit between given name and surname; a PDF address is kept after lines ending in numbers or abbreviations ("02139.", "et al.") and before lines such as "1. Introduction", "v1.2" or "e.g.".
+
 ## Regression safety nets (OA-025)
 
 * **Seeded fuzz invariants** (`test_oa_invariants.py`): thousands of adversarial mixtures through `find_addresses`, `attribute_spans` and the JATS/HTML/PDF parsers. Every reported address must occur verbatim in the input; attributions name only known people and only when their surname or initials appear; hostile input raises only `FetchDenied`.

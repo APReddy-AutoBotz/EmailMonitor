@@ -216,7 +216,8 @@ def _patterns(display_name: str) -> tuple[re.Pattern[str], re.Pattern[str]] | No
     given_cased = re.escape(first_given[0].upper()) + (
         f"(?i:{re.escape(first_given[1:])})" if len(first_given) > 1 else ""
     )
-    middle = r"(?:\s+(?:[A-Z][\w'\-]{0,20}\.?|[A-Z]\.)){0,2}?"
+    particles = "|".join(sorted(re.escape(p) for p in _PARTICLES if p.isalpha()))
+    middle = rf"(?:\s+(?:[A-Z][\w'\-]{{0,20}}\.?|[A-Z]\.|(?:{particles}))){{0,2}}?"
     forward = (
         rf"{start}(?:{given_cased}(?![\w])|{initials})"
         rf"{middle}\s+(?i:{surname_re})(?!\w)"
@@ -377,14 +378,65 @@ def attribute_spans(
 _CORRESPONDENCE_WORDING = re.compile(
     r"\bcorrespond(?:ence|ing)\b|\baddress(?:ed)?\s+correspondence\b|✉", re.IGNORECASE
 )
-# Any mail label ("E-mail:", "Emails", "E-mail of co-author", "Electronic mail",
-# "Mail:") starts an e-mail clause unless it is inline in parentheses right before
-# the address ("A.B. (email: ab@x)").
-_MAIL_LABEL = re.compile(r"(?<!\()(?<!\(\s)\b(?:e-?mails?|electronic\s+mail|mail)\b", re.I)
-# A sentence boundary: a word of two or more characters (not an initial like "J.")
-# or a closing parenthesis, then '.', then a new sentence.
-_SENTENCE = re.compile(r"(?:\b\w{2,}|\))\.\s+(?=[A-Z0-9*(])")
-_SOLE_EMAIL_SENTENCE = re.compile(r"^\s*e-?mail(?:\s+address)?\s*:\s*$", re.IGNORECASE)
+# A mail label introduces an e-mail clause: "E-mail:", "Emails:", "E-mail of
+# co-author:", "Other authors' e-mail addresses:", "Electronic mail:", "Mail:",
+# "Courriel:". It needs its colon, so link text reading "Email" or names such as
+# "Royal Mail Group" are not labels; an inline "(e-mail: ...)" right before the
+# address (Nature style) is not a clause break.
+_MAIL_WORD = r"(?:e-?mails?|electronic\s+mail|mail|courriel|correo(?:\s+electr[oó]nico)?)"
+_MAIL_LABEL = re.compile(
+    rf"(?<![\w\-(])(?<!\(\s){_MAIL_WORD}(?:\s+address(?:es)?|\s+of\s+[\w\-' ]{{1,30}}?)?\s*:",
+    re.IGNORECASE,
+)
+_SOLE_EMAIL_SENTENCE = re.compile(rf"^\s*{_MAIL_WORD}(?:\s+address)?\s*:\s*$", re.IGNORECASE)
+# Words ending in '.' that do not end a sentence.
+_ABBREVIATIONS = frozenset(
+    {
+        "prof",
+        "dr",
+        "mr",
+        "ms",
+        "mrs",
+        "mx",
+        "st",
+        "jr",
+        "sr",
+        "inc",
+        "ltd",
+        "co",
+        "corp",
+        "dept",
+        "univ",
+        "inst",
+        "et",
+        "al",
+        "tel",
+        "fax",
+        "ph",
+        "no",
+        "vol",
+        "pp",
+        "eg",
+        "ie",
+        "etc",
+        "vs",
+        "ave",
+        "rd",
+        "blvd",
+        "fig",
+        "ref",
+        "approx",
+    }
+)
+_PERIOD_SPACE = re.compile(r"(\b\w{2,}|\))\.\s+(?=[A-Z0-9*(])")
+
+
+def _sentence_breaks(segment: str) -> list[re.Match[str]]:
+    return [
+        m
+        for m in _PERIOD_SPACE.finditer(segment)
+        if m.group(1).lower().replace(".", "") not in _ABBREVIATIONS
+    ]
 
 
 def asserts_correspondence(text: str, offset: int) -> bool:
@@ -403,7 +455,7 @@ def asserts_correspondence(text: str, offset: int) -> bool:
     if last is None:
         return False
     segment = before[last:]
-    boundaries = list(_SENTENCE.finditer(segment))
+    boundaries = _sentence_breaks(segment)
     label = _MAIL_LABEL.search(segment)
     if not boundaries and not label:
         return True
@@ -413,8 +465,8 @@ def asserts_correspondence(text: str, offset: int) -> bool:
     if not _SOLE_EMAIL_SENTENCE.match(tail):
         return False
     # The e-mail sentence must hold exactly one address.
-    sentence_end = _SENTENCE.search(text, offset)
-    stop = sentence_end.start() if sentence_end else min(len(text), offset + 400)
+    later = _sentence_breaks(text[offset : offset + 400])
+    stop = offset + later[0].start() if later else min(len(text), offset + 400)
     return text.count("@", offset - len(tail), stop) == 1
 
 

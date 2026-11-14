@@ -139,8 +139,12 @@ def _lines(text: str) -> list[str]:
     return [" ".join(line.split()) for line in normalized.splitlines()]
 
 
-_DOMAIN_TOKEN = re.compile(r"^[.\-]?[a-z0-9][a-z0-9\-]*(?:\.[a-z0-9\-]+)*[;,.)]?$")
-_LOCAL_PREFIX = re.compile(r"^[a-z0-9][a-z0-9._%+\-]*[.\-_\u00ad]$")
+# A domain continuation: optional leading '.', labels, at least one ".xx" alphabetic
+# label, optional closing punctuation ("ard.edu", ".edu", "edu;").
+_DOMAIN_TOKEN = re.compile(r"^[.\-]?[a-z0-9][a-z0-9\-]*(?:\.[a-z0-9\-]+)*[;,)]?$")
+_ALPHA_LABEL = re.compile(r"\.[a-z]{2,}")
+_LOCAL_PREFIX = re.compile(r"^[a-z][a-z0-9_+\-]*(?:\.[a-z0-9_+\-]+)*[.\-_\u00ad]$")
+_NOT_LOCAL = frozenset({"al", "et", "tel", "fax", "etc", "eg", "ie", "vs", "no", "vol", "pp"})
 
 
 def _wraps_onto_next(line: str, end: int, next_line: str) -> bool:
@@ -161,14 +165,15 @@ def _wraps_onto_next(line: str, end: int, next_line: str) -> bool:
         return token[:1].islower() or token[:1].isdigit()
     if tail == "":
         # Nothing after the address on this line: wrapped if the next line starts
-        # with a domain continuation such as ".edu" or "ard.edu".
-        return token[:1] in ".-" or ("." in token and _DOMAIN_TOKEN.match(token) is not None)
-    # tail == ".": a sentence end unless the next token is clearly domain text.
-    bare = token.rstrip(";,.)")
-    followed_by_punct = token != bare or next_line.strip() == token
-    return _DOMAIN_TOKEN.match(token) is not None and (
-        "." in bare or (followed_by_punct and 2 <= len(bare) <= 6 and bare.isalpha())
-    )
+        # with a domain continuation such as ".edu" or "ard.edu" (not "1." or "v1.2").
+        if token[:1] in ".-":
+            return _DOMAIN_TOKEN.match(token) is not None
+        return _DOMAIN_TOKEN.match(token) is not None and _ALPHA_LABEL.search(token) is not None
+    # tail == ".": a sentence end unless the next token closes a domain, e.g. "edu;"
+    # or a line that is only "edu" — never ordinary words ("e.g.", "usa. Results").
+    bare = token.rstrip(";,)")
+    closes = token != bare or next_line.strip() == token
+    return closes and re.fullmatch(r"[a-z]{2,6}(?:\.[a-z]{2,6})*", bare) is not None
 
 
 def _wrapped_from_previous(line: str, start: int, previous_line: str) -> bool:
@@ -176,7 +181,9 @@ def _wrapped_from_previous(line: str, start: int, previous_line: str) -> bool:
     if line[:start].strip():
         return False
     last = previous_line.rstrip().rsplit(" ", 1)[-1] if previous_line.strip() else ""
-    return bool(last) and _LOCAL_PREFIX.match(last) is not None
+    if not last or _LOCAL_PREFIX.match(last) is None:
+        return False
+    return last.rstrip(".-_\u00ad").lower() not in _NOT_LOCAL
 
 
 def parse_pdf_contacts(
