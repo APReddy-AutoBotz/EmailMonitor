@@ -80,6 +80,17 @@ Never reported: addresses in header/footer/nav/aside/form chrome, hidden blocks,
 
 Preview endpoint: `POST /api/v1/organizations/{org}/open-access/documents?known_authors=A;B&target_roles=all` with the raw document as the body (no multipart dependency added). Size is checked from `Content-Length` before reading and again after (20 MB). The preview server parses in-process; production must run these parsers in the network-none parser worker (EM-008 boundary).
 
+### Batch command line (OA-024)
+
+For a folder of documents an operator already holds (no fetching, no recursion, no symlinks; ≤500 files of ≤20 MB):
+
+```sh
+cd services/backend
+uv run python -m emailmonitor.discovery.batch_intake /path/to/articles --out /path/outside/repo/results.csv   --preset evidence --authors authors.csv --minimum-strength labelled
+```
+
+`authors.csv` (optional) has columns `file,authors` with `;`-separated names, used only to link PDF addresses. The command refuses to overwrite an existing output file, isolates per-file failures, and prints a per-file summary to stderr. The output contains contact data; keep it outside Git (`/exports/` and `/data/` are ignored).
+
 ## Researcher rollup, role accounts and export presets (OA-017, OA-018, OA-019)
 
 * **Researcher profiles** (`results/researchers.py`): observations sharing an address comparison key form one profile; two addresses join only when both carry the same in-article ORCID with a valid check digit. Names never merge people. Flags: `address_has_conflicting_orcids`, `address_used_under_different_names` (both block `eligible`), `multiple_addresses_linked_by_orcid`, `invalid_orcid_declared`, `no_author_association`. `activity` is from the latest observed publication year only (`active_recent` ≤1y, `moderate` ≤3y, `dormant`, `unknown`). `affiliation_changed` compares affiliations across the profile's own observations.

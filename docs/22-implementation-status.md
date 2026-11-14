@@ -54,6 +54,7 @@ The repository documentation validator checks local Markdown targets, JSON synta
 | OA-021 | LOCAL CANDIDATE | `source="all"`: Europe PMC + OpenAlex + Crossref merged, deduplicated by PMCID then DOI (each article read once, `found_in` recorded); per-source failures reported in `source_errors`; declared license URL classified (`cc-by`, `cc-by-nc-nd`, …, `unknown`). |
 | OA-022 | LOCAL CANDIDATE | Generated JSON Schemas + synthetic examples for OA discovery, document extraction and researcher responses (`contracts/oa-*.schema.json`), registered in the docs validator; `test_oa_contracts.py` fails on model/fixture drift. |
 | OA-023 | LOCAL CANDIDATE | `association_strength` (structural / labelled / none) on every contact and a minimum-strength filter for outreach exports (API + UI). |
+| OA-024 | LOCAL CANDIDATE | Offline batch CLI (`python -m emailmonitor.discovery.batch_intake`) over a folder of PDFs/JATS/pages to one preset CSV, with per-file failure isolation and no-overwrite. |
 | EM-EXT-01–05 | DEFERRED | Post-core extensions (OCR adapter, institutional enrichment, recurring searches, direct outreach). |
 
 ## What has been done vs what remains
