@@ -7,7 +7,12 @@ import sys
 from pathlib import Path
 
 import pytest
-from service_artifacts import collect_service, git_blob_digest, verify_service_archive
+from service_artifacts import (
+    SERVICE_MAX_FILES,
+    collect_service,
+    git_blob_digest,
+    verify_service_archive,
+)
 
 from artifacts import NOTICES, PackagingRefused, archive, materialize
 
@@ -51,13 +56,13 @@ def test_service_artifact_receipt_and_installed_entrypoint(tmp_path: Path) -> No
         collect_service(inputs, "a" * 40, {"python": "3.12.13"}, inventory)
     changed.write_bytes(prior)
     receipt = files["manifest.json"]
-    assert verify_service_archive(archive(files), receipt) == files
+    assert verify_service_archive(archive(files, SERVICE_MAX_FILES), receipt) == files
     damaged = dict(files)
     damaged["services/backend/src/emailmonitor/runtime/worker.py"] += b"\n# changed\n"
     with pytest.raises(PackagingRefused):
-        verify_service_archive(archive(damaged), receipt)
+        verify_service_archive(archive(damaged, SERVICE_MAX_FILES), receipt)
     destination = tmp_path / "installed"
-    materialize(files, destination)
+    materialize(files, destination, SERVICE_MAX_FILES)
     code = """
 import sys
 sys.path.insert(0,sys.argv[1])
