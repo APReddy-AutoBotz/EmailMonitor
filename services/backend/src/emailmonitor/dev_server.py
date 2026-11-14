@@ -27,7 +27,7 @@ from emailmonitor.results.researchers import (
     render_researchers_csv,
 )
 
-SourceChoice = Literal["europe-pmc", "openalex", "crossref", "biorxiv", "auto"]
+SourceChoice = Literal["europe-pmc", "openalex", "crossref", "biorxiv", "auto", "all"]
 RoleChoice = Literal["corresponding", "first", "both", "all"]
 
 

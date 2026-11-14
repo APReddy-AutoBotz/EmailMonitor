@@ -3,7 +3,7 @@ import { ApiError, errorMessage, readBounded } from './client'
 import { Empty, Status, type Context } from './ui'
 
 /** Preview Open Access workspace: offline fixtures only, every row carries its evidence. */
-export type OaSource = 'auto' | 'europe-pmc' | 'openalex' | 'crossref' | 'biorxiv'
+export type OaSource = 'auto' | 'all' | 'europe-pmc' | 'openalex' | 'crossref' | 'biorxiv'
 export type OaRoles = 'both' | 'corresponding' | 'first' | 'all'
 export type OaPreset = 'instantly' | 'smartlead' | 'lemlist' | 'hubspot' | 'evidence' | 'researchers'
 export type OaContact = {
@@ -16,14 +16,14 @@ export type OaContact = {
 }
 export type OaArticle = {
   source: string; work_key: string; doi: string | null; pmcid: string | null; title: string | null; journal: string | null
-  publication_year: number | null; status: string; reason: string | null; license_url: string | null
+  publication_year: number | null; status: string; reason: string | null; license_url: string | null; license_category: string; found_in: string[]
   authors_observed: number; candidates_observed: number; unmatched_candidates: number; contacts_retained: number
 }
 export type OaDiscovery = {
   query: string; source_used: string; route_reason: string; target_roles: OaRoles; reference_year: number
   total_articles_scanned: number; articles_with_full_text: number; articles: OaArticle[]; contacts_extracted: OaContact[]
   corresponding_authors_count: number; first_authors_count: number; unmatched_candidates_count: number
-  eligible_contacts_count: number; hit_count_reported: number | null
+  eligible_contacts_count: number; hit_count_reported: number | null; source_errors: Record<string, string>
 }
 export type OaDocument = {
   kind: 'pdf' | 'jats_xml' | 'html'; parser_version: string; content_digest: string; status: string; reason: string | null
@@ -132,6 +132,7 @@ function ContactTable({ contacts, caption }: { contacts: OaContact[]; caption: s
 function Summary({ result }: { result: OaDiscovery }) {
   const items: [string, number | string][] = [['Articles scanned', result.total_articles_scanned], ['Own full text read', result.articles_with_full_text], ['Addresses (selected roles)', result.contacts_extracted.length], ['Export-ready', result.eligible_contacts_count], ['Unlinked addresses', result.unmatched_candidates_count]]
   return <div className="oa-summary" role="group" aria-label="Discovery summary">{items.map(([label, value]) => <div key={label} className="oa-stat"><span>{label}</span><strong>{value}</strong></div>)}
+    {Object.entries(result.source_errors).map(([name, reason]) => <p key={name} role="alert" className="error">{name} could not be searched ({reason.replaceAll('_', ' ')}); other sources still ran.</p>)}
     <p className="oa-route">Source <strong>{result.source_used}</strong> ({result.route_reason.replaceAll('_', ' ')}){result.hit_count_reported !== null ? ` · source reported ${result.hit_count_reported} matching record(s)` : ''}</p></div>
 }
 
@@ -139,7 +140,7 @@ function Outcomes({ articles }: { articles: OaArticle[] }) {
   if (!articles.length) return <Empty>No works matched this query in the offline fixtures.</Empty>
   return <div className="tablewrap" tabIndex={0}><table><caption>Every discovered work and what happened to it</caption><thead><tr><th>Work</th><th>Outcome</th><th>Authors / addresses</th></tr></thead>
     <tbody>{articles.map(a => <tr key={a.source + a.work_key}><td>{a.title ?? a.work_key}<br /><small>{[a.journal, a.publication_year, a.pmcid, a.doi && 'doi:' + a.doi].filter(Boolean).join(' · ')}</small></td>
-      <td><Status value={a.status} /> {outcomeLabel(a.status)}{a.reason && <><br /><small>{a.reason.replaceAll('_', ' ')}</small></>}</td>
+      <td><Status value={a.status} /> {outcomeLabel(a.status)}{a.reason && <><br /><small>{a.reason.replaceAll('_', ' ')}</small></>}<br /><small>Found in {a.found_in.join(', ')} · license {a.license_category}</small></td>
       <td>{a.authors_observed} authors · {a.candidates_observed} addresses · {a.unmatched_candidates} unlinked · {a.contacts_retained} shown</td></tr>)}</tbody></table></div>
 }
 
@@ -179,7 +180,7 @@ export function OpenAccessWorkspace({ context }: { context: Context }) {
     {tab !== 'document' && <form onSubmit={search} className="oa-form" aria-label="Open access search">
       <div className="formgrid">
         <label>Keyword, DOI or PMCID<input required maxLength={1000} value={form.query} placeholder="e.g. CRISPR base editing · 10.1038/… · PMC10293847" onChange={e => update('query', e.target.value)} /></label>
-        <label>Source<select value={form.source} onChange={e => update('source', e.target.value as OaSource)}><option value="auto">Automatic (identifier-aware)</option><option value="europe-pmc">Europe PMC full text</option><option value="openalex">OpenAlex</option><option value="crossref">Crossref</option><option value="biorxiv">bioRxiv preprints</option></select></label>
+        <label>Source<select value={form.source} onChange={e => update('source', e.target.value as OaSource)}><option value="auto">Automatic (identifier-aware)</option><option value="all">All sources, merged (Europe PMC + OpenAlex + Crossref)</option><option value="europe-pmc">Europe PMC full text</option><option value="openalex">OpenAlex</option><option value="crossref">Crossref</option><option value="biorxiv">bioRxiv preprints</option></select></label>
         <label>Authors<select value={form.roles} onChange={e => update('roles', e.target.value as OaRoles)}><option value="both">First or corresponding</option><option value="corresponding">Corresponding only</option><option value="first">First only</option><option value="all">All observed, including unlinked</option></select></label>
         <label>Maximum articles<input type="number" min={1} max={100} value={form.maxResults} onChange={e => update('maxResults', Number(e.target.value))} /></label>
         <label>From year<input inputMode="numeric" maxLength={4} value={form.fromYear} onChange={e => update('fromYear', e.target.value)} /></label>

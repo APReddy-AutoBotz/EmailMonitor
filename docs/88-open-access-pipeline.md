@@ -37,6 +37,8 @@ query --route--> discovery (bounded, <=100 works)
 
 Auto routing: `PMC\d+` → Europe PMC; DOI with prefix `10.1101/` → bioRxiv; other DOI → Crossref; anything else → Europe PMC keyword search. The chosen route and reason are returned (`source_used`, `route_reason`).
 
+**Merged discovery (OA-021).** `source="all"` runs Europe PMC, OpenAlex and Crossref, merges works by PMCID then DOI (each article is fetched and parsed once; `found_in` lists every source that returned it), and keeps going if one source fails (`source_errors`). Each outcome reports `license_category` from the article's declared license URL; a missing license is `unknown`, never assumed open.
+
 ## Association basis (JATS)
 
 | Basis | Meaning | Status |

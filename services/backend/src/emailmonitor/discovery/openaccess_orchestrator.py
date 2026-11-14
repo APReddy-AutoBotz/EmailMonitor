@@ -30,7 +30,7 @@ from __future__ import annotations
 import hashlib
 import re
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -67,7 +67,13 @@ from emailmonitor.sources.europepmc_search import (
     EuropePmcSearchPage,
     EuropePmcSearchRequest,
 )
-from emailmonitor.sources.openaccess import DOI_PATTERN, DoiIdentifier, PmcIdentifier
+from emailmonitor.sources.openaccess import (
+    DOI_PATTERN,
+    DoiIdentifier,
+    LicenseCategory,
+    PmcIdentifier,
+    license_category,
+)
 from emailmonitor.sources.openalex import (
     OpenAlexFilter,
     OpenAlexSearchRequest,
@@ -77,7 +83,8 @@ from emailmonitor.sources.openalex import (
 
 SourceName = Literal["europe-pmc", "openalex", "crossref", "biorxiv"]
 ContactSource = Literal["europe-pmc", "openalex", "crossref", "biorxiv", "document"]
-RequestedSource = Literal["europe-pmc", "openalex", "crossref", "biorxiv", "auto"]
+RequestedSource = Literal["europe-pmc", "openalex", "crossref", "biorxiv", "auto", "all"]
+MULTI_SOURCES: tuple[SourceName, ...] = ("europe-pmc", "openalex", "crossref")
 TargetRoles = Literal["corresponding", "first", "both", "all"]
 OutcomeStatus = Literal[
     "contacts_observed",
@@ -142,6 +149,8 @@ class ArticleOutcome(Contract):
     full_text_url: str | None = None
     content_digest: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     license_url: str | None = None
+    license_category: LicenseCategory = "unknown"
+    found_in: tuple[SourceName, ...] = Field(default_factory=tuple)
     keywords: tuple[str, ...] = Field(default_factory=tuple)
     authors_observed: int = Field(default=0, ge=0)
     candidates_observed: int = Field(default=0, ge=0)
@@ -209,7 +218,7 @@ class ExtractedAcademicContact(Contract):
 
 class DiscoveryResult(Contract):
     query: str
-    source_used: SourceName
+    source_used: SourceName | Literal["all"]
     route_reason: str
     target_roles: TargetRoles
     reference_year: int
@@ -222,6 +231,7 @@ class DiscoveryResult(Contract):
     unmatched_candidates_count: int = Field(ge=0)
     eligible_contacts_count: int = Field(ge=0)
     hit_count_reported: int | None = Field(default=None, ge=0)
+    source_errors: dict[str, str] = Field(default_factory=dict)
 
     def eligible_items(self) -> list[ContactExportItem]:
         return [
@@ -248,6 +258,7 @@ class _Work:
     publication_year: int | None
     preprint_doi: DoiIdentifier | None = None
     preprint_url: str | None = None
+    found_in: tuple[SourceName, ...] = ()
 
 
 def normalize_doi(value: str) -> str | None:
@@ -468,13 +479,19 @@ class OpenAccessOrchestrator:
         if not 1 <= max_results <= MAX_RESULTS:
             raise FetchDenied("max_results_out_of_bounds")
         filters = filters or DiscoveryFilters()
-        if source == "auto":
-            effective, reason = route_query(query)
-        else:
-            effective, reason = source, "explicit_source"
-
+        effective: SourceName | Literal["all"]
+        source_errors: dict[str, str] = {}
         hit_count: int | None
-        works, hit_count = self._discover(effective, query, max_results, filters)
+        if source == "all":
+            effective, reason = "all", "merged_sources"
+            works, source_errors = self._discover_all(query, max_results, filters)
+            hit_count = None
+        else:
+            if source == "auto":
+                effective, reason = route_query(query)
+            else:
+                effective, reason = source, "explicit_source"
+            works, hit_count = self._discover(effective, query, max_results, filters)
         suppressed_e = frozenset(e.strip().casefold() for e in suppressed_emails if e.strip())
         suppressed_d = frozenset(
             d.strip().lower().lstrip("@").lstrip(".") for d in suppressed_domains if d.strip()
@@ -518,6 +535,7 @@ class OpenAccessOrchestrator:
                 1 for c in contacts if c.outreach_eligibility == "eligible"
             ),
             hit_count_reported=hit_count,
+            source_errors=source_errors,
         )
 
     # --------------------------------------------------------------- discovery
@@ -532,6 +550,50 @@ class OpenAccessOrchestrator:
         if source == "crossref":
             return self._discover_crossref(query, limit, filters), None
         return self._discover_biorxiv(query, limit, filters), None
+
+    def _discover_all(
+        self, query: str, limit: int, filters: DiscoveryFilters
+    ) -> tuple[list[_Work], dict[str, str]]:
+        """Union of sources, deduplicated by PMCID, then DOI. One work is read once.
+
+        A failing source is reported in ``source_errors``; others still run.
+        """
+        merged: dict[str, _Work] = {}
+        order: list[str] = []
+        errors: dict[str, str] = {}
+        for name in MULTI_SOURCES:
+            try:
+                found, _count = self._discover(name, query, limit, filters)
+            except (FetchDenied, ValueError) as exc:
+                errors[name] = (str(exc) if isinstance(exc, FetchDenied) else "invalid_request")[
+                    :200
+                ]
+                continue
+            for work in found:
+                keys = [k for k in (work.pmcid, work.doi) if k]
+                existing = next((merged[k] for k in keys if k in merged), None)
+                if existing is None:
+                    record = replace(work, found_in=(name,))
+                    primary = keys[0] if keys else f"{name}:{work.work_key}"
+                    order.append(primary)
+                else:
+                    record = replace(
+                        existing,
+                        pmcid=existing.pmcid or work.pmcid,
+                        doi=existing.doi or work.doi,
+                        title=existing.title or work.title,
+                        journal=existing.journal or work.journal,
+                        publication_year=existing.publication_year or work.publication_year,
+                        found_in=existing.found_in
+                        + ((name,) if name not in existing.found_in else ()),
+                    )
+                    primary = next(o for o in order if merged.get(o) is existing)
+                for key in [primary, *keys]:
+                    merged[key] = record
+        unique: list[_Work] = []
+        for primary in order:
+            unique.append(merged[primary])
+        return unique[:limit], errors
 
     def _discover_europe_pmc(
         self, query: str, limit: int, filters: DiscoveryFilters
@@ -686,6 +748,7 @@ class OpenAccessOrchestrator:
             publication_year=work.publication_year,
             status=status,
             reason=reason,
+            found_in=work.found_in or (work.source,),
         )
 
     def _full_text(self, work: _Work) -> tuple[JatsObservation, str]:
@@ -799,6 +862,8 @@ class OpenAccessOrchestrator:
             full_text_url=full_text_url,
             content_digest=obs.content_digest,
             license_url=obs.license_url,
+            license_category=license_category(obs.license_url),
+            found_in=work.found_in or (work.source,),
             keywords=tuple(obs.keywords),
             authors_observed=len(obs.authors),
             candidates_observed=len(obs.candidates),
