@@ -6,14 +6,28 @@ academic Open Access extraction datasets for local exploration.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
 from emailmonitor.discovery.mesh_search import match_mesh_terms
 from emailmonitor.discovery.openaccess_orchestrator import OpenAccessOrchestrator
+
+
+class OpenAccessDiscoverRequest(BaseModel):
+    query: str = "CRISPR"
+    source: Literal["europe-pmc", "openalex", "crossref", "biorxiv", "auto"] = "auto"
+    max_results: int = 25
+    target_roles: Literal["corresponding", "first", "both", "all"] = "both"
+
+
+class OpenAccessExportRequest(BaseModel):
+    query: str = "CRISPR"
+    source: Literal["europe-pmc", "openalex", "crossref", "biorxiv", "auto"] = "auto"
+    preset: Literal["instantly", "smartlead"] = "instantly"
 
 app = FastAPI(title="EmailMonitor Dev & Preview Server", version="0.1.0")
 
@@ -474,6 +488,18 @@ def list_sources(org_id: str) -> list[dict[str, Any]]:
             "adapter": "openalex_rest",
             "platform_enabled": True,
         },
+        {
+            "source_id": "crossref",
+            "display_name": "Crossref REST & DOI Resolver",
+            "adapter": "crossref_rest",
+            "platform_enabled": True,
+        },
+        {
+            "source_id": "biorxiv",
+            "display_name": "bioRxiv / medRxiv Pre-Prints",
+            "adapter": "biorxiv_rest",
+            "platform_enabled": True,
+        },
     ]
 
 
@@ -586,34 +612,23 @@ def get_members(org_id: str) -> list[dict[str, Any]]:
 
 
 @app.post("/api/v1/organizations/{org_id}/open-access/discover")
-async def open_access_discover(org_id: str, request: Request) -> dict[str, Any]:
-    body = await request.json()
-    query = body.get("query", "CRISPR")
-    source = body.get("source", "auto")
-    max_results = int(body.get("max_results", 25))
-    target_roles = body.get("target_roles", "both")
-
+def open_access_discover(org_id: str, body: OpenAccessDiscoverRequest) -> dict[str, Any]:
     orchestrator = OpenAccessOrchestrator()
     result = orchestrator.discover_and_extract(
-        query=query,
-        source=source,
-        max_results=max_results,
-        target_roles=target_roles,
+        query=body.query,
+        source=body.source,
+        max_results=body.max_results,
+        target_roles=body.target_roles,
     )
     return result.model_dump()
 
 
 @app.post("/api/v1/organizations/{org_id}/open-access/export")
-async def open_access_export(org_id: str, request: Request) -> Response:
-    body = await request.json()
-    query = body.get("query", "CRISPR")
-    source = body.get("source", "auto")
-    preset = body.get("preset", "instantly")
-
+def open_access_export(org_id: str, body: OpenAccessExportRequest) -> Response:
     orchestrator = OpenAccessOrchestrator()
-    result = orchestrator.discover_and_extract(query=query, source=source)
+    result = orchestrator.discover_and_extract(query=body.query, source=body.source)
 
-    if preset == "smartlead":
+    if body.preset == "smartlead":
         content = result.export_smartlead_csv()
         filename = "emailmonitor-smartlead-export.csv"
     else:
