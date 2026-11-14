@@ -1,6 +1,6 @@
 # 22 — Implementation status and evidence ledger
 
-**Baseline date:** 2026-10-08. **Updated:** 2026-11-11.  
+**Baseline date:** 2026-10-08. **Updated:** 2026-11-14.  
 **Product state:** Staging integration candidate on branch `codex/checkpoint-recovered-focus-20261111` (PR #70) encompasses 299 commits across 70 pull requests with synthetic/offline verification through EM-013, candidate work on EM-014/EM-017, and isolated XML prototypes for EM-015. `main` currently hosts the normative design, schema contracts, and documentation baseline. See [Open Access strategic roadmap](25-open-access-strategic-roadmap.md) for target-market production plan.
 
 ## Documentation deliverables
@@ -42,6 +42,8 @@ The repository documentation validator checks local Markdown targets, JSON synta
 | OA-009 | VERIFIED IN DRAFT PR | ORCID ISO 7064 MOD 11-2 researcher checksum verification and institutional profile disambiguation verified in PR #71. |
 | OA-010 | VERIFIED IN DRAFT PR | Medical Subject Headings (MeSH) descriptor mapping, Boolean query generation, and journal exclusion filters verified in PR #71. |
 | OA-011 | VERIFIED IN DRAFT PR | Interactive Open Access discovery and cold outreach export API endpoints (`/open-access/discover`, `/open-access/export`) verified in PR #71. |
+| OA-012 | LOCAL CANDIDATE | Integrity correction of the OA pipeline: own-article full text only, no defaulted DOI/year/ORCID/role, JATS v2 parser (ordered text, association basis, entity refusal), deterministic IDs, per-work outcomes, suppression. Branch `feat/oa-truthful-pipeline`; see [document 88](88-open-access-pipeline.md). Offline only. |
+| OA-013 | LOCAL CANDIDATE | Europe PMC `/search` planner/parser and fixture gateway (keyword and exact-DOI lookup to PMCID). No live transport; see [document 88](88-open-access-pipeline.md). |
 | EM-EXT-01–05 | DEFERRED | Post-core extensions (OCR adapter, institutional enrichment, recurring searches, direct outreach). |
 
 ## What has been done vs what remains

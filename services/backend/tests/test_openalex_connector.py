@@ -3,7 +3,6 @@
 from pathlib import Path
 
 import pytest
-
 from emailmonitor.extraction.jats import parse_jats_xml
 from emailmonitor.fetching.safety import FetchDenied
 from emailmonitor.sources.openaccess import DoiIdentifier, PmcIdentifier
@@ -18,7 +17,7 @@ from emailmonitor.sources.openalex import (
 FIXTURES_DIR = Path(__file__).resolve().parents[3] / "fixtures"
 
 
-def test_build_openalex_query_url():
+def test_build_openalex_query_url() -> None:
     req = OpenAlexSearchRequest(
         query="CRISPR gene editing",
         filters=OpenAlexFilter(
@@ -46,7 +45,7 @@ def test_build_openalex_query_url():
     assert "per-page=50" in url
 
 
-def test_parse_openalex_search_fixture():
+def test_parse_openalex_search_fixture() -> None:
     fixture_path = FIXTURES_DIR / "openalex" / "search-crispr.json"
     data = fixture_path.read_bytes()
 
@@ -85,7 +84,7 @@ def test_parse_openalex_search_fixture():
     assert w2.authorships[0].is_corresponding is True
 
 
-def test_work_to_open_access_identifier_routing():
+def test_work_to_open_access_identifier_routing() -> None:
     fixture_path = FIXTURES_DIR / "openalex" / "search-crispr.json"
     works = parse_openalex_search_response(fixture_path.read_bytes())
 
@@ -100,7 +99,7 @@ def test_work_to_open_access_identifier_routing():
     assert id2.value == "10.1186/s12864-026-09123-x"
 
 
-def test_openalex_to_jats_pipeline_integration():
+def test_openalex_to_jats_pipeline_integration() -> None:
     """Verify end-to-end integration: OpenAlex search -> JATS XML email extraction."""
     openalex_fixture = FIXTURES_DIR / "openalex" / "search-crispr.json"
     works = parse_openalex_search_response(openalex_fixture.read_bytes())
@@ -122,14 +121,14 @@ def test_openalex_to_jats_pipeline_integration():
     assert observation.status == "observed"
     assert len(observation.candidates) == 1
     candidate = observation.candidates[0]
-    assert candidate.raw_address == "marcus.vance@biotech.ethz.ch"
+    assert candidate.raw_address == "marcus.vance@biotech.zurich.example"
     # Provenance matches Marcus Vance
     assert candidate.author_positions == [2]
     assert observation.authors[1].display_name == "Marcus Vance"
     assert observation.authors[1].corresponding is True
 
 
-def test_adversarial_openalex_inputs():
+def test_adversarial_openalex_inputs() -> None:
     with pytest.raises(FetchDenied, match="invalid_openalex_json"):
         parse_openalex_search_response(b"{malformed json...")
 

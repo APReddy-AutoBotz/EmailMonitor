@@ -8,26 +8,42 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 from emailmonitor.discovery.mesh_search import match_mesh_terms
-from emailmonitor.discovery.openaccess_orchestrator import OpenAccessOrchestrator
+from emailmonitor.discovery.openaccess_orchestrator import (
+    DiscoveryFilters,
+    DiscoveryResult,
+    OpenAccessOrchestrator,
+)
+from emailmonitor.fetching.safety import FetchDenied
+
+SourceChoice = Literal["europe-pmc", "openalex", "crossref", "biorxiv", "auto"]
+RoleChoice = Literal["corresponding", "first", "both", "all"]
 
 
 class OpenAccessDiscoverRequest(BaseModel):
-    query: str = "CRISPR"
-    source: Literal["europe-pmc", "openalex", "crossref", "biorxiv", "auto"] = "auto"
-    max_results: int = 25
-    target_roles: Literal["corresponding", "first", "both", "all"] = "both"
+    """Preview request. Bounds mirror the orchestrator so invalid input is a 422."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    query: str = Field(default="CRISPR", min_length=1, max_length=1000)
+    source: SourceChoice = "auto"
+    max_results: int = Field(default=25, ge=1, le=100)
+    target_roles: RoleChoice = "both"
+    from_year: int | None = Field(default=None, ge=1800, le=2100)
+    until_year: int | None = Field(default=None, ge=1800, le=2100)
+    exclude_journals: list[str] = Field(default_factory=list, max_length=50)
+    suppressed_emails: list[str] = Field(default_factory=list, max_length=10_000)
+    suppressed_domains: list[str] = Field(default_factory=list, max_length=1_000)
 
 
-class OpenAccessExportRequest(BaseModel):
-    query: str = "CRISPR"
-    source: Literal["europe-pmc", "openalex", "crossref", "biorxiv", "auto"] = "auto"
+class OpenAccessExportRequest(OpenAccessDiscoverRequest):
     preset: Literal["instantly", "smartlead"] = "instantly"
+
 
 app = FastAPI(title="EmailMonitor Dev & Preview Server", version="0.1.0")
 
@@ -55,8 +71,8 @@ SAMPLE_CONTACTS = [
         "revision": 1,
         "author_id": "author-001",
         "author_name": "Dr. Sarah L. Chen",
-        "raw_address": "sarah.chen@stanford.edu",
-        "normalized_address": "sarah.chen@stanford.edu",
+        "raw_address": "sarah.chen@bioeng.stanford.example",
+        "normalized_address": "sarah.chen@bioeng.stanford.example",
         "state": "accepted",
         "first_author": True,
         "corresponding_author": True,
@@ -81,8 +97,8 @@ SAMPLE_CONTACTS = [
         "revision": 1,
         "author_id": "author-002",
         "author_name": "Prof. Marcus Vance",
-        "raw_address": "m.vance@oxford.ac.uk",
-        "normalized_address": "m.vance@oxford.ac.uk",
+        "raw_address": "m.vance@medsci.oxford.example",
+        "normalized_address": "m.vance@medsci.oxford.example",
         "state": "accepted",
         "first_author": False,
         "corresponding_author": True,
@@ -107,8 +123,8 @@ SAMPLE_CONTACTS = [
         "revision": 1,
         "author_id": "author-003",
         "author_name": "Elena Rostova",
-        "raw_address": "e.rostova@biomed.ethz.ch",
-        "normalized_address": "e.rostova@biomed.ethz.ch",
+        "raw_address": "e.rostova@biomed.zurich.example",
+        "normalized_address": "e.rostova@biomed.zurich.example",
         "state": "needs_review",
         "first_author": True,
         "corresponding_author": False,
@@ -215,9 +231,7 @@ def session(request: Request, response: Response) -> dict[str, Any]:
 @app.get("/api/v1/auth/start")
 def auth_start() -> Response:
     # Auto-redirect back to frontend with state & code
-    return JSONResponse(
-        {"status": "ok", "message": "Development session already authenticated"}
-    )
+    return JSONResponse({"status": "ok", "message": "Development session already authenticated"})
 
 
 @app.post("/api/v1/auth/logout")
@@ -382,8 +396,8 @@ def get_batch(org_id: str, batch_id: str) -> dict[str, Any]:
             {
                 "id": "cand-001",
                 "address": {
-                    "raw_address": "sarah.chen@stanford.edu",
-                    "normalized_address": "sarah.chen@stanford.edu",
+                    "raw_address": "sarah.chen@bioeng.stanford.example",
+                    "normalized_address": "sarah.chen@bioeng.stanford.example",
                     "syntax_status": "valid",
                 },
                 "normalization_collision": False,
@@ -403,7 +417,7 @@ def get_batch(org_id: str, batch_id: str) -> dict[str, Any]:
             {
                 "id": "ev-oa-001",
                 "locator": "/article/front/article-meta/author-notes/corresp[1]",
-                "excerpt": "*Correspondence: sarah.chen@stanford.edu (S.L.C.)",
+                "excerpt": "*Correspondence: sarah.chen@bioeng.stanford.example (S.L.C.)",
                 "method": "xml_corresp_node",
                 "page": None,
                 "anchor": None,
@@ -433,7 +447,7 @@ def get_evidence(org_id: str, ev_id: str, batch_id: str = "") -> dict[str, Any]:
         "citation": {
             "id": ev_id,
             "locator": "/article/front/article-meta/author-notes/corresp[1]",
-            "excerpt": "*Correspondence: Dr. Sarah L. Chen <sarah.chen@stanford.edu>",
+            "excerpt": "*Correspondence: Dr. Sarah L. Chen <sarah.chen@bioeng.stanford.example>",
             "method": "xml_corresp_node",
             "page": None,
             "anchor": None,
@@ -611,38 +625,63 @@ def get_members(org_id: str) -> list[dict[str, Any]]:
     ]
 
 
+def _require_preview_org(org_id: str) -> None:
+    # The preview server hosts exactly one synthetic organization. A path value is
+    # never authorization; anything else is indistinguishable from "not found".
+    if org_id != ORG_ID:
+        raise HTTPException(status_code=404, detail="not_found")
+
+
+def _run_open_access(body: OpenAccessDiscoverRequest) -> DiscoveryResult:
+    try:
+        return OpenAccessOrchestrator().discover_and_extract(
+            query=body.query,
+            source=body.source,
+            max_results=body.max_results,
+            target_roles=body.target_roles,
+            filters=DiscoveryFilters(
+                from_year=body.from_year,
+                until_year=body.until_year,
+                exclude_journals=tuple(body.exclude_journals),
+            ),
+            suppressed_emails=body.suppressed_emails,
+            suppressed_domains=body.suppressed_domains,
+        )
+    except (FetchDenied, ValueError) as exc:
+        # FetchDenied carries a safe reason code only (no URL, body or secret).
+        reason = str(exc) if isinstance(exc, FetchDenied) else "invalid_request"
+        raise HTTPException(status_code=400, detail=reason[:200]) from None
+
+
 @app.post("/api/v1/organizations/{org_id}/open-access/discover")
 def open_access_discover(org_id: str, body: OpenAccessDiscoverRequest) -> dict[str, Any]:
-    orchestrator = OpenAccessOrchestrator()
-    result = orchestrator.discover_and_extract(
-        query=body.query,
-        source=body.source,
-        max_results=body.max_results,
-        target_roles=body.target_roles,
-    )
-    return result.model_dump()
+    _require_preview_org(org_id)
+    return _run_open_access(body).model_dump()
 
 
 @app.post("/api/v1/organizations/{org_id}/open-access/export")
 def open_access_export(org_id: str, body: OpenAccessExportRequest) -> Response:
-    orchestrator = OpenAccessOrchestrator()
-    result = orchestrator.discover_and_extract(query=body.query, source=body.source)
-
+    _require_preview_org(org_id)
+    result = _run_open_access(body)
     if body.preset == "smartlead":
         content = result.export_smartlead_csv()
         filename = "emailmonitor-smartlead-export.csv"
     else:
         content = result.export_instantly_csv()
         filename = "emailmonitor-instantly-export.csv"
-
     return Response(
         content=content,
         media_type="text/csv",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
     )
 
 
 @app.get("/api/v1/organizations/{org_id}/open-access/mesh")
 def get_mesh_suggestions(org_id: str, q: str = "") -> list[dict[str, Any]]:
-    matches = match_mesh_terms(q)
+    _require_preview_org(org_id)
+    matches = match_mesh_terms(q[:200])
     return [m.model_dump() for m in matches]

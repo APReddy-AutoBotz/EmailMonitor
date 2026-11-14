@@ -2,6 +2,21 @@
 
 Extracts structured author identities, correspondence status, affiliations,
 and literal email evidence with full cryptographic provenance.
+
+Rules that keep observations truthful:
+
+* An address is only ever copied from the document (``<email>``, an email
+  ``<ext-link>``/``<uri>``, or literal text inside a correspondence note). It
+  is never constructed, completed or guessed.
+* A ``<contrib>`` holding an ``<email>`` is *not* thereby a corresponding
+  author; only ``corresp="yes"`` or a cross-reference to a correspondence note
+  asserts that role. When an article declares no correspondence at all the
+  role stays unknown (``None``).
+* Every candidate records the structural basis of its author link. Shared
+  correspondence notes are split only by an explicit initials parenthetical or
+  an unambiguous surname directly preceding the address; otherwise the address
+  stays unmatched for operator review.
+* DTD internal subsets and entity declarations are refused before expansion.
 """
 
 import hashlib
@@ -23,15 +38,47 @@ MAX_BYTES = 4_194_304  # 4 MB
 MAX_NODES = 40_000
 MAX_DEPTH = 48
 MAX_TEXT = 2_097_152
+MAX_KEYWORDS = 50
 
 EMAIL_PATTERN = re.compile(
-    r"[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
+    r"[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,63}"
+)
+_EMAIL_FULL = re.compile(
+    r"[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+)*"
+    r"@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
+    r"(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*\.[A-Za-z]{2,63}"
 )
 ORCID_PATTERN = re.compile(r"([0-9]{4}-[0-9]{4}-[0-9]{4}-[0-9]{3}[0-9X])")
+_CORRESP_FN_TYPES = frozenset({"corresp", "correspondence", "corresponding-author"})
+_PUB_DATE_PREFERENCE = ("epub", "pub", "ppub", "collection", "epub-ppub")
+
+AssociationBasis = Literal[
+    "contrib_email",
+    "corresp_xref",
+    "corresp_initials",
+    "corresp_name_proximity",
+    "sole_corresponding_author",
+    "unmatched",
+]
+
+
+class JatsCandidateFact(CandidateFact):
+    """A literal address plus the structural reason (if any) it maps to an author."""
+
+    association_basis: AssociationBasis
+
+    @model_validator(mode="after")
+    def basis_matches_positions(self) -> "JatsCandidateFact":
+        unmatched = self.association_basis == "unmatched"
+        if unmatched != (not self.author_positions):
+            raise ValueError("association basis must agree with author positions")
+        if unmatched != (self.association_status == "unmatched"):
+            raise ValueError("association basis must agree with association status")
+        return self
 
 
 class JatsObservation(Fact):
-    parser_version: Literal["open-access-jats-v1"] = "open-access-jats-v1"
+    parser_version: Literal["open-access-jats-v2"] = "open-access-jats-v2"
     route: Literal["jats_xml"] = "jats_xml"
     url: str = Field(max_length=2048)
     requested_identifier: OpenAccessIdentifier
@@ -40,9 +87,12 @@ class JatsObservation(Fact):
     title: str | None = Field(default=None, max_length=1000)
     journal: str | None = Field(default=None, max_length=1000)
     doi: str | None = Field(default=None, max_length=256)
+    article_pmcid: str | None = Field(default=None, pattern=r"^PMC\d{1,12}$")
     publication_date: str | None = Field(default=None, max_length=100)
+    keywords: list[str] = Field(default_factory=list, max_length=MAX_KEYWORDS)
+    license_url: str | None = Field(default=None, max_length=2048)
     authors: list[AuthorFact] = Field(default_factory=list, max_length=100)
-    candidates: list[CandidateFact] = Field(default_factory=list, max_length=100)
+    candidates: list[JatsCandidateFact] = Field(default_factory=list, max_length=100)
     identity_association_implemented: Literal[False] = False
 
     @model_validator(mode="after")
@@ -58,6 +108,10 @@ class JatsObservation(Fact):
             for a in self.authors:
                 if a.first != (a.position == 1):
                     raise ValueError(f"Author at position {a.position} has incorrect first flag")
+        known_positions = {a.position for a in self.authors}
+        for c in self.candidates:
+            if any(p not in known_positions for p in c.author_positions):
+                raise ValueError("Candidate references an unknown author position")
         if self.status in ("observed", "no_contact"):
             if (self.status == "observed") != bool(self.candidates):
                 raise ValueError(
@@ -74,16 +128,19 @@ class JatsNode:
     parent: "JatsNode | None" = None
     children: list["JatsNode"] = field(default_factory=list)
     text_chunks: list[str] = field(default_factory=list)
+    content: list["str | JatsNode"] = field(default_factory=list)
 
-    def text(self) -> str:
+    def text(self, skip: frozenset[str] = frozenset()) -> str:
+        """Document-order text; element boundaries become word boundaries."""
         parts: list[str] = []
-        for chunk in self.text_chunks:
-            parts.append(chunk)
-        for child in self.children:
-            child_text = child.text()
-            if child_text:
-                parts.append(child_text)
-        return " ".join("".join(parts).split())
+        for item in self.content:
+            if isinstance(item, str):
+                parts.append(item)
+            elif item.tag not in skip:
+                parts.append(" " + item.text(skip) + " ")
+        joined = " ".join("".join(parts).split())
+        joined = re.sub(r"\s+([,.;:)\]])", r"\1", joined)
+        return re.sub(r"([(\[])\s+", r"\1", joined)
 
     def own_text(self) -> str:
         return " ".join("".join(self.text_chunks).split())
@@ -104,6 +161,14 @@ class JatsNode:
             if found is not None:
                 return found
         return None
+
+    def has_ancestor(self, tag: str, stop: "JatsNode | None" = None) -> bool:
+        node = self.parent
+        while node is not None and node is not stop:
+            if node.tag == tag:
+                return True
+            node = node.parent
+        return False
 
 
 def _clean_tag(name: str) -> str:
@@ -144,6 +209,7 @@ class _JatsBuilder:
             locator = f"{self.current.locator}/{tag}[{index}]"
             node = JatsNode(tag=tag, attrs=attrs, locator=locator, parent=self.current)
             self.current.children.append(node)
+            self.current.content.append(node)
             self.current = node
 
         self.child_counters.append({})
@@ -161,6 +227,197 @@ class _JatsBuilder:
             raise FetchDenied("jats_xml_text_limit_exceeded")
         if self.current is not None:
             self.current.text_chunks.append(data)
+            self.current.content.append(data)
+
+
+def _deny_doctype(
+    doctype_name: str, system_id: str | None, public_id: str | None, has_internal_subset: int
+) -> None:
+    if has_internal_subset:
+        raise FetchDenied("jats_internal_dtd_subset_denied")
+
+
+def _deny_entity(*_args: object) -> None:
+    raise FetchDenied("jats_entity_declaration_denied")
+
+
+def clean_address(value: str) -> str | None:
+    """Return the literal address if ``value`` is exactly one address after trimming."""
+    text = value.strip()
+    if text.lower().startswith("mailto:"):
+        text = text[7:]
+    text = text.strip().strip("<>()[]{}\"'").rstrip(".,;:").strip()
+    if len(text) > 320 or not _EMAIL_FULL.fullmatch(text):
+        return None
+    return text
+
+
+@dataclass(frozen=True)
+class _Address:
+    address: str
+    locator: str
+    excerpt: str
+    offset: int  # position within the owning note's text, -1 when unknown
+
+
+@dataclass
+class _Note:
+    note_id: str | None
+    locator: str
+    text: str
+    addresses: list[_Address]
+
+
+def _excerpt(text: str, start: int, length: int) -> str:
+    if start < 0:
+        return text[:300]
+    lo = max(0, start - 160)
+    hi = min(len(text), start + length + 80)
+    return text[lo:hi][:300]
+
+
+def _structured_addresses(node: JatsNode) -> list[tuple[str, str]]:
+    """(address, locator) for <email>, email <ext-link> and mailto <uri> descendants."""
+    found: list[tuple[str, str]] = []
+    for email_node in node.find_all("email"):
+        address = clean_address(email_node.text())
+        if address:
+            found.append((address, email_node.locator))
+    for tag in ("ext-link", "uri"):
+        for link in node.find_all(tag):
+            href = link.attrs.get("xlink:href") or link.attrs.get("href") or ""
+            link_type = link.attrs.get("ext-link-type", "").lower()
+            if link_type == "email" or href.lower().startswith("mailto:"):
+                address = clean_address(href) if href else None
+                address = address or clean_address(link.text())
+                if address:
+                    found.append((address, link.locator))
+    found.sort(key=lambda item: item[1])
+    return found
+
+
+def _note_addresses(node: JatsNode) -> list[_Address]:
+    text = node.text(skip=frozenset({"label"}))
+    structured = _structured_addresses(node)
+    result: list[_Address] = []
+    if structured:
+        cursor = 0
+        for address, locator in structured:
+            offset = text.find(address, cursor)
+            if offset >= 0:
+                cursor = offset + len(address)
+            result.append(_Address(address, locator, _excerpt(text, offset, len(address)), offset))
+        return result
+    for match in EMAIL_PATTERN.finditer(text):
+        literal = clean_address(match.group(0))
+        if literal:
+            result.append(
+                _Address(
+                    literal,
+                    node.locator,
+                    _excerpt(text, match.start(), len(literal)),
+                    match.start(),
+                )
+            )
+    return result
+
+
+def _initial_variants(display_name: str) -> frozenset[str]:
+    tokens = [t for t in re.split(r"[\s.]+", display_name) if t]
+    if not tokens:
+        return frozenset()
+    letters_all = "".join(part[0] for token in tokens for part in token.split("-") if part).upper()
+    letters_tokens = "".join(token[0] for token in tokens).upper()
+    variants = {letters_all, letters_tokens}
+    if len(tokens) >= 2:
+        variants.add((tokens[0][0] + tokens[-1][0]).upper())
+    return frozenset(v for v in variants if len(v) >= 2)
+
+
+def _surname(display_name: str) -> str:
+    tokens = display_name.split()
+    return tokens[-1] if tokens else ""
+
+
+def _disambiguate(
+    note: _Note,
+    index: int,
+    authors: list[AuthorFact],
+    eligible: list[int],
+) -> tuple[int, AssociationBasis] | None:
+    """Pick one author for address ``index`` of a shared note, or None if ambiguous."""
+    entry = note.addresses[index]
+    if entry.offset < 0 or not eligible:
+        return None
+    by_position = {a.position: a for a in authors}
+    after = note.text[entry.offset + len(entry.address) :]
+    paren = re.match(r"\s*\(([^()]{1,40})\)", after)
+    if paren:
+        token = re.sub(r"[\s.\-]", "", paren.group(1)).upper()
+        if token.isalpha():
+            hits = [p for p in eligible if token in _initial_variants(by_position[p].display_name)]
+            if len(hits) == 1:
+                return hits[0], "corresp_initials"
+    previous_end = 0
+    if index > 0:
+        prev = note.addresses[index - 1]
+        if prev.offset >= 0:
+            previous_end = prev.offset + len(prev.address)
+    segment = note.text[previous_end : entry.offset]
+    hits = []
+    for position in eligible:
+        surname = _surname(by_position[position].display_name)
+        if len(surname) >= 2 and re.search(
+            rf"(?<!\w){re.escape(surname)}(?!\w)", segment, re.IGNORECASE
+        ):
+            hits.append(position)
+    if len(hits) == 1:
+        return hits[0], "corresp_name_proximity"
+    return None
+
+
+def _publication_date(article_meta: JatsNode) -> str | None:
+    dates = article_meta.find_all("pub-date")
+    if not dates:
+        return None
+
+    def rank(node: JatsNode) -> int:
+        kind = (node.attrs.get("pub-type") or node.attrs.get("date-type") or "").lower()
+        return _PUB_DATE_PREFERENCE.index(kind) if kind in _PUB_DATE_PREFERENCE else 99
+
+    for node in sorted(dates, key=rank):
+        year_node = node.find_first("year")
+        if not year_node or not re.fullmatch(r"\d{4}", year_node.text()):
+            continue
+        parts = [year_node.text()]
+        month_node = node.find_first("month")
+        if month_node and re.fullmatch(r"\d{1,2}", month_node.text()):
+            parts.append(month_node.text().zfill(2))
+            day_node = node.find_first("day")
+            if day_node and re.fullmatch(r"\d{1,2}", day_node.text()):
+                parts.append(day_node.text().zfill(2))
+        return "-".join(parts)
+    return None
+
+
+def _person_name(contrib: JatsNode) -> tuple[str, Literal["person", "group", "unknown"]]:
+    direct = {child.tag: child for child in reversed(contrib.children)}
+    name_node = direct.get("name")
+    if name_node is None and "name-alternatives" in direct:
+        name_node = direct["name-alternatives"].find_first("name")
+    if name_node:
+        surname_node = name_node.find_first("surname")
+        given_node = name_node.find_first("given-names")
+        surname = surname_node.text() if surname_node else ""
+        given = given_node.text() if given_node else ""
+        return f"{given} {surname}".strip(), "person"
+    collab_node = direct.get("collab")
+    if collab_node:
+        return collab_node.text(skip=frozenset({"contrib-group"})).strip(), "group"
+    string_name_node = direct.get("string-name")
+    if string_name_node:
+        return string_name_node.text().strip(), "person"
+    return "", "unknown"
 
 
 def parse_jats_xml(data: bytes, requested_identifier: OpenAccessIdentifier) -> JatsObservation:
@@ -173,8 +430,13 @@ def parse_jats_xml(data: bytes, requested_identifier: OpenAccessIdentifier) -> J
     content_digest = hashlib.sha256(data).hexdigest()
     builder = _JatsBuilder()
 
-    # Create safe Expat parser without entity expansion or external resources
+    # Safe Expat parser: no internal subset, no entity declarations, no external
+    # parameter entities. External DTDs are never fetched.
     parser = expat.ParserCreate(encoding="utf-8")
+    parser.SetParamEntityParsing(expat.XML_PARAM_ENTITY_PARSING_NEVER)
+    parser.StartDoctypeDeclHandler = _deny_doctype
+    parser.EntityDeclHandler = _deny_entity
+    parser.UnparsedEntityDeclHandler = _deny_entity
     parser.StartElementHandler = builder.start_element
     parser.EndElementHandler = builder.end_element
     parser.CharacterDataHandler = builder.char_data
@@ -189,14 +451,16 @@ def parse_jats_xml(data: bytes, requested_identifier: OpenAccessIdentifier) -> J
     if root is None:
         raise FetchDenied("missing_root_element")
 
-    # Locate article metadata
     article_meta = root.find_first("article-meta")
     front = root.find_first("front")
 
     title: str | None = None
     journal: str | None = None
     doi: str | None = None
+    article_pmcid: str | None = None
     pub_date: str | None = None
+    keywords: list[str] = []
+    license_url: str | None = None
 
     if front:
         journal_title_node = front.find_first("journal-title")
@@ -206,77 +470,72 @@ def parse_jats_xml(data: bytes, requested_identifier: OpenAccessIdentifier) -> J
                 journal = journal_text[:1000]
 
     if article_meta:
-        # Title
         title_node = article_meta.find_first("article-title")
         if title_node:
             t = title_node.text()
             if t:
                 title = t[:1000]
 
-        # DOI
         for id_node in article_meta.find_all("article-id"):
             pub_id_type = id_node.attrs.get("pub-id-type", "").lower()
-            if pub_id_type == "doi":
-                doi_val = id_node.text()
-                if doi_val:
-                    doi = doi_val[:256]
-                break
+            value = id_node.text().strip()
+            if pub_id_type == "doi" and value and doi is None:
+                doi = value[:256]
+            elif pub_id_type in ("pmc", "pmcid") and value and article_pmcid is None:
+                digits = value.upper().removeprefix("PMC")
+                if digits.isdigit() and 1 <= len(digits) <= 12:
+                    article_pmcid = f"PMC{digits}"
 
-        # Publication date
-        pub_date_node = article_meta.find_first("pub-date")
-        if pub_date_node:
-            year_node = pub_date_node.find_first("year")
-            month_node = pub_date_node.find_first("month")
-            day_node = pub_date_node.find_first("day")
-            if year_node and year_node.text():
-                parts = [year_node.text()]
-                if month_node and month_node.text():
-                    parts.append(month_node.text().zfill(2))
-                    if day_node and day_node.text():
-                        parts.append(day_node.text().zfill(2))
-                pub_date = "-".join(parts)[:100]
+        pub_date = _publication_date(article_meta)
 
-    # Map affiliations: aff_id -> list of affiliation text
+        for kwd in article_meta.find_all("kwd"):
+            word = kwd.text()
+            if word and word not in keywords and len(keywords) < MAX_KEYWORDS:
+                keywords.append(word[:200])
+
+        license_node = article_meta.find_first("license")
+        if license_node:
+            href = license_node.attrs.get("xlink:href", "").strip()
+            if href.startswith(("https://", "http://")):
+                license_url = href[:2048]
+            else:
+                ali = license_node.find_first("license_ref")
+                if ali and ali.text().startswith(("https://", "http://")):
+                    license_url = ali.text()[:2048]
+
     affiliations_by_id: dict[str, list[str]] = {}
-    corresp_by_id: dict[str, list[tuple[str, str]]] = {}  # id -> list of (email, locator)
+    notes: list[_Note] = []
+    notes_by_id: dict[str, _Note] = {}
 
     if article_meta:
         for aff in article_meta.find_all("aff"):
             aff_id = aff.attrs.get("id")
             if aff_id:
-                # Text of institution or whole affiliation
-                aff_text = aff.text()
-                # Clean label numbers if present at start
-                label_node = aff.find_first("label")
-                if label_node and aff_text.startswith(label_node.text()):
-                    aff_text = aff_text[len(label_node.text()):].strip()
+                aff_text = aff.text(skip=frozenset({"label", "sup"}))
                 if aff_text:
                     affiliations_by_id.setdefault(aff_id, []).append(aff_text[:1000])
 
-        # Author notes and correspondence blocks
+        note_nodes = list(article_meta.find_all("corresp"))
         author_notes = article_meta.find_first("author-notes")
         if author_notes:
-            for corresp in author_notes.find_all("corresp"):
-                corresp_id = corresp.attrs.get("id")
-                # Look for email tags or email regex in text
-                found_emails: list[tuple[str, str]] = []
-                for email_node in corresp.find_all("email"):
-                    raw_email = email_node.text().strip()
-                    if EMAIL_PATTERN.match(raw_email):
-                        found_emails.append((raw_email, email_node.locator))
-                if not found_emails:
-                    text_match = EMAIL_PATTERN.findall(corresp.text())
-                    for em in text_match:
-                        found_emails.append((em, corresp.locator))
-                if corresp_id:
-                    corresp_by_id[corresp_id] = found_emails
-                else:
-                    corresp_by_id.setdefault("__default__", []).extend(found_emails)
+            for fn in author_notes.find_all("fn"):
+                if fn.attrs.get("fn-type", "").lower() in _CORRESP_FN_TYPES:
+                    note_nodes.append(fn)
+        note_nodes.sort(key=lambda n: n.locator)
+        for node in note_nodes:
+            note = _Note(
+                note_id=node.attrs.get("id"),
+                locator=node.locator,
+                text=node.text(skip=frozenset({"label"})),
+                addresses=_note_addresses(node),
+            )
+            notes.append(note)
+            if note.note_id:
+                notes_by_id[note.note_id] = note
 
-    # Extract Authors
     authors: list[AuthorFact] = []
-    author_corresp_flags: list[bool] = []
-    author_corresp_rids: list[list[str]] = []
+    author_signals: list[bool] = []
+    author_note_refs: list[list[str]] = []
     direct_author_emails: list[list[tuple[str, str]]] = []
 
     if article_meta:
@@ -284,82 +543,50 @@ def parse_jats_xml(data: bytes, requested_identifier: OpenAccessIdentifier) -> J
             contrib_type = contrib.attrs.get("contrib-type", "author").lower()
             if contrib_type != "author":
                 continue
+            if contrib.has_ancestor("contrib", stop=article_meta):
+                continue  # members of a group author; the group holds the position
 
-            position = len(authors) + 1
-            display_name = ""
-            author_kind: Literal["person", "group", "unknown"] = "unknown"
-
-            name_node = contrib.find_first("name")
-            collab_node = contrib.find_first("collab")
-            string_name_node = contrib.find_first("string-name")
-
-            if name_node:
-                surname_node = name_node.find_first("surname")
-                given_node = name_node.find_first("given-names")
-                surname = surname_node.text() if surname_node else ""
-                given = given_node.text() if given_node else ""
-                display_name = f"{given} {surname}".strip()
-                author_kind = "person"
-            elif collab_node:
-                display_name = collab_node.text().strip()
-                author_kind = "group"
-            elif string_name_node:
-                display_name = string_name_node.text().strip()
-                author_kind = "person"
-
+            display_name, author_kind = _person_name(contrib)
             if not display_name:
                 continue
+            position = len(authors) + 1
 
-            # ORCID
             orcid: str | None = None
-            contrib_id_node = contrib.find_first("contrib-id")
-            if contrib_id_node:
+            for contrib_id_node in contrib.find_all("contrib-id"):
                 cid_type = contrib_id_node.attrs.get("contrib-id-type", "").lower()
                 if "orcid" in cid_type:
                     orcid_match = ORCID_PATTERN.search(contrib_id_node.text())
                     if orcid_match:
                         orcid = orcid_match.group(1)
+                        break
 
-            # Correspondence flags
-            is_corresp = contrib.attrs.get("corresp", "").lower() == "yes"
-            corresp_rids: list[str] = []
+            signal = contrib.attrs.get("corresp", "").lower() == "yes"
+            refs: list[str] = []
             for xref in contrib.find_all("xref"):
-                if xref.attrs.get("ref-type", "").lower() == "corresp":
-                    rid = xref.attrs.get("rid")
-                    if rid:
-                        corresp_rids.append(rid)
-                        is_corresp = True
+                ref_type = xref.attrs.get("ref-type", "").lower()
+                rid_attr = xref.attrs.get("rid", "")
+                for rid in rid_attr.split():
+                    if ref_type == "corresp" or (
+                        ref_type in ("fn", "author-notes") and rid in notes_by_id
+                    ):
+                        refs.append(rid)
+                        signal = True
 
-            # Direct emails inside contrib
-            contrib_emails: list[tuple[str, str]] = []
-            for em_node in contrib.find_all("email"):
-                raw_em = em_node.text().strip()
-                if EMAIL_PATTERN.match(raw_em):
-                    contrib_emails.append((raw_em, em_node.locator))
-                    is_corresp = True
+            contrib_emails = [
+                (address, locator) for address, locator in _structured_addresses(contrib)
+            ]
 
-            # Affiliations for this author
             aff_texts: list[str] = []
             for xref in contrib.find_all("xref"):
                 if xref.attrs.get("ref-type", "").lower() == "aff":
-                    rid = xref.attrs.get("rid")
-                    if rid and rid in affiliations_by_id:
-                        for text in affiliations_by_id[rid]:
+                    for rid in xref.attrs.get("rid", "").split():
+                        for text in affiliations_by_id.get(rid, []):
                             if text not in aff_texts:
                                 aff_texts.append(text)
-            # Direct aff inside contrib
             for direct_aff in contrib.find_all("aff"):
-                dt = direct_aff.text()
-                if dt and dt not in aff_texts:
+                dt = direct_aff.text(skip=frozenset({"label", "sup"}))
+                if dt and dt[:1000] not in aff_texts:
                     aff_texts.append(dt[:1000])
-
-            author_evidence = [
-                Evidence(
-                    locator=contrib.locator,
-                    excerpt=display_name[:300],
-                    kind="structured_metadata",
-                )
-            ]
 
             authors.append(
                 AuthorFact(
@@ -369,96 +596,122 @@ def parse_jats_xml(data: bytes, requested_identifier: OpenAccessIdentifier) -> J
                     orcid=orcid,
                     author_kind=author_kind,
                     first=(position == 1),
-                    corresponding=True if is_corresp else False,
-                    evidence=author_evidence,
+                    corresponding=signal,
+                    evidence=[
+                        Evidence(
+                            locator=contrib.locator,
+                            excerpt=display_name[:300],
+                            kind="structured_metadata",
+                        )
+                    ],
                 )
             )
-            author_corresp_flags.append(is_corresp)
-            author_corresp_rids.append(corresp_rids)
+            author_signals.append(signal)
+            author_note_refs.append(refs)
             direct_author_emails.append(contrib_emails)
 
-    # Candidates resolution
-    candidates: list[CandidateFact] = []
-    seen_addresses: set[str] = set()
+    # Role is unknown (None) when the article declares no correspondence at all.
+    if authors and not any(author_signals) and not notes:
+        authors = [a.model_copy(update={"corresponding": None}) for a in authors]
 
-    # 1. Direct emails inside contrib
+    candidates: list[JatsCandidateFact] = []
+    seen: set[str] = set()
+
+    def add(
+        address: str,
+        locator: str,
+        excerpt: str,
+        positions: list[int],
+        basis: AssociationBasis,
+    ) -> None:
+        key = address.casefold()
+        if key in seen or len(candidates) >= 100:
+            return
+        seen.add(key)
+        candidates.append(
+            JatsCandidateFact(
+                raw_address=address,
+                author_positions=positions,
+                association_status="unmatched" if basis == "unmatched" else "needs_review",
+                technical_status="not_checked",
+                delivery_status="unverified",
+                outreach_eligibility="not_assessed",
+                association_basis=basis,
+                evidence=Evidence(
+                    locator=locator, excerpt=excerpt[:300], kind="structured_metadata"
+                ),
+            )
+        )
+
+    # 1. Addresses inside an author's own <contrib>.
     for pos_idx, email_list in enumerate(direct_author_emails):
-        author_pos = pos_idx + 1
-        for em, locator in email_list:
-            if em in seen_addresses:
-                continue
-            seen_addresses.add(em)
-            candidates.append(
-                CandidateFact(
-                    raw_address=em,
-                    author_positions=[author_pos],
-                    association_status="needs_review",
-                    technical_status="not_checked",
-                    delivery_status="unverified",
-                    outreach_eligibility="not_assessed",
-                    evidence=Evidence(
-                        locator=locator,
-                        excerpt=em[:300],
-                        kind="structured_metadata",
-                    ),
-                )
-            )
+        for address, locator in email_list:
+            add(address, locator, address, [pos_idx + 1], "contrib_email")
 
-    # 2. Corresp referenced via rid
-    for pos_idx, rids in enumerate(author_corresp_rids):
-        author_pos = pos_idx + 1
-        for rid in rids:
-            if rid in corresp_by_id:
-                for em, locator in corresp_by_id[rid]:
-                    if em in seen_addresses:
-                        continue
-                    seen_addresses.add(em)
-                    candidates.append(
-                        CandidateFact(
-                            raw_address=em,
-                            author_positions=[author_pos],
-                            association_status="needs_review",
-                            technical_status="not_checked",
-                            delivery_status="unverified",
-                            outreach_eligibility="not_assessed",
-                            evidence=Evidence(
-                                locator=locator,
-                                excerpt=em[:300],
-                                kind="structured_metadata",
-                            ),
+    # 2. Correspondence notes referenced by authors, then 3. unreferenced notes.
+    referencing: dict[str, list[int]] = {}
+    for pos_idx, refs in enumerate(author_note_refs):
+        for rid in refs:
+            referencing.setdefault(rid, [])
+            if pos_idx + 1 not in referencing[rid]:
+                referencing[rid].append(pos_idx + 1)
+    corresponding_positions = [a.position for a in authors if a.corresponding]
+
+    for referenced_pass in (True, False):
+        for note in notes:
+            refs_for_note = referencing.get(note.note_id or "", [])
+            if bool(refs_for_note) != referenced_pass:
+                continue
+            for index, entry in enumerate(note.addresses):
+                if refs_for_note:
+                    if len(refs_for_note) == 1 and len(note.addresses) == 1:
+                        add(
+                            entry.address,
+                            entry.locator,
+                            entry.excerpt,
+                            [refs_for_note[0]],
+                            "corresp_xref",
                         )
-                    )
+                        continue
+                    if len(refs_for_note) == 1:
+                        picked = _disambiguate(note, index, authors, refs_for_note)
+                        if picked is None:
+                            add(
+                                entry.address,
+                                entry.locator,
+                                entry.excerpt,
+                                [refs_for_note[0]],
+                                "corresp_xref",
+                            )
+                        else:
+                            add(entry.address, entry.locator, entry.excerpt, [picked[0]], picked[1])
+                        continue
+                    picked = _disambiguate(note, index, authors, refs_for_note)
+                else:
+                    if len(corresponding_positions) == 1:
+                        add(
+                            entry.address,
+                            entry.locator,
+                            entry.excerpt,
+                            [corresponding_positions[0]],
+                            "sole_corresponding_author",
+                        )
+                        continue
+                    pool = corresponding_positions or [a.position for a in authors]
+                    picked = _disambiguate(note, index, authors, pool)
+                if picked is None:
+                    add(entry.address, entry.locator, entry.excerpt, [], "unmatched")
+                else:
+                    add(entry.address, entry.locator, entry.excerpt, [picked[0]], picked[1])
 
-    # 3. Default author notes emails if not yet associated
-    corresp_authors = [i + 1 for i, flag in enumerate(author_corresp_flags) if flag]
-    for _corresp_id, email_list in corresp_by_id.items():
-        for em, locator in email_list:
-            if em in seen_addresses:
-                continue
-            seen_addresses.add(em)
-            # If exactly one corresponding author exists in the article, associate!
-            if len(corresp_authors) == 1:
-                assigned_positions = [corresp_authors[0]]
-                status: Literal["needs_review", "unmatched"] = "needs_review"
-            else:
-                assigned_positions = []
-                status = "unmatched"
-
-            candidates.append(
-                CandidateFact(
-                    raw_address=em,
-                    author_positions=assigned_positions,
-                    association_status=status,
-                    technical_status="not_checked",
-                    delivery_status="unverified",
-                    outreach_eligibility="not_assessed",
-                    evidence=Evidence(
-                        locator=locator,
-                        excerpt=em[:300],
-                        kind="structured_metadata",
-                    ),
-                )
-            )
+    # A note that names its author asserts correspondence even without an xref.
+    # Without any explicit author marker, unpicked authors stay unknown (None).
+    if authors and not any(author_signals) and notes:
+        picked_positions = {p for c in candidates for p in c.author_positions}
+        authors = [
+            a.model_copy(update={"corresponding": True if a.position in picked_positions else None})
+            for a in authors
+        ]
 
     status_val: Literal["observed", "no_contact", "unsupported"] = (
         "observed" if candidates else ("no_contact" if authors else "unsupported")
@@ -472,7 +725,10 @@ def parse_jats_xml(data: bytes, requested_identifier: OpenAccessIdentifier) -> J
         title=title,
         journal=journal,
         doi=doi,
+        article_pmcid=article_pmcid,
         publication_date=pub_date,
+        keywords=keywords,
+        license_url=license_url,
         authors=authors,
         candidates=candidates,
     )

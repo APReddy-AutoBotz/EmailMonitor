@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import pytest
-from pydantic import ValidationError
-
 from emailmonitor.sources.crossref import (
     CrossrefAuthor,
     CrossrefFixtureGateway,
     CrossrefFullTextLink,
     CrossrefQueryPlanner,
 )
+from pydantic import ValidationError
 
 
 def test_crossref_query_planner_url_generation() -> None:
@@ -43,9 +42,7 @@ def test_crossref_author_parsing() -> None:
         "family": "Charpentier",
         "sequence": "first",
         "ORCID": "http://orcid.org/0000-0002-0498-5743",
-        "affiliation": [
-            {"name": "Max Planck Unit for the Science of Pathogens, Berlin, Germany"}
-        ],
+        "affiliation": [{"name": "Max Planck Unit for the Science of Pathogens, Berlin, Germany"}],
     }
     author = CrossrefAuthor.from_dict(raw)
     assert author.display_name == "Emmanuelle Charpentier"

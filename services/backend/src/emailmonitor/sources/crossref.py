@@ -162,9 +162,7 @@ class CrossrefWork(BaseModel):
 
         # Authors
         authors = tuple(
-            CrossrefAuthor.from_dict(a)
-            for a in item.get("author", [])
-            if isinstance(a, dict)
+            CrossrefAuthor.from_dict(a) for a in item.get("author", []) if isinstance(a, dict)
         )
 
         # Full-text links

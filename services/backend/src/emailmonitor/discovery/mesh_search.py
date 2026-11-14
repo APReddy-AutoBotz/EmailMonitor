@@ -7,7 +7,6 @@ and excludes authors from specified target journals to prevent contributor spam.
 
 from __future__ import annotations
 
-import re
 from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -146,7 +145,5 @@ def match_mesh_terms(query_text: str) -> tuple[MeshDescriptor, ...]:
             if clean_q in syn_lower or syn_lower in clean_q:
                 matches.append(desc)
                 break
-
-    return tuple(matches)
 
     return tuple(matches)
