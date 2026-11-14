@@ -4,6 +4,7 @@
 
 | Document | Purpose |
 |---|---|
+| [89 Open Access source register](89-open-access-source-register.md) | Published access terms/limits for Europe PMC, OpenAlex, Crossref, bioRxiv and the owner decisions before live use |
 | [88 Open Access pipeline](88-open-access-pipeline.md) | Truthful OA discovery/extraction candidate, gates and fixtures |
 | [87 Local sibling integration](87-sibling-integration.md) | Unpublished PR58/61/62 reconciliation and remaining validation |
 | [00 Product charter](00-product-charter.md) | User-approved purpose, boundaries, product principles |

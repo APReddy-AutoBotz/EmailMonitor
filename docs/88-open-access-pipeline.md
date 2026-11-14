@@ -107,7 +107,7 @@ Executed 2026-11-14 on Windows with the locked environment: see the status ledge
 
 ## Not implemented / gates (owner input required)
 
-1. **Live API access.** No live transport exists. Europe PMC, OpenAlex, Crossref and bioRxiv are public APIs, but enabling them requires a source-policy approval record (purpose, rate limits, contact/User-Agent identity, retention) and a production egress path equivalent to the test-only protected gateway. Until then only fixtures run.
+1. **Live API access.** No live transport exists. See [document 89](89-open-access-source-register.md) for the providers' published terms, limits and the concrete owner decisions. Europe PMC, OpenAlex, Crossref and bioRxiv are public APIs, but enabling them requires a source-policy approval record (purpose, rate limits, contact/User-Agent identity, retention) and a production egress path equivalent to the test-only protected gateway. Until then only fixtures run.
 2. **Persistence.** Results are computed per request; nothing is stored, so tenant RLS, retention and deletion fences do not yet apply to OA results. Integration into the durable job/association tables (EM-005/009/011) is required before production use.
 3. **Review workflow.** OA contacts do not enter the existing association review queue.
 4. **Benchmark.** Association-basis precision is unmeasured; EM-016 must measure it on licensed/approved held-out articles.
