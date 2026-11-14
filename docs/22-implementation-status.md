@@ -47,6 +47,9 @@ The repository documentation validator checks local Markdown targets, JSON synta
 | OA-014 | LOCAL CANDIDATE | Publisher landing-page parser for supplied HTML (Highwire/DC/PRISM meta, correspondence-block mailto, chrome/hidden/script exclusion, obfuscated addresses counted not decoded). See [document 88](88-open-access-pipeline.md). |
 | OA-015 | LOCAL CANDIDATE | Text-layer PDF correspondence parser (pypdf, page/char ceilings, encrypted/image-only outcomes, grouped/wrapped addresses counted not expanded). In-process in preview only; production needs the EM-008 isolated worker. |
 | OA-016 | LOCAL CANDIDATE | Single-document intake (sniff PDF/JATS/HTML) with the shared contact builder, suppression and exports; preview `POST .../open-access/documents` raw-body endpoint. |
+| OA-017 | LOCAL CANDIDATE | Researcher-level rollup: address grouping, valid-ORCID linking only, conflict flags, observed-year activity, affiliation change; researchers CSV and preview endpoint. |
+| OA-018 | LOCAL CANDIDATE | Role/functional mailbox detection (`info@`, `noreply@`, `*-lab@`) as a `needs_review` reason. |
+| OA-019 | LOCAL CANDIDATE | Export presets (Instantly, Smartlead, Lemlist, HubSpot, evidence audit) with per-row withholding of formula-unsafe rows and row-count headers. |
 | EM-EXT-01–05 | DEFERRED | Post-core extensions (OCR adapter, institutional enrichment, recurring searches, direct outreach). |
 
 ## What has been done vs what remains

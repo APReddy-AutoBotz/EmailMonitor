@@ -44,6 +44,7 @@ from emailmonitor.results.outreach import (
     current_year,
     evaluate_contact,
     generate_gdpr_provenance,
+    is_role_account,
     render_instantly_csv,
     render_smartlead_csv,
     split_author_name,
@@ -381,6 +382,8 @@ def build_contact(
             reasons.append("author_association_unresolved")
         elif author.kind != "person":
             reasons.append("group_author_address")
+        if is_role_account(address):
+            reasons.append("role_account")
         if reasons:
             eligibility = "needs_review"
         if score.domain_type == "commercial_free":

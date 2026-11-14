@@ -1,6 +1,5 @@
 """Tests for cold outreach export formatting, recency scoring, and GDPR provenance."""
 
-import pytest
 from emailmonitor.results.outreach import (
     ContactExportItem,
     evaluate_contact,
@@ -9,7 +8,6 @@ from emailmonitor.results.outreach import (
     render_smartlead_csv,
     split_author_name,
 )
-from emailmonitor.results.render import RenderDenied
 
 
 def test_split_author_name() -> None:
@@ -148,14 +146,32 @@ def test_render_smartlead_csv() -> None:
 
 
 def test_csv_formula_injection_defense() -> None:
-    unsafe_item = [
+    items = [
         ContactExportItem(
             raw_email="evil@example.org",
             display_name="=CMD|' /C calc'!A0",
             paper_title="Unsafe Paper",
             journal="Journal",
             publication_year=2026,
-        )
+        ),
+        ContactExportItem(
+            raw_email="safe@lab.example",
+            display_name="Ana Silva",
+            paper_title="-omics of drought tolerance",
+            journal="Journal",
+            publication_year=2026,
+        ),
+        ContactExportItem(
+            raw_email="kept@lab.example",
+            display_name="Ben Ode",
+            paper_title="Safe Paper",
+            journal="Journal",
+            publication_year=2026,
+        ),
     ]
-    with pytest.raises(RenderDenied, match="unsafe_csv_cell"):
-        render_instantly_csv(unsafe_item)
+    for render in (render_instantly_csv, render_smartlead_csv):
+        text = render(items).decode()
+        # Unsafe rows are withheld whole, never rewritten or partially exported.
+        assert "CMD" not in text and "evil@example.org" not in text
+        assert "-omics" not in text and "safe@lab.example" not in text
+        assert "kept@lab.example" in text

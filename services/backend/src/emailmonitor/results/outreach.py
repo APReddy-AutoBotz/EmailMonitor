@@ -13,7 +13,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from emailmonitor.results.render import safe_csv
+from emailmonitor.results.render import RenderDenied, safe_csv
 
 DISPOSABLE_DOMAINS = frozenset(
     {
@@ -48,6 +48,58 @@ SUFFIXES = re.compile(
     r",?\s+(?:Ph\.?D\.?|M\.?D\.?|FACS|FRCP|M\.?Sc\.?|B\.?Sc\.?|Esq\.?)\.?$",
     re.IGNORECASE,
 )
+# Shared/functional mailboxes: valid addresses, but not a person's own contact.
+ROLE_LOCAL_PARTS = frozenset(
+    {
+        "admin",
+        "administrator",
+        "contact",
+        "contacts",
+        "editor",
+        "editorial",
+        "editors",
+        "enquiries",
+        "enquiry",
+        "help",
+        "helpdesk",
+        "hello",
+        "info",
+        "information",
+        "inquiries",
+        "lab",
+        "mail",
+        "marketing",
+        "no-reply",
+        "noreply",
+        "do-not-reply",
+        "office",
+        "postmaster",
+        "press",
+        "reception",
+        "sales",
+        "secretary",
+        "secretariat",
+        "service",
+        "support",
+        "team",
+        "webmaster",
+        "journal",
+        "submissions",
+        "permissions",
+        "abuse",
+        "hr",
+        "jobs",
+        "careers",
+    }
+)
+
+
+def is_role_account(address: str) -> bool:
+    """True for functional mailboxes such as info@ or noreply@ (plus-tags ignored)."""
+    local = address.rsplit("@", 1)[0].casefold().split("+", 1)[0]
+    return local in ROLE_LOCAL_PARTS or local.endswith(("-office", ".office", "-lab", ".lab"))
+
+
 EMAIL_SYNTAX = re.compile(r"^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
 
 
@@ -283,9 +335,15 @@ def render_smartlead_csv(
 
 
 def _write_safe_csv(rows: list[list[str]]) -> bytes:
-    """Format and write CSV rows ensuring strict spreadsheet formula safety."""
+    """QUOTE_ALL CSV. A row with an unsafe cell is withheld whole, never rewritten."""
     buffer = io.StringIO(newline="")
     writer = csv.writer(buffer, quoting=csv.QUOTE_ALL, lineterminator="\r\n")
-    for row in rows:
-        writer.writerow([safe_csv(val) for val in row])
+    header, *body = rows
+    writer.writerow([safe_csv(val) for val in header])
+    for row in body:
+        try:
+            cells = [safe_csv(val) for val in row]
+        except RenderDenied:
+            continue
+        writer.writerow(cells)
     return buffer.getvalue().encode("utf-8")

@@ -21,6 +21,11 @@ from emailmonitor.discovery.openaccess_orchestrator import (
     OpenAccessOrchestrator,
 )
 from emailmonitor.fetching.safety import FetchDenied
+from emailmonitor.results.oa_exports import render_export
+from emailmonitor.results.researchers import (
+    build_researcher_profiles,
+    render_researchers_csv,
+)
 
 SourceChoice = Literal["europe-pmc", "openalex", "crossref", "biorxiv", "auto"]
 RoleChoice = Literal["corresponding", "first", "both", "all"]
@@ -43,7 +48,9 @@ class OpenAccessDiscoverRequest(BaseModel):
 
 
 class OpenAccessExportRequest(OpenAccessDiscoverRequest):
-    preset: Literal["instantly", "smartlead"] = "instantly"
+    preset: Literal["instantly", "smartlead", "lemlist", "hubspot", "evidence", "researchers"] = (
+        "instantly"
+    )
 
 
 app = FastAPI(title="EmailMonitor Dev & Preview Server", version="0.1.0")
@@ -664,12 +671,21 @@ def open_access_discover(org_id: str, body: OpenAccessDiscoverRequest) -> dict[s
 def open_access_export(org_id: str, body: OpenAccessExportRequest) -> Response:
     _require_preview_org(org_id)
     result = _run_open_access(body)
-    if body.preset == "smartlead":
-        content = result.export_smartlead_csv()
-        filename = "emailmonitor-smartlead-export.csv"
+    if body.preset == "researchers":
+        profiles = build_researcher_profiles(
+            result.contacts_extracted, reference_year=result.reference_year
+        )
+        content = render_researchers_csv(profiles)
+        filename = "emailmonitor-researchers-export.csv"
+        counts = {"X-EmailMonitor-Rows-Written": str(len(profiles))}
     else:
-        content = result.export_instantly_csv()
-        filename = "emailmonitor-instantly-export.csv"
+        export = render_export(body.preset, result.contacts_extracted)
+        content, filename = export.content, export.filename
+        counts = {
+            "X-EmailMonitor-Rows-Written": str(export.rows_written),
+            "X-EmailMonitor-Rows-Withheld-Unsafe": str(export.rows_withheld_unsafe),
+            "X-EmailMonitor-Rows-Not-Eligible": str(export.rows_excluded_not_eligible),
+        }
     return Response(
         content=content,
         media_type="text/csv",
@@ -677,8 +693,25 @@ def open_access_export(org_id: str, body: OpenAccessExportRequest) -> Response:
             "Content-Disposition": f'attachment; filename="{filename}"',
             "Cache-Control": "no-store",
             "X-Content-Type-Options": "nosniff",
+            **counts,
         },
     )
+
+
+@app.post("/api/v1/organizations/{org_id}/open-access/researchers")
+def open_access_researchers(org_id: str, body: OpenAccessDiscoverRequest) -> dict[str, Any]:
+    """Researcher-level rollup of one discovery run (address/ORCID grouping only)."""
+    _require_preview_org(org_id)
+    result = _run_open_access(body)
+    profiles = build_researcher_profiles(
+        result.contacts_extracted, reference_year=result.reference_year
+    )
+    return {
+        "query": result.query,
+        "source_used": result.source_used,
+        "total_articles_scanned": result.total_articles_scanned,
+        "researchers": [p.model_dump() for p in profiles],
+    }
 
 
 @app.post("/api/v1/organizations/{org_id}/open-access/documents")

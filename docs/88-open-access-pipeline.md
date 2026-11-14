@@ -78,6 +78,15 @@ Never reported: addresses in header/footer/nav/aside/form chrome, hidden blocks,
 
 Preview endpoint: `POST /api/v1/organizations/{org}/open-access/documents?known_authors=A;B&target_roles=all` with the raw document as the body (no multipart dependency added). Size is checked from `Content-Length` before reading and again after (20 MB). The preview server parses in-process; production must run these parsers in the network-none parser worker (EM-008 boundary).
 
+## Researcher rollup, role accounts and export presets (OA-017, OA-018, OA-019)
+
+* **Researcher profiles** (`results/researchers.py`): observations sharing an address comparison key form one profile; two addresses join only when both carry the same in-article ORCID with a valid check digit. Names never merge people. Flags: `address_has_conflicting_orcids`, `address_used_under_different_names` (both block `eligible`), `multiple_addresses_linked_by_orcid`, `invalid_orcid_declared`, `no_author_association`. `activity` is from the latest observed publication year only (`active_recent` ≤1y, `moderate` ≤3y, `dormant`, `unknown`). `affiliation_changed` compares affiliations across the profile's own observations.
+* **Role accounts** (`info@`, `office@`, `noreply@`, `*-lab@`, …) are valid addresses but not personal contacts: `needs_review` with reason `role_account`.
+* **Presets** (`results/oa_exports.py`): `instantly`, `smartlead`, `lemlist`, `hubspot` (eligible rows only, one row per address) and `evidence` (every non-suppressed observation with basis, excerpt, SHA-256, eligibility reasons). Plus `researchers` (one row per profile) on the preview export endpoint. Column names follow each tool's common import template; operators may still need to map custom fields on import.
+* **Formula safety change:** `results.render.safe_csv` refuses unsafe cells. The OA renderers now withhold the *whole row* containing such a cell and count it (`X-EmailMonitor-Rows-Withheld-Unsafe`), instead of failing the entire export. Values are never rewritten. Trade-off: a legitimate title beginning with `-`, `+`, `=` or `@` withholds that row; the evidence export count makes this visible.
+
+Preview endpoints: `POST .../open-access/export` (`preset` = any of the above) and `POST .../open-access/researchers`.
+
 ## Commands and observed results
 
 ```sh
