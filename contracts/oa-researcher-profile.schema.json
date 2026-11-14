@@ -1,0 +1,240 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://emailmonitor.invalid/contracts/oa-researcher-profile.schema.json",
+  "description": "Researcher rollup: grouped by address; linked only by a valid in-article ORCID.",
+  "$defs": {
+    "ResearcherPublication": {
+      "additionalProperties": false,
+      "properties": {
+        "contact_id": {
+          "title": "Contact Id",
+          "type": "string"
+        },
+        "email": {
+          "title": "Email",
+          "type": "string"
+        },
+        "doi": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Doi"
+        },
+        "pmcid": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Pmcid"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Title"
+        },
+        "journal": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Journal"
+        },
+        "publication_year": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Publication Year"
+        },
+        "role": {
+          "enum": [
+            "corresponding",
+            "first",
+            "first_and_corresponding",
+            "other",
+            "unknown"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "affiliation": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Affiliation"
+        },
+        "association_basis": {
+          "title": "Association Basis",
+          "type": "string"
+        },
+        "content_digest": {
+          "title": "Content Digest",
+          "type": "string"
+        }
+      },
+      "required": [
+        "contact_id",
+        "email",
+        "doi",
+        "pmcid",
+        "title",
+        "journal",
+        "publication_year",
+        "role",
+        "affiliation",
+        "association_basis",
+        "content_digest"
+      ],
+      "title": "ResearcherPublication",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "researcher_key": {
+      "title": "Researcher Key",
+      "type": "string"
+    },
+    "display_names": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Display Names",
+      "type": "array"
+    },
+    "emails": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Emails",
+      "type": "array"
+    },
+    "orcids": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Orcids",
+      "type": "array"
+    },
+    "publications": {
+      "items": {
+        "$ref": "#/$defs/ResearcherPublication"
+      },
+      "title": "Publications",
+      "type": "array"
+    },
+    "publication_count": {
+      "minimum": 1,
+      "title": "Publication Count",
+      "type": "integer"
+    },
+    "corresponding_count": {
+      "minimum": 0,
+      "title": "Corresponding Count",
+      "type": "integer"
+    },
+    "first_author_count": {
+      "minimum": 0,
+      "title": "First Author Count",
+      "type": "integer"
+    },
+    "latest_publication_year": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Latest Publication Year"
+    },
+    "latest_affiliation": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Latest Affiliation"
+    },
+    "affiliation_changed": {
+      "title": "Affiliation Changed",
+      "type": "boolean"
+    },
+    "activity": {
+      "enum": [
+        "active_recent",
+        "moderate",
+        "dormant",
+        "unknown"
+      ],
+      "title": "Activity",
+      "type": "string"
+    },
+    "outreach_eligibility": {
+      "enum": [
+        "eligible",
+        "needs_review",
+        "suppressed"
+      ],
+      "title": "Outreach Eligibility",
+      "type": "string"
+    },
+    "review_flags": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Review Flags",
+      "type": "array"
+    }
+  },
+  "required": [
+    "researcher_key",
+    "display_names",
+    "emails",
+    "orcids",
+    "publications",
+    "publication_count",
+    "corresponding_count",
+    "first_author_count",
+    "latest_publication_year",
+    "latest_affiliation",
+    "affiliation_changed",
+    "activity",
+    "outreach_eligibility",
+    "review_flags"
+  ],
+  "title": "ResearcherProfile",
+  "type": "object"
+}

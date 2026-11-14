@@ -52,6 +52,7 @@ The repository documentation validator checks local Markdown targets, JSON synta
 | OA-019 | LOCAL CANDIDATE | Export presets (Instantly, Smartlead, Lemlist, HubSpot, evidence audit) with per-row withholding of formula-unsafe rows and row-count headers. |
 | OA-020 | LOCAL CANDIDATE | Operator "Open Access" screen: fixture search with per-work outcomes and evidence drawer, document upload, researcher list, preset CSV downloads with withheld-row counts; capability-gated. Verified in the browser against the preview server (no console errors). |
 | OA-021 | LOCAL CANDIDATE | `source="all"`: Europe PMC + OpenAlex + Crossref merged, deduplicated by PMCID then DOI (each article read once, `found_in` recorded); per-source failures reported in `source_errors`; declared license URL classified (`cc-by`, `cc-by-nc-nd`, …, `unknown`). |
+| OA-022 | LOCAL CANDIDATE | Generated JSON Schemas + synthetic examples for OA discovery, document extraction and researcher responses (`contracts/oa-*.schema.json`), registered in the docs validator; `test_oa_contracts.py` fails on model/fixture drift. |
 | EM-EXT-01–05 | DEFERRED | Post-core extensions (OCR adapter, institutional enrichment, recurring searches, direct outreach). |
 
 ## What has been done vs what remains

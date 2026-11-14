@@ -6,6 +6,7 @@
 - OA-017/018/019: researcher profiles (address grouping, valid-ORCID linking only, conflict flags), role-account review reason, and Lemlist/HubSpot/evidence/researchers export presets. Formula-unsafe rows are now withheld and counted instead of failing the whole Open Access export; values are never rewritten.
 - OA-020: "Open Access" workspace screen (search, document upload, researchers, exports). The preview server no longer advertises `live_sources_enabled: true`; nothing live exists.
 - OA-021: merged multi-source discovery with per-source error isolation and article license classification.
+- OA-022: generated Open Access response contracts and examples with a drift test.
 - Restore the web pnpm lockfile (v9) that an earlier commit downgraded to v6, which broke the dependency-inventory gate.
 
 ## Local sibling-Draft integration candidate

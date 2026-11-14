@@ -1,0 +1,623 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://emailmonitor.invalid/contracts/oa-discovery-result.schema.json",
+  "description": "Open Access discovery result (preview). Shape only: evidence, roles and eligibility semantics are enforced by the extraction code and its tests.",
+  "$defs": {
+    "ArticleOutcome": {
+      "additionalProperties": false,
+      "description": "What happened to one discovered work. Counts are truthful, not inferred.",
+      "properties": {
+        "source": {
+          "enum": [
+            "europe-pmc",
+            "openalex",
+            "crossref",
+            "biorxiv"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "work_key": {
+          "maxLength": 300,
+          "title": "Work Key",
+          "type": "string"
+        },
+        "doi": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Doi"
+        },
+        "pmcid": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pmcid"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Title"
+        },
+        "journal": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Journal"
+        },
+        "publication_year": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Publication Year"
+        },
+        "status": {
+          "enum": [
+            "contacts_observed",
+            "no_contact",
+            "full_text_unavailable",
+            "excluded_by_filter",
+            "failed"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "full_text_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Full Text Url"
+        },
+        "content_digest": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Content Digest"
+        },
+        "license_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "License Url"
+        },
+        "license_category": {
+          "default": "unknown",
+          "enum": [
+            "cc0",
+            "cc-by",
+            "cc-by-sa",
+            "cc-by-nd",
+            "cc-by-nc",
+            "cc-by-nc-sa",
+            "cc-by-nc-nd",
+            "public-domain",
+            "other",
+            "unknown"
+          ],
+          "title": "License Category",
+          "type": "string"
+        },
+        "found_in": {
+          "items": {
+            "enum": [
+              "europe-pmc",
+              "openalex",
+              "crossref",
+              "biorxiv"
+            ],
+            "type": "string"
+          },
+          "title": "Found In",
+          "type": "array"
+        },
+        "keywords": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Keywords",
+          "type": "array"
+        },
+        "authors_observed": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Authors Observed",
+          "type": "integer"
+        },
+        "candidates_observed": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Candidates Observed",
+          "type": "integer"
+        },
+        "unmatched_candidates": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Unmatched Candidates",
+          "type": "integer"
+        },
+        "contacts_retained": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Contacts Retained",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "source",
+        "work_key",
+        "status"
+      ],
+      "title": "ArticleOutcome",
+      "type": "object"
+    },
+    "ExtractedAcademicContact": {
+      "additionalProperties": false,
+      "description": "One literal address observation from one article, with provenance.",
+      "properties": {
+        "contact_id": {
+          "pattern": "^oa-[0-9a-f]{20}$",
+          "title": "Contact Id",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "europe-pmc",
+            "openalex",
+            "crossref",
+            "biorxiv",
+            "document"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "doi": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Doi"
+        },
+        "pmcid": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pmcid"
+        },
+        "article_title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Article Title"
+        },
+        "journal": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Journal"
+        },
+        "publication_year": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Publication Year"
+        },
+        "author_position": {
+          "anyOf": [
+            {
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Author Position"
+        },
+        "author_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Author Name"
+        },
+        "author_kind": {
+          "default": "unknown",
+          "enum": [
+            "person",
+            "group",
+            "unknown"
+          ],
+          "title": "Author Kind",
+          "type": "string"
+        },
+        "first_name": {
+          "default": "",
+          "title": "First Name",
+          "type": "string"
+        },
+        "last_name": {
+          "default": "",
+          "title": "Last Name",
+          "type": "string"
+        },
+        "email": {
+          "title": "Email",
+          "type": "string"
+        },
+        "comparison_key": {
+          "title": "Comparison Key",
+          "type": "string"
+        },
+        "is_first_author": {
+          "title": "Is First Author",
+          "type": "boolean"
+        },
+        "is_corresponding_author": {
+          "title": "Is Corresponding Author",
+          "type": "boolean"
+        },
+        "association_basis": {
+          "title": "Association Basis",
+          "type": "string"
+        },
+        "association_status": {
+          "enum": [
+            "needs_review",
+            "unmatched"
+          ],
+          "title": "Association Status",
+          "type": "string"
+        },
+        "affiliations": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Affiliations",
+          "type": "array"
+        },
+        "orcid_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Orcid Id"
+        },
+        "orcid_status": {
+          "enum": [
+            "absent",
+            "declared_valid_checksum",
+            "declared_invalid_checksum"
+          ],
+          "title": "Orcid Status",
+          "type": "string"
+        },
+        "evidence_locator": {
+          "title": "Evidence Locator",
+          "type": "string"
+        },
+        "evidence_excerpt": {
+          "title": "Evidence Excerpt",
+          "type": "string"
+        },
+        "content_digest": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Content Digest",
+          "type": "string"
+        },
+        "full_text_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Full Text Url"
+        },
+        "domain_type": {
+          "enum": [
+            "institutional",
+            "commercial_free",
+            "disposable"
+          ],
+          "title": "Domain Type",
+          "type": "string"
+        },
+        "recency_level": {
+          "enum": [
+            "active_recent",
+            "moderate",
+            "dormant",
+            "unknown"
+          ],
+          "title": "Recency Level",
+          "type": "string"
+        },
+        "recency_score": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Recency Score",
+          "type": "number"
+        },
+        "technical_status": {
+          "enum": [
+            "syntax_valid_not_mailbox_verified",
+            "syntax_invalid"
+          ],
+          "title": "Technical Status",
+          "type": "string"
+        },
+        "outreach_eligibility": {
+          "enum": [
+            "eligible",
+            "needs_review",
+            "suppressed"
+          ],
+          "title": "Outreach Eligibility",
+          "type": "string"
+        },
+        "eligibility_reasons": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Eligibility Reasons",
+          "type": "array"
+        },
+        "gdpr_notice": {
+          "title": "Gdpr Notice",
+          "type": "string"
+        }
+      },
+      "required": [
+        "contact_id",
+        "source",
+        "email",
+        "comparison_key",
+        "is_first_author",
+        "is_corresponding_author",
+        "association_basis",
+        "association_status",
+        "orcid_status",
+        "evidence_locator",
+        "evidence_excerpt",
+        "content_digest",
+        "domain_type",
+        "recency_level",
+        "recency_score",
+        "technical_status",
+        "outreach_eligibility",
+        "gdpr_notice"
+      ],
+      "title": "ExtractedAcademicContact",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "query": {
+      "title": "Query",
+      "type": "string"
+    },
+    "source_used": {
+      "anyOf": [
+        {
+          "enum": [
+            "europe-pmc",
+            "openalex",
+            "crossref",
+            "biorxiv"
+          ],
+          "type": "string"
+        },
+        {
+          "const": "all",
+          "type": "string"
+        }
+      ],
+      "title": "Source Used"
+    },
+    "route_reason": {
+      "title": "Route Reason",
+      "type": "string"
+    },
+    "target_roles": {
+      "enum": [
+        "corresponding",
+        "first",
+        "both",
+        "all"
+      ],
+      "title": "Target Roles",
+      "type": "string"
+    },
+    "reference_year": {
+      "title": "Reference Year",
+      "type": "integer"
+    },
+    "total_articles_scanned": {
+      "minimum": 0,
+      "title": "Total Articles Scanned",
+      "type": "integer"
+    },
+    "articles_with_full_text": {
+      "minimum": 0,
+      "title": "Articles With Full Text",
+      "type": "integer"
+    },
+    "articles": {
+      "items": {
+        "$ref": "#/$defs/ArticleOutcome"
+      },
+      "title": "Articles",
+      "type": "array"
+    },
+    "contacts_extracted": {
+      "items": {
+        "$ref": "#/$defs/ExtractedAcademicContact"
+      },
+      "title": "Contacts Extracted",
+      "type": "array"
+    },
+    "corresponding_authors_count": {
+      "minimum": 0,
+      "title": "Corresponding Authors Count",
+      "type": "integer"
+    },
+    "first_authors_count": {
+      "minimum": 0,
+      "title": "First Authors Count",
+      "type": "integer"
+    },
+    "unmatched_candidates_count": {
+      "minimum": 0,
+      "title": "Unmatched Candidates Count",
+      "type": "integer"
+    },
+    "eligible_contacts_count": {
+      "minimum": 0,
+      "title": "Eligible Contacts Count",
+      "type": "integer"
+    },
+    "hit_count_reported": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Hit Count Reported"
+    },
+    "source_errors": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Source Errors",
+      "type": "object"
+    }
+  },
+  "required": [
+    "query",
+    "source_used",
+    "route_reason",
+    "target_roles",
+    "reference_year",
+    "total_articles_scanned",
+    "articles_with_full_text",
+    "corresponding_authors_count",
+    "first_authors_count",
+    "unmatched_candidates_count",
+    "eligible_contacts_count"
+  ],
+  "title": "DiscoveryResult",
+  "type": "object"
+}
