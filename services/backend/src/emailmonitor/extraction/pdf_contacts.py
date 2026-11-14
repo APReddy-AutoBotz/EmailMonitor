@@ -35,7 +35,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pypdf import PdfReader
 from pypdf.errors import PyPdfError
 
-from emailmonitor.extraction.jats import attribute_label, find_addresses
+from emailmonitor.extraction.attribution import Person, attribute_spans, find_addresses
 from emailmonitor.fetching.safety import FetchDenied
 
 PARSER_VERSION: Literal["pdf-contacts-v1"] = "pdf-contacts-v1"
@@ -172,7 +172,7 @@ def parse_pdf_contacts(
     grouped = 0
     wrapped = 0
     doi: str | None = None
-    names = list(enumerate(authors, start=1))
+    people = [Person(index, name) for index, name in enumerate(authors, start=1)]
     for page_number, text in enumerate(texts, start=1):
         lines = _lines(text)
         carried: PdfRegion | None = None
@@ -194,19 +194,19 @@ def parse_pdf_contacts(
             found = find_addresses(line)
             # A marker line without an address of its own labels the next line only.
             inherited, inherited_text = carried, carried_text
-            carried = None
-            carried_text = ""
+            carried, carried_text = None, ""
             if not found and (correspondence or email_label):
                 carried = "pdf_correspondence_line" if correspondence else "pdf_email_line"
                 carried_text = line
-            boundary = 0
+            prefix = (inherited_text + " ") if inherited is not None else ""
+            context = prefix + line
+            entries: list[tuple[int, int, str, PdfRegion]] = []
             for start, address in found:
                 end = start + len(address)
-                in_group = any(lo < end and start < hi for lo, hi in grouped_spans)
-                if in_group or address.casefold() in seen or len(candidates) >= MAX_CANDIDATES:
-                    boundary = end
+                if any(lo < end and start < hi for lo, hi in grouped_spans):
                     continue
-                seen.add(address.casefold())
+                if address.casefold() in seen:
+                    continue
                 region: PdfRegion
                 if correspondence and correspondence.start() < start:
                     region = "pdf_correspondence_line"
@@ -216,23 +216,20 @@ def parse_pdf_contacts(
                     region = inherited
                 else:
                     region = "pdf_front_matter"
-                text_for_label = line
-                offset = 0
-                if inherited is not None and region == inherited and boundary == 0:
-                    text_for_label = inherited_text + " " + line
-                    offset = len(inherited_text) + 1
-                owner: int | None = None
-                if region != "pdf_front_matter":
-                    owner, _kind, label_end = attribute_label(
-                        text_for_label,
-                        start + offset,
-                        end + offset,
-                        boundary + offset if boundary else 0,
-                        names,
-                    )
-                    boundary = label_end - offset
-                else:
-                    boundary = end
+                entries.append((start + len(prefix), end + len(prefix), address, region))
+            labelled = [e for e in entries if e[3] != "pdf_front_matter"]
+            owners = dict(
+                zip(
+                    (e[0] for e in labelled),
+                    attribute_spans(context, [(e[0], e[1]) for e in labelled], people),
+                    strict=True,
+                )
+            )
+            for start, _end, address, region in entries:
+                if len(candidates) >= MAX_CANDIDATES:
+                    break
+                seen.add(address.casefold())
+                owner = owners.get(start, (None, None))[0]
                 basis: PdfBasis = "unmatched"
                 if owner is not None:
                     basis = (
@@ -240,7 +237,6 @@ def parse_pdf_contacts(
                         if region == "pdf_correspondence_line"
                         else "pdf_email_label_surname"
                     )
-                context = (inherited_text + " " + line) if inherited is not None else line
                 candidates.append(
                     PdfContactCandidate(
                         raw_address=address,

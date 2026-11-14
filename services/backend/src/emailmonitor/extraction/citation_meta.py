@@ -29,7 +29,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from emailmonitor.extraction.jats import attribute_label, clean_address
+from emailmonitor.extraction.attribution import Person, attribute_spans, clean_address
 from emailmonitor.fetching.safety import FetchDenied
 
 PARSER_VERSION: Literal["citation-meta-v1"] = "citation-meta-v1"
@@ -54,17 +54,20 @@ _BLOCK = frozenset(
 _VOID = frozenset(
     {"meta", "link", "img", "br", "hr", "input", "source", "wbr", "area", "base", "col", "embed"}
 )
+# Correspondence wording asserts the role; an "E-mail:" label only names owners.
 _CORRESPONDENCE = re.compile(
-    r"\b(correspond(?:ence|ing)(?:\s+author)?s?|e-?mail\s*:|address\s+correspondence|"
-    r"contact\s+author)\b",
+    r"\b(?:correspond(?:ence|ing)(?:\s+author)?s?|address\s+correspondence|contact\s+author)\b",
     re.IGNORECASE,
 )
+_EMAIL_LABEL = re.compile(r"\be-?mail(?:\s+address(?:es)?)?\s*:", re.IGNORECASE)
+MAX_BLOCK_TEXT = 2_000
 _DOI = re.compile(r"\b(10\.\d{4,9}/[-._;()/:A-Za-z0-9]+)")
 _ORCID = re.compile(r"(\d{4}-\d{4}-\d{4}-\d{3}[\dX])")
 
 CandidateBasis = Literal[
     "highwire_author_sequence",
     "correspondence_block_surname",
+    "email_block_surname",
     "unmatched",
 ]
 
@@ -145,6 +148,7 @@ class _Node:
     parent: _Node | None
     content: list[str | _Node] = field(default_factory=list)
     cached_text: str | None = None
+    too_long: bool = False
 
     def chrome(self) -> bool:
         node: _Node | None = self
@@ -165,19 +169,40 @@ class _Node:
             node = node.parent
         return False
 
-    def text(self) -> str:
-        # Cached: block text is requested per mailto link, which would otherwise be
-        # quadratic on pages with many links. Called only after parsing completes.
+    def bounded_text(self, limit: int = MAX_BLOCK_TEXT) -> str | None:
+        """Normalised text, or None once it exceeds ``limit`` characters.
+
+        Cached per node, and a too-long child makes its parent too long
+        immediately, so total work stays linear even for deeply nested blocks.
+        """
+        if self.too_long:
+            return None
         if self.cached_text is not None:
             return self.cached_text
         parts: list[str] = []
+        size = 0
         for item in self.content:
             if isinstance(item, str):
-                parts.append(item)
-            elif item.tag not in _INERT:
-                parts.append(" " + item.text() + " ")
-        self.cached_text = " ".join("".join(parts).split())
-        return self.cached_text
+                piece = item
+            elif item.tag in _INERT:
+                continue
+            else:
+                child = item.bounded_text(limit)
+                if child is None:
+                    self.too_long = True
+                    return None
+                piece = " " + child + " "
+            size += len(piece)
+            if size > 4 * limit:
+                self.too_long = True
+                return None
+            parts.append(piece)
+        text = " ".join("".join(parts).split())
+        if len(text) > limit:
+            self.too_long = True
+            return None
+        self.cached_text = text
+        return text
 
     def block(self) -> _Node:
         node: _Node = self
@@ -264,22 +289,6 @@ class _Collector(HTMLParser):
     def handle_data(self, data: str) -> None:
         if self.inert_depth == 0 and data:
             self.current.content.append(data)
-
-
-def _surname(name: str) -> str:
-    tokens = [t for t in re.split(r"[\s,]+", name) if t]
-    if not tokens:
-        return ""
-    # Highwire often writes "Surname, Given"; otherwise the last token.
-    return tokens[0] if "," in name else tokens[-1]
-
-
-def _mentions_surname(text: str, raw_name: str) -> bool:
-    surname = _surname(raw_name)
-    return (
-        len(surname) >= 2
-        and re.search(rf"(?<!\w){re.escape(surname)}(?!\w)", text, re.IGNORECASE) is not None
-    )
 
 
 def _display(name: str) -> str:
@@ -414,7 +423,8 @@ def parse_citation_page(data: bytes, page_url: str | None = None) -> PageObserva
             if not address:
                 continue
             if authors and not overflow:
-                authors[-1]["corresponding"] = True
+                # Highwire has no correspondence tag: an author's email tag links
+                # the address to that author but does not assert the role.
                 add_candidate(
                     address,
                     (len(authors),),
@@ -441,8 +451,8 @@ def parse_citation_page(data: bytes, page_url: str | None = None) -> PageObserva
             ),
         )
 
-    # Correspondence-block mailto links in article content.
-    names = [(pos, str(author["name"])) for pos, author in enumerate(authors, start=1)]
+    # Correspondence/e-mail block mailto links in article content.
+    people = [Person(pos, str(author["name"])) for pos, author in enumerate(authors, start=1)]
     per_block: dict[int, list[tuple[int, _Node, str]]] = {}
     blocks: dict[int, _Node] = {}
     for index, anchor, href in collector.mailto[:MAX_MAILTO]:
@@ -455,36 +465,39 @@ def parse_citation_page(data: bytes, page_url: str | None = None) -> PageObserva
         blocks[id(block)] = block
         per_block.setdefault(id(block), []).append((index, anchor, address))
     for key, links in per_block.items():
-        block_text = blocks[key].text()
-        if not _CORRESPONDENCE.search(block_text):
+        block_text = blocks[key].bounded_text()
+        if block_text is None:
+            continue  # a statement this long is page content, not a correspondence line
+        correspondence = _CORRESPONDENCE.search(block_text)
+        if not correspondence and not _EMAIL_LABEL.search(block_text):
             continue
-        boundary = 0
+        spans: list[tuple[int, int]] = []
+        located: list[tuple[int, str]] = []
+        cursor = 0
         for index, anchor, address in links:
-            owner: int | None = None
-            if len(links) == 1:
-                hits = [
-                    pos
-                    for pos, author in enumerate(authors, start=1)
-                    if _mentions_surname(block_text, str(author["raw"]))
-                ]
-                owner = hits[0] if len(hits) == 1 else None
-            else:
-                # Several links in one block: each is attributed by its own label or
-                # the text since the previous link, never by the whole block.
-                anchor_text = anchor.text()
-                start = block_text.find(anchor_text, boundary) if anchor_text else -1
-                if start >= 0:
-                    owner, _kind, boundary = attribute_label(
-                        block_text, start, start + len(anchor_text), boundary, names
-                    )
+            anchor_text = anchor.bounded_text() or ""
+            start = block_text.find(anchor_text, cursor) if anchor_text else -1
+            if start >= 0:
+                spans.append((start, start + len(anchor_text)))
+                located.append((index, address))
+                cursor = start + len(anchor_text)
+        owners = dict(
+            zip((i for i, _a in located), attribute_spans(block_text, spans, people), strict=True)
+        )
+        for index, _anchor, address in links:
+            owner = owners.get(index, (None, None))[0]
             evidence = PageEvidence(
                 locator=f"a[{index}][href^=mailto]",
                 excerpt=block_text[:300],
                 kind="correspondence_mailto",
             )
             if owner is not None:
-                authors[owner - 1]["corresponding"] = True
-                add_candidate(address, (owner,), "correspondence_block_surname", evidence)
+                if correspondence:
+                    authors[owner - 1]["corresponding"] = True
+                basis: CandidateBasis = (
+                    "correspondence_block_surname" if correspondence else "email_block_surname"
+                )
+                add_candidate(address, (owner,), basis, evidence)
             else:
                 add_candidate(address, (), "unmatched", evidence)
 

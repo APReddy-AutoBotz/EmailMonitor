@@ -122,6 +122,16 @@ A fresh-context review of this branch reproduced 17 defects; all are fixed with 
 * **Merging/linking**: multi-source merge joins groups bridged by a later record (no duplicate articles, no lost `found_in`); researcher profiles link addresses only through an ORCID tied by a structural basis and never through an address carrying two ORCIDs.
 * **Smaller**: researchers CSV withholds unsafe rows (no 500); license classes require the creativecommons.org host; PMCID routing matches identifier bounds; addresses sort in document order past ten; group authors do not take members' addresses; author names keep `Surname, Given` in the UI.
 
+## Second independent review fixes (2026-11-15)
+
+A second fresh-context review attacked the first round's fixes and reproduced 13 further issues; all are fixed with regression tests (`test_review2_regressions.py`). Attribution now lives in `extraction/attribution.py`, shared by JATS, PDF and HTML:
+
+* **Literal or nothing:** a token touching a non-ASCII letter (`müller@uni.de`), another `@`, or a run-on capitalised word (`x.edu.Phone`) is rejected, never sliced into a different address. Internationalised addresses are unsupported rather than corrupted.
+* **A person, not a word:** unlabelled text attributes only through a person form (given name or initial + surname, or "Surname, Given"); a bare surname in running text ("Brown University", "Johns Hopkins", "de Medicina") never attributes. Labels attribute by exact surname, name form, or initials written as initials (upper case or dotted) — so `(Li)` is the surname Li, not initials L.I.
+* **List direction:** "address, Name; address, Name" lists are read address-first; "Name: address" lists name-first; a name that already owns a labelled address is not reused.
+* **Roles:** a Highwire `citation_author_email` and an HTML/PDF "E-mail:" line link an owner but assert no corresponding role (new bases `email_block_surname`, `pdf_email_label_surname`); only correspondence wording does. The HTML "E-mail:" marker now works.
+* **Bounded time:** HTML block text is bounded (2,000 characters; longer blocks are page content, not correspondence lines) with linear caching; structured JATS addresses map to visible offsets linearly; at most 200 addresses per note are considered; the document identifier pre-scan is linear and falls back to the DOI when a PMCID is out of range.
+
 ## Commands and observed results
 
 ```sh

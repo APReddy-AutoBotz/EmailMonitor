@@ -55,10 +55,8 @@ def test_html_document_with_role_filter_and_notes() -> None:
         reference_year=2026,
     )
     assert result.kind == "html"
-    assert {c.email for c in result.contacts} == {
-        "saga.lindgren@agri.uppsala.example",
-        "y.haddad@arid.amman.example",
-    }
+    # Only the correspondence block asserts the role; a Highwire email tag does not.
+    assert {c.email for c in result.contacts} == {"y.haddad@arid.amman.example"}
     assert result.linked_pdf_url == "https://journal.publisher.example/sops/2026/0142/pdf"
     assert any("obfuscated" in note for note in result.review_notes)
     haddad = next(c for c in result.contacts if c.email.startswith("y.haddad"))

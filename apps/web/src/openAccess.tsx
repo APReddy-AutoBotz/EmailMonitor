@@ -97,6 +97,8 @@ export const basisLabel = (basis: string): string => ({
   highwire_author_sequence: 'Page metadata, author sequence',
   correspondence_block_surname: 'Page correspondence block, matched by surname',
   pdf_correspondence_surname: 'PDF correspondence line, matched by surname',
+  pdf_email_label_surname: 'PDF e-mail list, matched by name',
+  email_block_surname: 'Page e-mail line, matched by name',
   unmatched: 'Not linked to an author',
 } as Record<string, string>)[basis] ?? basis.replaceAll('_', ' ')
 

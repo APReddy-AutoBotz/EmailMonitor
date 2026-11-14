@@ -30,7 +30,7 @@
       "email": "saga.lindgren@agri.uppsala.example",
       "comparison_key": "saga.lindgren@agri.uppsala.example",
       "is_first_author": false,
-      "is_corresponding_author": true,
+      "is_corresponding_author": false,
       "association_basis": "highwire_author_sequence",
       "association_status": "needs_review",
       "association_strength": "structural",

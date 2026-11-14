@@ -27,6 +27,12 @@ from xml.parsers import expat
 
 from pydantic import Field, model_validator
 
+from emailmonitor.extraction.attribution import (
+    Person,
+    attribute_spans,
+    clean_address,
+    find_addresses,
+)
 from emailmonitor.extraction.html import AuthorFact, CandidateFact, Evidence, Fact
 from emailmonitor.fetching.safety import FetchDenied
 from emailmonitor.sources.openaccess import (
@@ -39,15 +45,9 @@ MAX_NODES = 40_000
 MAX_DEPTH = 48
 MAX_TEXT = 2_097_152
 MAX_KEYWORDS = 50
+MAX_NOTE_ADDRESSES = 200
+__all__ = ["clean_address", "find_addresses", "parse_jats_xml"]
 
-EMAIL_PATTERN = re.compile(
-    r"[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,63}"
-)
-_EMAIL_FULL = re.compile(
-    r"[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+)*"
-    r"@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
-    r"(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*\.[A-Za-z]{2,63}"
-)
 ORCID_PATTERN = re.compile(r"([0-9]{4}-[0-9]{4}-[0-9]{4}-[0-9]{3}[0-9X])")
 _CORRESP_FN_TYPES = frozenset({"corresp", "correspondence", "corresponding-author"})
 _PUB_DATE_PREFERENCE = ("epub", "pub", "ppub", "collection", "epub-ppub")
@@ -245,134 +245,6 @@ def _deny_entity(*_args: object) -> None:
     raise FetchDenied("jats_entity_declaration_denied")
 
 
-def clean_address(value: str) -> str | None:
-    """Return the literal address if ``value`` is exactly one address after trimming."""
-    text = value.strip()
-    if text.lower().startswith("mailto:"):
-        text = text[7:]
-    text = text.strip().strip("<>()[]{}\"'").rstrip(".,;:").strip()
-    if len(text) > 320 or not _EMAIL_FULL.fullmatch(text):
-        return None
-    return text
-
-
-_LOCAL_CHARS = frozenset(
-    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.!#$%&'*+/=?^_`|~-"
-)
-_DOMAIN_CHARS = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-")
-
-
-def find_addresses(text: str) -> list[tuple[int, str]]:
-    """Literal addresses in ``text`` as (start, address); linear time.
-
-    Anchored on each ``@`` with bounded scans (64-char local part, 253-char
-    domain), so hostile runs of address characters cannot cause regex
-    backtracking. Braces are excluded from local parts here: in running text
-    they signal grouped notation such as ``{a,b}@lab``, which is never expanded.
-    """
-    found: list[tuple[int, str]] = []
-    position = text.find("@")
-    last_end = 0
-    while position != -1:
-        start = position
-        while start > last_end and position - start < 64 and text[start - 1] in _LOCAL_CHARS:
-            start -= 1
-        end = position + 1
-        while end < len(text) and end - position <= 253 and text[end] in _DOMAIN_CHARS:
-            end += 1
-        # A token longer than the bounds is not an address; never keep a slice of it.
-        truncated_local = start > last_end and text[start - 1] in _LOCAL_CHARS
-        truncated_domain = end < len(text) and text[end] in _DOMAIN_CHARS
-        if truncated_local or truncated_domain:
-            position = text.find("@", position + 1)
-            continue
-        candidate = text[start:end].strip(".")
-        while candidate and not candidate[0].isalnum():
-            candidate = candidate[1:]
-            start += 1
-        address = clean_address(candidate)
-        if address and start >= last_end:
-            found.append((start, address))
-            last_end = start + len(address)
-        position = text.find("@", max(position + 1, last_end))
-    return found
-
-
-def trailing_label(text: str, end: int) -> tuple[str, int] | None:
-    """A parenthetical directly after an address: (content, end offset of the label)."""
-    match = re.match(r"\s*\(([^()]{1,80})\)", text[end : end + 120])
-    if not match:
-        return None
-    return match.group(1), end + match.end()
-
-
-def initial_variants(display_name: str) -> frozenset[str]:
-    tokens = [t for t in re.split(r"[\s.,]+", display_name) if t]
-    if not tokens:
-        return frozenset()
-    letters_all = "".join(part[0] for token in tokens for part in token.split("-") if part).upper()
-    letters_tokens = "".join(token[0] for token in tokens).upper()
-    variants = {letters_all, letters_tokens}
-    if len(tokens) >= 2:
-        variants.add((tokens[0][0] + tokens[-1][0]).upper())
-    return frozenset(v for v in variants if len(v) >= 2)
-
-
-def surname_of(display_name: str) -> str:
-    """Last token, or the part before a comma for 'Surname, Given' forms."""
-    if "," in display_name:
-        head = display_name.split(",", 1)[0].strip()
-        if head:
-            return head.split()[-1]
-    tokens = display_name.split()
-    return tokens[-1] if tokens else ""
-
-
-def _mentions(segment: str, name: str) -> bool:
-    surname = surname_of(name)
-    return (
-        len(surname) >= 2
-        and re.search(rf"(?<!\w){re.escape(surname)}(?!\w)", segment, re.IGNORECASE) is not None
-    )
-
-
-def attribute_label(
-    text: str,
-    start: int,
-    end: int,
-    window_start: int,
-    names: list[tuple[int, str]],
-) -> tuple[int | None, Literal["initials", "name"] | None, int]:
-    """Owner of the address at text[start:end] among ``names`` (key, display name).
-
-    Returns (key, kind, boundary). ``boundary`` is where the next address's
-    preceding window may begin (after this address's label, if any).
-
-    * A trailing parenthetical label decides alone: unique initials or unique
-      surname inside it, else no owner. It never falls back to earlier text,
-      which belongs to a previous address.
-    * Without a label, exactly one surname between ``window_start`` and the
-      address identifies the owner.
-    """
-    label = trailing_label(text, end)
-    if label is not None:
-        content, boundary = label
-        token = re.sub(r"[\s.\-]", "", content).upper()
-        if token.isalpha() and len(token) <= 6:
-            hits = [key for key, name in names if token in initial_variants(name)]
-            if len(hits) == 1:
-                return hits[0], "initials", boundary
-        hits = [key for key, name in names if _mentions(content, name)]
-        if len(hits) == 1:
-            return hits[0], "name", boundary
-        return None, None, boundary
-    segment = text[window_start:start]
-    hits = [key for key, name in names if _mentions(segment, name)]
-    if len(hits) == 1:
-        return hits[0], "name", end
-    return None, None, end
-
-
 @dataclass(frozen=True)
 class _Address:
     address: str
@@ -433,15 +305,23 @@ def _note_addresses(node: JatsNode) -> list[_Address]:
     text = node.text(skip=frozenset({"label"}))
     structured = _structured_addresses(node)
     result: list[_Address] = []
+    visible = find_addresses(text)
     if structured:
-        cursor = 0
-        for address, locator in structured:
-            offset = text.find(address, cursor)
+        # Map structured addresses onto visible occurrences in order, linearly.
+        positions: dict[str, list[int]] = {}
+        for start, literal in visible:
+            positions.setdefault(literal, []).append(start)
+        last = -1
+        for address, locator in structured[:MAX_NOTE_ADDRESSES]:
+            queue = positions.get(address, [])
+            while queue and queue[0] <= last:
+                queue.pop(0)
+            offset = queue.pop(0) if queue else -1
             if offset >= 0:
-                cursor = offset + len(address)
+                last = offset
             result.append(_Address(address, locator, _excerpt(text, offset, len(address)), offset))
         return result
-    for start, literal in find_addresses(text):
+    for start, literal in visible[:MAX_NOTE_ADDRESSES]:
         result.append(_Address(literal, node.locator, _excerpt(text, start, len(literal)), start))
     return result
 
@@ -728,26 +608,30 @@ def parse_jats_xml(data: bytes, requested_identifier: OpenAccessIdentifier) -> J
             if pos_idx + 1 not in referencing[rid]:
                 referencing[rid].append(pos_idx + 1)
     corresponding_positions = [a.position for a in authors if a.corresponding]
-    all_names = [(a.position, a.display_name) for a in authors if a.author_kind == "person"]
+    people = [Person(a.position, a.display_name) for a in authors if a.author_kind == "person"]
 
     for referenced_pass in (True, False):
         for note in notes:
             refs_for_note = referencing.get(note.note_id or "", [])
             if bool(refs_for_note) != referenced_pass:
                 continue
-            boundary = 0
             single = len(note.addresses) == 1
-            for entry in note.addresses:
-                owner: int | None = None
-                kind: Literal["initials", "name"] | None = None
-                if entry.offset >= 0:
-                    owner, kind, boundary = attribute_label(
+            located = [e for e in note.addresses if e.offset >= 0]
+            owners = dict(
+                zip(
+                    (id(e) for e in located),
+                    attribute_spans(
                         note.text,
-                        entry.offset,
-                        entry.offset + len(entry.address),
-                        boundary,
-                        all_names,
-                    )
+                        [(e.offset, e.offset + len(e.address)) for e in located],
+                        people,
+                    ),
+                    strict=True,
+                )
+            )
+            for entry in note.addresses:
+                if len(candidates) >= 100:
+                    break
+                owner, kind = owners.get(id(entry), (None, None))
                 # A sole address may inherit the note's structural owner unless an
                 # explicit label names somebody else.
                 structural: tuple[int, AssociationBasis] | None = None

@@ -37,8 +37,10 @@ from emailmonitor.sources.openaccess import DoiIdentifier, OpenAccessIdentifier,
 
 DocumentKind = Literal["pdf", "jats_xml", "html"]
 MAX_DOCUMENT_BYTES = 20_971_520
-_JATS_PMC = re.compile(rb'<article-id[^>]*pub-id-type="pmc(?:id)?"[^>]*>\s*(?:PMC)?(\d{1,12})\s*<')
-_JATS_DOI = re.compile(rb'<article-id[^>]*pub-id-type="doi"[^>]*>\s*(10\.[^<\s]{3,250})\s*<')
+_ID_TYPE = re.compile(rb"pub-id-type\s*=\s*[\"']([a-z]{2,10})[\"']")
+_PMC_DIGITS = re.compile(rb"(?:PMC)?(\d{3,10})")
+MAX_ARTICLE_IDS = 50
+SCAN_WINDOW = 262_144
 
 
 class Contract(BaseModel):
@@ -93,16 +95,41 @@ def _year(value: str | None) -> int | None:
     return None
 
 
+def _article_ids(data: bytes) -> list[tuple[bytes, bytes]]:
+    """(pub-id-type, value) for the first ``<article-id>`` elements; linear, bounded.
+
+    A pre-scan only to name the document; the full XML is parsed afterwards
+    under the safe parser, which also verifies the identifiers it reports.
+    """
+    window = data[:SCAN_WINDOW]
+    found: list[tuple[bytes, bytes]] = []
+    position = window.find(b"<article-id")
+    while position != -1 and len(found) < MAX_ARTICLE_IDS:
+        close = window.find(b">", position, position + 300)
+        if close == -1:
+            position = window.find(b"<article-id", position + 11)
+            continue
+        end = window.find(b"<", close + 1, close + 1 + 300)
+        kind = _ID_TYPE.search(window, position, close)
+        if end != -1 and kind:
+            found.append((kind.group(1).lower(), window[close + 1 : end].strip()))
+        position = window.find(b"<article-id", close)
+    return found
+
+
 def _jats_identifier(data: bytes) -> OpenAccessIdentifier:
-    pmc = _JATS_PMC.search(data[:262144])
-    if pmc:
-        return PmcIdentifier(value="PMC" + pmc.group(1).decode())
-    doi = _JATS_DOI.search(data[:262144])
-    if doi:
-        try:
-            return DoiIdentifier(value=doi.group(1).decode("utf-8", errors="strict"))
-        except (ValueError, UnicodeDecodeError):
-            pass
+    ids = _article_ids(data)
+    for kind, value in ids:
+        if kind in (b"pmc", b"pmcid"):
+            digits = _PMC_DIGITS.fullmatch(value.upper())
+            if digits:
+                return PmcIdentifier(value="PMC" + digits.group(1).decode())
+    for kind, value in ids:
+        if kind == b"doi":
+            try:
+                return DoiIdentifier(value=value.decode("utf-8", errors="strict"))
+            except (ValueError, UnicodeDecodeError):
+                continue
     raise FetchDenied("jats_identifier_missing")
 
 

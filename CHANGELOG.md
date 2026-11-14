@@ -10,6 +10,8 @@
 - Independent review fixes: label-decided address attribution (no wrong-person assignment), no absorption of shared-note addresses, no role from contrib emails or plain e-mail lists, linear-time address finding and HTML link handling, per-article failure isolation, correct multi-source group merging, ORCID linking only via structural associations, researchers CSV withholding, host-checked license classes. See document 88.
 - OA-023: association strength per contact and a "markup only" export option for highest-precision outreach lists.
 - OA-024: offline batch command line for a folder of supplied documents.
+- Second review fixes: shared attribution module (no sliced non-ASCII addresses, person-form matching instead of bare surnames, list-direction detection, no role from e-mail tags/lines), bounded HTML block text and linear JATS/intake scans.
+- Service package gets an explicit 384-entry cap (the shared 256 cap blocked the backend and installed-operator CI gates since the first OA commit).
 - Restore the web pnpm lockfile (v9) that an earlier commit downgraded to v6, which broke the dependency-inventory gate.
 
 ## Local sibling-Draft integration candidate

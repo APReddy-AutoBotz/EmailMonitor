@@ -27,7 +27,9 @@ def test_highwire_page_metadata_and_authors() -> None:
     ]
     assert obs.authors[0].orcid == "0000-0002-1825-0097"
     assert obs.authors[2].institutions == ("Institute of Arid Agriculture, Amman, Jordan",)
-    assert [a.corresponding for a in obs.authors] == [False, True, True]
+    # The Highwire email tag links Lindgren's address but asserts no role; only the
+    # correspondence block makes Haddad corresponding.
+    assert [a.corresponding for a in obs.authors] == [False, False, True]
     assert obs.obfuscated_address_count == 1
 
 
