@@ -12,6 +12,7 @@
 - OA-024: offline batch command line for a folder of supplied documents.
 - Second review fixes: shared attribution module (no sliced non-ASCII addresses, person-form matching instead of bare surnames, list-direction detection, no role from e-mail tags/lines), bounded HTML block text and linear JATS/intake scans.
 - Service package gets an explicit 384-entry cap (the shared 256 cap blocked the backend and installed-operator CI gates since the first OA commit).
+- Remove Google Fonts (`index.html` links and a CSS `@import`) added in 45da184: the UI must make no third-party requests (operator IP leakage, egress policy, production CSP `style-src 'self'`), and the cross-origin stylesheet made the isolated keyboard UI capture guard refuse every capture. A test now forbids remote assets.
 - Restore the web pnpm lockfile (v9) that an earlier commit downgraded to v6, which broke the dependency-inventory gate.
 
 ## Local sibling-Draft integration candidate
