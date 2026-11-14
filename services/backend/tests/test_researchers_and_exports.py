@@ -18,7 +18,7 @@ from emailmonitor.results.researchers import build_researcher_profiles, render_r
 from fastapi.testclient import TestClient
 
 VALID_ORCID = "0000-0002-1825-0097"
-OTHER_VALID_ORCID = "0000-0001-5109-3700"
+OTHER_VALID_ORCID = "0000-0000-0000-001X"
 
 
 def _contact(

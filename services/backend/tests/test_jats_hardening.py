@@ -40,7 +40,7 @@ def test_rich_fixture_roles_and_bases() -> None:
     assert names == ["Aiko Tanaka", "Rahul Mehta", "Lucia Ferreira", "Tomasz Nowak"]
     # Equal-contribution footnotes and a contrib email do not assert correspondence.
     assert [a.corresponding for a in obs.authors] == [False, False, True, True]
-    assert obs.authors[0].orcid == "0000-0001-5109-3700"
+    assert obs.authors[0].orcid == "0000-0000-0000-001X"
     assert obs.authors[3].affiliations == [
         "Department of Medical Genetics, Jagiellonian Research Centre, Kraków, Poland"
     ]
