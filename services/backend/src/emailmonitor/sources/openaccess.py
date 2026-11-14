@@ -8,7 +8,7 @@ Supports standard scholarly open access repositories:
 
 import re
 from typing import Annotated, Literal
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -116,16 +116,30 @@ LicenseCategory = Literal[
     "unknown",
 ]
 _CC_PATH = re.compile(
-    r"creativecommons\.org/(?:licenses/(by(?:-nc)?(?:-sa|-nd)?)|publicdomain/(zero|mark))/",
+    r"/(?:licenses/(by(?:-nc)?(?:-sa|-nd)?)|publicdomain/(zero|mark))/",
     re.IGNORECASE,
 )
 
 
 def license_category(url: str | None) -> LicenseCategory:
-    """Classify a declared license URL. Absent means unknown, never assumed open."""
+    """Classify a declared license URL. Absent means unknown, never assumed open.
+
+    Only creativecommons.org itself counts; a CC-looking path on any other host
+    is "other".
+    """
     if not url or not url.strip():
         return "unknown"
-    match = _CC_PATH.search(url.strip() + "/")
+    try:
+        parts = urlsplit(url.strip())
+    except ValueError:
+        return "other"
+    host = (parts.hostname or "").lower()
+    if parts.scheme not in ("http", "https") or host not in (
+        "creativecommons.org",
+        "www.creativecommons.org",
+    ):
+        return "other"
+    match = _CC_PATH.match(parts.path.rstrip("/") + "/")
     if not match:
         return "other"
     if match.group(2):

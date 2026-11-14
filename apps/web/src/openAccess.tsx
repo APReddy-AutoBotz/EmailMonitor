@@ -48,6 +48,11 @@ export function splitList(value: string, limit: number): string[] {
   return [...new Set(items)].slice(0, limit)
 }
 
+/** Author names keep commas ("Smith, John") and order; split on new lines or semicolons only. */
+export function splitAuthorNames(value: string, limit: number): string[] {
+  return value.split(/[\n;]+/).map(item => item.trim().slice(0, 300)).filter(Boolean).slice(0, limit)
+}
+
 function year(value: string, label: string): number | null {
   if (!value.trim()) return null
   if (!/^\d{4}$/.test(value.trim())) throw new ApiError(0, label + ' must be a four-digit year.')
@@ -73,7 +78,7 @@ export function discoverBody(form: OaForm): Record<string, unknown> {
 
 export function documentQuery(knownAuthors: string, pageUrl: string, roles: OaRoles): string {
   const params = new URLSearchParams({ target_roles: roles })
-  const authors = splitList(knownAuthors, 100)
+  const authors = splitAuthorNames(knownAuthors, 100)
   if (authors.length) params.set('known_authors', authors.join('; '))
   const url = pageUrl.trim()
   if (url) {

@@ -29,7 +29,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from emailmonitor.extraction.jats import clean_address
+from emailmonitor.extraction.jats import attribute_label, clean_address
 from emailmonitor.fetching.safety import FetchDenied
 
 PARSER_VERSION: Literal["citation-meta-v1"] = "citation-meta-v1"
@@ -39,6 +39,7 @@ MAX_NODES = 60_000
 MAX_DEPTH = 256
 MAX_AUTHORS = 100
 MAX_CANDIDATES = 100
+MAX_MAILTO = 1_000
 
 _INERT = frozenset({"script", "style", "template", "noscript", "svg", "iframe", "object"})
 _CHROME = frozenset({"header", "footer", "nav", "aside", "form", "button", "select"})
@@ -143,6 +144,7 @@ class _Node:
     index: int
     parent: _Node | None
     content: list[str | _Node] = field(default_factory=list)
+    cached_text: str | None = None
 
     def chrome(self) -> bool:
         node: _Node | None = self
@@ -164,13 +166,18 @@ class _Node:
         return False
 
     def text(self) -> str:
+        # Cached: block text is requested per mailto link, which would otherwise be
+        # quadratic on pages with many links. Called only after parsing completes.
+        if self.cached_text is not None:
+            return self.cached_text
         parts: list[str] = []
         for item in self.content:
             if isinstance(item, str):
                 parts.append(item)
             elif item.tag not in _INERT:
                 parts.append(" " + item.text() + " ")
-        return " ".join("".join(parts).split())
+        self.cached_text = " ".join("".join(parts).split())
+        return self.cached_text
 
     def block(self) -> _Node:
         node: _Node = self
@@ -265,6 +272,14 @@ def _surname(name: str) -> str:
         return ""
     # Highwire often writes "Surname, Given"; otherwise the last token.
     return tokens[0] if "," in name else tokens[-1]
+
+
+def _mentions_surname(text: str, raw_name: str) -> bool:
+    surname = _surname(raw_name)
+    return (
+        len(surname) >= 2
+        and re.search(rf"(?<!\w){re.escape(surname)}(?!\w)", text, re.IGNORECASE) is not None
+    )
 
 
 def _display(name: str) -> str:
@@ -366,9 +381,13 @@ def parse_citation_page(data: bytes, page_url: str | None = None) -> PageObserva
             )
         )
 
+    overflow = False  # tags after the author cap belong to an author we did not keep
     for index, name, content in collector.meta:
-        if name in ("citation_author", "dc.creator") and len(authors) < MAX_AUTHORS:
+        if name in ("citation_author", "dc.creator"):
             if name == "dc.creator" and any(a["source"] == "citation_author" for a in authors):
+                continue
+            if len(authors) >= MAX_AUTHORS:
+                overflow = True
                 continue
             authors.append(
                 {
@@ -381,12 +400,12 @@ def parse_citation_page(data: bytes, page_url: str | None = None) -> PageObserva
                     "corresponding": False,
                 }
             )
-        elif name == "citation_author_institution" and authors:
+        elif name == "citation_author_institution" and authors and not overflow:
             institutions = authors[-1]["institutions"]
             assert isinstance(institutions, list)
             if content not in institutions and len(institutions) < 20:
                 institutions.append(content[:1000])
-        elif name == "citation_author_orcid" and authors:
+        elif name == "citation_author_orcid" and authors and not overflow:
             match = _ORCID.search(content)
             if match:
                 authors[-1]["orcid"] = match.group(1)
@@ -394,7 +413,7 @@ def parse_citation_page(data: bytes, page_url: str | None = None) -> PageObserva
             address = clean_address(content)
             if not address:
                 continue
-            if authors:
+            if authors and not overflow:
                 authors[-1]["corresponding"] = True
                 add_candidate(
                     address,
@@ -423,36 +442,51 @@ def parse_citation_page(data: bytes, page_url: str | None = None) -> PageObserva
         )
 
     # Correspondence-block mailto links in article content.
-    for index, anchor, href in collector.mailto:
+    names = [(pos, str(author["name"])) for pos, author in enumerate(authors, start=1)]
+    per_block: dict[int, list[tuple[int, _Node, str]]] = {}
+    blocks: dict[int, _Node] = {}
+    for index, anchor, href in collector.mailto[:MAX_MAILTO]:
         if anchor.chrome():
             continue
         address = clean_address(href.split("?", 1)[0])
         if not address:
             continue
         block = anchor.block()
-        block_text = block.text()
+        blocks[id(block)] = block
+        per_block.setdefault(id(block), []).append((index, anchor, address))
+    for key, links in per_block.items():
+        block_text = blocks[key].text()
         if not _CORRESPONDENCE.search(block_text):
             continue
-        hits = [
-            pos
-            for pos, author in enumerate(authors, start=1)
-            if len(_surname(str(author["raw"]))) >= 2
-            and re.search(
-                rf"(?<!\w){re.escape(_surname(str(author['raw'])))}(?!\w)",
-                block_text,
-                re.IGNORECASE,
+        boundary = 0
+        for index, anchor, address in links:
+            owner: int | None = None
+            if len(links) == 1:
+                hits = [
+                    pos
+                    for pos, author in enumerate(authors, start=1)
+                    if _mentions_surname(block_text, str(author["raw"]))
+                ]
+                owner = hits[0] if len(hits) == 1 else None
+            else:
+                # Several links in one block: each is attributed by its own label or
+                # the text since the previous link, never by the whole block.
+                anchor_text = anchor.text()
+                start = block_text.find(anchor_text, boundary) if anchor_text else -1
+                if start >= 0:
+                    owner, _kind, boundary = attribute_label(
+                        block_text, start, start + len(anchor_text), boundary, names
+                    )
+            evidence = PageEvidence(
+                locator=f"a[{index}][href^=mailto]",
+                excerpt=block_text[:300],
+                kind="correspondence_mailto",
             )
-        ]
-        evidence = PageEvidence(
-            locator=f"a[{index}][href^=mailto]",
-            excerpt=block_text[:300],
-            kind="correspondence_mailto",
-        )
-        if len(hits) == 1:
-            authors[hits[0] - 1]["corresponding"] = True
-            add_candidate(address, (hits[0],), "correspondence_block_surname", evidence)
-        else:
-            add_candidate(address, (), "unmatched", evidence)
+            if owner is not None:
+                authors[owner - 1]["corresponding"] = True
+                add_candidate(address, (owner,), "correspondence_block_surname", evidence)
+            else:
+                add_candidate(address, (), "unmatched", evidence)
 
     any_corresp = any(bool(a["corresponding"]) for a in authors)
     page_authors = tuple(

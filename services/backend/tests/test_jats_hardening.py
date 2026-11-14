@@ -208,3 +208,154 @@ def test_candidate_cap_is_bounded() -> None:
     )
     obs = parse_jats_xml(_article(meta), PMC)
     assert len(obs.candidates) == 100
+
+
+# --- Regressions from the independent review (2026-11-14) -------------------
+
+
+def _two_authors(extra_smith: str = "", extra_jones: str = "", notes: str = "") -> bytes:
+    meta = (
+        "<contrib-group>"
+        + _author("John", "Smith", extra_smith)
+        + _author("Kate", "Jones", extra_jones)
+        + f"</contrib-group><author-notes>{notes}</author-notes>"
+    )
+    return _article(meta)
+
+
+def _owner(obs: object, address: str) -> tuple[list[int], str]:
+    candidate = next(c for c in obs.candidates if c.raw_address == address)  # type: ignore[attr-defined]
+    return candidate.author_positions, candidate.association_basis
+
+
+def test_full_name_label_after_each_address_is_respected() -> None:
+    obs = parse_jats_xml(
+        _two_authors(
+            notes="<corresp>E-mail addresses: <email>smith@x.example</email> (J. Smith), "
+            "<email>jones@y.example</email> (K. Jones).</corresp>"
+        ),
+        PMC,
+    )
+    assert _owner(obs, "smith@x.example") == ([1], "corresp_name_proximity")
+    assert _owner(obs, "jones@y.example") == ([2], "corresp_name_proximity")
+
+
+def test_label_naming_nobody_never_falls_back_to_previous_text() -> None:
+    obs = parse_jats_xml(
+        _two_authors(
+            notes="<corresp>Smith: <email>a@x.example</email> (lab office), "
+            "<email>b@x.example</email></corresp>"
+        ),
+        PMC,
+    )
+    assert _owner(obs, "a@x.example") == ([], "unmatched")
+    assert _owner(obs, "b@x.example") == ([], "unmatched")
+
+
+def test_contrib_email_does_not_become_corresponding_role() -> None:
+    obs = parse_jats_xml(
+        _two_authors(
+            extra_jones="<email>kate@y.example</email>",
+            notes="<corresp>Correspondence should be addressed via the journal office.</corresp>",
+        ),
+        PMC,
+    )
+    assert _owner(obs, "kate@y.example") == ([2], "contrib_email")
+    assert obs.authors[1].corresponding is not True
+
+
+def test_sole_corresponding_author_does_not_absorb_other_addresses() -> None:
+    obs = parse_jats_xml(
+        _two_authors(
+            extra_smith="",
+            notes='<fn fn-type="corresp"><p>office@inst.example; kate.jones@y.example</p></fn>',
+        ).replace(
+            b'<contrib contrib-type="author" >', b'<contrib contrib-type="author" corresp="yes">', 1
+        ),
+        PMC,
+    )
+    assert obs.authors[0].corresponding is True
+    assert _owner(obs, "office@inst.example") == ([], "unmatched")
+    assert _owner(obs, "kate.jones@y.example") == ([], "unmatched")
+
+
+def test_single_xref_note_with_labelled_second_address() -> None:
+    obs = parse_jats_xml(
+        _two_authors(
+            extra_smith='<xref ref-type="corresp" rid="c1"/>',
+            notes='<corresp id="c1"><email>smith@x.example</email>; Kate Jones, '
+            "<email>kj@y.example</email> (K.J.)</corresp>",
+        ),
+        PMC,
+    )
+    assert _owner(obs, "kj@y.example") == ([2], "corresp_initials")
+    assert _owner(obs, "smith@x.example") == ([], "unmatched")
+
+
+def test_sole_address_label_conflicting_with_xref_is_unmatched() -> None:
+    obs = parse_jats_xml(
+        _two_authors(
+            extra_smith='<xref ref-type="corresp" rid="c1"/>',
+            notes='<corresp id="c1"><email>kj@y.example</email> (K. Jones)</corresp>',
+        ),
+        PMC,
+    )
+    assert _owner(obs, "kj@y.example") == ([], "unmatched")
+
+
+def test_addresses_keep_document_order_beyond_ten() -> None:
+    emails = "".join(f"<email>u{i}@lab.example</email> " for i in range(12))
+    meta = (
+        "<contrib-group>"
+        + _author("Ana", "Silva", "", 'corresp="yes"')
+        + f"</contrib-group><author-notes><corresp>{emails}</corresp></author-notes>"
+    )
+    obs = parse_jats_xml(_article(meta), PMC)
+    assert [c.raw_address for c in obs.candidates] == [f"u{i}@lab.example" for i in range(12)]
+
+
+def test_group_member_addresses_are_not_the_groups() -> None:
+    meta = (
+        '<contrib-group><contrib contrib-type="author"><collab>Big Consortium'
+        "<contrib-group>"
+        + _author("Ann", "Lee", "<email>ann.lee@z.example</email>")
+        + "</contrib-group></collab></contrib></contrib-group>"
+    )
+    obs = parse_jats_xml(_article(meta), PMC)
+    assert all(c.association_basis != "contrib_email" for c in obs.candidates)
+
+
+def test_more_than_100_authors_is_truncated_not_crashing() -> None:
+    contribs = "".join(_author(f"G{i}", f"S{i}") for i in range(101))
+    obs = parse_jats_xml(_article(f"<contrib-group>{contribs}</contrib-group>"), PMC)
+    assert len(obs.authors) == 100
+    assert obs.authors_truncated is True
+
+
+def test_hostile_address_text_is_linear_time() -> None:
+    import time
+
+    meta = (
+        "<contrib-group>"
+        + _author("Ana", "Silva", "", 'corresp="yes"')
+        + "</contrib-group><author-notes><corresp>"
+        + "a" * 400_000
+        + "</corresp></author-notes>"
+    )
+    started = time.perf_counter()
+    obs = parse_jats_xml(_article(meta), PMC)
+    assert time.perf_counter() - started < 5
+    assert obs.candidates == []
+
+
+def test_find_addresses_bounds() -> None:
+    from emailmonitor.extraction.jats import find_addresses
+
+    assert find_addresses("x" * 100 + "@lab.example") == []  # local part over 64
+    assert find_addresses("mail ana@lab.example, ben@lab.example.") == [
+        (5, "ana@lab.example"),
+        (22, "ben@lab.example"),
+    ]
+    assert find_addresses("{amara,office}@lab.example") == [] or all(
+        "{" not in a and "}" not in a for _s, a in find_addresses("{amara,office}@lab.example")
+    )

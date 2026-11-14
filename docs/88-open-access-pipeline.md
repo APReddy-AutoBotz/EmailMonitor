@@ -95,6 +95,18 @@ Preview endpoints: `POST .../open-access/export` (`preset` = any of the above) a
 
 Local run (Windows, as verified): start `uvicorn emailmonitor.dev_server:app --app-dir services/backend/src --port 8000` and `pnpm --dir apps/web dev`, open the Vite URL, choose **Open Access**, search `CRISPR` with *All observed* authors.
 
+## Independent review fixes (2026-11-14)
+
+A fresh-context review of this branch reproduced 17 defects; all are fixed with a regression test each (`test_review_regressions.py`, `test_jats_hardening.py`, `openAccess.test.tsx`). The important ones:
+
+* **Wrong-person attribution** in notes and PDF lines of the form `a@x (J. Smith), b@y (K. Jones)`: the surname window included the previous address's label. Shared helpers (`find_addresses`, `attribute_label` in `extraction/jats.py`) now let a trailing label decide alone (a label naming nobody ⇒ unmatched, never a fallback), and the preceding window starts after the previous label.
+* **Absorption**: a note with several addresses no longer gives them all to its single xref/corresponding author; only a note's *sole* address inherits the structural owner, and only if no label names someone else. The HTML parser applies the same rule to several mailto links in one correspondence block.
+* **Role fabrication**: a contrib email never marks correspondence; PDF `E-mail:`/`Contact:` lists (`pdf_email_line`, basis `pdf_email_label_surname`) label owners without asserting the corresponding role — only correspondence wording does.
+* **Denial of service**: address finding is linear (bounded scans around `@`; over-long tokens are rejected, never sliced); the grouped/wrapped PDF detectors no longer backtrack; HTML block text is cached and at most 1,000 mailto links are inspected.
+* **Robustness**: one malformed article (e.g. >100 authors, year 3025) becomes a `failed` outcome instead of failing the run; JATS keeps the first 100 authors with `authors_truncated`; Highwire tags after the 100-author cap are not attached to author 100.
+* **Merging/linking**: multi-source merge joins groups bridged by a later record (no duplicate articles, no lost `found_in`); researcher profiles link addresses only through an ORCID tied by a structural basis and never through an address carrying two ORCIDs.
+* **Smaller**: researchers CSV withholds unsafe rows (no 500); license classes require the creativecommons.org host; PMCID routing matches identifier bounds; addresses sort in document order past ten; group authors do not take members' addresses; author names keep `Surname, Given` in the UI.
+
 ## Commands and observed results
 
 ```sh

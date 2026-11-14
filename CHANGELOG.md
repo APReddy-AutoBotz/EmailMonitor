@@ -7,6 +7,7 @@
 - OA-020: "Open Access" workspace screen (search, document upload, researchers, exports). The preview server no longer advertises `live_sources_enabled: true`; nothing live exists.
 - OA-021: merged multi-source discovery with per-source error isolation and article license classification.
 - OA-022: generated Open Access response contracts and examples with a drift test.
+- Independent review fixes: label-decided address attribution (no wrong-person assignment), no absorption of shared-note addresses, no role from contrib emails or plain e-mail lists, linear-time address finding and HTML link handling, per-article failure isolation, correct multi-source group merging, ORCID linking only via structural associations, researchers CSV withholding, host-checked license classes. See document 88.
 - Restore the web pnpm lockfile (v9) that an earlier commit downgraded to v6, which broke the dependency-inventory gate.
 
 ## Local sibling-Draft integration candidate

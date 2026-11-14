@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 import { ApiScope } from './client'
-import { basisLabel, defaultForm, discoverBody, documentQuery, OpenAccessWorkspace, outcomeLabel, splitList } from './openAccess'
+import { basisLabel, defaultForm, discoverBody, documentQuery, OpenAccessWorkspace, outcomeLabel, splitAuthorNames, splitList } from './openAccess'
 import type { Context } from './ui'
 
 const org = '00000000-0000-4000-8000-000000000001'
@@ -31,6 +31,10 @@ describe('open access request builders', () => {
     expect(documentQuery('', '', 'corresponding')).toBe('?target_roles=corresponding')
     expect(() => documentQuery('', 'http://journal.example/a', 'all')).toThrow('https://')
     expect(() => documentQuery('', 'javascript:alert(1)', 'all')).toThrow('https://')
+  })
+  it('keeps "Surname, Given" author names whole and in order', () => {
+    expect(splitAuthorNames('Smith, John\nJones, Kate', 100)).toEqual(['Smith, John', 'Jones, Kate'])
+    expect(documentQuery('Smith, John\nJones, Kate', '', 'all')).toBe('?target_roles=all&known_authors=Smith%2C+John%3B+Jones%2C+Kate')
   })
   it('caps list sizes', () => {
     expect(splitList(Array.from({ length: 60 }, (_, i) => 'j' + i).join('\n'), 50)).toHaveLength(50)

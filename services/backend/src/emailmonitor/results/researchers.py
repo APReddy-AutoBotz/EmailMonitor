@@ -22,13 +22,15 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from emailmonitor.discovery.openaccess_orchestrator import ExtractedAcademicContact
+from emailmonitor.results.oa_exports import write_rows_withholding
 from emailmonitor.results.outreach import current_year
-from emailmonitor.results.render import safe_csv
 
 
 class Contract(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
+
+LINKING_BASES = frozenset({"contrib_email", "corresp_xref", "highwire_author_sequence"})
 
 PublicationRole = Literal["corresponding", "first", "first_and_corresponding", "other", "unknown"]
 
@@ -110,10 +112,23 @@ def build_researcher_profiles(
     ref = reference_year or current_year()
     items = list(contacts)
     uf = _UnionFind()
-    orcid_owner: dict[str, str] = {}
+    # Link addresses only through an ORCID that (a) the article declares on the
+    # author, (b) is tied to the address by a structural basis, not a text
+    # heuristic, and (c) is the address's only ORCID. An address seen with two
+    # ORCIDs (a shared mailbox) never bridges two people.
+    orcids_by_address: dict[str, set[str]] = {}
     for c in items:
         uf.find(c.comparison_key)
         if c.orcid_id and c.orcid_status == "declared_valid_checksum":
+            orcids_by_address.setdefault(c.comparison_key, set()).add(c.orcid_id)
+    orcid_owner: dict[str, str] = {}
+    for c in items:
+        if (
+            c.orcid_id
+            and c.orcid_status == "declared_valid_checksum"
+            and c.association_basis in LINKING_BASES
+            and len(orcids_by_address.get(c.comparison_key, ())) == 1
+        ):
             owner = orcid_owner.setdefault(c.orcid_id, c.comparison_key)
             uf.union(owner, c.comparison_key)
 
@@ -235,11 +250,11 @@ def build_researcher_profiles(
     return tuple(profiles)
 
 
-def render_researchers_csv(profiles: Sequence[ResearcherProfile]) -> bytes:
-    """One row per researcher, formula-safe; evidence counts stay visible."""
-    import csv
-    import io
+def render_researchers_export(profiles: Sequence[ResearcherProfile]) -> tuple[bytes, int, int]:
+    """One row per researcher; a row with a formula-unsafe cell is withheld, not rewritten.
 
+    Returns (content, rows_written, rows_withheld).
+    """
     header = [
         "primary_email",
         "other_emails",
@@ -257,31 +272,30 @@ def render_researchers_csv(profiles: Sequence[ResearcherProfile]) -> bytes:
         "latest_title",
         "latest_doi",
     ]
-    buffer = io.StringIO(newline="")
-    writer = csv.writer(buffer, quoting=csv.QUOTE_ALL, lineterminator="\r\n")
-    writer.writerow(header)
+    rows: list[list[str]] = []
     for p in profiles:
         latest = p.publications[0]
-        writer.writerow(
+        rows.append(
             [
-                safe_csv(v)
-                for v in (
-                    p.emails[0],
-                    "; ".join(p.emails[1:]),
-                    "; ".join(p.display_names),
-                    "; ".join(p.orcids),
-                    str(p.latest_publication_year or ""),
-                    p.latest_affiliation or "",
-                    "yes" if p.affiliation_changed else "no",
-                    str(p.publication_count),
-                    str(p.corresponding_count),
-                    str(p.first_author_count),
-                    p.activity,
-                    p.outreach_eligibility,
-                    "; ".join(p.review_flags),
-                    latest.title or "",
-                    latest.doi or "",
-                )
+                p.emails[0],
+                "; ".join(p.emails[1:]),
+                "; ".join(p.display_names),
+                "; ".join(p.orcids),
+                str(p.latest_publication_year or ""),
+                p.latest_affiliation or "",
+                "yes" if p.affiliation_changed else "no",
+                str(p.publication_count),
+                str(p.corresponding_count),
+                str(p.first_author_count),
+                p.activity,
+                p.outreach_eligibility,
+                "; ".join(p.review_flags),
+                latest.title or "",
+                latest.doi or "",
             ]
         )
-    return buffer.getvalue().encode("utf-8")
+    return write_rows_withholding(header, rows)
+
+
+def render_researchers_csv(profiles: Sequence[ResearcherProfile]) -> bytes:
+    return render_researchers_export(profiles)[0]

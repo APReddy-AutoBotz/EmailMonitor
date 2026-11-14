@@ -94,7 +94,7 @@ OutcomeStatus = Literal[
     "failed",
 ]
 MAX_RESULTS = 100
-_PMCID = re.compile(r"^PMC\d{3,12}$", re.IGNORECASE)
+_PMCID = re.compile(r"^PMC\d{3,10}$", re.IGNORECASE)
 
 
 class OpenAlexFixtureGateway:
@@ -505,7 +505,13 @@ class OpenAccessOrchestrator:
             if excluded:
                 outcomes.append(self._outcome(work, "excluded_by_filter", excluded))
                 continue
-            outcome, found = self._process(work, target_roles, suppressed_e, suppressed_d)
+            try:
+                outcome, found = self._process(work, target_roles, suppressed_e, suppressed_d)
+            except (FetchDenied, ValueError) as exc:
+                # One hostile or malformed article must not fail the whole run.
+                reason = str(exc) if isinstance(exc, FetchDenied) else "article_rejected_by_bounds"
+                outcomes.append(self._outcome(work, "failed", reason[:200]))
+                continue
             kept: list[ExtractedAcademicContact] = []
             for contact in found:
                 key = (contact.comparison_key, contact.doi or contact.pmcid or work.work_key)
@@ -554,13 +560,28 @@ class OpenAccessOrchestrator:
     def _discover_all(
         self, query: str, limit: int, filters: DiscoveryFilters
     ) -> tuple[list[_Work], dict[str, str]]:
-        """Union of sources, deduplicated by PMCID, then DOI. One work is read once.
+        """Union of sources, merged by any shared PMCID or DOI. One work is read once.
 
-        A failing source is reported in ``source_errors``; others still run.
+        A record matching two earlier groups (one by PMCID, another by DOI) joins
+        them. A failing source is reported in ``source_errors``; others still run.
         """
-        merged: dict[str, _Work] = {}
-        order: list[str] = []
+        groups: list[_Work] = []
         errors: dict[str, str] = {}
+
+        def keys(work: _Work) -> set[str]:
+            return {k for k in (work.pmcid, work.doi) if k}
+
+        def combine(a: _Work, b: _Work) -> _Work:
+            return replace(
+                a,
+                pmcid=a.pmcid or b.pmcid,
+                doi=a.doi or b.doi,
+                title=a.title or b.title,
+                journal=a.journal or b.journal,
+                publication_year=a.publication_year or b.publication_year,
+                found_in=a.found_in + tuple(n for n in b.found_in if n not in a.found_in),
+            )
+
         for name in MULTI_SOURCES:
             try:
                 found, _count = self._discover(name, query, limit, filters)
@@ -570,30 +591,20 @@ class OpenAccessOrchestrator:
                 ]
                 continue
             for work in found:
-                keys = [k for k in (work.pmcid, work.doi) if k]
-                existing = next((merged[k] for k in keys if k in merged), None)
-                if existing is None:
-                    record = replace(work, found_in=(name,))
-                    primary = keys[0] if keys else f"{name}:{work.work_key}"
-                    order.append(primary)
-                else:
-                    record = replace(
-                        existing,
-                        pmcid=existing.pmcid or work.pmcid,
-                        doi=existing.doi or work.doi,
-                        title=existing.title or work.title,
-                        journal=existing.journal or work.journal,
-                        publication_year=existing.publication_year or work.publication_year,
-                        found_in=existing.found_in
-                        + ((name,) if name not in existing.found_in else ()),
-                    )
-                    primary = next(o for o in order if merged.get(o) is existing)
-                for key in [primary, *keys]:
-                    merged[key] = record
-        unique: list[_Work] = []
-        for primary in order:
-            unique.append(merged[primary])
-        return unique[:limit], errors
+                record = replace(work, found_in=(name,))
+                wanted = keys(record)
+                matched = [i for i, g in enumerate(groups) if wanted and keys(g) & wanted]
+                if not matched:
+                    groups.append(record)
+                    continue
+                first = matched[0]
+                merged = groups[first]
+                for i in matched[1:]:
+                    merged = combine(merged, groups[i])
+                groups[first] = combine(merged, record)
+                for i in reversed(matched[1:]):
+                    del groups[i]
+        return groups[:limit], errors
 
     def _discover_europe_pmc(
         self, query: str, limit: int, filters: DiscoveryFilters
@@ -797,7 +808,8 @@ class OpenAccessOrchestrator:
         journal = obs.journal or work.journal
         year = work.publication_year
         if obs.publication_date and re.match(r"^\d{4}", obs.publication_date):
-            year = int(obs.publication_date[:4])
+            parsed_year = int(obs.publication_date[:4])
+            year = parsed_year if 1800 <= parsed_year <= 2100 else None
 
         by_position = {a.position: a for a in obs.authors}
         contacts: list[ExtractedAcademicContact] = []

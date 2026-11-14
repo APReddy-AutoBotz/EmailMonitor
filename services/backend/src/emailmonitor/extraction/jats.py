@@ -93,6 +93,7 @@ class JatsObservation(Fact):
     license_url: str | None = Field(default=None, max_length=2048)
     authors: list[AuthorFact] = Field(default_factory=list, max_length=100)
     candidates: list[JatsCandidateFact] = Field(default_factory=list, max_length=100)
+    authors_truncated: bool = False
     identity_association_implemented: Literal[False] = False
 
     @model_validator(mode="after")
@@ -129,6 +130,7 @@ class JatsNode:
     children: list["JatsNode"] = field(default_factory=list)
     text_chunks: list[str] = field(default_factory=list)
     content: list["str | JatsNode"] = field(default_factory=list)
+    order: int = 0  # document order; locators sort lexicographically, not by position
 
     def text(self, skip: frozenset[str] = frozenset()) -> str:
         """Document-order text; element boundaries become word boundaries."""
@@ -199,7 +201,7 @@ class _JatsBuilder:
 
         if self.current is None:
             locator = f"/{tag}[{index}]"
-            node = JatsNode(tag=tag, attrs=attrs, locator=locator)
+            node = JatsNode(tag=tag, attrs=attrs, locator=locator, order=self.node_count)
             self.root = node
             self.current = node
         else:
@@ -207,7 +209,9 @@ class _JatsBuilder:
             if depth > MAX_DEPTH:
                 raise FetchDenied("jats_xml_depth_limit_exceeded")
             locator = f"{self.current.locator}/{tag}[{index}]"
-            node = JatsNode(tag=tag, attrs=attrs, locator=locator, parent=self.current)
+            node = JatsNode(
+                tag=tag, attrs=attrs, locator=locator, parent=self.current, order=self.node_count
+            )
             self.current.children.append(node)
             self.current.content.append(node)
             self.current = node
@@ -252,6 +256,123 @@ def clean_address(value: str) -> str | None:
     return text
 
 
+_LOCAL_CHARS = frozenset(
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.!#$%&'*+/=?^_`|~-"
+)
+_DOMAIN_CHARS = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-")
+
+
+def find_addresses(text: str) -> list[tuple[int, str]]:
+    """Literal addresses in ``text`` as (start, address); linear time.
+
+    Anchored on each ``@`` with bounded scans (64-char local part, 253-char
+    domain), so hostile runs of address characters cannot cause regex
+    backtracking. Braces are excluded from local parts here: in running text
+    they signal grouped notation such as ``{a,b}@lab``, which is never expanded.
+    """
+    found: list[tuple[int, str]] = []
+    position = text.find("@")
+    last_end = 0
+    while position != -1:
+        start = position
+        while start > last_end and position - start < 64 and text[start - 1] in _LOCAL_CHARS:
+            start -= 1
+        end = position + 1
+        while end < len(text) and end - position <= 253 and text[end] in _DOMAIN_CHARS:
+            end += 1
+        # A token longer than the bounds is not an address; never keep a slice of it.
+        truncated_local = start > last_end and text[start - 1] in _LOCAL_CHARS
+        truncated_domain = end < len(text) and text[end] in _DOMAIN_CHARS
+        if truncated_local or truncated_domain:
+            position = text.find("@", position + 1)
+            continue
+        candidate = text[start:end].strip(".")
+        while candidate and not candidate[0].isalnum():
+            candidate = candidate[1:]
+            start += 1
+        address = clean_address(candidate)
+        if address and start >= last_end:
+            found.append((start, address))
+            last_end = start + len(address)
+        position = text.find("@", max(position + 1, last_end))
+    return found
+
+
+def trailing_label(text: str, end: int) -> tuple[str, int] | None:
+    """A parenthetical directly after an address: (content, end offset of the label)."""
+    match = re.match(r"\s*\(([^()]{1,80})\)", text[end : end + 120])
+    if not match:
+        return None
+    return match.group(1), end + match.end()
+
+
+def initial_variants(display_name: str) -> frozenset[str]:
+    tokens = [t for t in re.split(r"[\s.,]+", display_name) if t]
+    if not tokens:
+        return frozenset()
+    letters_all = "".join(part[0] for token in tokens for part in token.split("-") if part).upper()
+    letters_tokens = "".join(token[0] for token in tokens).upper()
+    variants = {letters_all, letters_tokens}
+    if len(tokens) >= 2:
+        variants.add((tokens[0][0] + tokens[-1][0]).upper())
+    return frozenset(v for v in variants if len(v) >= 2)
+
+
+def surname_of(display_name: str) -> str:
+    """Last token, or the part before a comma for 'Surname, Given' forms."""
+    if "," in display_name:
+        head = display_name.split(",", 1)[0].strip()
+        if head:
+            return head.split()[-1]
+    tokens = display_name.split()
+    return tokens[-1] if tokens else ""
+
+
+def _mentions(segment: str, name: str) -> bool:
+    surname = surname_of(name)
+    return (
+        len(surname) >= 2
+        and re.search(rf"(?<!\w){re.escape(surname)}(?!\w)", segment, re.IGNORECASE) is not None
+    )
+
+
+def attribute_label(
+    text: str,
+    start: int,
+    end: int,
+    window_start: int,
+    names: list[tuple[int, str]],
+) -> tuple[int | None, Literal["initials", "name"] | None, int]:
+    """Owner of the address at text[start:end] among ``names`` (key, display name).
+
+    Returns (key, kind, boundary). ``boundary`` is where the next address's
+    preceding window may begin (after this address's label, if any).
+
+    * A trailing parenthetical label decides alone: unique initials or unique
+      surname inside it, else no owner. It never falls back to earlier text,
+      which belongs to a previous address.
+    * Without a label, exactly one surname between ``window_start`` and the
+      address identifies the owner.
+    """
+    label = trailing_label(text, end)
+    if label is not None:
+        content, boundary = label
+        token = re.sub(r"[\s.\-]", "", content).upper()
+        if token.isalpha() and len(token) <= 6:
+            hits = [key for key, name in names if token in initial_variants(name)]
+            if len(hits) == 1:
+                return hits[0], "initials", boundary
+        hits = [key for key, name in names if _mentions(content, name)]
+        if len(hits) == 1:
+            return hits[0], "name", boundary
+        return None, None, boundary
+    segment = text[window_start:start]
+    hits = [key for key, name in names if _mentions(segment, name)]
+    if len(hits) == 1:
+        return hits[0], "name", end
+    return None, None, end
+
+
 @dataclass(frozen=True)
 class _Address:
     address: str
@@ -276,24 +397,36 @@ def _excerpt(text: str, start: int, length: int) -> str:
     return text[lo:hi][:300]
 
 
-def _structured_addresses(node: JatsNode) -> list[tuple[str, str]]:
-    """(address, locator) for <email>, email <ext-link> and mailto <uri> descendants."""
-    found: list[tuple[str, str]] = []
+def _structured_addresses(node: JatsNode, own_only: bool = False) -> list[tuple[str, str]]:
+    """(address, locator) for <email>, email <ext-link> and mailto <uri> descendants.
+
+    ``own_only`` skips addresses inside nested ``<contrib>`` elements (group
+    members), which belong to the member, not to the enclosing group author.
+    """
+    found: list[tuple[int, str, str]] = []
+
+    def keep(child: JatsNode) -> bool:
+        return not (own_only and child.has_ancestor("contrib", stop=node))
+
     for email_node in node.find_all("email"):
+        if not keep(email_node):
+            continue
         address = clean_address(email_node.text())
         if address:
-            found.append((address, email_node.locator))
+            found.append((email_node.order, address, email_node.locator))
     for tag in ("ext-link", "uri"):
         for link in node.find_all(tag):
+            if not keep(link):
+                continue
             href = link.attrs.get("xlink:href") or link.attrs.get("href") or ""
             link_type = link.attrs.get("ext-link-type", "").lower()
             if link_type == "email" or href.lower().startswith("mailto:"):
                 address = clean_address(href) if href else None
                 address = address or clean_address(link.text())
                 if address:
-                    found.append((address, link.locator))
-    found.sort(key=lambda item: item[1])
-    return found
+                    found.append((link.order, address, link.locator))
+    found.sort()
+    return [(address, locator) for _order, address, locator in found]
 
 
 def _note_addresses(node: JatsNode) -> list[_Address]:
@@ -308,72 +441,9 @@ def _note_addresses(node: JatsNode) -> list[_Address]:
                 cursor = offset + len(address)
             result.append(_Address(address, locator, _excerpt(text, offset, len(address)), offset))
         return result
-    for match in EMAIL_PATTERN.finditer(text):
-        literal = clean_address(match.group(0))
-        if literal:
-            result.append(
-                _Address(
-                    literal,
-                    node.locator,
-                    _excerpt(text, match.start(), len(literal)),
-                    match.start(),
-                )
-            )
+    for start, literal in find_addresses(text):
+        result.append(_Address(literal, node.locator, _excerpt(text, start, len(literal)), start))
     return result
-
-
-def _initial_variants(display_name: str) -> frozenset[str]:
-    tokens = [t for t in re.split(r"[\s.]+", display_name) if t]
-    if not tokens:
-        return frozenset()
-    letters_all = "".join(part[0] for token in tokens for part in token.split("-") if part).upper()
-    letters_tokens = "".join(token[0] for token in tokens).upper()
-    variants = {letters_all, letters_tokens}
-    if len(tokens) >= 2:
-        variants.add((tokens[0][0] + tokens[-1][0]).upper())
-    return frozenset(v for v in variants if len(v) >= 2)
-
-
-def _surname(display_name: str) -> str:
-    tokens = display_name.split()
-    return tokens[-1] if tokens else ""
-
-
-def _disambiguate(
-    note: _Note,
-    index: int,
-    authors: list[AuthorFact],
-    eligible: list[int],
-) -> tuple[int, AssociationBasis] | None:
-    """Pick one author for address ``index`` of a shared note, or None if ambiguous."""
-    entry = note.addresses[index]
-    if entry.offset < 0 or not eligible:
-        return None
-    by_position = {a.position: a for a in authors}
-    after = note.text[entry.offset + len(entry.address) :]
-    paren = re.match(r"\s*\(([^()]{1,40})\)", after)
-    if paren:
-        token = re.sub(r"[\s.\-]", "", paren.group(1)).upper()
-        if token.isalpha():
-            hits = [p for p in eligible if token in _initial_variants(by_position[p].display_name)]
-            if len(hits) == 1:
-                return hits[0], "corresp_initials"
-    previous_end = 0
-    if index > 0:
-        prev = note.addresses[index - 1]
-        if prev.offset >= 0:
-            previous_end = prev.offset + len(prev.address)
-    segment = note.text[previous_end : entry.offset]
-    hits = []
-    for position in eligible:
-        surname = _surname(by_position[position].display_name)
-        if len(surname) >= 2 and re.search(
-            rf"(?<!\w){re.escape(surname)}(?!\w)", segment, re.IGNORECASE
-        ):
-            hits.append(position)
-    if len(hits) == 1:
-        return hits[0], "corresp_name_proximity"
-    return None
 
 
 def _publication_date(article_meta: JatsNode) -> str | None:
@@ -521,7 +591,7 @@ def parse_jats_xml(data: bytes, requested_identifier: OpenAccessIdentifier) -> J
             for fn in author_notes.find_all("fn"):
                 if fn.attrs.get("fn-type", "").lower() in _CORRESP_FN_TYPES:
                     note_nodes.append(fn)
-        note_nodes.sort(key=lambda n: n.locator)
+        note_nodes.sort(key=lambda n: n.order)
         for node in note_nodes:
             note = _Note(
                 note_id=node.attrs.get("id"),
@@ -534,6 +604,7 @@ def parse_jats_xml(data: bytes, requested_identifier: OpenAccessIdentifier) -> J
                 notes_by_id[note.note_id] = note
 
     authors: list[AuthorFact] = []
+    authors_truncated = False
     author_signals: list[bool] = []
     author_note_refs: list[list[str]] = []
     direct_author_emails: list[list[tuple[str, str]]] = []
@@ -548,6 +619,9 @@ def parse_jats_xml(data: bytes, requested_identifier: OpenAccessIdentifier) -> J
 
             display_name, author_kind = _person_name(contrib)
             if not display_name:
+                continue
+            if len(authors) >= 100:
+                authors_truncated = True
                 continue
             position = len(authors) + 1
 
@@ -572,9 +646,7 @@ def parse_jats_xml(data: bytes, requested_identifier: OpenAccessIdentifier) -> J
                         refs.append(rid)
                         signal = True
 
-            contrib_emails = [
-                (address, locator) for address, locator in _structured_addresses(contrib)
-            ]
+            contrib_emails = _structured_addresses(contrib, own_only=True)
 
             aff_texts: list[str] = []
             for xref in contrib.find_all("xref"):
@@ -648,7 +720,7 @@ def parse_jats_xml(data: bytes, requested_identifier: OpenAccessIdentifier) -> J
         for address, locator in email_list:
             add(address, locator, address, [pos_idx + 1], "contrib_email")
 
-    # 2. Correspondence notes referenced by authors, then 3. unreferenced notes.
+    # 2. Correspondence notes: referenced ones first, then unreferenced ones.
     referencing: dict[str, list[int]] = {}
     for pos_idx, refs in enumerate(author_note_refs):
         for rid in refs:
@@ -656,60 +728,65 @@ def parse_jats_xml(data: bytes, requested_identifier: OpenAccessIdentifier) -> J
             if pos_idx + 1 not in referencing[rid]:
                 referencing[rid].append(pos_idx + 1)
     corresponding_positions = [a.position for a in authors if a.corresponding]
+    all_names = [(a.position, a.display_name) for a in authors if a.author_kind == "person"]
 
     for referenced_pass in (True, False):
         for note in notes:
             refs_for_note = referencing.get(note.note_id or "", [])
             if bool(refs_for_note) != referenced_pass:
                 continue
-            for index, entry in enumerate(note.addresses):
-                if refs_for_note:
-                    if len(refs_for_note) == 1 and len(note.addresses) == 1:
-                        add(
-                            entry.address,
-                            entry.locator,
-                            entry.excerpt,
-                            [refs_for_note[0]],
-                            "corresp_xref",
-                        )
-                        continue
-                    if len(refs_for_note) == 1:
-                        picked = _disambiguate(note, index, authors, refs_for_note)
-                        if picked is None:
-                            add(
-                                entry.address,
-                                entry.locator,
-                                entry.excerpt,
-                                [refs_for_note[0]],
-                                "corresp_xref",
-                            )
-                        else:
-                            add(entry.address, entry.locator, entry.excerpt, [picked[0]], picked[1])
-                        continue
-                    picked = _disambiguate(note, index, authors, refs_for_note)
+            boundary = 0
+            single = len(note.addresses) == 1
+            for entry in note.addresses:
+                owner: int | None = None
+                kind: Literal["initials", "name"] | None = None
+                if entry.offset >= 0:
+                    owner, kind, boundary = attribute_label(
+                        note.text,
+                        entry.offset,
+                        entry.offset + len(entry.address),
+                        boundary,
+                        all_names,
+                    )
+                # A sole address may inherit the note's structural owner unless an
+                # explicit label names somebody else.
+                structural: tuple[int, AssociationBasis] | None = None
+                if single and len(refs_for_note) == 1:
+                    structural = (refs_for_note[0], "corresp_xref")
+                elif single and not refs_for_note and len(corresponding_positions) == 1:
+                    structural = (corresponding_positions[0], "sole_corresponding_author")
+                if structural and (owner is None or owner == structural[0]):
+                    add(entry.address, entry.locator, entry.excerpt, [structural[0]], structural[1])
+                elif owner is not None and kind is not None and not structural:
+                    basis: AssociationBasis = (
+                        "corresp_initials" if kind == "initials" else "corresp_name_proximity"
+                    )
+                    add(entry.address, entry.locator, entry.excerpt, [owner], basis)
                 else:
-                    if len(corresponding_positions) == 1:
-                        add(
-                            entry.address,
-                            entry.locator,
-                            entry.excerpt,
-                            [corresponding_positions[0]],
-                            "sole_corresponding_author",
-                        )
-                        continue
-                    pool = corresponding_positions or [a.position for a in authors]
-                    picked = _disambiguate(note, index, authors, pool)
-                if picked is None:
                     add(entry.address, entry.locator, entry.excerpt, [], "unmatched")
-                else:
-                    add(entry.address, entry.locator, entry.excerpt, [picked[0]], picked[1])
 
     # A note that names its author asserts correspondence even without an xref.
     # Without any explicit author marker, unpicked authors stay unknown (None).
+    note_picked = {
+        p
+        for c in candidates
+        if c.association_basis
+        in (
+            "corresp_xref",
+            "corresp_initials",
+            "corresp_name_proximity",
+            "sole_corresponding_author",
+        )
+        for p in c.author_positions
+    }
     if authors and not any(author_signals) and notes:
-        picked_positions = {p for c in candidates for p in c.author_positions}
         authors = [
-            a.model_copy(update={"corresponding": True if a.position in picked_positions else None})
+            a.model_copy(update={"corresponding": True if a.position in note_picked else None})
+            for a in authors
+        ]
+    elif note_picked:
+        authors = [
+            a.model_copy(update={"corresponding": True}) if a.position in note_picked else a
             for a in authors
         ]
 
@@ -731,4 +808,5 @@ def parse_jats_xml(data: bytes, requested_identifier: OpenAccessIdentifier) -> J
         license_url=license_url,
         authors=authors,
         candidates=candidates,
+        authors_truncated=authors_truncated,
     )

@@ -289,7 +289,7 @@ def extract_document(
         )
 
     pdf = parse_pdf_contacts(data, known_authors=known_authors)
-    names = [a.strip() for a in known_authors if a.strip()]
+    names = [a.strip()[:300] for a in known_authors[:100] if a.strip()]
     context = ArticleContext(
         source="document",
         article_key=pdf.doi or digest,
@@ -303,14 +303,15 @@ def extract_document(
     )
     for pdf_candidate in pdf.candidates:
         author = None
-        if pdf_candidate.author_name is not None:
-            position = names.index(pdf_candidate.author_name) + 1
+        if pdf_candidate.author_name is not None and pdf_candidate.author_position is not None:
+            position = pdf_candidate.author_position
             author = AuthorView(
                 position=position,
                 display_name=pdf_candidate.author_name,
                 kind="person",
                 first=position == 1,
-                corresponding=pdf_candidate.region == "pdf_correspondence_line",
+                # Only correspondence wording asserts the role; an "E-mail:" list does not.
+                corresponding=pdf_candidate.association_basis == "pdf_correspondence_surname",
             )
         contact = make(
             context,

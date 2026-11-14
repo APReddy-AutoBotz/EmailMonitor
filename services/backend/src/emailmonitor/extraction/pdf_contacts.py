@@ -35,7 +35,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pypdf import PdfReader
 from pypdf.errors import PyPdfError
 
-from emailmonitor.extraction.jats import EMAIL_PATTERN, clean_address
+from emailmonitor.extraction.jats import attribute_label, find_addresses
 from emailmonitor.fetching.safety import FetchDenied
 
 PARSER_VERSION: Literal["pdf-contacts-v1"] = "pdf-contacts-v1"
@@ -45,17 +45,19 @@ MAX_PAGES = 5
 MAX_CHARS = 400_000
 MAX_CANDIDATES = 100
 
-_MARKER = re.compile(
-    r"(\bcorrespond(?:ence|ing)\b|\be-?mail(?:\s+address(?:es)?)?\s*:|\bcontact\s*:|✉|\*\s*e-?mail)",
-    re.IGNORECASE,
+# Correspondence wording asserts the corresponding-author role; a bare
+# "E-mail:"/"Contact:" list only labels addresses and asserts no role.
+_CORRESPONDENCE = re.compile(
+    r"(\bcorrespond(?:ence|ing)\b|✉|\baddress\s+correspondence\b)", re.IGNORECASE
 )
+_EMAIL_LABEL = re.compile(r"(\be-?mail(?:\s+address(?:es)?)?\s*:|\bcontact\s*:)", re.IGNORECASE)
 _REFERENCES = re.compile(r"^\s*(references|bibliography|literature\s+cited)\s*$", re.IGNORECASE)
-_GROUPED = re.compile(r"[{(\[][^{}()\[\]@]{1,200},[^{}()\[\]@]{1,200}[})\]]\s*@")
-_WRAPPED = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]*[.-]$|[A-Za-z0-9._%+-]+@$")
+# Linear: the first class excludes the comma, so no ambiguous split points.
+_GROUPED = re.compile(r"[{(\[][^{}()\[\]@,]{1,200}(?:,[^{}()\[\]@,]{1,200}){1,20}[})\]]\s*@")
 _DOI = re.compile(r"\b(10\.\d{4,9}/[-._;()/:A-Za-z0-9]+[A-Za-z0-9])")
 
-PdfBasis = Literal["pdf_correspondence_surname", "unmatched"]
-PdfRegion = Literal["pdf_correspondence_line", "pdf_front_matter"]
+PdfBasis = Literal["pdf_correspondence_surname", "pdf_email_label_surname", "unmatched"]
+PdfRegion = Literal["pdf_correspondence_line", "pdf_email_line", "pdf_front_matter"]
 
 
 class Contract(BaseModel):
@@ -68,6 +70,7 @@ class PdfContactCandidate(Contract):
     line: int = Field(ge=1)
     region: PdfRegion
     author_name: str | None = Field(default=None, max_length=300)
+    author_position: int | None = Field(default=None, ge=1, le=100)
     association_basis: PdfBasis
     association_status: Literal["needs_review", "unmatched"]
     excerpt: str = Field(max_length=300)
@@ -75,6 +78,8 @@ class PdfContactCandidate(Contract):
     @model_validator(mode="after")
     def consistent(self) -> PdfContactCandidate:
         unmatched = self.association_basis == "unmatched"
+        if (self.author_name is None) != (self.author_position is None):
+            raise ValueError("author name and position must agree")
         if unmatched != (self.author_name is None) or unmatched != (
             self.association_status == "unmatched"
         ):
@@ -103,13 +108,6 @@ class PdfContactObservation(Contract):
         if (self.status == "observed") != bool(self.candidates):
             raise ValueError("status disagrees with candidates")
         return self
-
-
-def _surname(name: str) -> str:
-    tokens = [t for t in re.split(r"[\s,]+", name.strip()) if t]
-    if not tokens:
-        return ""
-    return tokens[0] if "," in name else tokens[-1]
 
 
 def _lines(text: str) -> list[str]:
@@ -174,9 +172,11 @@ def parse_pdf_contacts(
     grouped = 0
     wrapped = 0
     doi: str | None = None
+    names = list(enumerate(authors, start=1))
     for page_number, text in enumerate(texts, start=1):
         lines = _lines(text)
-        bare_marker_line: int | None = None
+        carried: PdfRegion | None = None
+        carried_text = ""
         for index, line in enumerate(lines):
             if _REFERENCES.match(line):
                 break
@@ -186,59 +186,71 @@ def parse_pdf_contacts(
                     doi = match.group(1).lower()
             grouped_spans = [(m.start(), m.end()) for m in _GROUPED.finditer(line)]
             grouped += len(grouped_spans)
-            if _WRAPPED.search(line):
+            last_token = line.rsplit(" ", 1)[-1] if line else ""
+            if "@" in last_token and last_token.endswith(("@", ".", "-")):
                 wrapped += 1
-            marker = _MARKER.search(line)
-            matches = list(EMAIL_PATTERN.finditer(line))
-            # A marker line with no address of its own labels the next line only.
-            follows_bare_marker = bare_marker_line == index - 1
-            bare_marker_line = index if marker and not matches else None
-            previous_end = 0
-            for match in matches:
-                in_group = any(lo < match.end() and match.start() < hi for lo, hi in grouped_spans)
-                address = clean_address(match.group(0))
-                segment_start, previous_end = previous_end, match.end()
-                if (
-                    in_group
-                    or not address
-                    or re.search(r"[{}]", address.split("@", 1)[0])
-                    or address.casefold() in seen
-                    or len(candidates) >= MAX_CANDIDATES
-                ):
+            correspondence = _CORRESPONDENCE.search(line)
+            email_label = _EMAIL_LABEL.search(line)
+            found = find_addresses(line)
+            # A marker line without an address of its own labels the next line only.
+            inherited, inherited_text = carried, carried_text
+            carried = None
+            carried_text = ""
+            if not found and (correspondence or email_label):
+                carried = "pdf_correspondence_line" if correspondence else "pdf_email_line"
+                carried_text = line
+            boundary = 0
+            for start, address in found:
+                end = start + len(address)
+                in_group = any(lo < end and start < hi for lo, hi in grouped_spans)
+                if in_group or address.casefold() in seen or len(candidates) >= MAX_CANDIDATES:
+                    boundary = end
                     continue
                 seen.add(address.casefold())
-                on_marker_line = marker is not None and marker.start() < match.start()
-                region: PdfRegion = (
-                    "pdf_correspondence_line"
-                    if on_marker_line or follows_bare_marker
-                    else "pdf_front_matter"
-                )
-                segment = line[segment_start : match.start()]
-                if follows_bare_marker and not on_marker_line:
-                    segment = lines[index - 1] + " " + segment
-                hits = [
-                    name
-                    for name in authors
-                    if len(_surname(name)) >= 2
-                    and re.search(
-                        rf"(?<!\w){re.escape(_surname(name))}(?!\w)", segment, re.IGNORECASE
+                region: PdfRegion
+                if correspondence and correspondence.start() < start:
+                    region = "pdf_correspondence_line"
+                elif email_label and email_label.start() < start:
+                    region = "pdf_email_line"
+                elif inherited is not None:
+                    region = inherited
+                else:
+                    region = "pdf_front_matter"
+                text_for_label = line
+                offset = 0
+                if inherited is not None and region == inherited and boundary == 0:
+                    text_for_label = inherited_text + " " + line
+                    offset = len(inherited_text) + 1
+                owner: int | None = None
+                if region != "pdf_front_matter":
+                    owner, _kind, label_end = attribute_label(
+                        text_for_label,
+                        start + offset,
+                        end + offset,
+                        boundary + offset if boundary else 0,
+                        names,
                     )
-                ]
-                matched = (
-                    hits[0] if len(hits) == 1 and region == "pdf_correspondence_line" else None
-                )
-                context = (lines[index - 1] + " " + line) if follows_bare_marker else line
+                    boundary = label_end - offset
+                else:
+                    boundary = end
+                basis: PdfBasis = "unmatched"
+                if owner is not None:
+                    basis = (
+                        "pdf_correspondence_surname"
+                        if region == "pdf_correspondence_line"
+                        else "pdf_email_label_surname"
+                    )
+                context = (inherited_text + " " + line) if inherited is not None else line
                 candidates.append(
                     PdfContactCandidate(
                         raw_address=address,
                         page=page_number,
                         line=index + 1,
                         region=region,
-                        author_name=matched,
-                        association_basis=(
-                            "pdf_correspondence_surname" if matched else "unmatched"
-                        ),
-                        association_status="needs_review" if matched else "unmatched",
+                        author_name=authors[owner - 1] if owner is not None else None,
+                        author_position=owner,
+                        association_basis=basis,
+                        association_status="needs_review" if owner is not None else "unmatched",
                         excerpt=context[:300],
                     )
                 )

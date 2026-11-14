@@ -22,9 +22,10 @@ from emailmonitor.discovery.openaccess_orchestrator import (
 )
 from emailmonitor.fetching.safety import FetchDenied
 from emailmonitor.results.oa_exports import render_export
+from emailmonitor.results.render import RenderDenied
 from emailmonitor.results.researchers import (
     build_researcher_profiles,
-    render_researchers_csv,
+    render_researchers_export,
 )
 
 SourceChoice = Literal["europe-pmc", "openalex", "crossref", "biorxiv", "auto", "all"]
@@ -671,21 +672,27 @@ def open_access_discover(org_id: str, body: OpenAccessDiscoverRequest) -> dict[s
 def open_access_export(org_id: str, body: OpenAccessExportRequest) -> Response:
     _require_preview_org(org_id)
     result = _run_open_access(body)
-    if body.preset == "researchers":
-        profiles = build_researcher_profiles(
-            result.contacts_extracted, reference_year=result.reference_year
-        )
-        content = render_researchers_csv(profiles)
-        filename = "emailmonitor-researchers-export.csv"
-        counts = {"X-EmailMonitor-Rows-Written": str(len(profiles))}
-    else:
-        export = render_export(body.preset, result.contacts_extracted)
-        content, filename = export.content, export.filename
-        counts = {
-            "X-EmailMonitor-Rows-Written": str(export.rows_written),
-            "X-EmailMonitor-Rows-Withheld-Unsafe": str(export.rows_withheld_unsafe),
-            "X-EmailMonitor-Rows-Not-Eligible": str(export.rows_excluded_not_eligible),
-        }
+    try:
+        if body.preset == "researchers":
+            profiles = build_researcher_profiles(
+                result.contacts_extracted, reference_year=result.reference_year
+            )
+            content, written, withheld = render_researchers_export(profiles)
+            filename = "emailmonitor-researchers-export.csv"
+            counts = {
+                "X-EmailMonitor-Rows-Written": str(written),
+                "X-EmailMonitor-Rows-Withheld-Unsafe": str(withheld),
+            }
+        else:
+            export = render_export(body.preset, result.contacts_extracted)
+            content, filename = export.content, export.filename
+            counts = {
+                "X-EmailMonitor-Rows-Written": str(export.rows_written),
+                "X-EmailMonitor-Rows-Withheld-Unsafe": str(export.rows_withheld_unsafe),
+                "X-EmailMonitor-Rows-Not-Eligible": str(export.rows_excluded_not_eligible),
+            }
+    except RenderDenied as exc:
+        raise HTTPException(status_code=400, detail=str(exc)[:200]) from None
     return Response(
         content=content,
         media_type="text/csv",
