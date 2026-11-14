@@ -41,6 +41,14 @@ export type OaForm = {
 }
 export const defaultForm: OaForm = { query: '', source: 'auto', roles: 'both', maxResults: 25, fromYear: '', untilYear: '', excludeJournals: '', suppressedEmails: '', suppressedDomains: '' }
 export const MAX_UPLOAD_BYTES = 20 * 1024 * 1024
+const TABS = [['search', 'Search open access'], ['document', 'Analyze a document'], ['researchers', 'Researchers']] as const
+
+export function formatBytes(size: number): string {
+  if (!Number.isFinite(size) || size < 0) return 'unknown size'
+  if (size < 1024) return size + ' B'
+  if (size < 1024 * 1024) return (size / 1024).toFixed(1) + ' KB'
+  return (size / (1024 * 1024)).toFixed(1) + ' MB'
+}
 const MAX_EXPORT_BYTES = 50 * 1024 * 1024
 
 export function splitList(value: string, limit: number): string[] {
@@ -183,7 +191,12 @@ export function OpenAccessWorkspace({ context }: { context: Context }) {
   return <section className="oa" aria-labelledby="oa-title">
     <h4 id="oa-title">Open Access contact discovery</h4>
     <p className="field-hint">Offline preview over committed synthetic fixtures. Every address is copied from its own article&apos;s full text with a document hash and excerpt; nothing is guessed, verified as a live mailbox, or sent.</p>
-    <div className="oa-tabs" role="tablist">{([['search', 'Search open access'], ['document', 'Analyze a document'], ['researchers', 'Researchers']] as const).map(([key, label]) => <button key={key} role="tab" aria-selected={tab === key} onClick={() => setTab(key)}>{label}</button>)}</div>
+    <div className="oa-tabs" role="tablist" aria-label="Open Access tasks">{TABS.map(([key, label]) => <button key={key} id={'oa-tab-' + key} type="button" role="tab" aria-selected={tab === key} aria-controls="oa-panel" tabIndex={tab === key ? 0 : -1} onClick={() => setTab(key)} onKeyDown={event => {
+      const index = TABS.findIndex(([k]) => k === tab)
+      const next = event.key === 'ArrowRight' ? (index + 1) % TABS.length : event.key === 'ArrowLeft' ? (index + TABS.length - 1) % TABS.length : -1
+      if (next >= 0) { event.preventDefault(); setTab(TABS[next][0]); document.getElementById('oa-tab-' + TABS[next][0])?.focus() }
+    }}>{label}</button>)}</div>
+    <div id="oa-panel" role="tabpanel" aria-labelledby={'oa-tab-' + tab}>
     {busy && <p role="status">Working…</p>}{failure && <p role="alert" className="error">{failure}</p>}{message && <p role="status" className="notice">{message}</p>}
     {tab !== 'document' && <form onSubmit={search} className="oa-form" aria-label="Open access search">
       <div className="formgrid">
@@ -202,10 +215,12 @@ export function OpenAccessWorkspace({ context }: { context: Context }) {
         {tab === 'researchers' && <button type="button" disabled={busy || !canSearch} onClick={loadResearchers}>Build researcher list</button>}
         <label className="inline">Export as<select value={preset} onChange={e => setPreset(e.target.value as OaPreset)}><option value="instantly">Instantly</option><option value="smartlead">Smartlead</option><option value="lemlist">Lemlist</option><option value="hubspot">HubSpot</option><option value="evidence">Evidence audit (all reviewable rows)</option><option value="researchers">Researchers (one row each)</option></select></label>
         <label className="inline">Author links<select value={strength} onChange={e => setStrength(e.target.value as 'labelled' | 'structural')}><option value="labelled">Markup or explicit name/initials label</option><option value="structural">Markup only (highest precision)</option></select></label>
-        <button type="button" disabled={busy || !canExport || !canSearch} onClick={exportFile}>Download CSV</button></div>
+        <button type="button" disabled={busy || !canExport || !canSearch || !form.query.trim()} onClick={exportFile}>Download CSV</button></div>
       {!canSearch && <p className="field-hint">Your role cannot run source discovery.</p>}
       {!canExport && <p className="field-hint">Your role cannot export results.</p>}
     </form>}
+    {tab === 'search' && !result && !busy && <Empty>Search a keyword (for example “CRISPR”), a DOI or a PMCID. Each discovered work is listed with what happened to it, and every address shows its evidence.</Empty>}
+    {tab === 'researchers' && !researchers && !busy && <Empty>Enter a query and choose “Build researcher list”: addresses from the matching articles are grouped per researcher. Names alone never merge two people.</Empty>}
     {tab === 'search' && result && <><Summary result={result} /><Outcomes articles={result.articles} /><ContactTable contacts={result.contacts_extracted} caption={`Addresses for “${result.query}”`} /></>}
     {tab === 'researchers' && researchers && (researchers.length ? <div className="tablewrap" tabIndex={0}><table><caption>Researchers (addresses grouped; names never merge people)</caption><thead><tr><th>Researcher</th><th>Addresses</th><th>Activity</th><th>Papers</th><th>Readiness</th></tr></thead>
       <tbody>{researchers.map(r => <tr key={r.researcher_key}><td>{r.display_names.join(' / ') || <em>No author link</em>}{r.orcids.length > 0 && <><br /><small>ORCID {r.orcids.join(', ')}</small></>}{r.latest_affiliation && <><br /><small>{r.latest_affiliation}{r.affiliation_changed ? ' (affiliation changed)' : ''}</small></>}</td>
@@ -214,7 +229,7 @@ export function OpenAccessWorkspace({ context }: { context: Context }) {
         <td><Status value={r.outreach_eligibility} />{r.review_flags.length > 0 && <><br /><small>{r.review_flags.map(f => f.replaceAll('_', ' ')).join(', ')}</small></>}</td></tr>)}</tbody></table></div> : <Empty>No researchers for this query.</Empty>)}
     {tab === 'document' && <form onSubmit={analyze} className="oa-form" aria-label="Analyze a document">
       <p className="field-hint">Use a PDF, JATS XML or saved article page that you are permitted to read. It is parsed once and not stored; links inside it are reported, never opened.</p>
-      <div className="formgrid"><label>Document<input type="file" accept=".pdf,.xml,.html,.htm,application/pdf,text/html,application/xml" onChange={e => setFile(e.target.files?.[0])} /></label>
+      <div className="formgrid"><label>Document<input type="file" accept=".pdf,.xml,.html,.htm,application/pdf,text/html,application/xml" onChange={e => { setFile(e.target.files?.[0]); setDoc(undefined) }} />{file && <small>{file.name} · {formatBytes(file.size)}{file.size > MAX_UPLOAD_BYTES ? ' · too large (20 MB limit)' : ''}</small>}</label>
         <label>Known author names (for PDFs; one per line, in order)<textarea rows={3} value={knownAuthors} onChange={e => setKnownAuthors(e.target.value)} /></label>
         <label>Page address (optional, provenance only)<input type="url" maxLength={2048} value={pageUrl} onChange={e => setPageUrl(e.target.value)} /></label>
         <label>Authors<select value={docRoles} onChange={e => setDocRoles(e.target.value as OaRoles)}><option value="all">All observed, including unlinked</option><option value="both">First or corresponding</option><option value="corresponding">Corresponding only</option></select></label></div>
@@ -225,5 +240,6 @@ export function OpenAccessWorkspace({ context }: { context: Context }) {
         {doc.linked_pdf_url && <p className="field-hint">The page links an article PDF ({doc.linked_pdf_url}); it was not opened.</p>}
         <ContactTable contacts={doc.contacts} caption="Addresses observed in this document" /></>}
     </form>}
+    </div>
   </section>
 }

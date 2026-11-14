@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 import { ApiScope } from './client'
-import { basisLabel, defaultForm, discoverBody, documentQuery, OpenAccessWorkspace, outcomeLabel, splitAuthorNames, splitList } from './openAccess'
+import { basisLabel, defaultForm, discoverBody, documentQuery, formatBytes, OpenAccessWorkspace, outcomeLabel, splitAuthorNames, splitList } from './openAccess'
 import type { Context } from './ui'
 
 const org = '00000000-0000-4000-8000-000000000001'
@@ -60,5 +60,27 @@ describe('open access workspace rendering', () => {
     expect(html).toContain('Your role cannot run source discovery.')
     expect(html).toContain('Your role cannot export results.')
     expect(html).toMatch(/<button type="submit" disabled="">Search fixtures<\/button>/)
+  })
+})
+
+describe('open access screen accessibility and guidance', () => {
+  it('wires tabs to a labelled tab panel with a single tab stop', () => {
+    const html = renderToStaticMarkup(<OpenAccessWorkspace context={context()} />)
+    expect(html).toContain('role="tablist" aria-label="Open Access tasks"')
+    expect(html).toContain('id="oa-panel" role="tabpanel" aria-labelledby="oa-tab-search"')
+    expect(html.match(/role="tab"/g)).toHaveLength(3)
+    expect(html.match(/tabindex="0"/g)?.length).toBeGreaterThanOrEqual(1)
+    expect(html).toContain('aria-controls="oa-panel"')
+  })
+  it('explains what to do before the first search and keeps downloads off without a query', () => {
+    const html = renderToStaticMarkup(<OpenAccessWorkspace context={context()} />)
+    expect(html).toContain('Search a keyword')
+    expect(html).toMatch(/<button type="button" disabled="">Download CSV<\/button>/)
+  })
+  it('formats upload sizes', () => {
+    expect(formatBytes(512)).toBe('512 B')
+    expect(formatBytes(2048)).toBe('2.0 KB')
+    expect(formatBytes(5 * 1024 * 1024)).toBe('5.0 MB')
+    expect(formatBytes(-1)).toBe('unknown size')
   })
 })
