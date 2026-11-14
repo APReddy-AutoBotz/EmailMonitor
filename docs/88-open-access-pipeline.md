@@ -87,6 +87,12 @@ Preview endpoint: `POST /api/v1/organizations/{org}/open-access/documents?known_
 
 Preview endpoints: `POST .../open-access/export` (`preset` = any of the above) and `POST .../open-access/researchers`.
 
+## Operator screen (OA-020)
+
+`apps/web/src/openAccess.tsx`, reachable as **Open Access** in the workspace navigation. Three tabs: *Search open access* (summary counts, every work with its outcome, addresses with link basis, export readiness and an evidence drawer showing excerpt, locator and document SHA-256), *Analyze a document* (PDF/JATS/HTML upload with optional known author names and page address), and *Researchers*. Discovery requires `source.acquire`; downloads also require `results.export`. Client-side checks mirror server bounds; the server stays authoritative. Uploads send their own `Content-Type` (the shared client now only defaults to JSON when none is given).
+
+Local run (Windows, as verified): start `uvicorn emailmonitor.dev_server:app --app-dir services/backend/src --port 8000` and `pnpm --dir apps/web dev`, open the Vite URL, choose **Open Access**, search `CRISPR` with *All observed* authors.
+
 ## Commands and observed results
 
 ```sh

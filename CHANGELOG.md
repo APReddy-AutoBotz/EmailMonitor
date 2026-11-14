@@ -4,6 +4,7 @@
 - OA-013: Europe PMC search planner/parser and fixture gateway for keyword and exact-DOI to PMCID resolution. Offline only; no live transport.
 - OA-014/015/016: single-document intake for operator-supplied landing pages (Highwire `citation_*` meta and correspondence mailto blocks), text-layer PDFs and JATS XML, sharing one contact builder with eligibility and suppression; preview raw-body upload endpoint. Nothing is fetched or decoded; grouped/wrapped/obfuscated addresses are review notes.
 - OA-017/018/019: researcher profiles (address grouping, valid-ORCID linking only, conflict flags), role-account review reason, and Lemlist/HubSpot/evidence/researchers export presets. Formula-unsafe rows are now withheld and counted instead of failing the whole Open Access export; values are never rewritten.
+- OA-020: "Open Access" workspace screen (search, document upload, researchers, exports). The preview server no longer advertises `live_sources_enabled: true`; nothing live exists.
 
 ## Local sibling-Draft integration candidate
 

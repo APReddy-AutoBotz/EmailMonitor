@@ -983,3 +983,27 @@ footer {
   .environment-note { padding: 0.5rem 1rem; }
   .workspace-heading { flex-wrap: wrap; }
 }
+
+/* Open Access workspace */
+.oa { display: grid; gap: 1rem; }
+.oa-tabs { display: flex; flex-wrap: wrap; gap: 0.5rem; border-bottom: 1px solid var(--slate-200); padding-bottom: 0.5rem; }
+.oa-tabs [aria-selected="true"] { background: var(--navy-800); color: #fff; border-color: var(--navy-800); }
+.oa-form { display: grid; gap: 0.75rem; }
+.oa-form textarea { width: 100%; font: inherit; }
+.oa-form .inline { display: inline-flex; align-items: center; gap: 0.5rem; }
+.oa-summary { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: stretch; }
+.oa-stat { display: grid; min-width: 9rem; padding: 0.6rem 0.8rem; border: 1px solid var(--slate-200); border-radius: 0.5rem; background: #fff; }
+.oa-stat span { font-size: 0.8rem; color: var(--slate-600); }
+.oa-stat strong { font-size: 1.35rem; color: var(--navy-800); }
+.oa-route { flex-basis: 100%; margin: 0; color: var(--slate-600); font-size: 0.9rem; }
+.oa-contacts { min-width: 64rem; }
+.oa-contacts td { vertical-align: top; }
+.oa-contacts td:first-child { min-width: 14rem; }
+.oa-contacts code { overflow-wrap: anywhere; }
+.oa-evidence { margin-top: 0.5rem; max-width: 28rem; }
+.oa-evidence blockquote { margin: 0; padding: 0.5rem 0.75rem; border-left: 3px solid var(--amber-600); background: var(--amber-50); font-size: 0.9rem; white-space: pre-wrap; }
+.status-eligible { background: #e7f6ec; color: #14532d; }
+.status-suppressed { background: var(--slate-200); color: var(--slate-700); }
+.status-unmatched { background: var(--amber-100); color: var(--amber-900); }
+.status-active_recent { background: #e7f6ec; color: #14532d; }
+.status-dormant { background: var(--slate-200); color: var(--slate-700); }

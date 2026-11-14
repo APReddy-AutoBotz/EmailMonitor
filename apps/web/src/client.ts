@@ -71,7 +71,8 @@ export class ApiScope {
       const headers = new Headers(init.headers)
       if (init.method && init.method !== 'GET') {
         headers.set('X-CSRF-Token', this.csrf)
-        headers.set('Content-Type', 'application/json')
+        // Binary document uploads declare their own type; everything else is JSON.
+        if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
       }
       const response = await fetch(this.path(suffix), { ...init, headers, signal: controller.signal, credentials: 'same-origin', cache: 'no-store', redirect: 'error' })
       if (this.closed || controller.signal.aborted) throw new DOMException('Organization changed', 'AbortError')

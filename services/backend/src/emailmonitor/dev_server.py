@@ -199,7 +199,7 @@ def capabilities() -> dict[str, Any]:
         "schema_version": "1.0",
         "implementation_stage": "tenant_foundation",
         "extraction_implemented": True,
-        "live_sources_enabled": True,
+        "live_sources_enabled": False,
         "outbound_email_enabled": False,
         "external_ai_enabled": False,
         "tenant_data_api_available": True,

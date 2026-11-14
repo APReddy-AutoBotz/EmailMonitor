@@ -50,6 +50,7 @@ The repository documentation validator checks local Markdown targets, JSON synta
 | OA-017 | LOCAL CANDIDATE | Researcher-level rollup: address grouping, valid-ORCID linking only, conflict flags, observed-year activity, affiliation change; researchers CSV and preview endpoint. |
 | OA-018 | LOCAL CANDIDATE | Role/functional mailbox detection (`info@`, `noreply@`, `*-lab@`) as a `needs_review` reason. |
 | OA-019 | LOCAL CANDIDATE | Export presets (Instantly, Smartlead, Lemlist, HubSpot, evidence audit) with per-row withholding of formula-unsafe rows and row-count headers. |
+| OA-020 | LOCAL CANDIDATE | Operator "Open Access" screen: fixture search with per-work outcomes and evidence drawer, document upload, researcher list, preset CSV downloads with withheld-row counts; capability-gated. Verified in the browser against the preview server (no console errors). |
 | EM-EXT-01–05 | DEFERRED | Post-core extensions (OCR adapter, institutional enrichment, recurring searches, direct outreach). |
 
 ## What has been done vs what remains
