@@ -22,6 +22,8 @@
 
 ## Proposed starting throttle (owner to confirm)
 
+Note: the current source-policy model enforces concurrency 1 and at least 5 seconds between requests per source (`sources/policy.Limits`). The table below is only reachable through a reviewed policy change; until then the 5-second floor applies. See [document 90](90-open-access-live-transport-design.md).
+
 | Source | Requests/s | Concurrency | Page size | Max pages/job |
 |---|---|---|---|---|
 | Europe PMC search | 2 | 1 | 100 | 5 |

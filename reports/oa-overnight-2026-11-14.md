@@ -34,7 +34,7 @@ Also fixed along the way: the web lockfile had been downgraded from v9 to v6 by 
 
 ## Decisions waiting for you (nothing below was decided overnight)
 
-1. **Live API access** — approve or reject Europe PMC, OpenAlex, Crossref, bioRxiv for this purpose; choose a role mailbox for Crossref's polite pool; decide on an OpenAlex API key and monthly budget (keys are now needed for paging and usage is priced); confirm throttles (proposed in document 89).
+1. **Live API access** — approve or reject Europe PMC, OpenAlex, Crossref, bioRxiv for this purpose; choose a role mailbox for Crossref's polite pool; decide on an OpenAlex API key and monthly budget (keys are now needed for paging and usage is priced); confirm throttles (proposed in document 89; the current policy model enforces ≥5 s between requests). The engineering path once approved is in document 90.
 2. **License stance** — whether contacts from articles whose license is `other`/`unknown` (e.g. some preprints) are allowed, flagged or excluded.
 3. **Persistence** — OA results are computed per request; integrating them into the durable job/association tables (tenant RLS, retention, deletion) is the next engineering step and needs the database.
 4. **Service package cap** — confirm the 384-entry cap (or prefer excluding preview-only modules from the service package).
