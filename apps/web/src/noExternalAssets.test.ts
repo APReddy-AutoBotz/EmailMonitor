@@ -13,7 +13,7 @@ describe('no external assets', () => {
     expect(indexHtml).not.toMatch(/<script[^>]+src="https?:/i)
   })
   it('styles.css never animates visibility (no `transition: all`)', () => {
-    expect(styles).not.toMatch(/transition\s*:[^;]*all/i)
+    expect(styles).not.toMatch(/transition\s*:[^;]*\ball\b/i)
     expect(styles).not.toMatch(/transition[^;]*visibility/i)
   })
   it('styles.css imports and fetches nothing remote', () => {
