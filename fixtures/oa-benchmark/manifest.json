@@ -1,0 +1,235 @@
+{
+  "description": "Synthetic authored corpus of common publisher correspondence layouts. Fictional people, reserved .example domains. A regression benchmark for association logic, not a measurement of real-world accuracy (EM-016).",
+  "documents": [
+    {
+      "id": "jats-plos-xref",
+      "file": "jats-plos-xref.xml",
+      "pattern": "PLOS: single corresp note referenced by one author",
+      "expected": [
+        {
+          "address": "r.okafor@immuno.lagos.example",
+          "author": "Ngozi Okafor",
+          "corresponding": true
+        }
+      ]
+    },
+    {
+      "id": "jats-bmc-all-emails",
+      "file": "jats-bmc-all-emails.xml",
+      "pattern": "BMC: every author has a contrib email; one corresp=yes",
+      "expected": [
+        {
+          "address": "h.lund@agro.oslo.example",
+          "author": "Hanne Lund",
+          "corresponding": false
+        },
+        {
+          "address": "t.berg@agro.oslo.example",
+          "author": "Tor Berg",
+          "corresponding": true
+        },
+        {
+          "address": "m.eide@agro.oslo.example",
+          "author": "Mari Eide",
+          "corresponding": false
+        }
+      ]
+    },
+    {
+      "id": "jats-frontiers-names",
+      "file": "jats-frontiers-names.xml",
+      "pattern": "Frontiers: unreferenced note 'Name, address' for two people",
+      "expected": [
+        {
+          "address": "c.rossi@neuro.milano.example",
+          "author": "Chiara Rossi",
+          "corresponding": true
+        },
+        {
+          "address": "l.bianchi@neuro.milano.example",
+          "author": "Luca Bianchi",
+          "corresponding": true
+        }
+      ]
+    },
+    {
+      "id": "jats-mdpi-initials",
+      "file": "jats-mdpi-initials.xml",
+      "pattern": "MDPI: fn-type=corresp with '(A.B.)' initials after each address",
+      "expected": [
+        {
+          "address": "a.nowak@chem.gdansk.example",
+          "author": "Anna Nowak",
+          "corresponding": true
+        },
+        {
+          "address": "p.zielinski@chem.gdansk.example",
+          "author": "Piotr Zielinski",
+          "corresponding": true
+        }
+      ]
+    },
+    {
+      "id": "jats-elife-separate-notes",
+      "file": "jats-elife-separate-notes.xml",
+      "pattern": "eLife: two corresponding authors each with their own corresp id",
+      "expected": [
+        {
+          "address": "s.tanaka@cell.kyoto.example",
+          "author": "Sora Tanaka",
+          "corresponding": true
+        },
+        {
+          "address": "d.mensah@cell.accra.example",
+          "author": "Daniel Mensah",
+          "corresponding": true
+        }
+      ]
+    },
+    {
+      "id": "jats-group-and-mailbox",
+      "file": "jats-group-and-mailbox.xml",
+      "pattern": "Consortium author whose member lists an address, plus a data-request mailbox; neither belongs to a listed author position",
+      "expected": [
+        {
+          "address": "f.costa@epi.porto.example",
+          "author": "Filipa Costa",
+          "corresponding": true
+        },
+        {
+          "address": "data-requests@epi.porto.example",
+          "author": null,
+          "corresponding": null
+        },
+        {
+          "address": "r.lopes@epi.porto.example",
+          "author": null,
+          "corresponding": null
+        }
+      ]
+    },
+    {
+      "id": "jats-institution-trap",
+      "file": "jats-institution-trap.xml",
+      "pattern": "Note naming 'Brown University' while author Alice Brown is not the owner",
+      "expected": [
+        {
+          "address": "kj@med.providence.example",
+          "author": null,
+          "corresponding": null
+        }
+      ]
+    },
+    {
+      "id": "html-highwire",
+      "file": "html-highwire.html",
+      "pattern": "Highwire citation_author_email tags in author sequence",
+      "expected": [
+        {
+          "address": "e.vargas@geo.lima.example",
+          "author": "Elena Vargas",
+          "corresponding": false
+        },
+        {
+          "address": "j.quispe@geo.lima.example",
+          "author": "Jorge Quispe",
+          "corresponding": false
+        }
+      ]
+    },
+    {
+      "id": "html-correspondence-block",
+      "file": "html-correspondence-block.html",
+      "pattern": "Correspondence block, name then mailto; footer support mailbox ignored",
+      "expected": [
+        {
+          "address": "m.haddad@arid.amman.example",
+          "author": "Mona Haddad",
+          "corresponding": true
+        }
+      ]
+    },
+    {
+      "id": "html-email-list-address-first",
+      "file": "html-email-list-address-first.html",
+      "pattern": "E-mail line 'address, Name; address, Name' (no correspondence wording)",
+      "expected": [
+        {
+          "address": "o.berg@phys.lund.example",
+          "author": "Olof Berg",
+          "corresponding": false
+        },
+        {
+          "address": "i.sand@phys.lund.example",
+          "author": "Ida Sand",
+          "corresponding": false
+        }
+      ]
+    },
+    {
+      "id": "pdf-correspondence-line",
+      "pdf_lines": [
+        "Sediment carbon budgets in tidal flats",
+        "Amara Diallo1, Pieter de Vries2*",
+        "*Correspondence: Pieter de Vries, p.devries@marine.delft.example",
+        "doi: 10.5555/bench.2026.12"
+      ],
+      "known_authors": [
+        "Amara Diallo",
+        "Pieter de Vries"
+      ],
+      "pattern": "PDF correspondence line with name before address",
+      "expected": [
+        {
+          "address": "p.devries@marine.delft.example",
+          "author": "Pieter de Vries",
+          "corresponding": true
+        }
+      ]
+    },
+    {
+      "id": "pdf-email-labels",
+      "pdf_lines": [
+        "Gut microbiota in seasonal diets",
+        "E-mail addresses: wli@micro.wuhan.example (Li), lito@micro.osaka.example (Ito)"
+      ],
+      "known_authors": [
+        "Wei Li",
+        "Lan Ito"
+      ],
+      "pattern": "PDF e-mail list with surname labels (short surnames)",
+      "expected": [
+        {
+          "address": "wli@micro.wuhan.example",
+          "author": "Wei Li",
+          "corresponding": false
+        },
+        {
+          "address": "lito@micro.osaka.example",
+          "author": "Lan Ito",
+          "corresponding": false
+        }
+      ]
+    },
+    {
+      "id": "pdf-institution-and-umlaut",
+      "pdf_lines": [
+        "Correspondence: Department of Surgery, Brown University. kj@med.providence.example",
+        "Contact: Jürgen Müller, müller@uni.example"
+      ],
+      "known_authors": [
+        "Alice Brown",
+        "Karen Jones",
+        "Jürgen Müller"
+      ],
+      "pattern": "Institution-word trap and an internationalised address that must not be sliced",
+      "expected": [
+        {
+          "address": "kj@med.providence.example",
+          "author": null,
+          "corresponding": null
+        }
+      ]
+    }
+  ]
+}

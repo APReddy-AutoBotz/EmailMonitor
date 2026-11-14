@@ -485,6 +485,7 @@ def parse_jats_xml(data: bytes, requested_identifier: OpenAccessIdentifier) -> J
 
     authors: list[AuthorFact] = []
     authors_truncated = False
+    member_emails: list[tuple[str, str]] = []
     author_signals: list[bool] = []
     author_note_refs: list[list[str]] = []
     direct_author_emails: list[list[tuple[str, str]]] = []
@@ -495,7 +496,10 @@ def parse_jats_xml(data: bytes, requested_identifier: OpenAccessIdentifier) -> J
             if contrib_type != "author":
                 continue
             if contrib.has_ancestor("contrib", stop=article_meta):
-                continue  # members of a group author; the group holds the position
+                # Members of a group author: the group holds the position. A member's
+                # own address is still literal evidence, reported unlinked below.
+                member_emails.extend(_structured_addresses(contrib, own_only=True))
+                continue
 
             display_name, author_kind = _person_name(contrib)
             if not display_name:
@@ -599,6 +603,8 @@ def parse_jats_xml(data: bytes, requested_identifier: OpenAccessIdentifier) -> J
     for pos_idx, email_list in enumerate(direct_author_emails):
         for address, locator in email_list:
             add(address, locator, address, [pos_idx + 1], "contrib_email")
+    for address, locator in member_emails:
+        add(address, locator, address, [], "unmatched")
 
     # 2. Correspondence notes: referenced ones first, then unreferenced ones.
     referencing: dict[str, list[int]] = {}
@@ -637,7 +643,15 @@ def parse_jats_xml(data: bytes, requested_identifier: OpenAccessIdentifier) -> J
                 structural: tuple[int, AssociationBasis] | None = None
                 if single and len(refs_for_note) == 1:
                     structural = (refs_for_note[0], "corresp_xref")
-                elif single and not refs_for_note and len(corresponding_positions) == 1:
+                elif (
+                    single
+                    and not refs_for_note
+                    and not referencing  # article links no note by markup
+                    and len(corresponding_positions) == 1
+                ):
+                    # Only when the article never ties notes to authors by markup; if
+                    # it does, an extra unreferenced note ("Data requests: …") is not
+                    # the corresponding author's by default.
                     structural = (corresponding_positions[0], "sole_corresponding_author")
                 if structural and (owner is None or owner == structural[0]):
                     add(entry.address, entry.locator, entry.excerpt, [structural[0]], structural[1])

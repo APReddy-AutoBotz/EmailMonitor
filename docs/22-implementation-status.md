@@ -55,6 +55,7 @@ The repository documentation validator checks local Markdown targets, JSON synta
 | OA-022 | LOCAL CANDIDATE | Generated JSON Schemas + synthetic examples for OA discovery, document extraction and researcher responses (`contracts/oa-*.schema.json`), registered in the docs validator; `test_oa_contracts.py` fails on model/fixture drift. |
 | OA-023 | LOCAL CANDIDATE | `association_strength` (structural / labelled / none) on every contact and a minimum-strength filter for outreach exports (API + UI). |
 | OA-024 | LOCAL CANDIDATE | Offline batch CLI (`python -m emailmonitor.discovery.batch_intake`) over a folder of PDFs/JATS/pages to one preset CSV, with per-file failure isolation and no-overwrite. |
+| OA-025 | LOCAL CANDIDATE | Seeded fuzz invariants (literal addresses, grounded attribution) and a 13-document synthetic association benchmark with zero-tolerance test for wrong-person/invented addresses; not a real-world precision measurement. |
 | EM-EXT-01–05 | DEFERRED | Post-core extensions (OCR adapter, institutional enrichment, recurring searches, direct outreach). |
 
 ## What has been done vs what remains

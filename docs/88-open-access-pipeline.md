@@ -132,6 +132,11 @@ A second fresh-context review attacked the first round's fixes and reproduced 13
 * **Roles:** a Highwire `citation_author_email` and an HTML/PDF "E-mail:" line link an owner but assert no corresponding role (new bases `email_block_surname`, `pdf_email_label_surname`); only correspondence wording does. The HTML "E-mail:" marker now works.
 * **Bounded time:** HTML block text is bounded (2,000 characters; longer blocks are page content, not correspondence lines) with linear caching; structured JATS addresses map to visible offsets linearly; at most 200 addresses per note are considered; the document identifier pre-scan is linear and falls back to the DOI when a PMCID is out of range.
 
+## Regression safety nets (OA-025)
+
+* **Seeded fuzz invariants** (`test_oa_invariants.py`): thousands of adversarial mixtures through `find_addresses`, `attribute_spans` and the JATS/HTML/PDF parsers. Every reported address must occur verbatim in the input; attributions name only known people and only when their surname or initials appear; hostile input raises only `FetchDenied`.
+* **Synthetic association benchmark** (`fixtures/oa-benchmark/`, `python -m emailmonitor.discovery.oa_benchmark`): 13 annotated documents modelled on common layouts (PLOS xref, BMC all-author emails, Frontiers "Name, address", MDPI initials footnote, eLife separate notes, consortium member + data mailbox, institution-word trap, Highwire tags, correspondence block, address-first e-mail line, PDF correspondence/e-mail lists, non-ASCII address). It scores wrong-person links, invented/extra addresses, role mismatches and misses per link basis; `test_oa_benchmark.py` requires zero of each. On its first run it found a real defect — an unreferenced "Data requests" note was given to the sole corresponding author although the article links its notes by markup — and a completeness gap (a consortium member's own address was not reported). Both are fixed. This corpus is authored and synthetic: it guards regressions and does **not** measure real-world precision (EM-016 must use approved held-out articles).
+
 ## Commands and observed results
 
 ```sh

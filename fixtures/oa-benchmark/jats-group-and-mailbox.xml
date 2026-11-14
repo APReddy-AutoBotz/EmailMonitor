@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Synthetic authored benchmark document: fictional people, reserved .example domains. -->
+<article xmlns:xlink="http://www.w3.org/1999/xlink" article-type="research-article">
+<front><journal-meta><journal-title>Synthetic Benchmark Journal</journal-title></journal-meta>
+<article-meta>
+<article-id pub-id-type="pmc">PMC9100006</article-id>
+<article-id pub-id-type="doi">10.5555/bench.pmc9100006</article-id>
+<title-group><article-title>Surveillance of arboviruses in coastal towns</article-title></title-group>
+<contrib-group>
+<contrib contrib-type="author"><collab>Synthetic Arbovirus Consortium<contrib-group><contrib contrib-type="author"><name><surname>Lopes</surname><given-names>Rui</given-names></name><email>r.lopes@epi.porto.example</email></contrib>
+</contrib-group></collab></contrib>
+<contrib contrib-type="author"><name><surname>Costa</surname><given-names>Filipa</given-names></name><xref ref-type="corresp" rid="c1">*</xref></contrib>
+</contrib-group>
+<author-notes><corresp id="c1">* <email>f.costa@epi.porto.example</email></corresp><corresp>Data requests: <email>data-requests@epi.porto.example</email></corresp></author-notes>
+<pub-date pub-type="epub"><year>2026</year></pub-date>
+</article-meta></front></article>

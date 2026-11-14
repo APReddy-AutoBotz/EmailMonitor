@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Synthetic authored benchmark document: fictional people, reserved .example domains. -->
+<article xmlns:xlink="http://www.w3.org/1999/xlink" article-type="research-article">
+<front><journal-meta><journal-title>Synthetic Benchmark Journal</journal-title></journal-meta>
+<article-meta>
+<article-id pub-id-type="pmc">PMC9100007</article-id>
+<article-id pub-id-type="doi">10.5555/bench.pmc9100007</article-id>
+<title-group><article-title>Outcomes after hernia repair</article-title></title-group>
+<contrib-group>
+<contrib contrib-type="author"><name><surname>Brown</surname><given-names>Alice</given-names></name></contrib>
+<contrib contrib-type="author"><name><surname>Jones</surname><given-names>Karen</given-names></name></contrib>
+</contrib-group>
+<author-notes><corresp>Correspondence: Department of Surgery, Brown University, Providence. E-mail: <email>kj@med.providence.example</email></corresp></author-notes>
+<pub-date pub-type="epub"><year>2026</year></pub-date>
+</article-meta></front></article>
