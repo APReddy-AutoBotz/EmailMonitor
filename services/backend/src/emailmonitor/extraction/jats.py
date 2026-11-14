@@ -34,6 +34,7 @@ from emailmonitor.extraction.attribution import (
     clean_address,
     find_addresses,
     owner_from_label,
+    strip_invisible,
 )
 from emailmonitor.extraction.html import AuthorFact, CandidateFact, Evidence, Fact
 from emailmonitor.fetching.safety import FetchDenied
@@ -286,7 +287,7 @@ def _structured_addresses(node: JatsNode, own_only: bool = False) -> list[tuple[
     for email_node in node.find_all("email"):
         if not keep(email_node):
             continue
-        address = clean_address(email_node.text())
+        address = clean_address(strip_invisible(email_node.text()))
         if address:
             found.append((email_node.order, address, email_node.locator, email_node.text()))
     for tag in ("ext-link", "uri"):

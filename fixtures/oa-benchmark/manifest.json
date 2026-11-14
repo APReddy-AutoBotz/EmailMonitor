@@ -300,6 +300,42 @@
           "corresponding": null
         }
       ]
+    },
+    {
+      "id": "html-co-author-emails",
+      "file": "html-co-author-emails.html",
+      "pattern": "'Corresponding author: A. Emails: a (A), b (B)': the e-mail clause asserts no role for the co-author",
+      "expected": [
+        {
+          "address": "kj@wind.aarhus.example",
+          "author": "Kate Jones",
+          "corresponding": false
+        },
+        {
+          "address": "js@wind.aarhus.example",
+          "author": "John Smith",
+          "corresponding": false
+        }
+      ]
+    },
+    {
+      "id": "pdf-local-part-wrap",
+      "pdf_lines": [
+        "Correspondence: John Smith, john.",
+        "smith@clinic.oslo.example; Kate Jones, kate.jones@clinic.oslo.example"
+      ],
+      "known_authors": [
+        "John Smith",
+        "Kate Jones"
+      ],
+      "pattern": "Local part wrapped from the previous line must not yield 'smith@...'; the complete second address is kept",
+      "expected": [
+        {
+          "address": "kate.jones@clinic.oslo.example",
+          "author": "Kate Jones",
+          "corresponding": true
+        }
+      ]
     }
   ]
 }

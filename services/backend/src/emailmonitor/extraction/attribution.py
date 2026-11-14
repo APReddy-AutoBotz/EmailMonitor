@@ -87,6 +87,19 @@ def clean_address(value: str) -> str | None:
     return text
 
 
+# Characters that render inside a word: an address touching one of these was split
+# by typesetting (soft hyphen, zero-width space, non-breaking hyphen, curly
+# apostrophe). Rejecting keeps us from returning only the part after/before it.
+JOINERS = frozenset("\u00ad\u200b\u200c\u200d\u2060\ufeff\u2010\u2011\u2019\u02bc")
+INVISIBLE = "\u00ad\u200b\u200c\u200d\u2060\ufeff"
+
+
+def strip_invisible(value: str) -> str:
+    """Remove characters that do not render (soft hyphen, zero-width): the displayed
+    text is unchanged. Used only on explicit <email> element content."""
+    return value.translate({ord(c): None for c in INVISIBLE})
+
+
 def _is_word_char(char: str) -> bool:
     # Superscript/subscript digits and other 'No' numbers are footnote markers, not
     # part of an address: "¹js@uni.example" is "js@uni.example" after marker ¹.
@@ -115,8 +128,14 @@ def find_addresses(text: str) -> list[tuple[int, str]]:
         # Reject rather than slice: a neighbour that could continue the token
         # (another address char, a non-ASCII letter, or another '@').
         bad_edge = (
-            before and (before in _ASCII_LOCAL or before == "@" or _is_word_char(before))
-        ) or (after and (after == "@" or _is_word_char(after)))
+            before
+            and (
+                before in _ASCII_LOCAL
+                or before == "@"
+                or before in JOINERS
+                or _is_word_char(before)
+            )
+        ) or (after and (after == "@" or after in JOINERS or _is_word_char(after)))
         candidate = text[start:end]
         while candidate.endswith((".", "-")):
             candidate = candidate[:-1]
@@ -140,8 +159,8 @@ def _looks_run_on(address: str) -> bool:
     """'smith@x.edu.Phone' or 'js@uni.eduTel' — a word glued onto the domain."""
     labels = address.rsplit("@", 1)[1].split(".")
     last = labels[-1]
-    if any(re.search(r"[a-z][A-Z]", label) for label in labels):
-        return True  # lower-to-upper case change inside one label: "eduTel"
+    if re.search(r"[a-z][A-Z]", last):
+        return True  # a word glued onto the top-level domain: "eduTel"
     return (
         len(labels) >= 3
         and last[:1].isupper()
@@ -184,18 +203,25 @@ def _patterns(display_name: str) -> tuple[re.Pattern[str], re.Pattern[str]] | No
     given, surname = parts
     first_given = given.split()[0]
     surname_re = r"\s+".join(re.escape(t) for t in surname.split())
-    given_full = re.escape(first_given)
     initial = re.escape(first_given[0].upper())
     # An initial is an upper-case letter standing alone ("J", "J.", "J.-L."), so
     # titles such as "Dr", "Mr", "Ms" or words like "to" can never act as one.
     single = r"(?:\.|(?![A-Za-z]))"
     initials = rf"{initial}{single}(?:\s?-?[A-Z]{single})?"
     start = r"(?<![\w\-.])"  # not inside a hyphenated or dotted token ("M.-J. Kim")
-    forward = (
-        rf"{start}(?:(?i:{given_full})|{initials})"
-        rf"(?:\s+(?i:[\w.\-]{{1,20}})){{0,3}}?\s+(?i:{surname_re})(?!\w)"
+    # The given name keeps its capital ("May", "MAY"), so the word "may" in running
+    # text is not a given name; tokens between given name and surname must look like
+    # name parts (capitalised word or initial), so "Kate Brown and John Smith" never
+    # reads as "Kate ... Smith".
+    given_cased = re.escape(first_given[0].upper()) + (
+        f"(?i:{re.escape(first_given[1:])})" if len(first_given) > 1 else ""
     )
-    inverted = rf"{start}(?i:{surname_re}),?\s+(?:(?i:{given_full})|{initial}\.)(?!\w)"
+    middle = r"(?:\s+(?:[A-Z][\w'\-]{0,20}\.?|[A-Z]\.)){0,2}?"
+    forward = (
+        rf"{start}(?:{given_cased}(?![\w])|{initials})"
+        rf"{middle}\s+(?i:{surname_re})(?!\w)"
+    )
+    inverted = rf"{start}(?i:{surname_re}),?\s+(?:{given_cased}(?![\w])|{initial}\.)(?!\w)"
     person = re.compile(f"(?:{forward})|(?:{inverted})")
     exact = re.compile(rf"^{surname_re}$", re.IGNORECASE)
     return person, exact
@@ -351,17 +377,24 @@ def attribute_spans(
 _CORRESPONDENCE_WORDING = re.compile(
     r"\bcorrespond(?:ence|ing)\b|\baddress(?:ed)?\s+correspondence\b|✉", re.IGNORECASE
 )
-# An e-mail label that starts a new clause ("Corresponding author. E-mail addresses:")
-# ends the correspondence clause; an inline "(email: ...)" does not.
-_EMAIL_CLAUSE = re.compile(r"(?:^|[.;:]|\*)\s*e-?mail(?:\s+address(?:es)?)?\s*:", re.IGNORECASE)
+# Any mail label ("E-mail:", "Emails", "E-mail of co-author", "Electronic mail",
+# "Mail:") starts an e-mail clause unless it is inline in parentheses right before
+# the address ("A.B. (email: ab@x)").
+_MAIL_LABEL = re.compile(r"(?<!\()(?<!\(\s)\b(?:e-?mails?|electronic\s+mail|mail)\b", re.I)
+# A sentence boundary: a word of two or more characters (not an initial like "J.")
+# or a closing parenthesis, then '.', then a new sentence.
+_SENTENCE = re.compile(r"(?:\b\w{2,}|\))\.\s+(?=[A-Z0-9*(])")
+_SOLE_EMAIL_SENTENCE = re.compile(r"^\s*e-?mail(?:\s+address)?\s*:\s*$", re.IGNORECASE)
 
 
 def asserts_correspondence(text: str, offset: int) -> bool:
     """True when correspondence wording governs the address at ``offset``.
 
-    The wording must precede the address with no new e-mail clause in between,
-    so "Corresponding author. E-mail addresses: a (A), b (B)" asserts nothing
-    about A or B, while "*Correspondence: A, a@x; B, b@y" covers both.
+    The wording must precede the address within the same clause: no mail label
+    and no sentence boundary in between. One exception mirrors common layouts
+    ("Correspondence: A, Dept, Univ. Email: a@x"): a single following sentence
+    that is just "Email:" + exactly one address. Shared lists such as
+    "Corresponding author. E-mail addresses: a (A), b (B)" assert nothing.
     """
     before = text[max(0, offset - 600) : offset]
     last = None
@@ -369,7 +402,20 @@ def asserts_correspondence(text: str, offset: int) -> bool:
         last = match.end()
     if last is None:
         return False
-    return _EMAIL_CLAUSE.search(before, last) is None
+    segment = before[last:]
+    boundaries = list(_SENTENCE.finditer(segment))
+    label = _MAIL_LABEL.search(segment)
+    if not boundaries and not label:
+        return True
+    if len(boundaries) != 1:
+        return False
+    tail = segment[boundaries[0].end() :]
+    if not _SOLE_EMAIL_SENTENCE.match(tail):
+        return False
+    # The e-mail sentence must hold exactly one address.
+    sentence_end = _SENTENCE.search(text, offset)
+    stop = sentence_end.start() if sentence_end else min(len(text), offset + 400)
+    return text.count("@", offset - len(tail), stop) == 1
 
 
 def owner_from_label(content: str, people: Sequence[Person]) -> int | None:

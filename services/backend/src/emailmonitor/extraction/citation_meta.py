@@ -65,7 +65,9 @@ _CORRESPONDENCE = re.compile(
     r"\b(?:correspond(?:ence|ing)(?:\s+author)?s?|address\s+correspondence|contact\s+author)\b",
     re.IGNORECASE,
 )
-_EMAIL_LABEL = re.compile(r"\be-?mail(?:\s+address(?:es)?)?\s*:", re.IGNORECASE)
+_EMAIL_LABEL = re.compile(
+    r"\b(?:e-?mails?|electronic\s+mail)(?:\s+address(?:es)?)?\s*:", re.IGNORECASE
+)
 MAX_BLOCK_TEXT = 2_000
 _DOI = re.compile(r"\b(10\.\d{4,9}/[-._;()/:A-Za-z0-9]+)")
 _ORCID = re.compile(r"(\d{4}-\d{4}-\d{4}-\d{3}[\dX])")
@@ -243,10 +245,18 @@ def _anchor_span(block: _Node, anchor: _Node) -> tuple[int, int] | None:
     parts: list[str] = []
     _render(block, anchor, parts)
     marked = " ".join("".join(parts).split())
-    start, end = marked.find(_OPEN), marked.find(_CLOSE)
-    if start < 0 or end < start:
+    opened, closed = marked.find(_OPEN), marked.find(_CLOSE)
+    if opened < 0 or closed < opened:
         return None
-    return start, end - 1
+    # Recompute offsets in the marker-free normalised text (the block text): the
+    # anchor may carry its own surrounding whitespace or nested elements.
+    inner = " ".join(marked[opened + 1 : closed].split())
+    prefix = " ".join(marked[:opened].split())
+    start = len(prefix) + (1 if prefix and inner else 0)
+    text = block.bounded_text()
+    if not inner or text is None or text[start : start + len(inner)] != inner:
+        return None
+    return start, start + len(inner)
 
 
 class _Collector(HTMLParser):
@@ -326,7 +336,8 @@ class _Collector(HTMLParser):
 
     def handle_data(self, data: str) -> None:
         if self.inert_depth == 0 and data:
-            self.current.content.append(data)
+            # Private-use characters are reserved for internal position markers.
+            self.current.content.append(data.replace(_OPEN, "").replace(_CLOSE, ""))
 
 
 def _display(name: str) -> str:

@@ -143,6 +143,17 @@ A third review reproduced 16 further issues; all are fixed with regression tests
 * **More coverage:** role-only labels ("(corresponding author)") no longer block name matching; Nature style "A.B. (email: ...)" attributes by initials; plain-text addresses next to an `<email>` in the same note are reported.
 * **Bounded work:** name search windows are capped at 300 characters per address, and nested correspondence notes are processed once.
 
+## Fourth independent review fixes (2026-11-15)
+
+Seven reproduced issues, all fixed with `test_review4_regressions.py` and two new benchmark documents (18 total; 27/27 links correct):
+
+* **Clause rule:** any mail label ("Emails", "E-mail of co-author", "Electronic mail", "Mail:") or a sentence boundary between correspondence wording and the address ends the clause, so co-author lists never receive the role. One common layout is still recognised: a correspondence sentence followed by a single "Email: address" sentence (Wiley, PNAS). Inline "(email: ...)" (Nature) stays inside the clause.
+* **Typesetting characters:** a token touching a soft hyphen, zero-width character, non-breaking hyphen or curly apostrophe is rejected, never sliced; inside an explicit JATS `<email>`, invisible characters are removed so the displayed address is read.
+* **PDF wraps both ways:** a local part continued from the previous line (`john.` / `smith@...`) and domains continued on the next line (`...harvard` / `.edu`, `...harv` / `ard.edu`) are suppressed and counted; suppressed fragments still bound the name windows. A sentence-final address followed by ordinary words is kept.
+* **HTML spans:** offsets are recomputed in the normalised block text and verified, so whitespace or nested elements inside a link cannot shift them; private-use characters in page text are stripped at parse time.
+* **Running text is not a person:** given names keep their capital ("may" is not "May") and only name-like tokens may sit between given name and surname ("Kate Brown and John Smith" is not "Kate Smith").
+* **Mixed-case domains kept:** only a case change in the top-level label ("eduTel") marks a run-on; `LaTrobe.edu.au` and `cs.McGill.ca` are valid.
+
 ## Regression safety nets (OA-025)
 
 * **Seeded fuzz invariants** (`test_oa_invariants.py`): thousands of adversarial mixtures through `find_addresses`, `attribute_spans` and the JATS/HTML/PDF parsers. Every reported address must occur verbatim in the input; attributions name only known people and only when their surname or initials appear; hostile input raises only `FetchDenied`.

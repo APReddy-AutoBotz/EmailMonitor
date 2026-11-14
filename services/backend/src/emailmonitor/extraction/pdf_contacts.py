@@ -55,7 +55,9 @@ MAX_CANDIDATES = 100
 _CORRESPONDENCE = re.compile(
     r"(\bcorrespond(?:ence|ing)\b|✉|\baddress\s+correspondence\b)", re.IGNORECASE
 )
-_EMAIL_LABEL = re.compile(r"(\be-?mail(?:\s+address(?:es)?)?\s*:|\bcontact\s*:)", re.IGNORECASE)
+_EMAIL_LABEL = re.compile(
+    r"(\b(?:e-?mails?|electronic\s+mail)(?:\s+address(?:es)?)?\s*:|\bcontact\s*:)", re.IGNORECASE
+)
 _REFERENCES = re.compile(r"^\s*(references|bibliography|literature\s+cited)\s*$", re.IGNORECASE)
 # Linear: the first class excludes the comma, so no ambiguous split points.
 _GROUPED = re.compile(r"[{(\[][^{}()\[\]@,]{1,200}(?:,[^{}()\[\]@,]{1,200}){1,20}[})\]]\s*@")
@@ -137,15 +139,44 @@ def _lines(text: str) -> list[str]:
     return [" ".join(line.split()) for line in normalized.splitlines()]
 
 
+_DOMAIN_TOKEN = re.compile(r"^[.\-]?[a-z0-9][a-z0-9\-]*(?:\.[a-z0-9\-]+)*[;,.)]?$")
+_LOCAL_PREFIX = re.compile(r"^[a-z0-9][a-z0-9._%+\-]*[.\-_\u00ad]$")
+
+
 def _wraps_onto_next(line: str, end: int, next_line: str) -> bool:
-    """An address ending the line on '.', '-' or a soft hyphen, continued below."""
-    tail = line[end:]
-    if tail.strip(" ") not in (".", "-", SOFT_HYPHEN, ""):
+    """The address ends this line and its domain continues on the next line.
+
+    "jsmith@med.harvard." + "edu; ...", "...@chem.uni-" + "versity.example",
+    "...@med.harvard" + ".edu", "...@med.harv" + "ard.edu". A sentence-final
+    address followed by ordinary words ("... js@x.example." + "and Kate") is not
+    a wrap.
+    """
+    tail = line[end:].strip(" ")
+    if tail not in (".", "-", SOFT_HYPHEN, ""):
         return False
-    if tail.strip(" ") == "" and not line[:end].endswith(SOFT_HYPHEN):
+    token = next_line.lstrip().split(" ", 1)[0] if next_line.strip() else ""
+    if not token:
         return False
-    first = next_line.lstrip()[:1]
-    return bool(first) and (first.islower() or first.isdigit())
+    if tail in ("-", SOFT_HYPHEN) or line[:end].endswith(SOFT_HYPHEN):
+        return token[:1].islower() or token[:1].isdigit()
+    if tail == "":
+        # Nothing after the address on this line: wrapped if the next line starts
+        # with a domain continuation such as ".edu" or "ard.edu".
+        return token[:1] in ".-" or ("." in token and _DOMAIN_TOKEN.match(token) is not None)
+    # tail == ".": a sentence end unless the next token is clearly domain text.
+    bare = token.rstrip(";,.)")
+    followed_by_punct = token != bare or next_line.strip() == token
+    return _DOMAIN_TOKEN.match(token) is not None and (
+        "." in bare or (followed_by_punct and 2 <= len(bare) <= 6 and bare.isalpha())
+    )
+
+
+def _wrapped_from_previous(line: str, start: int, previous_line: str) -> bool:
+    """The address starts this line and its local part began on the previous line."""
+    if line[:start].strip():
+        return False
+    last = previous_line.rstrip().rsplit(" ", 1)[-1] if previous_line.strip() else ""
+    return bool(last) and _LOCAL_PREFIX.match(last) is not None
 
 
 def parse_pdf_contacts(
@@ -225,6 +256,7 @@ def parse_pdf_contacts(
             correspondence = _CORRESPONDENCE.search(line)
             email_label = _EMAIL_LABEL.search(line)
             next_line = lines[index + 1] if index + 1 < len(lines) else ""
+            previous_line = lines[index - 1] if index > 0 else ""
             found = find_addresses(line)
             # A marker line without an address of its own labels the next line only.
             inherited, inherited_text = carried, carried_text
@@ -235,15 +267,24 @@ def parse_pdf_contacts(
             prefix = (inherited_text + " ") if inherited is not None else ""
             context = prefix + line
             entries: list[tuple[int, int, str, PdfRegion]] = []
+            boundaries: list[tuple[int, int]] = []
             for start, address in found:
                 end = start + len(address)
                 if any(lo < end and start < hi for lo, hi in grouped_spans):
                     continue
                 if address.casefold() in seen:
                     continue
+                if _wrapped_from_previous(line, start, previous_line):
+                    # "... John Smith, john." + "smith@x.example": never report "smith@...",
+                    # but keep its span as a boundary so names before it stay with it.
+                    wrapped += 1
+                    boundaries.append((start + len(prefix), end + len(prefix)))
+                    continue
                 if _wraps_onto_next(line, end, next_line):
-                    # "jsmith@med.harvard." + "edu; ...": never report the cut part
-                    # (the line was already counted as possibly wrapped above).
+                    # "jsmith@med.harvard." + "edu; ...": never report the cut part.
+                    if not line.rstrip().endswith(("@", ".", "-", SOFT_HYPHEN)):
+                        wrapped += 1  # not already counted by the end-of-line check
+                    boundaries.append((start + len(prefix), end + len(prefix)))
                     continue
                 region: PdfRegion
                 position = start + len(prefix)
@@ -259,12 +300,9 @@ def parse_pdf_contacts(
                     region = "pdf_front_matter"
                 entries.append((start + len(prefix), end + len(prefix), address, region))
             labelled = [e for e in entries if e[3] != "pdf_front_matter"]
+            spans = sorted([(e[0], e[1]) for e in labelled] + (boundaries if labelled else []))
             owners = dict(
-                zip(
-                    (e[0] for e in labelled),
-                    attribute_spans(context, [(e[0], e[1]) for e in labelled], people),
-                    strict=True,
-                )
+                zip((sp[0] for sp in spans), attribute_spans(context, spans, people), strict=True)
             )
             for start, _end, address, region in entries:
                 if len(candidates) >= MAX_CANDIDATES:
