@@ -2,6 +2,7 @@
 
 - OA-012: rebuild the Open Access orchestrator so every contact comes from its own article's full text, with per-work outcomes (`contacts_observed`, `no_contact`, `full_text_unavailable`, `excluded_by_filter`, `failed`), deterministic contact IDs, role filters, suppression by address/domain, and no defaulted DOI, year, ORCID or role. JATS parser v2: document-order text, association basis per address, initials/name disambiguation of shared notes, mailto/ext-link addresses, correspondence footnotes, DTD internal subset/entity refusal. See [document 88](docs/88-open-access-pipeline.md).
 - OA-013: Europe PMC search planner/parser and fixture gateway for keyword and exact-DOI to PMCID resolution. Offline only; no live transport.
+- OA-014/015/016: single-document intake for operator-supplied landing pages (Highwire `citation_*` meta and correspondence mailto blocks), text-layer PDFs and JATS XML, sharing one contact builder with eligibility and suppression; preview raw-body upload endpoint. Nothing is fetched or decoded; grouped/wrapped/obfuscated addresses are review notes.
 
 ## Local sibling-Draft integration candidate
 

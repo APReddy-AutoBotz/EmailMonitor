@@ -64,6 +64,20 @@ Instantly/Smartlead CSVs contain only `eligible` rows and remain formula-safe. E
 
 Synthetic, authored, reserved domains only: `fixtures/europepmc/search-crispr.json` (six hits including a subscription item and a PMCID without registered full text), `fixtures/jats/usher-base-editing.xml` (shared note split by initials, email ext-link on a middle author, equal-contribution footnote, editor contrib, unattributable lab mailbox, prompt-injection body text), and `fixtures/biorxiv/jats/10.1101_2026.03.14.584920.xml`.
 
+## Single-document intake (OA-014, OA-015, OA-016)
+
+For the "I already have this article open" workflow, an operator submits bytes they are permitted to read; nothing is fetched and links are reported, never followed.
+
+| Kind (sniffed) | Parser | Association bases |
+|---|---|---|
+| JATS XML | `extraction/jats.py` (identifier taken from the document's own PMC/DOI `article-id`; refused if absent) | as above |
+| Landing-page HTML | `extraction/citation_meta.py` — Highwire `citation_*`, DC, PRISM tags | `highwire_author_sequence` (email tag after its `citation_author`), `correspondence_block_surname` (mailto inside a block reading as correspondence, exactly one author surname), `unmatched` |
+| PDF (text layer) | `extraction/pdf_contacts.py` — pypdf, first 3 pages (max 5), 400k characters | `pdf_correspondence_surname` (needs caller-supplied author names; surname between the previous address and this one on the marker line, or on a bare marker line directly above), `unmatched` |
+
+Never reported: addresses in header/footer/nav/aside/form chrome, hidden blocks, script/style/template text, mailto links outside correspondence wording, PDF references sections. Cloudflare-style obfuscated addresses are counted and **not decoded** (decoding would defeat a site's anti-harvesting control). Grouped PDF notation such as `{a,b}@lab.example` and addresses wrapped across lines are counted as review notes and never expanded or rejoined. Encrypted PDFs are refused; image-only PDFs report `image_only` (OCR is a separate license/decision gate).
+
+Preview endpoint: `POST /api/v1/organizations/{org}/open-access/documents?known_authors=A;B&target_roles=all` with the raw document as the body (no multipart dependency added). Size is checked from `Content-Length` before reading and again after (20 MB). The preview server parses in-process; production must run these parsers in the network-none parser worker (EM-008 boundary).
+
 ## Commands and observed results
 
 ```sh

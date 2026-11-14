@@ -44,6 +44,9 @@ The repository documentation validator checks local Markdown targets, JSON synta
 | OA-011 | VERIFIED IN DRAFT PR | Interactive Open Access discovery and cold outreach export API endpoints (`/open-access/discover`, `/open-access/export`) verified in PR #71. |
 | OA-012 | LOCAL CANDIDATE | Integrity correction of the OA pipeline: own-article full text only, no defaulted DOI/year/ORCID/role, JATS v2 parser (ordered text, association basis, entity refusal), deterministic IDs, per-work outcomes, suppression. Branch `feat/oa-truthful-pipeline`; see [document 88](88-open-access-pipeline.md). Offline only. |
 | OA-013 | LOCAL CANDIDATE | Europe PMC `/search` planner/parser and fixture gateway (keyword and exact-DOI lookup to PMCID). No live transport; see [document 88](88-open-access-pipeline.md). |
+| OA-014 | LOCAL CANDIDATE | Publisher landing-page parser for supplied HTML (Highwire/DC/PRISM meta, correspondence-block mailto, chrome/hidden/script exclusion, obfuscated addresses counted not decoded). See [document 88](88-open-access-pipeline.md). |
+| OA-015 | LOCAL CANDIDATE | Text-layer PDF correspondence parser (pypdf, page/char ceilings, encrypted/image-only outcomes, grouped/wrapped addresses counted not expanded). In-process in preview only; production needs the EM-008 isolated worker. |
+| OA-016 | LOCAL CANDIDATE | Single-document intake (sniff PDF/JATS/HTML) with the shared contact builder, suppression and exports; preview `POST .../open-access/documents` raw-body endpoint. |
 | EM-EXT-01–05 | DEFERRED | Post-core extensions (OCR adapter, institutional enrichment, recurring searches, direct outreach). |
 
 ## What has been done vs what remains

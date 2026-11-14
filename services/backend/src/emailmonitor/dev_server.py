@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
+from emailmonitor.discovery.document_intake import MAX_DOCUMENT_BYTES, extract_document
 from emailmonitor.discovery.mesh_search import match_mesh_terms
 from emailmonitor.discovery.openaccess_orchestrator import (
     DiscoveryFilters,
@@ -678,6 +679,36 @@ def open_access_export(org_id: str, body: OpenAccessExportRequest) -> Response:
             "X-Content-Type-Options": "nosniff",
         },
     )
+
+
+@app.post("/api/v1/organizations/{org_id}/open-access/documents")
+async def open_access_document(
+    org_id: str,
+    request: Request,
+    page_url: str | None = None,
+    known_authors: str = "",
+    target_roles: RoleChoice = "all",
+) -> dict[str, Any]:
+    """Extract contacts from one supplied PDF/JATS/HTML body. Nothing is fetched."""
+    _require_preview_org(org_id)
+    declared = request.headers.get("content-length", "")
+    if not declared.isdigit() or int(declared) > MAX_DOCUMENT_BYTES:
+        raise HTTPException(status_code=413, detail="document_byte_limit_exceeded")
+    data = await request.body()
+    if len(data) > MAX_DOCUMENT_BYTES:
+        raise HTTPException(status_code=413, detail="document_byte_limit_exceeded")
+    authors = [a.strip() for a in known_authors.split(";") if a.strip()][:100]
+    try:
+        result = extract_document(
+            data,
+            page_url=page_url,
+            known_authors=[a[:300] for a in authors],
+            target_roles=target_roles,
+        )
+    except (FetchDenied, ValueError) as exc:
+        reason = str(exc) if isinstance(exc, FetchDenied) else "invalid_document"
+        raise HTTPException(status_code=400, detail=reason[:200]) from None
+    return result.model_dump()
 
 
 @app.get("/api/v1/organizations/{org_id}/open-access/mesh")

@@ -147,7 +147,7 @@ def test_biorxiv_uses_preprint_full_text_or_reports_unavailable(
     (contact,) = found.contacts_extracted
     assert contact.email == "m.vance@biotech.zurich.example"
     assert contact.doi == "10.1101/2026.03.14.584920"
-    assert contact.full_text_url.endswith("584920v1.source.xml")
+    assert (contact.full_text_url or "").endswith("584920v1.source.xml")
     assert contact.orcid_id is None
 
     missing = orchestrator.discover_and_extract("10.1101/2026.02.10.579112")

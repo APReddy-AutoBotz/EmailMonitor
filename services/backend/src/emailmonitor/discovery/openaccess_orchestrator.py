@@ -75,6 +75,7 @@ from emailmonitor.sources.openalex import (
 )
 
 SourceName = Literal["europe-pmc", "openalex", "crossref", "biorxiv"]
+ContactSource = Literal["europe-pmc", "openalex", "crossref", "biorxiv", "document"]
 RequestedSource = Literal["europe-pmc", "openalex", "crossref", "biorxiv", "auto"]
 TargetRoles = Literal["corresponding", "first", "both", "all"]
 OutcomeStatus = Literal[
@@ -151,7 +152,7 @@ class ExtractedAcademicContact(Contract):
     """One literal address observation from one article, with provenance."""
 
     contact_id: str = Field(pattern=r"^oa-[0-9a-f]{20}$")
-    source: SourceName
+    source: ContactSource
     doi: str | None = None
     pmcid: str | None = None
     article_title: str | None = None
@@ -174,7 +175,7 @@ class ExtractedAcademicContact(Contract):
     evidence_locator: str
     evidence_excerpt: str
     content_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
-    full_text_url: str
+    full_text_url: str | None = None
     domain_type: Literal["institutional", "commercial_free", "disposable"]
     recency_level: Literal["active_recent", "moderate", "dormant", "unknown"]
     recency_score: float = Field(ge=0.0, le=1.0)
@@ -277,6 +278,152 @@ def _domain_suppressed(domain: str, suppressed_domains: frozenset[str]) -> bool:
 def contact_id_for(source: str, article_key: str, comparison_key: str) -> str:
     digest = hashlib.sha256(f"{source}\x1f{article_key}\x1f{comparison_key}".encode()).hexdigest()
     return f"oa-{digest[:20]}"
+
+
+@dataclass(frozen=True)
+class ArticleContext:
+    """Article-level provenance shared by every contact observed in one document."""
+
+    source: ContactSource
+    article_key: str
+    doi: str | None
+    pmcid: str | None
+    title: str | None
+    journal: str | None
+    publication_year: int | None
+    content_digest: str
+    full_text_url: str | None
+
+
+@dataclass(frozen=True)
+class AuthorView:
+    position: int | None
+    display_name: str
+    kind: Literal["person", "group", "unknown"]
+    first: bool
+    corresponding: bool
+    affiliations: tuple[str, ...] = ()
+    orcid: str | None = None
+
+
+def passes_role_filter(target_roles: TargetRoles, is_first: bool, is_corresp: bool) -> bool:
+    if target_roles == "corresponding":
+        return is_corresp
+    if target_roles == "first":
+        return is_first
+    if target_roles == "both":
+        return is_first or is_corresp
+    return True
+
+
+def build_contact(
+    context: ArticleContext,
+    *,
+    address: str,
+    author: AuthorView | None,
+    association_basis: str,
+    association_status: Literal["needs_review", "unmatched"],
+    evidence_locator: str,
+    evidence_excerpt: str,
+    target_roles: TargetRoles,
+    reference_year: int,
+    suppressed_emails: frozenset[str],
+    suppressed_domains: frozenset[str],
+) -> ExtractedAcademicContact | None:
+    """One observed address -> contact record, or None when the role filter excludes it."""
+    is_first = bool(author and author.first)
+    is_corresp = bool(author and author.corresponding)
+    if not passes_role_filter(target_roles, is_first, is_corresp):
+        return None
+
+    comparison_key = address.casefold()
+    domain = comparison_key.rsplit("@", 1)[-1]
+    first_name, last_name = ("", "")
+    if author and author.kind == "person":
+        first_name, last_name = split_author_name(author.display_name)
+
+    orcid_id: str | None = None
+    orcid_status: Literal["absent", "declared_valid_checksum", "declared_invalid_checksum"] = (
+        "absent"
+    )
+    if author and author.orcid:
+        if validate_orcid_id(author.orcid):
+            orcid_id, orcid_status = author.orcid, "declared_valid_checksum"
+        else:
+            orcid_status = "declared_invalid_checksum"
+
+    item = ContactExportItem(
+        raw_email=address,
+        display_name=author.display_name if author else None,
+        orcid=orcid_id,
+        affiliation=author.affiliations[0] if author and author.affiliations else None,
+        role="corresponding" if is_corresp else ("first" if is_first else "contributor"),
+        paper_title=context.title or "",
+        journal=context.journal,
+        publication_year=context.publication_year,
+        doi=context.doi,
+        content_digest=context.content_digest,
+    )
+    score = evaluate_contact(item, reference_year)
+
+    reasons: list[str] = []
+    eligibility: Literal["eligible", "needs_review", "suppressed"] = "eligible"
+    if comparison_key in suppressed_emails:
+        eligibility, reasons = "suppressed", ["suppressed_address"]
+    elif _domain_suppressed(domain, suppressed_domains):
+        eligibility, reasons = "suppressed", ["suppressed_domain"]
+    else:
+        if not score.is_valid_syntax:
+            reasons.append("invalid_syntax")
+        if score.domain_type == "disposable":
+            reasons.append("disposable_domain")
+        if author is None:
+            reasons.append("author_association_unresolved")
+        elif author.kind != "person":
+            reasons.append("group_author_address")
+        if reasons:
+            eligibility = "needs_review"
+        if score.domain_type == "commercial_free":
+            reasons.append("free_mail_domain")
+        if score.recency_level == "unknown":
+            reasons.append("publication_year_unknown")
+
+    return ExtractedAcademicContact(
+        contact_id=contact_id_for(context.source, context.article_key, comparison_key),
+        source=context.source,
+        doi=context.doi,
+        pmcid=context.pmcid,
+        article_title=context.title,
+        journal=context.journal,
+        publication_year=context.publication_year,
+        author_position=author.position if author else None,
+        author_name=author.display_name if author else None,
+        author_kind=author.kind if author else "unknown",
+        first_name=first_name,
+        last_name=last_name,
+        email=address,
+        comparison_key=comparison_key,
+        is_first_author=is_first,
+        is_corresponding_author=is_corresp,
+        association_basis=association_basis,
+        association_status=association_status,
+        affiliations=author.affiliations if author else (),
+        orcid_id=orcid_id,
+        orcid_status=orcid_status,
+        evidence_locator=evidence_locator,
+        evidence_excerpt=evidence_excerpt,
+        content_digest=context.content_digest,
+        full_text_url=context.full_text_url,
+        domain_type=score.domain_type,
+        recency_level=score.recency_level,
+        recency_score=score.recency_score,
+        technical_status=(
+            "syntax_valid_not_mailbox_verified" if score.is_valid_syntax else "syntax_invalid"
+        ),
+        outreach_eligibility=eligibility,
+        eligibility_reasons=tuple(reasons),
+        gdpr_notice=generate_gdpr_provenance(item),
+    )
 
 
 class OpenAccessOrchestrator:
@@ -589,117 +736,53 @@ class OpenAccessOrchestrator:
         by_position = {a.position: a for a in obs.authors}
         contacts: list[ExtractedAcademicContact] = []
         unmatched = 0
+        context = ArticleContext(
+            source=work.source,
+            article_key=work.pmcid or doi or work.work_key,
+            doi=doi,
+            pmcid=work.pmcid,
+            title=title,
+            journal=journal,
+            publication_year=year,
+            content_digest=obs.content_digest,
+            full_text_url=full_text_url,
+        )
         for candidate in obs.candidates:
             if candidate.association_basis == "unmatched":
                 unmatched += 1
-            author = (
+            fact = (
                 by_position.get(candidate.author_positions[0])
-                if (candidate.author_positions)
+                if candidate.author_positions
                 else None
             )
-            is_first = bool(author and author.first)
-            is_corresp = bool(author and author.corresponding)
-            if target_roles == "corresponding" and not is_corresp:
-                continue
-            if target_roles == "first" and not is_first:
-                continue
-            if target_roles == "both" and not (is_first or is_corresp):
-                continue
-
-            address = candidate.raw_address
-            comparison_key = address.casefold()
-            domain = comparison_key.rsplit("@", 1)[-1]
-            first_name, last_name = ("", "")
-            if author and author.author_kind == "person":
-                first_name, last_name = split_author_name(author.display_name)
-
-            orcid_id: str | None = None
-            orcid_status: Literal[
-                "absent", "declared_valid_checksum", "declared_invalid_checksum"
-            ] = "absent"
-            if author and author.orcid:
-                if validate_orcid_id(author.orcid):
-                    orcid_id, orcid_status = author.orcid, "declared_valid_checksum"
-                else:
-                    orcid_status = "declared_invalid_checksum"
-
-            item = ContactExportItem(
-                raw_email=address,
-                display_name=author.display_name if author else None,
-                orcid=orcid_id,
-                affiliation=author.affiliations[0] if author and author.affiliations else None,
-                role="corresponding" if is_corresp else ("first" if is_first else "contributor"),
-                paper_title=title or "",
-                journal=journal,
-                publication_year=year,
-                doi=doi,
-                content_digest=obs.content_digest,
-            )
-            score = evaluate_contact(item, self._reference_year)
-
-            reasons: list[str] = []
-            eligibility: Literal["eligible", "needs_review", "suppressed"] = "eligible"
-            if comparison_key in suppressed_emails:
-                eligibility, reasons = "suppressed", ["suppressed_address"]
-            elif _domain_suppressed(domain, suppressed_domains):
-                eligibility, reasons = "suppressed", ["suppressed_domain"]
-            else:
-                if not score.is_valid_syntax:
-                    reasons.append("invalid_syntax")
-                if score.domain_type == "disposable":
-                    reasons.append("disposable_domain")
-                if author is None:
-                    reasons.append("author_association_unresolved")
-                elif author.author_kind != "person":
-                    reasons.append("group_author_address")
-                if reasons:
-                    eligibility = "needs_review"
-                if score.domain_type == "commercial_free":
-                    reasons.append("free_mail_domain")
-                if score.recency_level == "unknown":
-                    reasons.append("publication_year_unknown")
-
-            article_key = work.pmcid or doi or work.work_key
-            contacts.append(
-                ExtractedAcademicContact(
-                    contact_id=contact_id_for(work.source, article_key, comparison_key),
-                    source=work.source,
-                    doi=doi,
-                    pmcid=work.pmcid,
-                    article_title=title,
-                    journal=journal,
-                    publication_year=year,
-                    author_position=author.position if author else None,
-                    author_name=author.display_name if author else None,
-                    author_kind=author.author_kind if author else "unknown",
-                    first_name=first_name,
-                    last_name=last_name,
-                    email=address,
-                    comparison_key=comparison_key,
-                    is_first_author=is_first,
-                    is_corresponding_author=is_corresp,
-                    association_basis=candidate.association_basis,
-                    association_status=candidate.association_status,
-                    affiliations=tuple(author.affiliations) if author else (),
-                    orcid_id=orcid_id,
-                    orcid_status=orcid_status,
-                    evidence_locator=candidate.evidence.locator,
-                    evidence_excerpt=candidate.evidence.excerpt,
-                    content_digest=obs.content_digest,
-                    full_text_url=full_text_url,
-                    domain_type=score.domain_type,
-                    recency_level=score.recency_level,
-                    recency_score=score.recency_score,
-                    technical_status=(
-                        "syntax_valid_not_mailbox_verified"
-                        if score.is_valid_syntax
-                        else "syntax_invalid"
-                    ),
-                    outreach_eligibility=eligibility,
-                    eligibility_reasons=tuple(reasons),
-                    gdpr_notice=generate_gdpr_provenance(item),
+            author = (
+                AuthorView(
+                    position=fact.position,
+                    display_name=fact.display_name,
+                    kind=fact.author_kind,
+                    first=fact.first,
+                    corresponding=bool(fact.corresponding),
+                    affiliations=tuple(fact.affiliations),
+                    orcid=fact.orcid,
                 )
+                if fact
+                else None
             )
+            contact = build_contact(
+                context,
+                address=candidate.raw_address,
+                author=author,
+                association_basis=candidate.association_basis,
+                association_status=candidate.association_status,
+                evidence_locator=candidate.evidence.locator,
+                evidence_excerpt=candidate.evidence.excerpt,
+                target_roles=target_roles,
+                reference_year=self._reference_year,
+                suppressed_emails=suppressed_emails,
+                suppressed_domains=suppressed_domains,
+            )
+            if contact is not None:
+                contacts.append(contact)
 
         outcome = ArticleOutcome(
             source=work.source,
