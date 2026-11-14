@@ -157,6 +157,16 @@
           "title": "Association Status",
           "type": "string"
         },
+        "association_strength": {
+          "default": "none",
+          "enum": [
+            "structural",
+            "labelled",
+            "none"
+          ],
+          "title": "Association Strength",
+          "type": "string"
+        },
         "affiliations": {
           "items": {
             "type": "string"

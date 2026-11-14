@@ -95,6 +95,10 @@ Preview endpoints: `POST .../open-access/export` (`preset` = any of the above) a
 
 Local run (Windows, as verified): start `uvicorn emailmonitor.dev_server:app --app-dir services/backend/src --port 8000` and `pnpm --dir apps/web dev`, open the Vite URL, choose **Open Access**, search `CRISPR` with *All observed* authors.
 
+## Association strength (OA-023)
+
+Every contact carries `association_strength`: **structural** (`contrib_email`, `corresp_xref`, `sole_corresponding_author`, `highwire_author_sequence` — markup ties the address to the author), **labelled** (an initials or name label/phrase does) or **none** (unmatched). Outreach presets accept `minimum_association_strength` (`labelled` by default, `structural` for highest precision); the evidence audit ignores it. Strength is an ordering, not a probability, and does not replace review.
+
 ## Independent review fixes (2026-11-14)
 
 A fresh-context review of this branch reproduced 17 defects; all are fixed with a regression test each (`test_review_regressions.py`, `test_jats_hardening.py`, `openAccess.test.tsx`). The important ones:

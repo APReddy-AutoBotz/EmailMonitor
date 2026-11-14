@@ -243,3 +243,36 @@ def test_preview_export_presets_and_researchers_endpoint() -> None:
     body = response.json()
     assert body["researchers"]
     assert all(r["publication_count"] >= 1 for r in body["researchers"])
+
+
+def test_minimum_association_strength_filters_outreach_presets() -> None:
+    result = OpenAccessOrchestrator(reference_year=2026).discover_and_extract(
+        "PMC7700001", target_roles="all"
+    )
+    strengths = {c.email: c.association_strength for c in result.contacts_extracted}
+    assert strengths == {
+        "r.mehta@bio.pune.example": "structural",
+        "lucia.ferreira@neuro.lisbon.example": "labelled",
+        "t.nowak@genetics.krakow.example": "labelled",
+        "core-lab@genetics.krakow.example": "none",
+    }
+    default = render_export("instantly", result.contacts_extracted)
+    strict = render_export("instantly", result.contacts_extracted, "structural")
+    assert (default.rows_written, strict.rows_written) == (3, 1)
+    # The evidence audit is a review file and ignores the outreach threshold.
+    assert render_export("evidence", result.contacts_extracted, "structural").rows_written == 4
+
+
+def test_preview_export_accepts_minimum_strength() -> None:
+    client = TestClient(app)
+    response = client.post(
+        f"/api/v1/organizations/{ORG_ID}/open-access/export",
+        json={
+            "query": "PMC7700001",
+            "target_roles": "all",
+            "preset": "smartlead",
+            "minimum_association_strength": "structural",
+        },
+    )
+    assert response.status_code == 200
+    assert response.headers["x-emailmonitor-rows-written"] == "1"

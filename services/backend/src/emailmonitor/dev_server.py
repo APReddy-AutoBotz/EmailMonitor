@@ -49,6 +49,7 @@ class OpenAccessDiscoverRequest(BaseModel):
 
 
 class OpenAccessExportRequest(OpenAccessDiscoverRequest):
+    minimum_association_strength: Literal["structural", "labelled"] = "labelled"
     preset: Literal["instantly", "smartlead", "lemlist", "hubspot", "evidence", "researchers"] = (
         "instantly"
     )
@@ -684,7 +685,9 @@ def open_access_export(org_id: str, body: OpenAccessExportRequest) -> Response:
                 "X-EmailMonitor-Rows-Withheld-Unsafe": str(withheld),
             }
         else:
-            export = render_export(body.preset, result.contacts_extracted)
+            export = render_export(
+                body.preset, result.contacts_extracted, body.minimum_association_strength
+            )
             content, filename = export.content, export.filename
             counts = {
                 "X-EmailMonitor-Rows-Written": str(export.rows_written),

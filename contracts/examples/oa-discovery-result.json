@@ -55,6 +55,7 @@
       "is_corresponding_author": false,
       "association_basis": "contrib_email",
       "association_status": "needs_review",
+      "association_strength": "structural",
       "affiliations": [
         "Institute of Bioinformatics, Pune, India"
       ],
@@ -91,6 +92,7 @@
       "is_corresponding_author": true,
       "association_basis": "corresp_initials",
       "association_status": "needs_review",
+      "association_strength": "labelled",
       "affiliations": [
         "Champalimaud Neuroscience Programme, Lisbon, Portugal"
       ],
@@ -127,6 +129,7 @@
       "is_corresponding_author": true,
       "association_basis": "corresp_initials",
       "association_status": "needs_review",
+      "association_strength": "labelled",
       "affiliations": [
         "Department of Medical Genetics, Jagiellonian Research Centre, Kraków, Poland"
       ],
@@ -163,6 +166,7 @@
       "is_corresponding_author": false,
       "association_basis": "unmatched",
       "association_status": "unmatched",
+      "association_strength": "none",
       "affiliations": [],
       "orcid_id": null,
       "orcid_status": "absent",

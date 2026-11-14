@@ -9,7 +9,7 @@ export type OaPreset = 'instantly' | 'smartlead' | 'lemlist' | 'hubspot' | 'evid
 export type OaContact = {
   contact_id: string; source: string; doi: string | null; pmcid: string | null; article_title: string | null; journal: string | null
   publication_year: number | null; author_position: number | null; author_name: string | null; email: string
-  is_first_author: boolean; is_corresponding_author: boolean; association_basis: string; association_status: string
+  is_first_author: boolean; is_corresponding_author: boolean; association_basis: string; association_status: string; association_strength: 'structural' | 'labelled' | 'none'
   affiliations: string[]; orcid_id: string | null; orcid_status: string; evidence_locator: string; evidence_excerpt: string
   content_digest: string; full_text_url: string | null; technical_status: string; recency_level: string
   outreach_eligibility: 'eligible' | 'needs_review' | 'suppressed'; eligibility_reasons: string[]
@@ -127,7 +127,7 @@ function ContactTable({ contacts, caption }: { contacts: OaContact[]; caption: s
       <td><code>{c.email}</code><br /><small>{c.technical_status === 'syntax_valid_not_mailbox_verified' ? 'Syntax valid · mailbox not verified' : 'Syntax invalid'}</small></td>
       <td>{c.author_name ?? <em>No author link</em>}<br /><small>{role(c)}{c.orcid_id ? ' · ORCID ' + c.orcid_id : ''}</small>{c.affiliations[0] && <><br /><small>{c.affiliations[0]}</small></>}</td>
       <td>{c.article_title ?? <em>Untitled</em>}<br /><small>{[c.journal, c.publication_year ?? 'year unknown', c.doi && 'doi:' + c.doi].filter(Boolean).join(' · ')}</small></td>
-      <td>{basisLabel(c.association_basis)}<br /><Status value={c.association_status} /></td>
+      <td>{basisLabel(c.association_basis)}<br /><Status value={c.association_status} /> <small>{c.association_strength} link</small></td>
       <td><Status value={c.outreach_eligibility} />{c.eligibility_reasons.length > 0 && <><br /><small>{c.eligibility_reasons.map(r => r.replaceAll('_', ' ')).join(', ')}</small></>}</td>
       <td><button aria-expanded={open === c.contact_id} onClick={() => setOpen(open === c.contact_id ? undefined : c.contact_id)}>{open === c.contact_id ? 'Hide' : 'Show'}</button>
         {open === c.contact_id && <div className="oa-evidence"><blockquote>{c.evidence_excerpt}</blockquote><p><small>Locator <code>{c.evidence_locator}</code></small></p><p><small>Document SHA-256 <code>{c.content_digest.slice(0, 16)}…</code></small></p>{c.full_text_url && <p><small>Source {c.full_text_url}</small></p>}</div>}</td>
@@ -158,6 +158,7 @@ export function OpenAccessWorkspace({ context }: { context: Context }) {
   const [file, setFile] = useState<File>()
   const [knownAuthors, setKnownAuthors] = useState(''), [pageUrl, setPageUrl] = useState(''), [docRoles, setDocRoles] = useState<OaRoles>('all')
   const [preset, setPreset] = useState<OaPreset>('instantly')
+  const [strength, setStrength] = useState<'labelled' | 'structural'>('labelled')
   const [message, setMessage] = useState<string>(), [failure, setFailure] = useState<string>(), [busy, setBusy] = useState(false)
   const canExport = context.can('results.export'), canSearch = context.can('source.acquire')
   const update = <K extends keyof OaForm>(key: K, value: OaForm[K]) => setForm(previous => ({ ...previous, [key]: value }))
@@ -168,7 +169,7 @@ export function OpenAccessWorkspace({ context }: { context: Context }) {
   }
   const search = (event: FormEvent) => { event.preventDefault(); void run(async () => { const body = discoverBody(form); setResult(await context.scope.write<OaDiscovery>('/open-access/discover', body)); setResearchers(undefined) }) }
   const loadResearchers = () => void run(async () => { const body = discoverBody(form); const data = await context.scope.write<{ researchers: OaResearcher[] }>('/open-access/researchers', { ...body, target_roles: 'all' }); setResearchers(data.researchers) })
-  const exportFile = () => void run(async () => { const body = discoverBody(form); setMessage(await download(context, '/open-access/export', { method: 'POST', body: JSON.stringify({ ...body, preset }) }, `emailmonitor-${preset}-export.csv`)) })
+  const exportFile = () => void run(async () => { const body = discoverBody(form); setMessage(await download(context, '/open-access/export', { method: 'POST', body: JSON.stringify({ ...body, preset, minimum_association_strength: strength }) }, `emailmonitor-${preset}-export.csv`)) })
   const analyze = (event: FormEvent) => { event.preventDefault(); void run(async () => {
     if (!file) throw new ApiError(0, 'Choose a PDF, JATS XML or saved article page.')
     if (file.size > MAX_UPLOAD_BYTES) throw new ApiError(0, 'Documents are limited to 20 MB.')
@@ -198,6 +199,7 @@ export function OpenAccessWorkspace({ context }: { context: Context }) {
       <div className="actions"><button type="submit" disabled={busy || !canSearch}>Search fixtures</button>
         {tab === 'researchers' && <button type="button" disabled={busy || !canSearch} onClick={loadResearchers}>Build researcher list</button>}
         <label className="inline">Export as<select value={preset} onChange={e => setPreset(e.target.value as OaPreset)}><option value="instantly">Instantly</option><option value="smartlead">Smartlead</option><option value="lemlist">Lemlist</option><option value="hubspot">HubSpot</option><option value="evidence">Evidence audit (all reviewable rows)</option><option value="researchers">Researchers (one row each)</option></select></label>
+        <label className="inline">Author links<select value={strength} onChange={e => setStrength(e.target.value as 'labelled' | 'structural')}><option value="labelled">Markup or explicit name/initials label</option><option value="structural">Markup only (highest precision)</option></select></label>
         <button type="button" disabled={busy || !canExport || !canSearch} onClick={exportFile}>Download CSV</button></div>
       {!canSearch && <p className="field-hint">Your role cannot run source discovery.</p>}
       {!canExport && <p className="field-hint">Your role cannot export results.</p>}

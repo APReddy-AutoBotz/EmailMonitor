@@ -94,6 +94,7 @@ OutcomeStatus = Literal[
     "failed",
 ]
 MAX_RESULTS = 100
+AssociationStrength = Literal["structural", "labelled", "none"]
 _PMCID = re.compile(r"^PMC\d{3,10}$", re.IGNORECASE)
 
 
@@ -179,6 +180,7 @@ class ExtractedAcademicContact(Contract):
     is_corresponding_author: bool
     association_basis: str
     association_status: Literal["needs_review", "unmatched"]
+    association_strength: AssociationStrength = "none"
     affiliations: tuple[str, ...] = Field(default_factory=tuple)
     orcid_id: str | None = None
     orcid_status: Literal["absent", "declared_valid_checksum", "declared_invalid_checksum"]
@@ -318,6 +320,25 @@ class AuthorView:
     orcid: str | None = None
 
 
+STRUCTURAL_BASES = frozenset(
+    {"contrib_email", "corresp_xref", "sole_corresponding_author", "highwire_author_sequence"}
+)
+_STRENGTH_RANK: dict[str, int] = {"none": 0, "labelled": 1, "structural": 2}
+
+
+def association_strength(basis: str) -> AssociationStrength:
+    """Structural: markup ties the address to the author. Labelled: an initials or
+    name label/phrase in the text does. None: not linked. Ordering only; neither
+    is a probability."""
+    if basis == "unmatched":
+        return "none"
+    return "structural" if basis in STRUCTURAL_BASES else "labelled"
+
+
+def meets_strength(strength: str, minimum: AssociationStrength) -> bool:
+    return _STRENGTH_RANK.get(strength, 0) >= _STRENGTH_RANK[minimum]
+
+
 def passes_role_filter(target_roles: TargetRoles, is_first: bool, is_corresp: bool) -> bool:
     if target_roles == "corresponding":
         return is_corresp
@@ -421,6 +442,7 @@ def build_contact(
         is_corresponding_author=is_corresp,
         association_basis=association_basis,
         association_status=association_status,
+        association_strength=association_strength(association_basis),
         affiliations=author.affiliations if author else (),
         orcid_id=orcid_id,
         orcid_status=orcid_status,

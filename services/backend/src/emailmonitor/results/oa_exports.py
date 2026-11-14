@@ -19,7 +19,11 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from typing import Literal
 
-from emailmonitor.discovery.openaccess_orchestrator import ExtractedAcademicContact
+from emailmonitor.discovery.openaccess_orchestrator import (
+    AssociationStrength,
+    ExtractedAcademicContact,
+    meets_strength,
+)
 from emailmonitor.results.outreach import split_author_name
 from emailmonitor.results.render import RenderDenied, safe_csv
 
@@ -278,7 +282,11 @@ def write_rows_withholding(
     return buffer.getvalue().encode("utf-8"), written, withheld
 
 
-def render_export(preset: ExportPreset, contacts: Iterable[ExtractedAcademicContact]) -> ExportFile:
+def render_export(
+    preset: ExportPreset,
+    contacts: Iterable[ExtractedAcademicContact],
+    minimum_strength: AssociationStrength = "labelled",
+) -> ExportFile:
     if preset not in _PRESETS:
         raise ValueError("unknown_export_preset")
     header, row, eligible_only = _PRESETS[preset]
@@ -289,7 +297,10 @@ def render_export(preset: ExportPreset, contacts: Iterable[ExtractedAcademicCont
         if contact.outreach_eligibility == "suppressed":
             excluded += 1
             continue
-        if eligible_only and contact.outreach_eligibility != "eligible":
+        if eligible_only and (
+            contact.outreach_eligibility != "eligible"
+            or not meets_strength(contact.association_strength, minimum_strength)
+        ):
             excluded += 1
             continue
         # Outreach presets carry one row per address (latest-first input wins);

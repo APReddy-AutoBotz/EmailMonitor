@@ -33,6 +33,7 @@
       "is_corresponding_author": true,
       "association_basis": "highwire_author_sequence",
       "association_status": "needs_review",
+      "association_strength": "structural",
       "affiliations": [
         "Swedish Synthetic Agricultural Institute, Uppsala, Sweden"
       ],
@@ -69,6 +70,7 @@
       "is_corresponding_author": true,
       "association_basis": "correspondence_block_surname",
       "association_status": "needs_review",
+      "association_strength": "labelled",
       "affiliations": [
         "Institute of Arid Agriculture, Amman, Jordan"
       ],
@@ -105,6 +107,7 @@
       "is_corresponding_author": false,
       "association_basis": "unmatched",
       "association_status": "unmatched",
+      "association_strength": "none",
       "affiliations": [],
       "orcid_id": null,
       "orcid_status": "absent",
