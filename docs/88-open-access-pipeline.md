@@ -132,6 +132,17 @@ A second fresh-context review attacked the first round's fixes and reproduced 13
 * **Roles:** a Highwire `citation_author_email` and an HTML/PDF "E-mail:" line link an owner but assert no corresponding role (new bases `email_block_surname`, `pdf_email_label_surname`); only correspondence wording does. The HTML "E-mail:" marker now works.
 * **Bounded time:** HTML block text is bounded (2,000 characters; longer blocks are page content, not correspondence lines) with linear caching; structured JATS addresses map to visible offsets linearly; at most 200 addresses per note are considered; the document identifier pre-scan is linear and falls back to the DOI when a PMCID is out of range.
 
+## Third independent review fixes (2026-11-15)
+
+A third review reproduced 16 further issues; all are fixed with regression tests (`test_review3_regressions.py`) and three new benchmark documents (16 in total, zero errors):
+
+* **Titles are not initials.** Initials must be upper-case letters standing alone, so "Dr", "Mr", "Ms" or "to" never match a person; a name cannot start inside a hyphenated or dotted token ("M.-J. Kim" no longer matches "J. Kim").
+* **Roles from wording, not lists.** A shared footnote "Corresponding author. E-mail addresses: x (J. Smith), y (M. Jones)" links each address to its person but grants the corresponding role to nobody; correspondence wording must govern the address with no new e-mail clause in between (`asserts_correspondence`). In JATS, note text never grants a role when the article marks roles in markup.
+* **Never altered addresses.** PDF text uses NFC plus explicit ligature expansion (NFKC turned superscript footnote digits into address characters); superscript digits, `*`, `|` and similar symbols are token edges; an address that ends a line on `.`, `-` or a soft hyphen and continues on the next line is suppressed and counted, not reported cut; run-on words glued to a domain ("eduTel") and tokens hitting the domain length cap are rejected.
+* **Exact link positions in HTML** via render markers, so an earlier identical text ("Email") is never taken for the link; links whose text is a person's name are attributed by that name; a link whose visible address differs from its target stays unmatched.
+* **More coverage:** role-only labels ("(corresponding author)") no longer block name matching; Nature style "A.B. (email: ...)" attributes by initials; plain-text addresses next to an `<email>` in the same note are reported.
+* **Bounded work:** name search windows are capped at 300 characters per address, and nested correspondence notes are processed once.
+
 ## Regression safety nets (OA-025)
 
 * **Seeded fuzz invariants** (`test_oa_invariants.py`): thousands of adversarial mixtures through `find_addresses`, `attribute_spans` and the JATS/HTML/PDF parsers. Every reported address must occur verbatim in the input; attributions name only known people and only when their surname or initials appear; hostile input raises only `FetchDenied`.

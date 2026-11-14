@@ -29,9 +29,11 @@ from pydantic import Field, model_validator
 
 from emailmonitor.extraction.attribution import (
     Person,
+    asserts_correspondence,
     attribute_spans,
     clean_address,
     find_addresses,
+    owner_from_label,
 )
 from emailmonitor.extraction.html import AuthorFact, CandidateFact, Evidence, Fact
 from emailmonitor.fetching.safety import FetchDenied
@@ -251,6 +253,7 @@ class _Address:
     locator: str
     excerpt: str
     offset: int  # position within the owning note's text, -1 when unknown
+    hint: str | None = None  # visible link text naming a person, when not an address
 
 
 @dataclass
@@ -269,13 +272,13 @@ def _excerpt(text: str, start: int, length: int) -> str:
     return text[lo:hi][:300]
 
 
-def _structured_addresses(node: JatsNode, own_only: bool = False) -> list[tuple[str, str]]:
-    """(address, locator) for <email>, email <ext-link> and mailto <uri> descendants.
+def _structured_addresses(node: JatsNode, own_only: bool = False) -> list[tuple[str, str, str]]:
+    """(address, locator, visible text) for <email>, email <ext-link>, mailto <uri>.
 
     ``own_only`` skips addresses inside nested ``<contrib>`` elements (group
     members), which belong to the member, not to the enclosing group author.
     """
-    found: list[tuple[int, str, str]] = []
+    found: list[tuple[int, str, str, str]] = []
 
     def keep(child: JatsNode) -> bool:
         return not (own_only and child.has_ancestor("contrib", stop=node))
@@ -285,7 +288,7 @@ def _structured_addresses(node: JatsNode, own_only: bool = False) -> list[tuple[
             continue
         address = clean_address(email_node.text())
         if address:
-            found.append((email_node.order, address, email_node.locator))
+            found.append((email_node.order, address, email_node.locator, email_node.text()))
     for tag in ("ext-link", "uri"):
         for link in node.find_all(tag):
             if not keep(link):
@@ -296,33 +299,48 @@ def _structured_addresses(node: JatsNode, own_only: bool = False) -> list[tuple[
                 address = clean_address(href) if href else None
                 address = address or clean_address(link.text())
                 if address:
-                    found.append((link.order, address, link.locator))
+                    found.append((link.order, address, link.locator, link.text()))
     found.sort()
-    return [(address, locator) for _order, address, locator in found]
+    return [(address, locator, visible) for _order, address, locator, visible in found]
 
 
 def _note_addresses(node: JatsNode) -> list[_Address]:
     text = node.text(skip=frozenset({"label"}))
+    visible = find_addresses(text)
     structured = _structured_addresses(node)
     result: list[_Address] = []
-    visible = find_addresses(text)
-    if structured:
-        # Map structured addresses onto visible occurrences in order, linearly.
-        positions: dict[str, list[int]] = {}
-        for start, literal in visible:
-            positions.setdefault(literal, []).append(start)
-        last = -1
-        for address, locator in structured[:MAX_NOTE_ADDRESSES]:
-            queue = positions.get(address, [])
-            while queue and queue[0] <= last:
-                queue.pop(0)
-            offset = queue.pop(0) if queue else -1
-            if offset >= 0:
-                last = offset
-            result.append(_Address(address, locator, _excerpt(text, offset, len(address)), offset))
-        return result
-    for start, literal in visible[:MAX_NOTE_ADDRESSES]:
+    positions: dict[str, list[int]] = {}
+    for start, literal in visible:
+        positions.setdefault(literal.casefold(), []).append(start)
+    used: set[int] = set()
+    last = -1
+    for address, locator, shown in structured[:MAX_NOTE_ADDRESSES]:
+        shown_address = clean_address(shown) if "@" in shown else None
+        if shown_address is not None and shown_address.casefold() != address.casefold():
+            # Visible text is a different address from the link target: never use
+            # the visible position for the target.
+            result.append(_Address(address, locator, _excerpt(text, -1, 0), -1))
+            continue
+        queue = positions.get(address.casefold(), [])
+        while queue and queue[0] <= last:
+            queue.pop(0)
+        offset = queue.pop(0) if queue else -1
+        if offset >= 0:
+            last = offset
+            used.add(offset)
+        hint = shown.strip() if shown_address is None and shown.strip() else None
+        result.append(
+            _Address(address, locator, _excerpt(text, offset, len(address)), offset, hint)
+        )
+    # Plain-text addresses in the same note are literal evidence too.
+    structured_keys = {a.casefold() for a, _l, _v in structured}
+    for start, literal in visible:
+        if len(result) >= MAX_NOTE_ADDRESSES:
+            break
+        if start in used or literal.casefold() in structured_keys:
+            continue
         result.append(_Address(literal, node.locator, _excerpt(text, start, len(literal)), start))
+    result.sort(key=lambda a: (a.offset < 0, a.offset))
     return result
 
 
@@ -471,6 +489,11 @@ def parse_jats_xml(data: bytes, requested_identifier: OpenAccessIdentifier) -> J
             for fn in author_notes.find_all("fn"):
                 if fn.attrs.get("fn-type", "").lower() in _CORRESP_FN_TYPES:
                     note_nodes.append(fn)
+        # A note nested inside another note is part of the outer note's text; it
+        # is not processed again (that would repeat work per nesting level).
+        note_nodes = [
+            n for n in note_nodes if not (n.has_ancestor("corresp") or n.has_ancestor("fn"))
+        ]
         note_nodes.sort(key=lambda n: n.order)
         for node in note_nodes:
             note = _Note(
@@ -498,7 +521,9 @@ def parse_jats_xml(data: bytes, requested_identifier: OpenAccessIdentifier) -> J
             if contrib.has_ancestor("contrib", stop=article_meta):
                 # Members of a group author: the group holds the position. A member's
                 # own address is still literal evidence, reported unlinked below.
-                member_emails.extend(_structured_addresses(contrib, own_only=True))
+                member_emails.extend(
+                    (a, loc) for a, loc, _v in _structured_addresses(contrib, True)
+                )
                 continue
 
             display_name, author_kind = _person_name(contrib)
@@ -530,7 +555,7 @@ def parse_jats_xml(data: bytes, requested_identifier: OpenAccessIdentifier) -> J
                         refs.append(rid)
                         signal = True
 
-            contrib_emails = _structured_addresses(contrib, own_only=True)
+            contrib_emails = [(a, loc) for a, loc, _v in _structured_addresses(contrib, True)]
 
             aff_texts: list[str] = []
             for xref in contrib.find_all("xref"):
@@ -616,6 +641,7 @@ def parse_jats_xml(data: bytes, requested_identifier: OpenAccessIdentifier) -> J
     corresponding_positions = [a.position for a in authors if a.corresponding]
     people = [Person(a.position, a.display_name) for a in authors if a.author_kind == "person"]
 
+    role_from_notes: set[int] = set()
     for referenced_pass in (True, False):
         for note in notes:
             refs_for_note = referencing.get(note.note_id or "", [])
@@ -638,6 +664,13 @@ def parse_jats_xml(data: bytes, requested_identifier: OpenAccessIdentifier) -> J
                 if len(candidates) >= 100:
                     break
                 owner, kind = owners.get(id(entry), (None, None))
+                if owner is None and entry.offset < 0 and entry.hint:
+                    hinted = owner_from_label(entry.hint, people)
+                    if hinted is not None:
+                        owner, kind = hinted, "name"
+                role_eligible = entry.offset >= 0 and asserts_correspondence(
+                    note.text, entry.offset
+                )
                 # A sole address may inherit the note's structural owner unless an
                 # explicit label names somebody else.
                 structural: tuple[int, AssociationBasis] | None = None
@@ -660,31 +693,17 @@ def parse_jats_xml(data: bytes, requested_identifier: OpenAccessIdentifier) -> J
                         "corresp_initials" if kind == "initials" else "corresp_name_proximity"
                     )
                     add(entry.address, entry.locator, entry.excerpt, [owner], basis)
+                    if role_eligible:
+                        role_from_notes.add(owner)
                 else:
                     add(entry.address, entry.locator, entry.excerpt, [], "unmatched")
 
-    # A note that names its author asserts correspondence even without an xref.
-    # Without any explicit author marker, unpicked authors stay unknown (None).
-    note_picked = {
-        p
-        for c in candidates
-        if c.association_basis
-        in (
-            "corresp_xref",
-            "corresp_initials",
-            "corresp_name_proximity",
-            "sole_corresponding_author",
-        )
-        for p in c.author_positions
-    }
+    # Roles come from explicit markup when the article has any. Only when it has
+    # none may a note grant the role, and only to people it names inside
+    # correspondence wording (never in a following "E-mail addresses:" clause).
     if authors and not any(author_signals) and notes:
         authors = [
-            a.model_copy(update={"corresponding": True if a.position in note_picked else None})
-            for a in authors
-        ]
-    elif note_picked:
-        authors = [
-            a.model_copy(update={"corresponding": True}) if a.position in note_picked else a
+            a.model_copy(update={"corresponding": True if a.position in role_from_notes else None})
             for a in authors
         ]
 

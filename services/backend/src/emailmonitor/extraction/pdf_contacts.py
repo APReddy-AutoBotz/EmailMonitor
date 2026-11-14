@@ -35,7 +35,12 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pypdf import PdfReader
 from pypdf.errors import PyPdfError
 
-from emailmonitor.extraction.attribution import Person, attribute_spans, find_addresses
+from emailmonitor.extraction.attribution import (
+    Person,
+    asserts_correspondence,
+    attribute_spans,
+    find_addresses,
+)
 from emailmonitor.fetching.safety import FetchDenied
 
 PARSER_VERSION: Literal["pdf-contacts-v1"] = "pdf-contacts-v1"
@@ -110,9 +115,37 @@ class PdfContactObservation(Contract):
         return self
 
 
+_LIGATURES = str.maketrans(
+    {
+        "\ufb00": "ff",
+        "\ufb01": "fi",
+        "\ufb02": "fl",
+        "\ufb03": "ffi",
+        "\ufb04": "ffl",
+        "\ufb05": "st",
+        "\ufb06": "st",
+    }
+)
+SOFT_HYPHEN = "\u00ad"
+
+
 def _lines(text: str) -> list[str]:
-    normalized = unicodedata.normalize("NFKC", text).replace("­", "")
+    # NFC plus explicit ligature expansion only. NFKC would turn superscript
+    # footnote digits into ordinary digits glued onto addresses ("¹js@" -> "1js@").
+    # Soft hyphens are kept: at a line end they are evidence of a wrapped token.
+    normalized = unicodedata.normalize("NFC", text).translate(_LIGATURES)
     return [" ".join(line.split()) for line in normalized.splitlines()]
+
+
+def _wraps_onto_next(line: str, end: int, next_line: str) -> bool:
+    """An address ending the line on '.', '-' or a soft hyphen, continued below."""
+    tail = line[end:]
+    if tail.strip(" ") not in (".", "-", SOFT_HYPHEN, ""):
+        return False
+    if tail.strip(" ") == "" and not line[:end].endswith(SOFT_HYPHEN):
+        return False
+    first = next_line.lstrip()[:1]
+    return bool(first) and (first.islower() or first.isdigit())
 
 
 def parse_pdf_contacts(
@@ -187,10 +220,11 @@ def parse_pdf_contacts(
             grouped_spans = [(m.start(), m.end()) for m in _GROUPED.finditer(line)]
             grouped += len(grouped_spans)
             last_token = line.rsplit(" ", 1)[-1] if line else ""
-            if "@" in last_token and last_token.endswith(("@", ".", "-")):
+            if "@" in last_token and last_token.endswith(("@", ".", "-", SOFT_HYPHEN)):
                 wrapped += 1
             correspondence = _CORRESPONDENCE.search(line)
             email_label = _EMAIL_LABEL.search(line)
+            next_line = lines[index + 1] if index + 1 < len(lines) else ""
             found = find_addresses(line)
             # A marker line without an address of its own labels the next line only.
             inherited, inherited_text = carried, carried_text
@@ -207,13 +241,20 @@ def parse_pdf_contacts(
                     continue
                 if address.casefold() in seen:
                     continue
+                if _wraps_onto_next(line, end, next_line):
+                    # "jsmith@med.harvard." + "edu; ...": never report the cut part
+                    # (the line was already counted as possibly wrapped above).
+                    continue
                 region: PdfRegion
-                if correspondence and correspondence.start() < start:
+                position = start + len(prefix)
+                if asserts_correspondence(prefix + line, position):
                     region = "pdf_correspondence_line"
-                elif email_label and email_label.start() < start:
+                elif (email_label and email_label.start() < start) or (
+                    inherited == "pdf_email_line"
+                ):
                     region = "pdf_email_line"
-                elif inherited is not None:
-                    region = inherited
+                elif inherited is not None and not asserts_correspondence(prefix + line, position):
+                    region = "pdf_email_line"
                 else:
                     region = "pdf_front_matter"
                 entries.append((start + len(prefix), end + len(prefix), address, region))

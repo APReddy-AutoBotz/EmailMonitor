@@ -11,6 +11,7 @@
 - OA-023: association strength per contact and a "markup only" export option for highest-precision outreach lists.
 - OA-024: offline batch command line for a folder of supplied documents.
 - OA-025: seeded parser fuzz invariants and a synthetic association benchmark; it found and fixed a sole-corresponding-author over-attribution and unreported consortium-member addresses.
+- Third review fixes: titles never read as initials, roles only from correspondence wording or markup (no spread from shared e-mail footnotes), no altered PDF addresses (NFC, superscript/symbol edges, wrapped-address suppression), exact HTML link positions and name-text links, Nature-style initials, bounded windows and single processing of nested notes; benchmark extended to 16 documents.
 - Second review fixes: shared attribution module (no sliced non-ASCII addresses, person-form matching instead of bare surnames, list-direction detection, no role from e-mail tags/lines), bounded HTML block text and linear JATS/intake scans.
 - Service package gets an explicit 384-entry cap (the shared 256 cap blocked the backend and installed-operator CI gates since the first OA commit).
 - Remove Google Fonts (`index.html` links and a CSS `@import`) added in 45da184: the UI must make no third-party requests (operator IP leakage, egress policy, production CSP `style-src 'self'`), and the cross-origin stylesheet made the isolated keyboard UI capture guard refuse every capture. A test now forbids remote assets.

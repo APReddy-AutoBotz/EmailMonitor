@@ -29,7 +29,13 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from emailmonitor.extraction.attribution import Person, attribute_spans, clean_address
+from emailmonitor.extraction.attribution import (
+    Person,
+    asserts_correspondence,
+    attribute_spans,
+    clean_address,
+    owner_from_label,
+)
 from emailmonitor.fetching.safety import FetchDenied
 
 PARSER_VERSION: Literal["citation-meta-v1"] = "citation-meta-v1"
@@ -209,6 +215,38 @@ class _Node:
         while node.parent is not None and (node.tag not in _BLOCK or node.tag == "span"):
             node = node.parent
         return node
+
+
+_OPEN, _CLOSE = "\ue000", "\ue001"
+
+
+def _render(node: _Node, anchor: _Node, parts: list[str]) -> None:
+    for item in node.content:
+        if isinstance(item, str):
+            parts.append(item.replace(_OPEN, "").replace(_CLOSE, ""))
+        elif item.tag not in _INERT:
+            parts.append(" ")
+            if item is anchor:
+                parts.append(_OPEN)
+            _render(item, anchor, parts)
+            if item is anchor:
+                parts.append(_CLOSE)
+            parts.append(" ")
+
+
+def _anchor_span(block: _Node, anchor: _Node) -> tuple[int, int] | None:
+    """Exact (start, end) of ``anchor``'s text inside ``block.bounded_text()``.
+
+    Uses private-use markers around the anchor while rendering, so an earlier
+    identical text ("Email") can never be mistaken for the link's position.
+    """
+    parts: list[str] = []
+    _render(block, anchor, parts)
+    marked = " ".join("".join(parts).split())
+    start, end = marked.find(_OPEN), marked.find(_CLOSE)
+    if start < 0 or end < start:
+        return None
+    return start, end - 1
 
 
 class _Collector(HTMLParser):
@@ -473,29 +511,43 @@ def parse_citation_page(data: bytes, page_url: str | None = None) -> PageObserva
             continue
         spans: list[tuple[int, int]] = []
         located: list[tuple[int, str]] = []
-        cursor = 0
+        named: dict[int, int] = {}
+        role_ok: dict[int, bool] = {}
         for index, anchor, address in links:
-            anchor_text = anchor.bounded_text() or ""
-            start = block_text.find(anchor_text, cursor) if anchor_text else -1
-            if start >= 0:
-                spans.append((start, start + len(anchor_text)))
+            span = _anchor_span(blocks[key], anchor)
+            if span is None:
+                continue
+            shown = block_text[span[0] : span[1]].strip()
+            role_ok[index] = asserts_correspondence(block_text, span[0])
+            shown_address = clean_address(shown) if "@" in shown else None
+            if shown_address is not None:
+                if shown_address.casefold() == address.casefold():
+                    spans.append(span)
+                    located.append((index, address))
+                # A different visible address: never attribute the target by it.
+                continue
+            hinted = owner_from_label(shown, people) if shown else None
+            if hinted is not None:
+                named[index] = hinted  # the link text itself names the person
+            else:
+                spans.append(span)
                 located.append((index, address))
-                cursor = start + len(anchor_text)
         owners = dict(
             zip((i for i, _a in located), attribute_spans(block_text, spans, people), strict=True)
         )
         for index, _anchor, address in links:
-            owner = owners.get(index, (None, None))[0]
+            owner = named.get(index, owners.get(index, (None, None))[0])
             evidence = PageEvidence(
                 locator=f"a[{index}][href^=mailto]",
                 excerpt=block_text[:300],
                 kind="correspondence_mailto",
             )
             if owner is not None:
-                if correspondence:
+                asserted = role_ok.get(index, False)
+                if asserted:
                     authors[owner - 1]["corresponding"] = True
                 basis: CandidateBasis = (
-                    "correspondence_block_surname" if correspondence else "email_block_surname"
+                    "correspondence_block_surname" if asserted else "email_block_surname"
                 )
                 add_candidate(address, (owner,), basis, evidence)
             else:

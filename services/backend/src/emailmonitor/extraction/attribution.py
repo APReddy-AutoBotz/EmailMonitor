@@ -23,14 +23,17 @@ Everything here is linear in the input size up to small per-author constants.
 from __future__ import annotations
 
 import re
+import unicodedata
 from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Literal
 
-_ASCII_LOCAL = frozenset(
-    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.!#$%&'*+/=?^_`|~-"
-)
+# Characters that may form a local part when scanning running text. RFC 5322 allows
+# more symbols, but in documents '*', '|', '#', '!' and similar are footnote markers
+# or separators; they end the token instead of joining it. (Explicit <email> values
+# and mailto: hrefs are validated by clean_address, which keeps the full RFC set.)
+_ASCII_LOCAL = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._+-'")
 _ASCII_DOMAIN = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-")
 _EMAIL_FULL = re.compile(
     r"[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+)*"
@@ -85,7 +88,11 @@ def clean_address(value: str) -> str | None:
 
 
 def _is_word_char(char: str) -> bool:
-    return char.isalnum() or char == "_"
+    # Superscript/subscript digits and other 'No' numbers are footnote markers, not
+    # part of an address: "¹js@uni.example" is "js@uni.example" after marker ¹.
+    if char == "_":
+        return True
+    return char.isalnum() and unicodedata.category(char) != "No"
 
 
 def find_addresses(text: str) -> list[tuple[int, str]]:
@@ -102,6 +109,9 @@ def find_addresses(text: str) -> list[tuple[int, str]]:
             end += 1
         before = text[start - 1] if start > 0 else ""
         after = text[end] if end < len(text) else ""
+        capped = end - position > 254 or (
+            position - start > 64 and start > floor and text[start - 1] in _ASCII_LOCAL
+        )
         # Reject rather than slice: a neighbour that could continue the token
         # (another address char, a non-ASCII letter, or another '@').
         bad_edge = (
@@ -114,7 +124,7 @@ def find_addresses(text: str) -> list[tuple[int, str]]:
         while candidate[leading : leading + 1] in (".", "'", "`"):
             leading += 1
         candidate = candidate[leading:]
-        address = None if bad_edge else clean_address(candidate)
+        address = None if bad_edge or capped else clean_address(candidate)
         if address is not None and _looks_run_on(address):
             address = None
         if address is not None:
@@ -127,9 +137,11 @@ def find_addresses(text: str) -> list[tuple[int, str]]:
 
 
 def _looks_run_on(address: str) -> bool:
-    """'smith@x.edu.Phone' — a capitalised word glued after a lowercase domain."""
+    """'smith@x.edu.Phone' or 'js@uni.eduTel' — a word glued onto the domain."""
     labels = address.rsplit("@", 1)[1].split(".")
     last = labels[-1]
+    if any(re.search(r"[a-z][A-Z]", label) for label in labels):
+        return True  # lower-to-upper case change inside one label: "eduTel"
     return (
         len(labels) >= 3
         and last[:1].isupper()
@@ -173,13 +185,18 @@ def _patterns(display_name: str) -> tuple[re.Pattern[str], re.Pattern[str]] | No
     first_given = given.split()[0]
     surname_re = r"\s+".join(re.escape(t) for t in surname.split())
     given_full = re.escape(first_given)
-    initial = re.escape(first_given[0])
+    initial = re.escape(first_given[0].upper())
+    # An initial is an upper-case letter standing alone ("J", "J.", "J.-L."), so
+    # titles such as "Dr", "Mr", "Ms" or words like "to" can never act as one.
+    single = r"(?:\.|(?![A-Za-z]))"
+    initials = rf"{initial}{single}(?:\s?-?[A-Z]{single})?"
+    start = r"(?<![\w\-.])"  # not inside a hyphenated or dotted token ("M.-J. Kim")
     forward = (
-        rf"(?<!\w)(?:{given_full}|{initial}\.?(?:-?\w\.?)?)"
-        rf"(?:\s+[\w.\-]{{1,20}}){{0,3}}?\s+{surname_re}(?!\w)"
+        rf"{start}(?:(?i:{given_full})|{initials})"
+        rf"(?:\s+(?i:[\w.\-]{{1,20}})){{0,3}}?\s+(?i:{surname_re})(?!\w)"
     )
-    inverted = rf"(?<!\w){surname_re},?\s+(?:{given_full}|{initial}\.)(?!\w)"
-    person = re.compile(f"(?:{forward})|(?:{inverted})", re.IGNORECASE)
+    inverted = rf"{start}(?i:{surname_re}),?\s+(?:(?i:{given_full})|{initial}\.)(?!\w)"
+    person = re.compile(f"(?:{forward})|(?:{inverted})")
     exact = re.compile(rf"^{surname_re}$", re.IGNORECASE)
     return person, exact
 
@@ -233,6 +250,17 @@ def _label_owner(content: str, people: Sequence[Person]) -> int | None:
     return next(iter(candidates)) if len(candidates) == 1 else None
 
 
+_ROLE_LABEL = re.compile(
+    r"^\s*(?:\*|†|‡|corresponding(?:\s+authors?)?|corresp\.?|equal\s+contribution|"
+    r"e-?mail|primary\s+contact|lead\s+contact)\s*$",
+    re.IGNORECASE,
+)
+_INITIALS_BEFORE_EMAIL = re.compile(
+    r"(?<![\w.])([A-Z]\.(?:\s?-?[A-Z]\.){1,4})\s*\(\s*e-?mail\s*:?\s*$"
+)
+MAX_WINDOW = 300
+
+
 def _trailing_label(text: str, end: int) -> tuple[str, int] | None:
     match = re.match(rf"\s*\(([^()]{{1,{MAX_LABEL}}})\)", text[end : end + MAX_LABEL + 8])
     if not match:
@@ -259,8 +287,10 @@ def attribute_spans(
     unlabelled: list[int] = []
     for index, (_start, end) in enumerate(spans):
         label = _trailing_label(text, end)
-        if label is None:
-            label_ends.append(end)
+        if label is None or _ROLE_LABEL.match(label[0]):
+            # No label, or a role-only label such as "(corresponding author)" that
+            # names nobody: decide from the surrounding text instead.
+            label_ends.append(label[1] if label else end)
             unlabelled.append(index)
             continue
         owner = _label_owner(label[0], people)
@@ -275,11 +305,26 @@ def attribute_spans(
 
     def preceding(index: int) -> str:
         lo = label_ends[index - 1] if index > 0 else window_start
+        lo = max(lo, spans[index][0] - MAX_WINDOW)  # bounded work per address
         return text[lo : spans[index][0]]
 
     def following(index: int) -> str:
         hi = spans[index + 1][0] if index + 1 < len(spans) else label_ends[index] + MAX_FOLLOWING
+        hi = min(hi, label_ends[index] + MAX_WINDOW)
         return text[label_ends[index] : hi]
+
+    # Nature style: "... addressed to A.B. (email: ab@x) or C.D. (email: cd@y)".
+    for i in list(unlabelled):
+        match = _INITIALS_BEFORE_EMAIL.search(preceding(i))
+        if not match:
+            continue
+        token = re.sub(r"[\s.\-]", "", match.group(1))
+        hits = [p.key for p in people if token in initial_variants(p.display_name)]
+        if len(hits) == 1:
+            results[i] = (hits[0], "initials")
+            unlabelled.remove(i)
+    if not unlabelled:
+        return results
 
     # A person already identified by a label owns that labelled address; the same
     # name in neighbouring text ("a@x; Kate Jones, kj@y (K.J.)") is not reused.
@@ -301,3 +346,32 @@ def attribute_spans(
         if len(hits) == 1:
             results[i] = (hits[0], "name")
     return results
+
+
+_CORRESPONDENCE_WORDING = re.compile(
+    r"\bcorrespond(?:ence|ing)\b|\baddress(?:ed)?\s+correspondence\b|✉", re.IGNORECASE
+)
+# An e-mail label that starts a new clause ("Corresponding author. E-mail addresses:")
+# ends the correspondence clause; an inline "(email: ...)" does not.
+_EMAIL_CLAUSE = re.compile(r"(?:^|[.;:]|\*)\s*e-?mail(?:\s+address(?:es)?)?\s*:", re.IGNORECASE)
+
+
+def asserts_correspondence(text: str, offset: int) -> bool:
+    """True when correspondence wording governs the address at ``offset``.
+
+    The wording must precede the address with no new e-mail clause in between,
+    so "Corresponding author. E-mail addresses: a (A), b (B)" asserts nothing
+    about A or B, while "*Correspondence: A, a@x; B, b@y" covers both.
+    """
+    before = text[max(0, offset - 600) : offset]
+    last = None
+    for match in _CORRESPONDENCE_WORDING.finditer(before):
+        last = match.end()
+    if last is None:
+        return False
+    return _EMAIL_CLAUSE.search(before, last) is None
+
+
+def owner_from_label(content: str, people: Sequence[Person]) -> int | None:
+    """Owner named by a label-like text (initials, name form or exact surname)."""
+    return _label_owner(content, people)

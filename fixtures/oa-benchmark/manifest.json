@@ -230,6 +230,76 @@
           "corresponding": null
         }
       ]
+    },
+    {
+      "id": "jats-elsevier-shared-footnote",
+      "file": "jats-elsevier-shared-footnote.xml",
+      "pattern": "Elsevier: 'Corresponding author. E-mail addresses: x (J. Smith), y (M. Jones), z (K. Brown)' with only one author marked",
+      "expected": [
+        {
+          "address": "js@energy.leeds.example",
+          "author": "John Smith",
+          "corresponding": true
+        },
+        {
+          "address": "mj@energy.leeds.example",
+          "author": "Mary Jones",
+          "corresponding": false
+        },
+        {
+          "address": "kb@energy.leeds.example",
+          "author": "Kate Brown",
+          "corresponding": false
+        }
+      ]
+    },
+    {
+      "id": "html-name-links",
+      "file": "html-name-links.html",
+      "pattern": "Correspondence links whose visible text is the person's name; a generic 'Email' link after an earlier plain '(Email)'",
+      "expected": [
+        {
+          "address": "a.ngata@marine.example",
+          "author": "Aroha Ngata",
+          "corresponding": true
+        },
+        {
+          "address": "t.pere@marine.example",
+          "author": "Tamati Pere",
+          "corresponding": true
+        },
+        {
+          "address": "t.pere2@marine.example",
+          "author": null,
+          "corresponding": null
+        }
+      ]
+    },
+    {
+      "id": "pdf-wrapped-and-markers",
+      "pdf_lines": [
+        "*Correspondence: John Smith, jsmith@med.harvard.",
+        "edu; Department of Medicine",
+        "E-mail: ¹kb@lab.example, ²mj@lab.example"
+      ],
+      "known_authors": [
+        "John Smith",
+        "Kate Brown",
+        "Mary Jones"
+      ],
+      "pattern": "Line-wrapped address must not be reported cut; superscript markers are not address text",
+      "expected": [
+        {
+          "address": "kb@lab.example",
+          "author": null,
+          "corresponding": null
+        },
+        {
+          "address": "mj@lab.example",
+          "author": null,
+          "corresponding": null
+        }
+      ]
     }
   ]
 }
