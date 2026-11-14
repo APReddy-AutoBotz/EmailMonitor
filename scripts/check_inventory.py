@@ -57,7 +57,7 @@ def main() -> None:
             if any(s in package["name"].lower() for s in ("pymupdf", "mupdf")):
                 raise ValueError("Parser license gate requires separate review")
     for path in (python_lock, node_lock):
-        key = str(path.relative_to(ROOT))
+        key = path.relative_to(ROOT).as_posix()
         if report["lock_sha256"][key] != hashlib.sha256(path.read_bytes()).hexdigest():
             raise ValueError(f"Lock changed without inventory review: {key}")
     runtime = json.loads((ROOT / "reports/runtime-inventory.json").read_text())
