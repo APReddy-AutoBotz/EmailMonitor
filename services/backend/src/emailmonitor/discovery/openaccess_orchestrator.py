@@ -37,7 +37,11 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from emailmonitor.extraction.jats import JatsObservation, parse_jats_xml
 from emailmonitor.extraction.orcid import validate_orcid_id
-from emailmonitor.fetching.europepmc import EuropePmcFixtureGateway, EuropePmcRequest
+from emailmonitor.fetching.europepmc import (
+    EuropePmcFixtureGateway,
+    EuropePmcRequest,
+    EuropePmcResponse,
+)
 from emailmonitor.fetching.safety import FetchDenied
 from emailmonitor.results.outreach import (
     ContactExportItem,
@@ -94,6 +98,23 @@ OutcomeStatus = Literal[
     "failed",
 ]
 MAX_RESULTS = 100
+ALL_SOURCES: frozenset[SourceName] = frozenset({"europe-pmc", "openalex", "crossref", "biorxiv"})
+
+
+class FullTextGateway(Protocol):
+    """Europe PMC full text: the offline fixture gateway or the live connector."""
+
+    def fetch(self, request: EuropePmcRequest) -> EuropePmcResponse: ...
+
+
+class SearchGateway(Protocol):
+    """Europe PMC search: the offline fixture gateway or the live connector."""
+
+    def search(self, request: EuropePmcSearchRequest) -> EuropePmcSearchPage: ...
+
+    def resolve_doi(self, doi: str) -> EuropePmcHit | None: ...
+
+
 AssociationStrength = Literal["structural", "labelled", "none"]
 _PMCID = re.compile(r"^PMC\d{3,10}$", re.IGNORECASE)
 
@@ -476,19 +497,25 @@ class OpenAccessOrchestrator:
 
     def __init__(
         self,
-        europe_pmc_gateway: EuropePmcFixtureGateway | None = None,
+        europe_pmc_gateway: FullTextGateway | None = None,
         openalex_gateway: OpenAlexFixtureGateway | None = None,
         crossref_gateway: CrossrefFixtureGateway | None = None,
         biorxiv_gateway: BioRxivFixtureGateway | None = None,
-        europe_pmc_search_gateway: EuropePmcSearchFixtureGateway | None = None,
+        europe_pmc_search_gateway: SearchGateway | None = None,
         biorxiv_jats_gateway: BioRxivJatsFixtureGateway | None = None,
         reference_year: int | None = None,
+        enabled_sources: frozenset[SourceName] = ALL_SOURCES,
     ) -> None:
-        self._pmc = europe_pmc_gateway or EuropePmcFixtureGateway()
+        # A live composition enables only approved sources, so live results are
+        # never merged with offline fixture data from a source left at its default.
+        if not enabled_sources or not enabled_sources <= ALL_SOURCES:
+            raise FetchDenied("enabled_sources_invalid")
+        self._enabled = enabled_sources
+        self._pmc: FullTextGateway = europe_pmc_gateway or EuropePmcFixtureGateway()
         self._openalex = openalex_gateway or OpenAlexFixtureGateway()
         self._crossref = crossref_gateway or CrossrefFixtureGateway()
         self._biorxiv = biorxiv_gateway or BioRxivFixtureGateway()
-        self._search = europe_pmc_search_gateway or EuropePmcSearchFixtureGateway()
+        self._search: SearchGateway = europe_pmc_search_gateway or EuropePmcSearchFixtureGateway()
         self._biorxiv_jats = biorxiv_jats_gateway or BioRxivJatsFixtureGateway()
         self._reference_year = reference_year or current_year()
 
@@ -580,6 +607,8 @@ class OpenAccessOrchestrator:
     def _discover(
         self, source: SourceName, query: str, limit: int, filters: DiscoveryFilters
     ) -> tuple[list[_Work], int | None]:
+        if source not in self._enabled:
+            raise FetchDenied("source_not_enabled")
         if source == "europe-pmc":
             return self._discover_europe_pmc(query, limit, filters)
         if source == "openalex":
@@ -666,7 +695,7 @@ class OpenAccessOrchestrator:
         )
 
     def _resolve_pmcid(self, doi: str | None) -> str | None:
-        if not doi:
+        if not doi or "europe-pmc" not in self._enabled:
             return None
         try:
             hit = self._search.resolve_doi(doi)
@@ -794,7 +823,7 @@ class OpenAccessOrchestrator:
         )
 
     def _full_text(self, work: _Work) -> tuple[JatsObservation, str]:
-        if work.pmcid:
+        if work.pmcid and "europe-pmc" in self._enabled:
             identifier = PmcIdentifier(value=work.pmcid)
             request = EuropePmcRequest(pmcid=identifier)
             response = self._pmc.fetch(request)
@@ -803,7 +832,7 @@ class OpenAccessOrchestrator:
             if obs.article_pmcid and obs.article_pmcid != identifier.value:
                 raise FetchDenied("full_text_identifier_mismatch")
             return obs, request.url
-        if work.preprint_doi is not None:
+        if work.preprint_doi is not None and "biorxiv" in self._enabled:
             data = self._biorxiv_jats.fetch_jats(work.preprint_doi)
             obs = parse_jats_xml(data, work.preprint_doi)
             url = work.preprint_url or f"https://doi.org/{work.preprint_doi.value}"
@@ -826,6 +855,7 @@ class OpenAccessOrchestrator:
                 "unregistered_pmc_fixture",
                 "preprint_full_text_unavailable",
                 "missing_fixture_file",
+                "europe_pmc_full_text_not_found",
             )
             status: OutcomeStatus = "full_text_unavailable" if unavailable else "failed"
             return self._outcome(work, status, reason[:200]), []

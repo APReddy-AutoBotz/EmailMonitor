@@ -22,6 +22,7 @@ The Open Access truthful-pipeline candidate (OA-012…OA-022, [document 88](88-o
 | — | OA-020 | `apps/web/src/openAccess.test.tsx` (bounds, capability gating) |
 | NFR-004, FR-016 | OA-025 | `test_oa_invariants.py` (literal addresses, grounded attribution), `test_oa_benchmark.py` (zero wrong-person on the synthetic corpus) |
 | FR-016, NFR-004 | OA-026 | `test_researchers_and_exports.py::test_license_is_flagged_but_never_blocks`, `::test_every_preset_carries_the_license_class` |
+| FR-016, NFR-004, SEC egress | OA-027 | `test_europepmc_live.py` (document 90 acceptance items 1, 3, 5, 6; items 2, 4, 7 need EM-013, credentials and durable jobs) |
 
 These are offline fixture tests. They do not establish production precision (EM-016), tenant persistence (EM-005/009/011) or live-source permission.
 

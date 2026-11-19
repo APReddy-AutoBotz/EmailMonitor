@@ -139,3 +139,10 @@ The owner accepted the following on 2026-11-19 (recommendations presented from d
 5. **Service package cap of 384 entries** is accepted as recorded above.
 
 bioRxiv/medRxiv received no approval and stays fixture-only. Throttles in document 89 remain proposals; the 5-second source-policy floor still applies to any live path.
+
+### 2026-11-19 — Europe PMC connector boundary (OA-027)
+
+`classify_url` gained a second typed query grammar (after Elsevier `view=FULL`): the Europe PMC search URL produced by `EuropePmcSearchRequest.plan_url()`, on host `www.ebi.ac.uk` and path `/europepmc/webservices/rest/search` only, with the five parameters in fixed order, fixed `format=json`/`resultType=lite`, `pageSize` 1–100, a bounded cursor alphabet, and canonical re-encoding. Queries on any other host or path are still refused (`url_scope_denied`). The grammar is request syntax, not permission; the host must still be in the caller's allowed set.
+
+The connector has no network code; it requires an injected protected transport, and none exists for production. Known limits, recorded rather than worked around: the throttle is process-local (one live worker per source until EM-013); the approval record is in memory (the durable tenant-scoped policy record and per-tenant flag belong to the persistence slice); long keyword queries whose encoded URL exceeds 2 048 bytes are refused rather than truncated; in the Europe-PMC-only composition, a bare DOI routed by `auto` to Crossref is refused (`source_not_enabled`) rather than re-routed.
+

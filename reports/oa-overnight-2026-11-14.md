@@ -36,7 +36,7 @@ Also fixed along the way: the web lockfile had been downgraded from v9 to v6 by 
 
 ## Decisions taken 2026-11-19
 
-You accepted: Europe PMC as the first live source; OpenAlex deferred; a role mailbox for Crossref's polite pool (address still to be supplied); licences **allowed but flagged**; the 384-entry service package cap. The licence flag is implemented (OA-026: licence class on every contact and in every export, informational reasons that never block). Recorded in documents 19, 89 and 90. No live network access was built; that is the next slice and is described in document 90.
+You accepted: Europe PMC as the first live source; OpenAlex deferred; a role mailbox for Crossref's polite pool (address still to be supplied); licences **allowed but flagged**; the 384-entry service package cap. The licence flag is implemented (OA-026: licence class on every contact and in every export, informational reasons that never block). Recorded in documents 19, 89 and 90. No live network access was built. The Europe PMC connector itself (OA-027, partial) now exists behind a protected-transport port and is tested over recorded synthetic responses; reaching Europe PMC still needs the production protected transport, the shared throttle and the persisted tenant policy (document 90).
 
 ## Decisions originally waiting for you (status as of 2026-11-19 in document 19)
 

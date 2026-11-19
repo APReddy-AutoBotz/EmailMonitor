@@ -1,6 +1,6 @@
 # 90 — Design: live Open Access API access through the protected fetch layer
 
-**Status:** proposal for owner review (2026-11-15). Nothing here is implemented or enabled. It turns the decisions listed in [document 89](89-open-access-source-register.md) into a concrete, reviewable engineering task once the owner approves specific sources. Rules: [AGENTS.md](../AGENTS.md) items 3–6 and 9; existing boundaries: [document 33](33-shared-fetch-hop-planner.md), [document 49](49-disabled-provider-binding.md), [document 50](50-controlled-provider-gateway.md).
+**Status:** proposal for owner review (2026-11-15). Europe PMC approved 2026-11-19. **Partly implemented (OA-027, 2026-11-19):** the exact search query grammar in `classify_url`, the Europe PMC connector (`sources/europepmc_live.py`) behind a `ProtectedTransport` port with approval, throttle, back-off and stop rules, and a Europe-PMC-only composition (`discovery/openaccess_live.py`). Still not implemented or enabled: the production transport, EM-013 shared throttle, persisted tenant policy and per-tenant flag. No live call is possible from this repository. It turns the decisions listed in [document 89](89-open-access-source-register.md) into a concrete, reviewable engineering task once the owner approves specific sources. Rules: [AGENTS.md](../AGENTS.md) items 3–6 and 9; existing boundaries: [document 33](33-shared-fetch-hop-planner.md), [document 49](49-disabled-provider-binding.md), [document 50](50-controlled-provider-gateway.md).
 
 ## Goal and non-goals
 
