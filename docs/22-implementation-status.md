@@ -56,6 +56,7 @@ The repository documentation validator checks local Markdown targets, JSON synta
 | OA-023 | LOCAL CANDIDATE | `association_strength` (structural / labelled / none) on every contact and a minimum-strength filter for outreach exports (API + UI). |
 | OA-024 | LOCAL CANDIDATE | Offline batch CLI (`python -m emailmonitor.discovery.batch_intake`) over a folder of PDFs/JATS/pages to one preset CSV, with per-file failure isolation and no-overwrite. |
 | OA-025 | LOCAL CANDIDATE | Seeded fuzz invariants (literal addresses, grounded attribution) and a 13-document synthetic association benchmark with zero-tolerance test for wrong-person/invented addresses; not a real-world precision measurement. |
+| OA-026 | LOCAL CANDIDATE | Owner decision 2026-11-19 "allow but flag": every contact carries its article's `license_category` (JATS and API sources; supplied HTML/PDF stay `unknown`), `license_unknown` / `license_not_creative_commons` are informational reasons that never change eligibility, and every outreach/evidence preset has a licence column. Contracts regenerated. Owner decisions on live sources, polite-pool identity and the service package cap recorded in documents 19, 89 and 90; no live transport implemented. | `test_researchers_and_exports.py` (licence flag and preset columns); OA suites pass locally |
 | EM-EXT-01–05 | DEFERRED | Post-core extensions (OCR adapter, institutional enrichment, recurring searches, direct outreach). |
 
 ## What has been done vs what remains

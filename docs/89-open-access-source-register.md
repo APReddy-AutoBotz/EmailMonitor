@@ -11,7 +11,18 @@
 | Crossref REST (`api.crossref.org`) | DOI resolution, search, author sequence | Public pool; polite pool via `mailto` parameter plus an identifying `User-Agent`; paid Metadata Plus key | Public 5 / polite 10 / Plus 150 (interval from `x-rate-limit-interval`); concurrency public 1 / polite 3; honour `x-rate-limit-*` and `x-concurrency-limit` headers, cache, back off; abusive clients get 403 | Metadata; abstracts may carry publisher copyright | Planner/parser implemented; fixtures only |
 | bioRxiv/medRxiv API (`api.biorxiv.org`) | Recent preprints by date window or DOI; JATS path per preprint | No key documented | `details` serves **30 records per call** (cursor paging); no published rate limit — use a conservative client throttle | Each preprint carries its own license (some are not CC); bioRxiv site-wide TDM terms not confirmed | Planner/parser + DOI-keyed JATS fixture gateway; no keyword search exists upstream, so filtering is local |
 
-## Decisions needed before any live call
+## Owner decisions recorded 2026-11-19
+
+* Europe PMC: **approved** as the first live source (implementation per document 90 still required; fixtures only until then).
+* OpenAlex: **deferred** (no key or budget approved).
+* Crossref: polite pool will use an owner-chosen **role mailbox** via configuration; none supplied yet, so fixture-only.
+* bioRxiv/medRxiv: no decision; fixture-only.
+* Licence stance: **allow but flag** (item 6 below; implemented as OA-026).
+* Throttles (item 4) and retention (item 5) remain open.
+
+Details: [document 19](19-risks-decisions-and-assumptions.md).
+
+## Decisions needed before any live call (original list)
 
 1. **Approve or reject each source** for the stated purpose (academic contact discovery for publisher outreach), per jurisdiction. A provider's API availability is not permission for this purpose; see [document 12](12-source-governance-and-privacy.md).
 2. **Contact identity for polite use.** Crossref's polite pool needs a contact email in `mailto` and `User-Agent`. That must be a role mailbox the owner chooses (not a personal address, not committed to Git), injected through configuration.

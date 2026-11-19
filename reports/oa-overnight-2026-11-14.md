@@ -34,7 +34,11 @@ Also fixed along the way: the web lockfile had been downgraded from v9 to v6 by 
 
 **Not run:** the full backend suite on this machine (Linux-only signals and PostgreSQL/RabbitMQ requirements); CI is the authority there.
 
-## Decisions waiting for you (nothing below was decided overnight)
+## Decisions taken 2026-11-19
+
+You accepted: Europe PMC as the first live source; OpenAlex deferred; a role mailbox for Crossref's polite pool (address still to be supplied); licences **allowed but flagged**; the 384-entry service package cap. The licence flag is implemented (OA-026: licence class on every contact and in every export, informational reasons that never block). Recorded in documents 19, 89 and 90. No live network access was built; that is the next slice and is described in document 90.
+
+## Decisions originally waiting for you (status as of 2026-11-19 in document 19)
 
 1. **Live API access** — approve or reject Europe PMC, OpenAlex, Crossref, bioRxiv for this purpose; choose a role mailbox for Crossref's polite pool; decide on an OpenAlex API key and monthly budget (keys are now needed for paging and usage is priced); confirm throttles (proposed in document 89; the current policy model enforces ≥5 s between requests). The engineering path once approved is in document 90.
 2. **License stance** — whether contacts from articles whose license is `other`/`unknown` (e.g. some preprints) are allowed, flagged or excluded.

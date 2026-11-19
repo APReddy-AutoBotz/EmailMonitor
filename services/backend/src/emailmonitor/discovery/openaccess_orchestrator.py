@@ -188,6 +188,9 @@ class ExtractedAcademicContact(Contract):
     evidence_excerpt: str
     content_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     full_text_url: str | None = None
+    # Owner decision 2026-11-19: contacts from articles without a Creative Commons
+    # (or public-domain) licence are allowed but flagged, never silently dropped.
+    license_category: LicenseCategory = "unknown"
     domain_type: Literal["institutional", "commercial_free", "disposable"]
     recency_level: Literal["active_recent", "moderate", "dormant", "unknown"]
     recency_score: float = Field(ge=0.0, le=1.0)
@@ -307,6 +310,7 @@ class ArticleContext:
     publication_year: int | None
     content_digest: str
     full_text_url: str | None
+    license_category: LicenseCategory = "unknown"
 
 
 @dataclass(frozen=True)
@@ -422,6 +426,10 @@ def build_contact(
             reasons.append("free_mail_domain")
         if score.recency_level == "unknown":
             reasons.append("publication_year_unknown")
+        if context.license_category == "unknown":
+            reasons.append("license_unknown")
+        elif context.license_category == "other":
+            reasons.append("license_not_creative_commons")
 
     return ExtractedAcademicContact(
         contact_id=contact_id_for(context.source, context.article_key, comparison_key),
@@ -450,6 +458,7 @@ def build_contact(
         evidence_excerpt=evidence_excerpt,
         content_digest=context.content_digest,
         full_text_url=context.full_text_url,
+        license_category=context.license_category,
         domain_type=score.domain_type,
         recency_level=score.recency_level,
         recency_score=score.recency_score,
@@ -846,6 +855,7 @@ class OpenAccessOrchestrator:
             publication_year=year,
             content_digest=obs.content_digest,
             full_text_url=full_text_url,
+            license_category=license_category(obs.license_url),
         )
         for candidate in obs.candidates:
             if candidate.association_basis == "unmatched":

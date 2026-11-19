@@ -43,12 +43,15 @@
       "evidence_excerpt": "citation_author=Lindgren, Saga; citation_author_email=saga.lindgren@agri.uppsala.example",
       "content_digest": "c38946ad1008e2df9854a64664bc23ee16d107da83676a95c3a3c80b4cd93a63",
       "full_text_url": "https://journal.publisher.example/sops/2026/0142",
+      "license_category": "unknown",
       "domain_type": "institutional",
       "recency_level": "active_recent",
       "recency_score": 1.0,
       "technical_status": "syntax_valid_not_mailbox_verified",
       "outreach_eligibility": "eligible",
-      "eligibility_reasons": [],
+      "eligibility_reasons": [
+        "license_unknown"
+      ],
       "gdpr_notice": "Notice: Address observed in published work 'Soil microbiome resilience under prolonged drought', published in Synthetic Open Plant Science (2026), DOI: 10.5555/sops.2026.0142. Processed under GDPR Article 6(1)(f) Legitimate Interest."
     },
     {
@@ -80,12 +83,15 @@
       "evidence_excerpt": "* Correspondence: Yusuf Haddad, y.haddad@arid.amman.example",
       "content_digest": "c38946ad1008e2df9854a64664bc23ee16d107da83676a95c3a3c80b4cd93a63",
       "full_text_url": "https://journal.publisher.example/sops/2026/0142",
+      "license_category": "unknown",
       "domain_type": "institutional",
       "recency_level": "active_recent",
       "recency_score": 1.0,
       "technical_status": "syntax_valid_not_mailbox_verified",
       "outreach_eligibility": "eligible",
-      "eligibility_reasons": [],
+      "eligibility_reasons": [
+        "license_unknown"
+      ],
       "gdpr_notice": "Notice: Address observed in published work 'Soil microbiome resilience under prolonged drought', published in Synthetic Open Plant Science (2026), DOI: 10.5555/sops.2026.0142. Processed under GDPR Article 6(1)(f) Legitimate Interest."
     },
     {
@@ -115,13 +121,15 @@
       "evidence_excerpt": "Correspondence regarding data: datadesk@arid.amman.example",
       "content_digest": "c38946ad1008e2df9854a64664bc23ee16d107da83676a95c3a3c80b4cd93a63",
       "full_text_url": "https://journal.publisher.example/sops/2026/0142",
+      "license_category": "unknown",
       "domain_type": "institutional",
       "recency_level": "active_recent",
       "recency_score": 1.0,
       "technical_status": "syntax_valid_not_mailbox_verified",
       "outreach_eligibility": "needs_review",
       "eligibility_reasons": [
-        "author_association_unresolved"
+        "author_association_unresolved",
+        "license_unknown"
       ],
       "gdpr_notice": "Notice: Address observed in published work 'Soil microbiome resilience under prolonged drought', published in Synthetic Open Plant Science (2026), DOI: 10.5555/sops.2026.0142. Processed under GDPR Article 6(1)(f) Legitimate Interest."
     }

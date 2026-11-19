@@ -67,7 +67,7 @@ Every live response is untrusted data. It cannot add hosts, follow links, change
 
 ## Rollout
 
-1. Owner approves sources, contact identity, budget, limits and license stance (document 89).
+1. Owner approves sources, contact identity, budget, limits and license stance (document 89). *Status 2026-11-19: Europe PMC approved, OpenAlex deferred, Crossref role mailbox pending, licences allow-but-flag (done, OA-026); throttles and retention still open.*
 2. Implement behind a per-tenant flag that defaults off; run acceptance tests above against recorded synthetic responses.
 3. Pilot one tenant, one source (Europe PMC: no key, full text with clear OA licensing), measured with the EM-016 protocol on approved held-out articles.
 4. Add the other sources one at a time.

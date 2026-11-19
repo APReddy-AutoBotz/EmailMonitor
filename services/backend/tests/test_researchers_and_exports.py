@@ -15,6 +15,7 @@ from emailmonitor.discovery.openaccess_orchestrator import (
 from emailmonitor.results.oa_exports import EXPORT_PRESETS, render_export
 from emailmonitor.results.outreach import is_role_account
 from emailmonitor.results.researchers import build_researcher_profiles, render_researchers_csv
+from emailmonitor.sources.openaccess import LicenseCategory
 from fastapi.testclient import TestClient
 
 VALID_ORCID = "0000-0002-1825-0097"
@@ -33,6 +34,7 @@ def _contact(
     corresponding: bool = True,
     first: bool = False,
     suppressed: frozenset[str] = frozenset(),
+    license: LicenseCategory = "cc-by",
 ) -> ExtractedAcademicContact:
     context = ArticleContext(
         source="europe-pmc",
@@ -44,6 +46,7 @@ def _contact(
         publication_year=year,
         content_digest="0" * 64,
         full_text_url=None,
+        license_category=license,
     )
     author = (
         AuthorView(
@@ -276,3 +279,41 @@ def test_preview_export_accepts_minimum_strength() -> None:
     )
     assert response.status_code == 200
     assert response.headers["x-emailmonitor-rows-written"] == "1"
+
+
+LICENSE_COLUMN = {
+    "instantly": "custom_license",
+    "smartlead": "Custom_License",
+    "lemlist": "license",
+    "hubspot": "Article License",
+    "evidence": "license",
+}
+
+
+@pytest.mark.parametrize(
+    ("license", "reason"),
+    [
+        ("cc-by", None),
+        ("cc0", None),
+        ("unknown", "license_unknown"),
+        ("other", "license_not_creative_commons"),
+    ],
+)
+def test_license_is_flagged_but_never_blocks(license: LicenseCategory, reason: str | None) -> None:
+    contact = _contact("ana@uni.example", license=license)
+    assert contact.license_category == license
+    assert contact.outreach_eligibility == "eligible"  # owner decision: allow but flag
+    flagged = {"license_unknown", "license_not_creative_commons"} & set(contact.eligibility_reasons)
+    assert flagged == ({reason} if reason else set())
+
+
+@pytest.mark.parametrize("preset", sorted(LICENSE_COLUMN))
+def test_every_preset_carries_the_license_class(preset: str) -> None:
+    contacts = [
+        _contact("ana@uni.example", license="cc-by"),
+        _contact("ben@uni.example", name="Ben Ode", doi="10.5555/b.1", license="other"),
+    ]
+    export = render_export(preset, contacts)  # type: ignore[arg-type]
+    rows = list(csv.DictReader(io.StringIO(export.content.decode())))
+    by_license = sorted(row[LICENSE_COLUMN[preset]] for row in rows)
+    assert by_license == ["cc-by", "other"]

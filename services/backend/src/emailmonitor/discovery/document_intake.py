@@ -33,7 +33,12 @@ from emailmonitor.results.outreach import (
     render_instantly_csv,
     render_smartlead_csv,
 )
-from emailmonitor.sources.openaccess import DoiIdentifier, OpenAccessIdentifier, PmcIdentifier
+from emailmonitor.sources.openaccess import (
+    DoiIdentifier,
+    OpenAccessIdentifier,
+    PmcIdentifier,
+    license_category,
+)
 
 DocumentKind = Literal["pdf", "jats_xml", "html"]
 MAX_DOCUMENT_BYTES = 20_971_520
@@ -194,6 +199,7 @@ def extract_document(
             publication_year=_year(obs.publication_date),
             content_digest=digest,
             full_text_url=page_url,
+            license_category=license_category(obs.license_url),
         )
         by_position = {a.position: a for a in obs.authors}
         for candidate in obs.candidates:

@@ -430,6 +430,23 @@
           "default": null,
           "title": "Full Text Url"
         },
+        "license_category": {
+          "default": "unknown",
+          "enum": [
+            "cc0",
+            "cc-by",
+            "cc-by-sa",
+            "cc-by-nd",
+            "cc-by-nc",
+            "cc-by-nc-sa",
+            "cc-by-nc-nd",
+            "public-domain",
+            "other",
+            "unknown"
+          ],
+          "title": "License Category",
+          "type": "string"
+        },
         "domain_type": {
           "enum": [
             "institutional",

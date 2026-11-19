@@ -21,6 +21,7 @@ The Open Access truthful-pipeline candidate (OA-012…OA-022, [document 88](88-o
 | NFR-004 | OA-012 | `test_openaccess_orchestrator.py` (no cross-article pairing, no defaulted metadata) |
 | — | OA-020 | `apps/web/src/openAccess.test.tsx` (bounds, capability gating) |
 | NFR-004, FR-016 | OA-025 | `test_oa_invariants.py` (literal addresses, grounded attribution), `test_oa_benchmark.py` (zero wrong-person on the synthetic corpus) |
+| FR-016, NFR-004 | OA-026 | `test_researchers_and_exports.py::test_license_is_flagged_but_never_blocks`, `::test_every_preset_carries_the_license_class` |
 
 These are offline fixture tests. They do not establish production precision (EM-016), tenant persistence (EM-005/009/011) or live-source permission.
 

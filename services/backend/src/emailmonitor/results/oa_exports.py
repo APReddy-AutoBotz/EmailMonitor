@@ -81,6 +81,7 @@ def _instantly(c: ExtractedAcademicContact) -> list[str]:
         _year(c),
         c.doi or "",
         _receipt(c),
+        c.license_category,
     ]
 
 
@@ -97,6 +98,7 @@ def _smartlead(c: ExtractedAcademicContact) -> list[str]:
         c.doi or "",
         f"{c.recency_score:.1f}",
         _receipt(c),
+        c.license_category,
     ]
 
 
@@ -112,6 +114,7 @@ def _lemlist(c: ExtractedAcademicContact) -> list[str]:
         _year(c),
         f"https://doi.org/{c.doi}" if c.doi else "",
         _receipt(c),
+        c.license_category,
     ]
 
 
@@ -129,6 +132,7 @@ def _hubspot(c: ExtractedAcademicContact) -> list[str]:
         c.orcid_id or "",
         "EmailMonitor Open Access extraction",
         _receipt(c),
+        c.license_category,
     ]
 
 
@@ -159,6 +163,7 @@ def _evidence(c: ExtractedAcademicContact) -> list[str]:
         c.recency_level,
         c.outreach_eligibility,
         "; ".join(c.eligibility_reasons),
+        c.license_category,
     ]
 
 
@@ -175,6 +180,7 @@ _PRESETS: dict[ExportPreset, tuple[list[str], Row, bool]] = {
             "custom_publication_year",
             "custom_doi",
             "custom_gdpr_receipt",
+            "custom_license",
         ],
         _instantly,
         True,
@@ -191,6 +197,7 @@ _PRESETS: dict[ExportPreset, tuple[list[str], Row, bool]] = {
             "Custom_DOI",
             "Custom_Recency_Score",
             "GDPR_Notice",
+            "Custom_License",
         ],
         _smartlead,
         True,
@@ -206,6 +213,7 @@ _PRESETS: dict[ExportPreset, tuple[list[str], Row, bool]] = {
             "publicationYear",
             "doiLink",
             "gdprNotice",
+            "license",
         ],
         _lemlist,
         True,
@@ -223,6 +231,7 @@ _PRESETS: dict[ExportPreset, tuple[list[str], Row, bool]] = {
             "ORCID",
             "Lead Source Detail",
             "Legal Basis Note",
+            "Article License",
         ],
         _hubspot,
         True,
@@ -254,6 +263,7 @@ _PRESETS: dict[ExportPreset, tuple[list[str], Row, bool]] = {
             "recency_level",
             "outreach_eligibility",
             "eligibility_reasons",
+            "license",
         ],
         _evidence,
         False,
