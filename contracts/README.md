@@ -33,3 +33,5 @@ outcome records remain unchanged. Internal filtered snapshots contain exact
 captured item/source fingerprints for private current-authority validation.
 See [document 69](../docs/69-retained-article-filters.md); these fields authorize no
 new source, worker capability or acquisition route.
+
+OA-022 adds `oa-discovery-result`, `oa-document-extraction` and `oa-researcher-profile` schemas for the Open Access preview responses. They are **generated** from the Pydantic response models and the examples are real outputs over the committed synthetic fixtures (reference year 2026): regenerate with `python -m emailmonitor.discovery.oa_contracts --write` (run from `services/backend` with `src` on the path); `test_oa_contracts.py` fails on drift. They describe preview endpoints that compute results per request; no persistence, tenant authority or live source access is implied. See [document 88](../docs/88-open-access-pipeline.md).

@@ -13,7 +13,7 @@ from run_service_acceptance import (
     validate_dockerfile,
     validate_smoke,
 )
-from service_artifacts import verify_service_archive
+from service_artifacts import SERVICE_MAX_FILES, verify_service_archive
 
 from artifacts import archive, materialize, read
 
@@ -32,11 +32,11 @@ def installed_service_image(installed: Path, context: Path) -> Iterator[str]:
         if path.is_file()
     }
     manifest = files["manifest.json"]
-    verified = verify_service_archive(archive(files), manifest)
+    verified = verify_service_archive(archive(files, SERVICE_MAX_FILES), manifest)
     runtime = json.loads(manifest)["runtime_distributions"]
     recipe = read(ROOT, "scripts/packaging/ServiceRuntime.Dockerfile")
     validate_dockerfile(recipe)
-    materialize(verified, context)
+    materialize(verified, context, SERVICE_MAX_FILES)
     (context / "Dockerfile").write_bytes(recipe)
     (context / ".dockerignore").write_text("migrations\n", encoding="utf-8")
     owner = OwnedServiceBuilds(uuid4().hex)

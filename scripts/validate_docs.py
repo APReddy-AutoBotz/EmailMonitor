@@ -120,6 +120,9 @@ def main() -> int:
         'tenant-configuration.json': 'tenant-configuration.schema.json',
         'tenant-configuration-update.json': 'tenant-configuration-update.schema.json',
         'resource-usage.json': 'resource-usage.schema.json',
+        'oa-discovery-result.json': 'oa-discovery-result.schema.json',
+        'oa-document-extraction.json': 'oa-document-extraction.schema.json',
+        'oa-researcher-profile.json': 'oa-researcher-profile.schema.json',
     }
     loaded = {}
     for name, schema_name in examples.items():

@@ -4,6 +4,28 @@ The local sibling integration candidate maps FR-006/020/021/025/029 and NFR-011 
 
 **Baseline:** 2026-10-08. Test IDs below are planned test families. They are not tests that have already passed. Actual evidence is recorded in document 22 and implementation reports.
 
+The Open Access truthful-pipeline candidate (OA-012…OA-022, [document 88](88-open-access-pipeline.md)) maps existing requirements to executed offline tests; it adds no requirement IDs:
+
+| Requirement | OA task(s) | Executed tests (services/backend/tests unless noted) |
+|---|---|---|
+| FR-008 | OA-021 | `test_openaccess_multisource.py` (cross-source dedupe, one read per article) |
+| FR-010 | OA-012, OA-014, OA-015 | `test_jats_hardening.py`, `test_document_parsers.py` (metadata, roles, unknown role stays null) |
+| FR-011 | OA-014 | `test_document_parsers.py` (chrome/hidden/script exclusions, negative cases) |
+| FR-013 | OA-015 | `test_document_parsers.py` (page window, encrypted/image-only/unreadable, references) |
+| FR-015 | OA-012 | `test_jats_hardening.py` (shared note split by initials/surname) |
+| FR-016 | OA-012, OA-014, OA-015 | `test_jats_hardening.py`, `test_document_parsers.py` (ambiguous → unmatched) |
+| FR-017 | OA-012, OA-016, OA-022 | `test_openaccess_orchestrator.py`, `test_document_intake.py`, `test_oa_contracts.py` (excerpt, locator, SHA-256 on every contact) |
+| FR-018 | OA-018 | `test_researchers_and_exports.py` (role accounts; syntax ≠ mailbox) |
+| FR-019 | OA-017 | `test_researchers_and_exports.py` (address/valid-ORCID grouping, never by name) |
+| FR-024 | OA-019 | `test_researchers_and_exports.py`, `test_outreach_export.py` (formula-unsafe rows withheld) |
+| NFR-004 | OA-012 | `test_openaccess_orchestrator.py` (no cross-article pairing, no defaulted metadata) |
+| — | OA-020 | `apps/web/src/openAccess.test.tsx` (bounds, capability gating) |
+| NFR-004, FR-016 | OA-025 | `test_oa_invariants.py` (literal addresses, grounded attribution), `test_oa_benchmark.py` (zero wrong-person on the synthetic corpus) |
+| FR-016, NFR-004 | OA-026 | `test_researchers_and_exports.py::test_license_is_flagged_but_never_blocks`, `::test_every_preset_carries_the_license_class` |
+| FR-016, NFR-004, SEC egress | OA-027 | `test_europepmc_live.py` (document 90 acceptance items 1, 3, 5, 6; items 2, 4, 7 need EM-013, credentials and durable jobs) |
+
+These are offline fixture tests. They do not establish production precision (EM-016), tenant persistence (EM-005/009/011) or live-source permission.
+
 ## Functional traceability
 
 | Requirement | Delivery task(s) | Acceptance family |

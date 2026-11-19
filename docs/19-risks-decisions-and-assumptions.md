@@ -117,3 +117,32 @@ Controlled SQL reproduction established publisher receipt/worker authority self-
 The selected conservative product semantics and current implementation limits are recorded in `docs/82-evidence-date-reuse-decisions.md`. In particular, the existing generic HTML `time` parser label does not itself prove an explicit source publication-date declaration, and the current search fixture cannot apply date filtering. Do not infer complete filter support from an accepted request shape.
 
 ScienceDirect's general quota page lists 200 results per page, while its V2 migration guide specifies 10, 25, 50 or 100. The inactive request description uses the narrower V2 set and refuses a page crossing 6,000 results. Publication-year range endpoint inclusivity and journal/book title matching remain unspecified. Provider-native search terms cannot satisfy the product's day-inclusive or exact-journal filters. Applicable retention/contact rights remain unestablished; see [source filter contract](85-source-filter-contract.md).
+
+### 2026-11-14 — Open Access preview pipeline integrity correction
+
+The OA-006…OA-011 preview orchestrator attached one fixture article's authors and addresses to unrelated Crossref/bioRxiv works, used a fixed PMCID for any keyword, and stamped a fixed ORCID, DOI and year on contacts. Under the evidence-mandatory invariant this is fabricated contact evidence. The safer bounded interpretation was implemented (OA-012): a work yields contacts only from its own full text; unknown metadata stays unknown; ORCID requires an in-article declaration on that author with a valid check digit; a contrib email does not assert correspondence. Tests that encoded the old behavior were replaced. Fixture addresses on real institutional domains were moved to reserved `.example` domains. See [document 88](88-open-access-pipeline.md).
+
+Open decision (owner): which OA APIs may be called live, with what contact identity, rate limits and retention. Safe default: none; fixtures only. Partly decided on 2026-11-19 (see below): Europe PMC approved, OpenAlex deferred; rate limits and retention still open.
+
+### 2026-11-14 — Service package entry cap
+
+The authored-source service package shared the metadata package's 256-entry cap while already holding about 254 entries (every tracked backend module, contracts, migrations, notices, web assets and the fixed fixture corpus). The first Open Access module pushed it over, and since `a0f49c7` the `backend` and `installed-operator` CI gates failed in preparation with `package_cap_refused` before running any test. The service package now has its own explicit cap (`SERVICE_MAX_FILES = 384`, `scripts/packaging/service_artifacts.py`), passed explicitly to `archive`/`materialize` for that package only. The 16 MB byte cap, path grammar, digest and inventory-equality checks, and the metadata/XML package caps are unchanged. Owner review requested; a smaller cap would require excluding preview-only modules from the service package. **Accepted by the owner on 2026-11-19.**
+
+### 2026-11-19 — Owner decisions on Open Access sources
+
+The owner accepted the following on 2026-11-19 (recommendations presented from documents 89 and 90):
+
+1. **Europe PMC** is the first and only source approved for live access, for the stated purpose. Approval is a decision, not an implementation: no live transport exists yet, and the source still needs a source-policy record, the production egress path and the per-tenant flag described in [document 90](90-open-access-live-transport-design.md). Until those land, fixtures remain the only data path.
+2. **OpenAlex is deferred.** It now needs an API key and a usage budget; no key or budget is approved, so it stays fixture-only.
+3. **Crossref polite pool** will use an owner-chosen role mailbox (not a personal address), injected through configuration and never committed. No address has been supplied, so Crossref stays fixture-only until it is.
+4. **Licence stance: allow but flag.** Contacts from articles whose licence is not Creative Commons/public domain (`other`) or cannot be determined (`unknown`) are kept, carry an informational eligibility reason (`license_not_creative_commons` / `license_unknown`) and show the licence class in every export. The flag never changes eligibility. Operator-supplied HTML and PDF documents carry no machine-readable licence and are reported `unknown` (OA-026).
+5. **Service package cap of 384 entries** is accepted as recorded above.
+
+bioRxiv/medRxiv received no approval and stays fixture-only. Throttles in document 89 remain proposals; the 5-second source-policy floor still applies to any live path.
+
+### 2026-11-19 — Europe PMC connector boundary (OA-027)
+
+`classify_url` gained a second typed query grammar (after Elsevier `view=FULL`): the Europe PMC search URL produced by `EuropePmcSearchRequest.plan_url()`, on host `www.ebi.ac.uk` and path `/europepmc/webservices/rest/search` only, with the five parameters in fixed order, fixed `format=json`/`resultType=lite`, `pageSize` 1–100, a bounded cursor alphabet, and canonical re-encoding. Queries on any other host or path are still refused (`url_scope_denied`). The grammar is request syntax, not permission; the host must still be in the caller's allowed set.
+
+The connector has no network code; it requires an injected protected transport, and none exists for production. Known limits, recorded rather than worked around: the throttle is process-local (one live worker per source until EM-013); the approval record is in memory (the durable tenant-scoped policy record and per-tenant flag belong to the persistence slice); long keyword queries whose encoded URL exceeds 2 048 bytes are refused rather than truncated; in the Europe-PMC-only composition, a bare DOI routed by `auto` to Crossref is refused (`source_not_enabled`) rather than re-routed.
+

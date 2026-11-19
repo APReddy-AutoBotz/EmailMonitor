@@ -85,6 +85,7 @@ class EuropePmcFixtureGateway:
         "PMC10293847": "plos-sample.xml",
         "PMC1234567": "biomed-sample.xml",
         "PMC887766": "no-contact.xml",
+        "PMC7700001": "usher-base-editing.xml",
     }
 
     def fetch(self, request: EuropePmcRequest) -> EuropePmcResponse:

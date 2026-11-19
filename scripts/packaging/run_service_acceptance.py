@@ -22,7 +22,12 @@ from run_xml_acceptance import (
     StdoutPresence,
     bounded_process,
 )
-from service_artifacts import collect_service, tracked_service_sources, verify_service_archive
+from service_artifacts import (
+    SERVICE_MAX_FILES,
+    collect_service,
+    tracked_service_sources,
+    verify_service_archive,
+)
 
 from artifacts import BASE, PLATFORM, PackagingRefused, archive, digest, materialize, read
 from run_acceptance import require_tool_versions, runtime_versions, validate_container
@@ -802,13 +807,13 @@ def execute(diagnostics: Diagnostics) -> None:
                 diagnostics.mark("artifact_collect", ordinal)
                 files = collect_service(ROOT, tree_sha, runtime, sources)
                 diagnostics.mark("artifact_archive", ordinal)
-                bundle = archive(files)
+                bundle = archive(files, SERVICE_MAX_FILES)
                 diagnostics.mark("artifact_verify", ordinal)
                 if verify_service_archive(bundle, files["manifest.json"]) != files:
                     raise PackagingRefused("service_package_roundtrip_refused")
                 context = Path(temporary) / str(ordinal)
                 diagnostics.mark("artifact_materialize", ordinal)
-                materialize(files, context)
+                materialize(files, context, SERVICE_MAX_FILES)
                 (context / "Dockerfile").write_bytes(dockerfile)
                 # Migration inputs remain in the archive, never in a runtime layer.
                 (context / ".dockerignore").write_text("migrations\n", encoding="utf-8")

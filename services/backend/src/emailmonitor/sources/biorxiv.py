@@ -53,9 +53,9 @@ class BioRxivPreprint(Contract):
     doi: DoiIdentifier
     title: str
     authors: tuple[str, ...]
-    corresponding_author: str
+    corresponding_author: str | None = None
     corresponding_institution: str | None = None
-    posted_date: str
+    posted_date: Annotated[str, Field(pattern=r"^(19|20)\d\d-\d{2}-\d{2}$")]
     version: int = Field(ge=1, le=50)
     server: PreprintServer
     category: str
@@ -65,9 +65,8 @@ class BioRxivPreprint(Contract):
 
     @property
     def publication_year(self) -> int:
-        """Extract calendar year from posted date."""
-        match = re.search(r"^\d{4}", self.posted_date)
-        return int(match.group(0)) if match else 2026
+        """Calendar year of the posted date (validated as YYYY-MM-DD on parse)."""
+        return int(self.posted_date[:4])
 
 
 def parse_biorxiv_api_response(raw_json: str | bytes) -> tuple[BioRxivPreprint, ...]:
@@ -93,18 +92,16 @@ def parse_biorxiv_api_response(raw_json: str | bytes) -> tuple[BioRxivPreprint, 
         title = item.get("title", "").strip() or "Untitled Preprint"
 
         raw_authors = item.get("authors", "")
-        author_list = [
-            a.strip()
-            for a in re.split(r"[;,]", raw_authors)
-            if a.strip()
-        ]
+        author_list = [a.strip() for a in re.split(r"[;,]", raw_authors) if a.strip()]
 
-        corresp = item.get("author_corresponding", "").strip()
-        if not corresp and author_list:
-            corresp = author_list[0]
+        # A missing corresponding-author field stays unknown; it is never
+        # back-filled with the first author.
+        corresp = str(item.get("author_corresponding") or "").strip() or None
 
         inst = item.get("author_corresponding_institution", "").strip() or None
-        date_str = item.get("date", "2026-01-01").strip()
+        date_str = str(item.get("date") or "").strip()
+        if not re.fullmatch(r"(19|20)\d\d-\d{2}-\d{2}", date_str):
+            continue  # an undated record is not given an invented date
         raw_version = item.get("version", "1")
         try:
             ver_num = int(raw_version)
@@ -157,8 +154,7 @@ class BioRxivFixtureGateway:
         matched = [
             p
             for p in all_preprints
-            if p.server == planner.server
-            and planner.from_date <= p.posted_date <= planner.to_date
+            if p.server == planner.server and planner.from_date <= p.posted_date <= planner.to_date
         ]
 
         start = planner.cursor
@@ -177,3 +173,53 @@ class BioRxivFixtureGateway:
             if p.doi.value.lower() == doi.value.lower():
                 return p
         return None
+
+
+def matches_keywords(preprint: BioRxivPreprint, query: str) -> bool:
+    """Client-side keyword rule: every query term appears in title, abstract or category.
+
+    The bioRxiv ``details`` endpoint lists a date window and has no keyword search,
+    so the connector must filter locally. Terms shorter than three characters and
+    Boolean operators are ignored.
+    """
+    terms = [
+        t
+        for t in re.findall(r"[a-z0-9][a-z0-9-]*", re.sub(r"\b(AND|OR|NOT)\b", " ", query).lower())
+        if len(t) > 2
+    ]
+    if not terms:
+        return True
+    haystack = " ".join(
+        part for part in (preprint.title, preprint.abstract_text or "", preprint.category) if part
+    ).lower()
+    return all(term in haystack for term in terms)
+
+
+BIORXIV_JATS_MAX_BYTES = 4_194_304
+
+
+class BioRxivJatsFixtureGateway:
+    """Offline stand-in for bioRxiv/medRxiv full-text JATS retrieval keyed by DOI.
+
+    A preprint without a committed synthetic JATS file is reported unavailable;
+    the connector never substitutes another article's full text.
+    """
+
+    def __init__(self, fixture_dir: Path | None = None) -> None:
+        self._dir = fixture_dir or (
+            Path(__file__).resolve().parents[5] / "fixtures" / "biorxiv" / "jats"
+        )
+
+    def fetch_jats(self, doi: DoiIdentifier) -> bytes:
+        from emailmonitor.fetching.safety import FetchDenied
+
+        name = doi.value.replace("/", "_") + ".xml"
+        if not re.fullmatch(r"10\.1101_[0-9.]+\.xml", name):
+            raise FetchDenied("unsupported_preprint_doi")
+        path = self._dir / name
+        if not path.is_file():
+            raise FetchDenied("preprint_full_text_unavailable")
+        data = path.read_bytes()
+        if len(data) > BIORXIV_JATS_MAX_BYTES:
+            raise FetchDenied("preprint_jats_too_large")
+        return data

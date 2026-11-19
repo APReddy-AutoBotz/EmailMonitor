@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Synthetic authored benchmark document: fictional people, reserved .example domains. -->
+<article xmlns:xlink="http://www.w3.org/1999/xlink" article-type="research-article">
+<front><journal-meta><journal-title>Synthetic Benchmark Journal</journal-title></journal-meta>
+<article-meta>
+<article-id pub-id-type="pmc">PMC9100004</article-id>
+<article-id pub-id-type="doi">10.5555/bench.pmc9100004</article-id>
+<title-group><article-title>Porous catalysts for nitrate reduction</article-title></title-group>
+<contrib-group>
+<contrib contrib-type="author"><name><surname>Nowak</surname><given-names>Anna</given-names></name><xref ref-type="fn" rid="c1">*</xref></contrib>
+<contrib contrib-type="author"><name><surname>Zielinski</surname><given-names>Piotr</given-names></name><xref ref-type="fn" rid="c1">*</xref></contrib>
+<contrib contrib-type="author"><name><surname>Kowalska</surname><given-names>Ewa</given-names></name></contrib>
+</contrib-group>
+<author-notes><fn fn-type="corresp" id="c1"><p>Correspondence: <email>a.nowak@chem.gdansk.example</email> (A.N.); <email>p.zielinski@chem.gdansk.example</email> (P.Z.)</p></fn></author-notes>
+<pub-date pub-type="epub"><year>2026</year></pub-date>
+</article-meta></front></article>

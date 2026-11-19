@@ -6,7 +6,14 @@ import re
 import subprocess
 from pathlib import Path
 
-from artifacts import MAX_BYTES, MAX_FILES, PackagingRefused, canonical, collect, digest, read
+from artifacts import MAX_BYTES, PackagingRefused, canonical, collect, digest, read
+
+# The service package carries every tracked backend module plus contracts, migrations,
+# notices, web assets and the fixed fixture corpus. The shared 256-entry cap was sized
+# to the tree at the time (about 254 entries) and refused the first added module.
+# This explicit, larger entry cap applies to the service package only; the byte cap,
+# path grammar, digests and inventory equality checks are unchanged.
+SERVICE_MAX_FILES = 384
 
 
 def git_blob_digest(body: bytes) -> str:
@@ -63,7 +70,7 @@ def collect_service(
         if name.startswith("metadata-api/"):
             del files[name]
     source = root / "services/backend/src/emailmonitor"
-    if not 1 <= len(source_blobs) < MAX_FILES or any(
+    if not 1 <= len(source_blobs) < SERVICE_MAX_FILES or any(
         not re.fullmatch(r"services/backend/src/emailmonitor/[A-Za-z0-9_/]+\.py", name)
         or not re.fullmatch(r"[a-f0-9]{40}", blob)
         for name, blob in source_blobs.items()
@@ -106,7 +113,7 @@ def collect_service(
     )
     for name in fixtures:
         files["fixtures/" + name] = read(root, "fixtures/" + name)
-    if len(files) >= MAX_FILES or sum(map(len, files.values())) > MAX_BYTES:
+    if len(files) >= SERVICE_MAX_FILES or sum(map(len, files.values())) > MAX_BYTES:
         raise PackagingRefused("package_cap_refused")
     files["manifest.json"] = canonical(
         {
@@ -155,7 +162,7 @@ def verify_service_archive(value: bytes, expected_manifest: bytes) -> dict[str, 
         ):
             raise ValueError
         expected = manifest["files"]
-        if not isinstance(expected, dict) or not 1 <= len(expected) < MAX_FILES:
+        if not isinstance(expected, dict) or not 1 <= len(expected) < SERVICE_MAX_FILES:
             raise ValueError
         files: dict[str, bytes] = {}
         with tarfile.open(fileobj=io.BytesIO(value), mode="r:") as bundle:
@@ -171,7 +178,7 @@ def verify_service_archive(value: bytes, expected_manifest: bytes) -> dict[str, 
                     or member.gname
                     or member.pax_headers
                     or member.name in files
-                    or len(files) >= MAX_FILES
+                    or len(files) >= SERVICE_MAX_FILES
                     or not re.fullmatch(r"[A-Za-z0-9_./-]{1,99}", member.name)
                     or member.name.startswith("/")
                     or any(part in {"", ".", ".."} for part in member.name.split("/"))

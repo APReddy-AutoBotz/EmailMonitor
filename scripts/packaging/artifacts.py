@@ -186,8 +186,8 @@ def collect(root: Path, tree_sha: str, runtime: dict[str, str]) -> dict[str, byt
     return dict(sorted(files.items()))
 
 
-def archive(files: dict[str, bytes]) -> bytes:
-    if not files or len(files) > MAX_FILES or sum(map(len, files.values())) > MAX_BYTES:
+def archive(files: dict[str, bytes], max_files: int = MAX_FILES) -> bytes:
+    if not files or len(files) > max_files or sum(map(len, files.values())) > MAX_BYTES:
         raise PackagingRefused("package_cap_refused")
     output = io.BytesIO()
     with tarfile.open(fileobj=output, mode="w", format=tarfile.USTAR_FORMAT) as bundle:
@@ -207,11 +207,11 @@ def archive(files: dict[str, bytes]) -> bytes:
     return output.getvalue()
 
 
-def materialize(files: dict[str, bytes], destination: Path) -> None:
+def materialize(files: dict[str, bytes], destination: Path, max_files: int = MAX_FILES) -> None:
     if destination.exists() or destination.is_symlink():
         raise PackagingRefused("package_owned_destination_required")
     # Validate all names and bounds before creating any output.
-    archive(files)
+    archive(files, max_files)
     destination.mkdir(mode=0o700)
     for name, content in files.items():
         path = destination / name

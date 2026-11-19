@@ -11,8 +11,8 @@ from emailmonitor.discovery.mesh_search import (
 
 
 def test_mesh_catalog_integrity() -> None:
-    assert "D000089822" in COMMON_MESH_CATALOG
-    crispr: MeshDescriptor = COMMON_MESH_CATALOG["D000089822"]
+    assert "D064113" in COMMON_MESH_CATALOG
+    crispr: MeshDescriptor = COMMON_MESH_CATALOG["D064113"]
     assert crispr.name == "CRISPR-Cas Systems"
     assert "CRISPR-Cas9" in crispr.synonyms
     assert crispr.scope_note is not None
@@ -21,7 +21,7 @@ def test_mesh_catalog_integrity() -> None:
 def test_thematic_search_planner_europepmc_query() -> None:
     planner = ThematicSearchPlanner(
         primary_topic="Gene Therapy",
-        mesh_descriptor_ids=("D000089822",),
+        mesh_descriptor_ids=("D064113",),
         excluded_journals=("Nature Biotechnology", "Science"),
         keywords_must=("clinical trials",),
         keywords_must_not=("murine",),

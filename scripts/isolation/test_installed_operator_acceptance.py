@@ -34,6 +34,7 @@ from installed_operator_stage import InstalledStage, report_stage
 from operator_ui_protocol import asset_manifest
 from run_installed_operator import run_installed
 from service_artifacts import (
+    SERVICE_MAX_FILES,
     collect_service,
     tracked_service_sources,
     verify_service_archive,
@@ -534,10 +535,10 @@ def installed_package(directory: Path) -> tuple[Path, dict[str, str], str]:
         ROOT, tree, runtime_versions(requirements), tracked_service_sources(ROOT, tree)
     )
     receipt = files["manifest.json"]
-    payload = archive(files)
+    payload = archive(files, SERVICE_MAX_FILES)
     verified = verify_service_archive(payload, receipt)
     installed = directory / "installed-service"
-    materialize(verified, installed)
+    materialize(verified, installed, SERVICE_MAX_FILES)
     assets = asset_manifest(installed / "static-web")
     assert assets == asset_manifest(ROOT / "apps/web/dist")
     assert not any(name.endswith((".key", ".pem", ".env")) for name in verified)

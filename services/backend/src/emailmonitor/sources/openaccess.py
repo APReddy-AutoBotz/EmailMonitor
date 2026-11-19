@@ -8,7 +8,7 @@ Supports standard scholarly open access repositories:
 
 import re
 from typing import Annotated, Literal
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -101,3 +101,56 @@ def open_access_url(identifier: OpenAccessIdentifier) -> str:
     if identifier.kind == "openalex":
         return f"{OPENALEX_API}/works/{identifier.value}"
     raise ValueError("unsupported_open_access_identifier")
+
+
+LicenseCategory = Literal[
+    "cc0",
+    "cc-by",
+    "cc-by-sa",
+    "cc-by-nd",
+    "cc-by-nc",
+    "cc-by-nc-sa",
+    "cc-by-nc-nd",
+    "public-domain",
+    "other",
+    "unknown",
+]
+_CC_PATH = re.compile(
+    r"/(?:licenses/(by(?:-nc)?(?:-sa|-nd)?)|publicdomain/(zero|mark))/",
+    re.IGNORECASE,
+)
+
+
+def license_category(url: str | None) -> LicenseCategory:
+    """Classify a declared license URL. Absent means unknown, never assumed open.
+
+    Only creativecommons.org itself counts; a CC-looking path on any other host
+    is "other".
+    """
+    if not url or not url.strip():
+        return "unknown"
+    try:
+        parts = urlsplit(url.strip())
+    except ValueError:
+        return "other"
+    host = (parts.hostname or "").lower()
+    if parts.scheme not in ("http", "https") or host not in (
+        "creativecommons.org",
+        "www.creativecommons.org",
+    ):
+        return "other"
+    match = _CC_PATH.match(parts.path.rstrip("/") + "/")
+    if not match:
+        return "other"
+    if match.group(2):
+        return "cc0" if match.group(2).lower() == "zero" else "public-domain"
+    code = match.group(1).lower()
+    mapping: dict[str, LicenseCategory] = {
+        "by": "cc-by",
+        "by-sa": "cc-by-sa",
+        "by-nd": "cc-by-nd",
+        "by-nc": "cc-by-nc",
+        "by-nc-sa": "cc-by-nc-sa",
+        "by-nc-nd": "cc-by-nc-nd",
+    }
+    return mapping.get(code, "other")
