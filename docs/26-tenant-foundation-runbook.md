@@ -35,6 +35,28 @@ EM_MIGRATION_DATABASE_URL="$DISPOSABLE_ADMIN_URL" uv run --project services/back
 EM_TEST_AUTH_DATABASE_URL="$DISPOSABLE_AUTH_URL" EM_TEST_ADMIN_DATABASE_URL="$DISPOSABLE_ADMIN_URL" EM_TEST_DATABASE_URL="$DISPOSABLE_RUNTIME_URL" scripts/check_tenant_foundation.sh
 ```
 
+### Local disposable container (Docker)
+
+On a workstation with Docker, the CI image pinned by digest gives the same database. Bind it to loopback only and pick a free port (5432 may already be in use; any service already listening is left alone). The passwords are the synthetic CI-only values from `.github/workflows/application.yml`, valid only inside this throwaway container.
+
+```sh
+docker run -d --name em-oa-pg -e POSTGRES_PASSWORD=emailmonitor-ci-only \
+  -p 127.0.0.1:55439:5432 \
+  postgres:17.11-bookworm@sha256:3645570cccdfa447589da9f57dd740faa29b30938e861289a5574b6ca6b03826
+ADMIN=postgresql+pg8000://postgres:emailmonitor-ci-only@127.0.0.1:55439/postgres
+EM_MIGRATION_DATABASE_URL="$ADMIN" uv run --project services/backend alembic -c services/backend/alembic.ini upgrade head
+docker exec -i em-oa-pg psql -U postgres -v ON_ERROR_STOP=1 <<'SQL'
+CREATE ROLE em_ci_runtime LOGIN NOSUPERUSER NOBYPASSRLS PASSWORD 'emailmonitor-ci-runtime-only' IN ROLE emailmonitor_runtime;
+CREATE ROLE em_ci_authenticator LOGIN NOSUPERUSER NOBYPASSRLS PASSWORD 'emailmonitor-ci-auth-only' IN ROLE emailmonitor_authenticator;
+SQL
+export EM_TEST_ADMIN_DATABASE_URL="$ADMIN"
+export EM_TEST_AUTH_DATABASE_URL=postgresql+pg8000://em_ci_authenticator:emailmonitor-ci-auth-only@127.0.0.1:55439/postgres
+export EM_TEST_DATABASE_URL=postgresql+pg8000://em_ci_runtime:emailmonitor-ci-runtime-only@127.0.0.1:55439/postgres
+# Remove everything afterwards: docker rm -f em-oa-pg
+```
+
+`scripts/create_ci_runtime.py` refuses to run outside GitHub Actions by design, so the two roles are created with the equivalent SQL above. Verified 2026-11-21 on Windows 11 with Docker 29.7.2: `test_tenant_foundation.py` and `test_review_context_tenant.py` gave 28 passed.
+
 The script requires all three explicit test URLs, runs migration upgrade twice (fresh/current revision behavior) and executes the complete scaffold/identity/SQL/frontend checks. Without DB URLs, ordinary `scripts/check.sh` explicitly skips real SQL/API acceptance tests; that is not an EM-002 pass. The EM-002 CI job provides a fresh official PostgreSQL image pinned by digest, migrates it, creates separate synthetic non-owner runtime and authentication logins and runs the required script. It does not receive production secrets. The CI-login helper refuses any target except the exact documented disposable CI service.
 
 Local verification built PostgreSQL 17.11 from its official source with published SHA-256 `dd27f2b3c59e73ed14aa3324901242bf69a032a6347805f274e6260322d42979`. Unix sockets were unavailable in the execution environment; tests ran in a disposable loopback-only process, stopped after each run. A direct runtime login was used, not SET ROLE under a superuser. [Runtime inventory](../reports/runtime-inventory.json) records the source and immutable official CI-image reference. PostgreSQL 17.11 is the current supported 17 minor on the checked [version policy](https://www.postgresql.org/support/versioning/) page.
