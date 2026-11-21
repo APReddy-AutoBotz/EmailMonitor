@@ -229,7 +229,7 @@ def assert_pdf_upgrade_history(
     before: dict[str, list[tuple[object, ...]]],
     after: dict[str, list[tuple[object, ...]]],
 ) -> None:
-    """Only the exact authored fixture catalog extension may alter history."""
+    """Only the exact authored PDF and Open Access catalog extensions may alter history."""
     assert before.keys() == after.keys()
     assert "source_catalog" in before
     for table in before.keys() - {"source_catalog"}:
@@ -270,6 +270,16 @@ def assert_pdf_upgrade_history(
         assert isinstance(routes[operation], list)
         assert not any(path in routes[operation] for path in paths)
         routes[operation] = routes[operation] + paths
+    # 0027 then appends the registered Open Access fixtures (OA-029, document 91).
+    from emailmonitor.sources.open_access_documents import DOCUMENTS, catalog_entries
+
+    assert "open_access_documents" not in support
+    oa_paths = ["/oa/" + document.pmcid + ".xml" for document in DOCUMENTS]
+    support["open_access_documents"] = catalog_entries()
+    support["fixture_routes"] = support["fixture_routes"] + oa_paths
+    for operation in ("fetch_xml", "extract_contacts", "retain_excerpt", "export_contacts"):
+        assert not any(path in routes[operation] for path in oa_paths)
+        routes[operation] = routes[operation] + oa_paths
     # JSON object order is immaterial; all values, fields and array order remain exact.
     assert sorted(json.dumps(row, sort_keys=True) for row in actual) == sorted(
         json.dumps(row, sort_keys=True) for row in expected
