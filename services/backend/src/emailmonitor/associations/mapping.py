@@ -8,6 +8,7 @@ from emailmonitor.associations.models import Association, Author, Bundle, Candid
 from emailmonitor.associations.normalization import normalize
 from emailmonitor.config import Settings
 from emailmonitor.extraction.html import ArticleObservation, CandidateFact
+from emailmonitor.extraction.jats_retained import RetainedJats
 from emailmonitor.extraction.pdf import PdfCandidate, PdfObservation
 from emailmonitor.extraction.xml_retained import RetainedXml, RetainedXmlCandidate
 from emailmonitor.fetching.fixture import require_fixture
@@ -20,7 +21,9 @@ def identifier(org: UUID, kind: str, *parts: object) -> UUID:
 
 
 def map_observation(
-    settings: Settings, org: UUID, value: ArticleObservation | PdfObservation | RetainedXml
+    settings: Settings,
+    org: UUID,
+    value: ArticleObservation | PdfObservation | RetainedXml | RetainedJats,
 ) -> Bundle:
     require_fixture(settings)
     if type(org) is not UUID or value.content_digest is None:
@@ -147,7 +150,9 @@ def map_observation(
                 reason = "partial_document"
             elif not retained_text:
                 reason = "retained_locator_only"
-            elif explicit and not isinstance(value, RetainedXml):
+            elif explicit and not isinstance(value, (RetainedXml, RetainedJats)):
+                # Retained XML and Open Access JATS never auto-accept: every
+                # association waits for a human reviewer (document 91).
                 state, strength, reason = "accepted", "explicit", "explicit_observed_correspondence"
             associations.append(
                 Association.model_validate(

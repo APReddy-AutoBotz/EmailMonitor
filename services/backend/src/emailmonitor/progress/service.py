@@ -15,6 +15,7 @@ from emailmonitor.config import Settings
 from emailmonitor.discovery.fixture import step_fixture
 from emailmonitor.discovery.service import Discovery
 from emailmonitor.discovery.state import DiscoveryState
+from emailmonitor.extraction.jats_service import JatsParser
 from emailmonitor.extraction.pdf_service import PdfParser
 from emailmonitor.extraction.service import Extraction
 from emailmonitor.fetching.fixture import require_fixture
@@ -381,8 +382,10 @@ SELECT emailmonitor.execution_finish(:org, :job, :item, :token, :batch, :failure
         after_observation: Callable[[], None] | None = None,
         *,
         pdf_parser: PdfParser | None = None,
+        jats_parser: JatsParser | None = None,
     ) -> str:
         from emailmonitor.fetching.safety import IsolationUnavailable
+        from emailmonitor.sources.open_access_documents import URLS as OPEN_ACCESS_URLS
         from emailmonitor.sources.provider_documents import URLS
 
         scope = work.lease
@@ -430,6 +433,18 @@ SELECT emailmonitor.execution_finish(:org, :job, :item, :token, :batch, :failure
                         self.database, self.token, self.settings, parser=pdf_parser
                     ).isolated_fixture(
                         scope.organization, scope.job, work.url, int(str(current["revision"]))
+                    )
+                elif work.url in OPEN_ACCESS_URLS:
+                    from emailmonitor.extraction.jats_service import OaExtraction
+
+                    existing = OaExtraction(
+                        self.database, self.token, self.settings
+                    ).isolated_open_access(
+                        scope.organization,
+                        scope.job,
+                        work.url,
+                        int(str(current["revision"])),
+                        parser=jats_parser,
                     )
                 elif work.url == "https://synthetic.publisher.example/article-xml.xml":
                     from emailmonitor.extraction.xml_service import XmlExtraction

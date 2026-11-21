@@ -88,6 +88,11 @@ def plan_input(request: JobRequest) -> InputPlan:
         url = classify_url(value.url, HOSTS)
     except FetchDenied:
         return InputPlan("unsupported", "unsafe_or_unonboarded_url")
+    from emailmonitor.sources import open_access_documents
+
+    if url.normalized in open_access_documents.URLS:
+        # Registered synthetic Open Access JATS fixture (OA-029); offline only.
+        return InputPlan("article", "open_access_fixture", url.normalized)
     if url.normalized in provider.URLS:
         return InputPlan(
             "search_results" if url.normalized == provider.SEARCH_URL else "article",

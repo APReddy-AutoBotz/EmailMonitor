@@ -5,7 +5,7 @@ type Field = 'title' | 'journal' | 'publication_date' | 'doi'
 export type ArticleMetadata = {
   view_version: 'article-metadata-v1'; organization_id: string; batch_id: string
   source_url: string; content_digest: string; parser_version: string
-  observation_route: 'html' | 'browser_dom' | 'pdf' | 'article_xml'
+  observation_route: 'html' | 'browser_dom' | 'pdf' | 'article_xml' | 'jats_xml'
   preferred_metadata: Record<Field, string | null>
   facts: { field: Field; value: string; date_type: 'published' | 'unspecified'; evidence: { locator: string; excerpt: string; kind?: string; page?: number; region_precision?: string } }[]
   date_precisions?: { fact_index: number; precision: 'year' | 'month' | 'day' | 'unrecognized' }[]
@@ -20,7 +20,7 @@ function validMetadata(value: unknown): value is ArticleMetadata {
   const data = object(value), preferred = object(data?.preferred_metadata)
   if (!data || !preferred || !fields.every(field => preferred[field] === null || typeof preferred[field] === 'string')
     || typeof data.source_url !== 'string' || typeof data.content_digest !== 'string' || typeof data.parser_version !== 'string'
-    || typeof data.observation_route !== 'string' || !['html', 'browser_dom', 'pdf', 'article_xml'].includes(data.observation_route)
+    || typeof data.observation_route !== 'string' || !['html', 'browser_dom', 'pdf', 'article_xml', 'jats_xml'].includes(data.observation_route)
     || typeof data.fact_availability !== 'string' || !['recorded', 'not_recorded'].includes(data.fact_availability)
     || !Array.isArray(data.multiple_value_fields) || !data.multiple_value_fields.every(field => fields.includes(field))
     || !Array.isArray(data.facts) || data.facts.length > 100) return false

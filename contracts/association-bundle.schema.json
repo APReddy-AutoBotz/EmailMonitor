@@ -595,7 +595,8 @@
         "html",
         "browser_dom",
         "pdf",
-        "article_xml"
+        "article_xml",
+        "jats_xml"
       ],
       "title": "Observation Route",
       "type": "string"

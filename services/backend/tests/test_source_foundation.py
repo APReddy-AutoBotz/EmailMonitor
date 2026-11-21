@@ -370,11 +370,24 @@ def test_source_policy_contract_catalog_fixture_parity(scenario: Scenario) -> No
         html_routes = {"/" + path.name for path in (root / "fixtures/html").glob("*.html")}
         xml_route = "/article-xml.xml"
         provider_routes = {"/provider-search-0.json", "/provider-doi.xml", "/provider-pii.xml"}
-        assert (
-            set(catalog["support"]["fixture_routes"]) == html_routes | {xml_route} | provider_routes
+        from emailmonitor.sources.open_access_documents import DOCUMENTS, catalog_entries
+
+        oa_routes = {"/oa/" + d.pmcid + ".xml" for d in DOCUMENTS}
+        assert set(catalog["support"]["fixture_routes"]) == (
+            html_routes | {xml_route} | provider_routes | oa_routes
         )
+        assert catalog["support"]["open_access_documents"] == catalog_entries()
         operations = catalog["support"]["routes_by_operation"]
-        assert set(operations["fetch_xml"]) == {xml_route, "/provider-doi.xml", "/provider-pii.xml"}
+        assert set(operations["fetch_xml"]) == {
+            xml_route,
+            "/provider-doi.xml",
+            "/provider-pii.xml",
+        } | oa_routes
+        for operation in ("search", "fetch_html", "browser"):
+            assert not oa_routes & set(operations[operation])
+        for operation in ("extract_contacts", "retain_excerpt", "export_contacts"):
+            assert oa_routes <= set(operations[operation])
+        assert all((root / "fixtures/jats" / d.fixture).is_file() for d in DOCUMENTS)
         assert "/provider-search-0.json" in operations["search"]
         assert not provider_routes & set(operations["fetch_html"])
         for operation in ("search", "fetch_html", "browser"):
