@@ -10,7 +10,7 @@
     {
       "source": "europe-pmc",
       "work_key": "PMC7700001",
-      "doi": "10.1038/s41587-026-01824-x",
+      "doi": "10.5555/oa.base-editing.01824",
       "pmcid": "PMC7700001",
       "title": "In vivo base editing rescues sensory defects in Usher syndrome mice",
       "journal": "Synthetic Journal of Gene Therapy",
@@ -18,7 +18,7 @@
       "status": "contacts_observed",
       "reason": null,
       "full_text_url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC7700001/fullTextXML",
-      "content_digest": "112d5957a4906ea92fc41a7192b07a7f32d4095cb1137dbe49b09d3e4bb04538",
+      "content_digest": "76a5fffb223ab16da05d29246c4f80f0def5cff431eecd2ee936d4c2a2fe575d",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
       "license_category": "cc-by",
       "found_in": [
@@ -39,7 +39,7 @@
     {
       "contact_id": "oa-6749cdc41d7ffaf879b1",
       "source": "europe-pmc",
-      "doi": "10.1038/s41587-026-01824-x",
+      "doi": "10.5555/oa.base-editing.01824",
       "pmcid": "PMC7700001",
       "article_title": "In vivo base editing rescues sensory defects in Usher syndrome mice",
       "journal": "Synthetic Journal of Gene Therapy",
@@ -63,7 +63,7 @@
       "orcid_status": "absent",
       "evidence_locator": "/article[1]/front[1]/article-meta[1]/contrib-group[1]/contrib[2]/ext-link[1]",
       "evidence_excerpt": "r.mehta@bio.pune.example",
-      "content_digest": "112d5957a4906ea92fc41a7192b07a7f32d4095cb1137dbe49b09d3e4bb04538",
+      "content_digest": "76a5fffb223ab16da05d29246c4f80f0def5cff431eecd2ee936d4c2a2fe575d",
       "full_text_url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC7700001/fullTextXML",
       "license_category": "cc-by",
       "domain_type": "institutional",
@@ -72,12 +72,12 @@
       "technical_status": "syntax_valid_not_mailbox_verified",
       "outreach_eligibility": "eligible",
       "eligibility_reasons": [],
-      "gdpr_notice": "Notice: Address observed in published work 'In vivo base editing rescues sensory defects in Usher syndrome mice', published in Synthetic Journal of Gene Therapy (2026), DOI: 10.1038/s41587-026-01824-x. Processed under GDPR Article 6(1)(f) Legitimate Interest."
+      "gdpr_notice": "Notice: Address observed in published work 'In vivo base editing rescues sensory defects in Usher syndrome mice', published in Synthetic Journal of Gene Therapy (2026), DOI: 10.5555/oa.base-editing.01824. Processed under GDPR Article 6(1)(f) Legitimate Interest."
     },
     {
       "contact_id": "oa-71522d0b73e3535ab65c",
       "source": "europe-pmc",
-      "doi": "10.1038/s41587-026-01824-x",
+      "doi": "10.5555/oa.base-editing.01824",
       "pmcid": "PMC7700001",
       "article_title": "In vivo base editing rescues sensory defects in Usher syndrome mice",
       "journal": "Synthetic Journal of Gene Therapy",
@@ -101,7 +101,7 @@
       "orcid_status": "absent",
       "evidence_locator": "/article[1]/front[1]/article-meta[1]/author-notes[1]/corresp[1]/email[1]",
       "evidence_excerpt": "* Correspondence: lucia.ferreira@neuro.lisbon.example (LF); t.nowak@genetics.krakow.example (TN).",
-      "content_digest": "112d5957a4906ea92fc41a7192b07a7f32d4095cb1137dbe49b09d3e4bb04538",
+      "content_digest": "76a5fffb223ab16da05d29246c4f80f0def5cff431eecd2ee936d4c2a2fe575d",
       "full_text_url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC7700001/fullTextXML",
       "license_category": "cc-by",
       "domain_type": "institutional",
@@ -110,12 +110,12 @@
       "technical_status": "syntax_valid_not_mailbox_verified",
       "outreach_eligibility": "eligible",
       "eligibility_reasons": [],
-      "gdpr_notice": "Notice: Address observed in published work 'In vivo base editing rescues sensory defects in Usher syndrome mice', published in Synthetic Journal of Gene Therapy (2026), DOI: 10.1038/s41587-026-01824-x. Processed under GDPR Article 6(1)(f) Legitimate Interest."
+      "gdpr_notice": "Notice: Address observed in published work 'In vivo base editing rescues sensory defects in Usher syndrome mice', published in Synthetic Journal of Gene Therapy (2026), DOI: 10.5555/oa.base-editing.01824. Processed under GDPR Article 6(1)(f) Legitimate Interest."
     },
     {
       "contact_id": "oa-c10819bef0ea167003ba",
       "source": "europe-pmc",
-      "doi": "10.1038/s41587-026-01824-x",
+      "doi": "10.5555/oa.base-editing.01824",
       "pmcid": "PMC7700001",
       "article_title": "In vivo base editing rescues sensory defects in Usher syndrome mice",
       "journal": "Synthetic Journal of Gene Therapy",
@@ -139,7 +139,7 @@
       "orcid_status": "absent",
       "evidence_locator": "/article[1]/front[1]/article-meta[1]/author-notes[1]/corresp[1]/email[2]",
       "evidence_excerpt": "* Correspondence: lucia.ferreira@neuro.lisbon.example (LF); t.nowak@genetics.krakow.example (TN).",
-      "content_digest": "112d5957a4906ea92fc41a7192b07a7f32d4095cb1137dbe49b09d3e4bb04538",
+      "content_digest": "76a5fffb223ab16da05d29246c4f80f0def5cff431eecd2ee936d4c2a2fe575d",
       "full_text_url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC7700001/fullTextXML",
       "license_category": "cc-by",
       "domain_type": "institutional",
@@ -148,12 +148,12 @@
       "technical_status": "syntax_valid_not_mailbox_verified",
       "outreach_eligibility": "eligible",
       "eligibility_reasons": [],
-      "gdpr_notice": "Notice: Address observed in published work 'In vivo base editing rescues sensory defects in Usher syndrome mice', published in Synthetic Journal of Gene Therapy (2026), DOI: 10.1038/s41587-026-01824-x. Processed under GDPR Article 6(1)(f) Legitimate Interest."
+      "gdpr_notice": "Notice: Address observed in published work 'In vivo base editing rescues sensory defects in Usher syndrome mice', published in Synthetic Journal of Gene Therapy (2026), DOI: 10.5555/oa.base-editing.01824. Processed under GDPR Article 6(1)(f) Legitimate Interest."
     },
     {
       "contact_id": "oa-e4d2fbe68e0d00810188",
       "source": "europe-pmc",
-      "doi": "10.1038/s41587-026-01824-x",
+      "doi": "10.5555/oa.base-editing.01824",
       "pmcid": "PMC7700001",
       "article_title": "In vivo base editing rescues sensory defects in Usher syndrome mice",
       "journal": "Synthetic Journal of Gene Therapy",
@@ -175,7 +175,7 @@
       "orcid_status": "absent",
       "evidence_locator": "/article[1]/front[1]/article-meta[1]/author-notes[1]/corresp[2]/email[1]",
       "evidence_excerpt": "Data and material requests: core-lab@genetics.krakow.example",
-      "content_digest": "112d5957a4906ea92fc41a7192b07a7f32d4095cb1137dbe49b09d3e4bb04538",
+      "content_digest": "76a5fffb223ab16da05d29246c4f80f0def5cff431eecd2ee936d4c2a2fe575d",
       "full_text_url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC7700001/fullTextXML",
       "license_category": "cc-by",
       "domain_type": "institutional",
@@ -187,7 +187,7 @@
         "author_association_unresolved",
         "role_account"
       ],
-      "gdpr_notice": "Notice: Address observed in published work 'In vivo base editing rescues sensory defects in Usher syndrome mice', published in Synthetic Journal of Gene Therapy (2026), DOI: 10.1038/s41587-026-01824-x. Processed under GDPR Article 6(1)(f) Legitimate Interest."
+      "gdpr_notice": "Notice: Address observed in published work 'In vivo base editing rescues sensory defects in Usher syndrome mice', published in Synthetic Journal of Gene Therapy (2026), DOI: 10.5555/oa.base-editing.01824. Processed under GDPR Article 6(1)(f) Legitimate Interest."
     }
   ],
   "corresponding_authors_count": 2,

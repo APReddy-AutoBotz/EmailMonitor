@@ -7,7 +7,7 @@
     "result": [
       {
         "id": "PMC10293847", "source": "PMC", "pmid": "39000001", "pmcid": "PMC10293847",
-        "doi": "10.1371/journal.pbio.3002145",
+        "doi": "10.5555/oa.plos.3002145",
         "title": "Advances in CRISPR-Cas9 Target Specificity",
         "authorString": "Rostova E, Vance M.", "journalTitle": "PLOS Biology",
         "pubYear": "2026", "firstPublicationDate": "2026-03-15",
@@ -15,7 +15,7 @@
       },
       {
         "id": "PMC7700001", "source": "PMC", "pmid": "39000002", "pmcid": "PMC7700001",
-        "doi": "10.1038/s41587-026-01824-x",
+        "doi": "10.5555/oa.base-editing.01824",
         "title": "In vivo base editing rescues sensory defects in Usher syndrome mice (CRISPR base editor)",
         "authorString": "Tanaka A, Mehta R, Ferreira L, Nowak T.", "journalTitle": "Synthetic Journal of Gene Therapy",
         "pubYear": "2026", "firstPublicationDate": "2026-02-04",
@@ -23,7 +23,7 @@
       },
       {
         "id": "PMC887766", "source": "PMC", "pmcid": "PMC887766",
-        "doi": "10.3389/fimmu.2026.887766",
+        "doi": "10.5555/oa.immuno.887766",
         "title": "CRISPR screens of memory T-cell persistence",
         "authorString": "Okafor N.", "journalTitle": "Frontiers in Immunology",
         "pubYear": "2025", "firstPublicationDate": "2025-09-01",
@@ -46,7 +46,7 @@
       },
       {
         "id": "PMC1234567", "source": "PMC", "pmcid": "PMC1234567",
-        "doi": "10.1186/s12864-026-09123-x",
+        "doi": "10.5555/oa.biomed.09123",
         "title": "High-throughput transcriptomic profiling of drought-tolerant wheat",
         "authorString": "Kim SJ.", "journalTitle": "BMC Genomics",
         "pubYear": "2026", "firstPublicationDate": "2026-01-10",

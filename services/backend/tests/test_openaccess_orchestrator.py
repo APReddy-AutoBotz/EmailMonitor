@@ -31,7 +31,7 @@ def _by_email(result: DiscoveryResult) -> dict[str, object]:
         ("PMC10293847", "europe-pmc", "pmcid_identifier"),
         ("pmc10293847", "europe-pmc", "pmcid_identifier"),
         ("10.1101/2026.03.14.584920", "biorxiv", "preprint_doi_prefix"),
-        ("https://doi.org/10.1038/s41587-026-01824-x", "crossref", "doi_identifier"),
+        ("https://doi.org/10.5555/oa.base-editing.01824", "crossref", "doi_identifier"),
         ("CRISPR base editing", "europe-pmc", "keyword_full_text_search"),
         # A keyword that merely contains 'PMC' is not an identifier.
         ("PMC funding policy", "europe-pmc", "keyword_full_text_search"),
@@ -67,7 +67,7 @@ def test_europe_pmc_keyword_pipeline_reports_every_work(
     assert vance.affiliations == (  # type: ignore[attr-defined]
         "Institute of Biotechnology, ETH Zurich, Zurich, Switzerland",
     )
-    assert vance.doi == "10.1371/journal.pbio.3002145"  # type: ignore[attr-defined]
+    assert vance.doi == "10.5555/oa.plos.3002145"  # type: ignore[attr-defined]
     assert vance.publication_year == 2026  # type: ignore[attr-defined]
     assert vance.association_basis == "corresp_xref"  # type: ignore[attr-defined]
     assert vance.technical_status == "syntax_valid_not_mailbox_verified"  # type: ignore[attr-defined]
@@ -110,11 +110,11 @@ def test_crossref_work_uses_only_its_own_full_text(orchestrator: OpenAccessOrche
     by_work = {a.work_key: a for a in result.articles}
     assert by_work["10.1016/j.cell.2025.11.020"].status == "full_text_unavailable"
     assert by_work["10.1016/j.cell.2025.11.020"].contacts_retained == 0
-    usher = by_work["10.1038/s41587-026-01824-x"]
+    usher = by_work["10.5555/oa.base-editing.01824"]
     assert usher.status == "contacts_observed"
     assert usher.pmcid == "PMC7700001"
     for contact in result.contacts_extracted:
-        assert contact.doi == "10.1038/s41587-026-01824-x"
+        assert contact.doi == "10.5555/oa.base-editing.01824"
         assert contact.pmcid == "PMC7700001"
         assert "Usher" in (contact.article_title or "")
     # The PLOS fixture's address must never be attached to a Crossref work.
@@ -122,7 +122,7 @@ def test_crossref_work_uses_only_its_own_full_text(orchestrator: OpenAccessOrche
 
 
 def test_crossref_doi_lookup(orchestrator: OpenAccessOrchestrator) -> None:
-    result = orchestrator.discover_and_extract("doi:10.1038/S41587-026-01824-X")
+    result = orchestrator.discover_and_extract("doi:10.5555/OA.BASE-EDITING.01824")
     assert result.source_used == "crossref"
     assert result.total_articles_scanned == 1
     assert result.corresponding_authors_count == 2
@@ -215,7 +215,7 @@ def test_export_columns_carry_provenance(orchestrator: OpenAccessOrchestrator) -
     assert row["email"] == "marcus.vance@biotech.zurich.example"
     assert row["first_name"] == "Marcus"
     assert row["last_name"] == "Vance"
-    assert row["custom_doi"] == "10.1371/journal.pbio.3002145"
+    assert row["custom_doi"] == "10.5555/oa.plos.3002145"
     assert "ETH Zurich" in row["company_name"]
 
 

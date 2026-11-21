@@ -7,19 +7,19 @@
   "results": [
     {
       "id": "https://openalex.org/W3029182736",
-      "doi": "https://doi.org/10.1371/journal.pbio.3002145",
+      "doi": "https://doi.org/10.5555/oa.plos.3002145",
       "title": "Advances in CRISPR-Cas9 Target Specificity",
       "publication_year": 2026,
       "publication_date": "2026-03-15",
       "ids": {
         "openalex": "https://openalex.org/W3029182736",
-        "doi": "https://doi.org/10.1371/journal.pbio.3002145",
+        "doi": "https://doi.org/10.5555/oa.plos.3002145",
         "pmcid": "https://pubmed.ncbi.nlm.nih.gov/pmc/articles/PMC10293847"
       },
       "primary_location": {
         "is_oa": true,
-        "landing_page_url": "https://journals.plos.org/plosbiology/article?id=10.1371/journal.pbio.3002145",
-        "pdf_url": "https://journals.plos.org/plosbiology/article/file?id=10.1371/journal.pbio.3002145&type=printable",
+        "landing_page_url": "https://journals.plos.org/plosbiology/article?id=10.5555/oa.plos.3002145",
+        "pdf_url": "https://journals.plos.org/plosbiology/article/file?id=10.5555/oa.plos.3002145&type=printable",
         "source": {
           "id": "https://openalex.org/S12345678",
           "display_name": "PLOS Biology",
@@ -30,7 +30,7 @@
       "open_access": {
         "is_oa": true,
         "oa_status": "gold",
-        "oa_url": "https://journals.plos.org/plosbiology/article/file?id=10.1371/journal.pbio.3002145&type=printable"
+        "oa_url": "https://journals.plos.org/plosbiology/article/file?id=10.5555/oa.plos.3002145&type=printable"
       },
       "authorships": [
         {
@@ -69,13 +69,13 @@
     },
     {
       "id": "https://openalex.org/W4019283746",
-      "doi": "https://doi.org/10.1186/s12864-026-09123-x",
+      "doi": "https://doi.org/10.5555/oa.biomed.09123",
       "title": "High-throughput transcriptomic profiling of drought-tolerant wheat",
       "publication_year": 2026,
       "publication_date": "2026-01-20",
       "ids": {
         "openalex": "https://openalex.org/W4019283746",
-        "doi": "https://doi.org/10.1186/s12864-026-09123-x"
+        "doi": "https://doi.org/10.5555/oa.biomed.09123"
       },
       "primary_location": {
         "is_oa": true,

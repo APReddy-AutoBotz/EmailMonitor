@@ -74,13 +74,13 @@ def test_gdpr_provenance() -> None:
         paper_title="Advances in CRISPR",
         journal="PLOS Biology",
         publication_year=2026,
-        doi="10.1371/journal.pbio.3002145",
+        doi="10.5555/oa.plos.3002145",
     )
     notice = generate_gdpr_provenance(item)
     assert "Advances in CRISPR" in notice
     assert "PLOS Biology" in notice
     assert "2026" in notice
-    assert "10.1371/journal.pbio.3002145" in notice
+    assert "10.5555/oa.plos.3002145" in notice
     assert "GDPR Article 6(1)(f) Legitimate Interest" in notice
 
 
@@ -93,7 +93,7 @@ def test_render_instantly_csv() -> None:
             paper_title="Advances in CRISPR",
             journal="PLOS Biology",
             publication_year=2026,
-            doi="10.1371/journal.pbio.3002145",
+            doi="10.5555/oa.plos.3002145",
         ),
         ContactExportItem(
             raw_email="suppressed.author@example.edu",
@@ -132,7 +132,7 @@ def test_render_smartlead_csv() -> None:
             paper_title="Wheat Transcriptomics",
             journal="BMC Genomics",
             publication_year=2026,
-            doi="10.1186/s12864-026-09123-x",
+            doi="10.5555/oa.biomed.09123",
         )
     ]
     csv_bytes = render_smartlead_csv(items, reference_year=2026)

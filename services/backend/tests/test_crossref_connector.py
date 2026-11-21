@@ -78,7 +78,7 @@ def test_crossref_fixture_gateway_search() -> None:
 
     assert len(works) == 2
     nature_work = works[0]
-    assert nature_work.doi.value == "10.1038/s41587-026-01824-x"
+    assert nature_work.doi.value == "10.5555/oa.base-editing.01824"
     assert "Usher syndrome" in nature_work.title
     assert nature_work.container_title == "Nature Biotechnology"
     assert nature_work.publication_year == 2026

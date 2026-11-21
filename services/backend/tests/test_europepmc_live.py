@@ -130,7 +130,7 @@ def live(transport: ReplayTransport) -> OpenAccessOrchestrator:
         EuropePmcSearchRequest(query="crispr base editing"),
         EuropePmcSearchRequest(query='"gene therapy" AND (mouse OR rat)', page_size=100),
         EuropePmcSearchRequest(query="x", from_year=2020, until_year=2025, cursor_mark="AoE/x+="),
-        doi_lookup_request("10.1371/journal.pbio.3002145"),
+        doi_lookup_request("10.5555/oa.plos.3002145"),
     ],
 )
 def test_planner_search_urls_pass_the_exact_grammar(request_: EuropePmcSearchRequest) -> None:

@@ -38,7 +38,7 @@ def test_sniffing() -> None:
 def test_jats_document() -> None:
     result = extract_document(JATS, reference_year=2026)
     assert result.kind == "jats_xml"
-    assert result.doi == "10.1038/s41587-026-01824-x"
+    assert result.doi == "10.5555/oa.base-editing.01824"
     assert result.publication_year == 2026
     assert result.unmatched_candidates == 1
     by_email = {c.email: c for c in result.contacts}

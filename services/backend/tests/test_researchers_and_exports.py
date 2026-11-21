@@ -224,7 +224,7 @@ def test_lemlist_and_hubspot_columns() -> None:
             io.StringIO(render_export("lemlist", result.contacts_extracted).content.decode())
         )
     )
-    assert lem[0]["doiLink"] == "https://doi.org/10.1371/journal.pbio.3002145"
+    assert lem[0]["doiLink"] == "https://doi.org/10.5555/oa.plos.3002145"
     hub = list(
         csv.DictReader(
             io.StringIO(render_export("hubspot", result.contacts_extracted).content.decode())

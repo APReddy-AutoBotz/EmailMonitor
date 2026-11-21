@@ -211,14 +211,14 @@ class _OpenAlexOnlyDoi(OpenAlexFixtureGateway):
         return [
             OpenAlexWork(
                 id="https://openalex.org/W12345678",
-                doi="https://doi.org/10.1371/journal.pbio.3002145",
+                doi="https://doi.org/10.5555/oa.plos.3002145",
             )
         ]
 
 
 class _CrossrefBoth(CrossrefFixtureGateway):
     def search_works(self, planner: CrossrefQueryPlanner) -> tuple[CrossrefWork, ...]:
-        return (CrossrefWork(doi=DoiIdentifier(value="10.1371/journal.pbio.3002145"), title="T"),)
+        return (CrossrefWork(doi=DoiIdentifier(value="10.5555/oa.plos.3002145"), title="T"),)
 
 
 def test_merge_joins_groups_bridged_by_a_later_record() -> None:
