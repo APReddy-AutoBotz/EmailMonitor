@@ -227,7 +227,12 @@ def main() -> None:
     if [name for _, name in socket.if_nameindex()] != ["lo"]:
         raise RuntimeError("xml_image_network_refused")
     distributions = verify_layout()
-    from emailmonitor.parsing import affiliation_diagnostic_worker, pdf_worker, xml_worker  # noqa: F401
+    from emailmonitor.parsing import (  # noqa: F401
+        affiliation_diagnostic_worker,
+        jats_worker,
+        pdf_worker,
+        xml_worker,
+    )
 
     loaded = {
         Path(module.__file__).relative_to(ROOT / "src/emailmonitor").as_posix()

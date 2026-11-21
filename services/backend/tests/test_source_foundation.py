@@ -378,11 +378,15 @@ def test_source_policy_contract_catalog_fixture_parity(scenario: Scenario) -> No
         )
         assert catalog["support"]["open_access_documents"] == catalog_entries()
         operations = catalog["support"]["routes_by_operation"]
-        assert set(operations["fetch_xml"]) == {
-            xml_route,
-            "/provider-doi.xml",
-            "/provider-pii.xml",
-        } | oa_routes
+        assert (
+            set(operations["fetch_xml"])
+            == {
+                xml_route,
+                "/provider-doi.xml",
+                "/provider-pii.xml",
+            }
+            | oa_routes
+        )
         for operation in ("search", "fetch_html", "browser"):
             assert not oa_routes & set(operations[operation])
         for operation in ("extract_contacts", "retain_excerpt", "export_contacts"):
