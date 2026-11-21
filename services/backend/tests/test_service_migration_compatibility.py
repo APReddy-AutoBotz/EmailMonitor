@@ -229,7 +229,7 @@ def assert_pdf_upgrade_history(
     before: dict[str, list[tuple[object, ...]]],
     after: dict[str, list[tuple[object, ...]]],
 ) -> None:
-    """Only the exact authored PDF and Open Access catalog extensions may alter history."""
+    """Only the exact authored fixture catalog extension may alter history."""
     assert before.keys() == after.keys()
     assert "source_catalog" in before
     for table in before.keys() - {"source_catalog"}:
@@ -270,20 +270,42 @@ def assert_pdf_upgrade_history(
         assert isinstance(routes[operation], list)
         assert not any(path in routes[operation] for path in paths)
         routes[operation] = routes[operation] + paths
-    # 0027 then appends the registered Open Access fixtures (OA-029, document 91).
-    from emailmonitor.sources.open_access_documents import DOCUMENTS, catalog_entries
-
-    assert "open_access_documents" not in support
-    oa_paths = ["/oa/" + document.pmcid + ".xml" for document in DOCUMENTS]
-    support["open_access_documents"] = catalog_entries()
-    support["fixture_routes"] = support["fixture_routes"] + oa_paths
-    for operation in ("fetch_xml", "extract_contacts", "retain_excerpt", "export_contacts"):
-        assert not any(path in routes[operation] for path in oa_paths)
-        routes[operation] = routes[operation] + oa_paths
     # JSON object order is immaterial; all values, fields and array order remain exact.
     assert sorted(json.dumps(row, sort_keys=True) for row in actual) == sorted(
         json.dumps(row, sort_keys=True) for row in expected
     )
+
+
+def without_open_access_delta(
+    after: dict[str, list[tuple[object, ...]]],
+) -> dict[str, list[tuple[object, ...]]]:
+    """Remove exactly the 0027 Open Access catalog extension (OA-029), or fail.
+
+    The upgraded catalog must carry the registered documents and their four
+    article paths appended to the routes 0027 extends; what remains is then
+    checked by the unchanged PDF-only history rule.
+    """
+    from emailmonitor.sources.open_access_documents import DOCUMENTS, catalog_entries
+
+    paths = ["/oa/" + document.pmcid + ".xml" for document in DOCUMENTS]
+    rows: list[tuple[object, ...]] = []
+    for row in after["source_catalog"]:
+        assert len(row) == 1 and isinstance(row[0], str)
+        value = json.loads(row[0])
+        if value.get("source_id") == "synthetic-publisher":
+            support = value["support"]
+            assert support.pop("open_access_documents") == catalog_entries()
+            assert support["fixture_routes"][-len(paths) :] == paths
+            support["fixture_routes"] = support["fixture_routes"][: -len(paths)]
+            routes = support["routes_by_operation"]
+            for operation in ("fetch_xml", "extract_contacts", "retain_excerpt", "export_contacts"):
+                assert routes[operation][-len(paths) :] == paths
+                routes[operation] = routes[operation][: -len(paths)]
+            for operation, values in routes.items():
+                assert not set(paths) & set(values), operation
+            row = (json.dumps(value),)
+        rows.append(row)
+    return {**after, "source_catalog": rows}
 
 
 @dataclass(frozen=True)
@@ -606,7 +628,9 @@ def test_actual_fresh_and_populated_upgrade_schema_acl_rls_equivalence(
                     )
                 ).scalar_one()
                 if target is migration_pair.upgraded:
-                    assert_pdf_upgrade_history(migration_pair.before, history(c))
+                    assert_pdf_upgrade_history(
+                        migration_pair.before, without_open_access_delta(history(c))
+                    )
                     for table in ("admission_requests", "source_resource_requests"):
                         assert (
                             c.execute(
