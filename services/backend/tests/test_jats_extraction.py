@@ -3,7 +3,6 @@
 from pathlib import Path
 
 import pytest
-
 from emailmonitor.extraction.jats import parse_jats_xml
 from emailmonitor.fetching.safety import FetchDenied
 from emailmonitor.sources.openaccess import (
@@ -16,10 +15,13 @@ from emailmonitor.sources.openaccess import (
 FIXTURES_DIR = Path(__file__).resolve().parents[3] / "fixtures" / "jats"
 
 
-def test_open_access_identifiers():
+def test_open_access_identifiers() -> None:
     pmc = PmcIdentifier(value="pmc10293847")
     assert pmc.value == "PMC10293847"
-    assert open_access_url(pmc) == "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC10293847/fullTextXML"
+    assert (
+        open_access_url(pmc)
+        == "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC10293847/fullTextXML"
+    )
 
     doi = DoiIdentifier(value="https://doi.org/10.1371/journal.pbio.3002145")
     assert doi.value == "10.1371/journal.pbio.3002145"
@@ -30,7 +32,7 @@ def test_open_access_identifiers():
     assert open_access_url(oa) == "https://api.openalex.org/works/W3123456789"
 
 
-def test_plos_sample_extraction():
+def test_plos_sample_extraction() -> None:
     xml_path = FIXTURES_DIR / "plos-sample.xml"
     data = xml_path.read_bytes()
     identifier = PmcIdentifier(value="PMC10293847")
@@ -61,15 +63,15 @@ def test_plos_sample_extraction():
 
     assert len(obs.candidates) == 1
     candidate = obs.candidates[0]
-    assert candidate.raw_address == "marcus.vance@biotech.ethz.ch"
+    assert candidate.raw_address == "marcus.vance@biotech.zurich.example"
     # Accurately linked to Marcus Vance (position 2)!
     assert candidate.author_positions == [2]
     assert candidate.association_status == "needs_review"
     assert candidate.evidence.kind == "structured_metadata"
-    assert "marcus.vance@biotech.ethz.ch" in candidate.evidence.excerpt
+    assert "marcus.vance@biotech.zurich.example" in candidate.evidence.excerpt
 
 
-def test_biomed_direct_email_extraction():
+def test_biomed_direct_email_extraction() -> None:
     xml_path = FIXTURES_DIR / "biomed-sample.xml"
     data = xml_path.read_bytes()
     identifier = DoiIdentifier(value="10.1186/s12864-026-09123-x")
@@ -92,12 +94,12 @@ def test_biomed_direct_email_extraction():
 
     assert len(obs.candidates) == 1
     candidate = obs.candidates[0]
-    assert candidate.raw_address == "kim.soojin@cropgenomics.ac.kr"
+    assert candidate.raw_address == "kim.soojin@cropgenomics.suwon.example"
     assert candidate.author_positions == [1]
     assert candidate.association_status == "needs_review"
 
 
-def test_no_contact_article():
+def test_no_contact_article() -> None:
     xml_path = FIXTURES_DIR / "no-contact.xml"
     data = xml_path.read_bytes()
     identifier = DoiIdentifier(value="10.3389/fimmu.2026.887766")
@@ -111,7 +113,7 @@ def test_no_contact_article():
     assert len(obs.candidates) == 0
 
 
-def test_adversarial_malformed_xml():
+def test_adversarial_malformed_xml() -> None:
     data = b"<article><front><title>Unclosed tag</article>"
     identifier = PmcIdentifier(value="PMC9999999")
 
@@ -119,14 +121,14 @@ def test_adversarial_malformed_xml():
         parse_jats_xml(data, identifier)
 
 
-def test_adversarial_empty_payload():
+def test_adversarial_empty_payload() -> None:
     identifier = PmcIdentifier(value="PMC9999999")
 
     with pytest.raises(FetchDenied, match="empty_jats_xml_payload"):
         parse_jats_xml(b"   ", identifier)
 
 
-def test_adversarial_oversized_payload():
+def test_adversarial_oversized_payload() -> None:
     large_data = b"<article>" + (b"A" * (4 * 1024 * 1024 + 10)) + b"</article>"
     identifier = PmcIdentifier(value="PMC9999999")
 
@@ -134,7 +136,7 @@ def test_adversarial_oversized_payload():
         parse_jats_xml(large_data, identifier)
 
 
-def test_adversarial_deep_nesting():
+def test_adversarial_deep_nesting() -> None:
     # Construct XML exceeding 48 levels of depth
     tags = [f"tag{i}" for i in range(55)]
     nested_xml = "".join(f"<{t}>" for t in tags) + "".join(f"</{t}>" for t in reversed(tags))

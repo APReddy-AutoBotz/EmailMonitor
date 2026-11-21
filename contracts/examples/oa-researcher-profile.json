@@ -1,0 +1,34 @@
+{
+  "researcher_key": "r-lucia.ferreira@neuro.lisbon.example",
+  "display_names": [
+    "Lucia Ferreira"
+  ],
+  "emails": [
+    "lucia.ferreira@neuro.lisbon.example"
+  ],
+  "orcids": [],
+  "publications": [
+    {
+      "contact_id": "oa-71522d0b73e3535ab65c",
+      "email": "lucia.ferreira@neuro.lisbon.example",
+      "doi": "10.1038/s41587-026-01824-x",
+      "pmcid": "PMC7700001",
+      "title": "In vivo base editing rescues sensory defects in Usher syndrome mice",
+      "journal": "Synthetic Journal of Gene Therapy",
+      "publication_year": 2026,
+      "role": "corresponding",
+      "affiliation": "Champalimaud Neuroscience Programme, Lisbon, Portugal",
+      "association_basis": "corresp_initials",
+      "content_digest": "112d5957a4906ea92fc41a7192b07a7f32d4095cb1137dbe49b09d3e4bb04538"
+    }
+  ],
+  "publication_count": 1,
+  "corresponding_count": 1,
+  "first_author_count": 0,
+  "latest_publication_year": 2026,
+  "latest_affiliation": "Champalimaud Neuroscience Programme, Lisbon, Portugal",
+  "affiliation_changed": false,
+  "activity": "active_recent",
+  "outreach_eligibility": "eligible",
+  "review_flags": []
+}

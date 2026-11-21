@@ -1,3 +1,27 @@
+## Open Access truthful pipeline — local candidate
+
+- OA-012: rebuild the Open Access orchestrator so every contact comes from its own article's full text, with per-work outcomes (`contacts_observed`, `no_contact`, `full_text_unavailable`, `excluded_by_filter`, `failed`), deterministic contact IDs, role filters, suppression by address/domain, and no defaulted DOI, year, ORCID or role. JATS parser v2: document-order text, association basis per address, initials/name disambiguation of shared notes, mailto/ext-link addresses, correspondence footnotes, DTD internal subset/entity refusal. See [document 88](docs/88-open-access-pipeline.md).
+- OA-013: Europe PMC search planner/parser and fixture gateway for keyword and exact-DOI to PMCID resolution. Offline only; no live transport.
+- OA-014/015/016: single-document intake for operator-supplied landing pages (Highwire `citation_*` meta and correspondence mailto blocks), text-layer PDFs and JATS XML, sharing one contact builder with eligibility and suppression; preview raw-body upload endpoint. Nothing is fetched or decoded; grouped/wrapped/obfuscated addresses are review notes.
+- OA-017/018/019: researcher profiles (address grouping, valid-ORCID linking only, conflict flags), role-account review reason, and Lemlist/HubSpot/evidence/researchers export presets. Formula-unsafe rows are now withheld and counted instead of failing the whole Open Access export; values are never rewritten.
+- OA-020: "Open Access" workspace screen (search, document upload, researchers, exports). The preview server no longer advertises `live_sources_enabled: true`; nothing live exists.
+- OA-021: merged multi-source discovery with per-source error isolation and article license classification.
+- OA-022: generated Open Access response contracts and examples with a drift test.
+- Independent review fixes: label-decided address attribution (no wrong-person assignment), no absorption of shared-note addresses, no role from contrib emails or plain e-mail lists, linear-time address finding and HTML link handling, per-article failure isolation, correct multi-source group merging, ORCID linking only via structural associations, researchers CSV withholding, host-checked license classes. See document 88.
+- OA-023: association strength per contact and a "markup only" export option for highest-precision outreach lists.
+- OA-024: offline batch command line for a folder of supplied documents.
+- OA-028: Europe PMC live limit of 1 request/s with concurrency 1 (separate from the unchanged 5 s fixture policy) and raw full-text retention fixed at 0 hours in the approval record; merge target, database approach and production-transport blocker recorded.
+- OA-027 (partial): Europe PMC live connector behind an injected protected-transport port, exact search URL grammar, approval record, throttle, back-off/stop, Europe-PMC-only composition; tested over recorded synthetic responses, no network path exists yet.
+- OA-026: per-contact article licence class with non-blocking `license_unknown` / `license_not_creative_commons` reasons and a licence column in every export preset (owner decision: allow but flag).
+- OA-025: seeded parser fuzz invariants and a synthetic association benchmark; it found and fixed a sole-corresponding-author over-attribution and unreported consortium-member addresses.
+- Third review fixes: titles never read as initials, roles only from correspondence wording or markup (no spread from shared e-mail footnotes), no altered PDF addresses (NFC, superscript/symbol edges, wrapped-address suppression), exact HTML link positions and name-text links, Nature-style initials, bounded windows and single processing of nested notes; benchmark extended to 16 documents.
+- Fourth review fixes: broader e-mail-clause and sentence rule for roles (Wiley/PNAS layouts still recognised), typesetting characters reject tokens, PDF wraps in both directions with boundary-preserving suppression, verified HTML link spans, capitalised given names and name-like middle tokens, mixed-case domains kept; benchmark 18 documents.
+- Fifth review: restore valid results the fourth-round rules had lost (abbreviations, hyphenated inline labels, "Email" link text, "Courriel", name particles, PDF lines ending in numbers/abbreviations or followed by section numbers).
+- Second review fixes: shared attribution module (no sliced non-ASCII addresses, person-form matching instead of bare surnames, list-direction detection, no role from e-mail tags/lines), bounded HTML block text and linear JATS/intake scans.
+- Service package gets an explicit 384-entry cap (the shared 256 cap blocked the backend and installed-operator CI gates since the first OA commit).
+- Remove Google Fonts (`index.html` links and a CSS `@import`) added in 45da184: the UI must make no third-party requests (operator IP leakage, egress policy, production CSP `style-src 'self'`), and the cross-origin stylesheet made the isolated keyboard UI capture guard refuse every capture. A test now forbids remote assets.
+- Restore the web pnpm lockfile (v9) that an earlier commit downgraded to v6, which broke the dependency-inventory gate.
+
 ## Local sibling-Draft integration candidate
 
 - Reconcile current-scoped review history, selected-job deletion staging and saved-draft plan/launch UI on the PR67 source. No server authority, migration, live source or actual deletion change. See [integration scope](docs/87-sibling-integration.md); real SQL and hosted browser/full acceptance remain pending.

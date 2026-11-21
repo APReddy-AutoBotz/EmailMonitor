@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Synthetic authored benchmark document: fictional people, reserved .example domains. -->
+<article xmlns:xlink="http://www.w3.org/1999/xlink" article-type="research-article">
+<front><journal-meta><journal-title>Synthetic Benchmark Journal</journal-title></journal-meta>
+<article-meta>
+<article-id pub-id-type="pmc">PMC9100008</article-id>
+<article-id pub-id-type="doi">10.5555/bench.pmc9100008</article-id>
+<title-group><article-title>Grid-scale storage with sodium batteries</article-title></title-group>
+<contrib-group>
+<contrib contrib-type="author"><name><surname>Smith</surname><given-names>John</given-names></name><xref ref-type="corresp" rid="cor1">*</xref></contrib>
+<contrib contrib-type="author"><name><surname>Jones</surname><given-names>Mary</given-names></name></contrib>
+<contrib contrib-type="author"><name><surname>Brown</surname><given-names>Kate</given-names></name></contrib>
+</contrib-group>
+<author-notes><corresp id="cor1">Corresponding author. E-mail addresses: <email>js@energy.leeds.example</email> (J. Smith), <email>mj@energy.leeds.example</email> (M. Jones), <email>kb@energy.leeds.example</email> (K. Brown).</corresp></author-notes>
+<pub-date pub-type="epub"><year>2026</year></pub-date>
+</article-meta></front></article>

@@ -20,7 +20,9 @@ def test_biorxiv_query_planner_canonical_url() -> None:
     )
 
     assert planner.api_path == "/details/biorxiv/2026-01-01/2026-03-31/0"
-    assert planner.canonical_url == "https://api.biorxiv.org/details/biorxiv/2026-01-01/2026-03-31/0"
+    assert (
+        planner.canonical_url == "https://api.biorxiv.org/details/biorxiv/2026-01-01/2026-03-31/0"
+    )
 
 
 def test_biorxiv_parse_fixture() -> None:

@@ -4,6 +4,10 @@
 
 | Document | Purpose |
 |---|---|
+| [90 Live OA transport design](90-open-access-live-transport-design.md) | Proposed path for approved live OA API access through the protected gateway |
+| [91 OA persistence design](91-open-access-persistence-design.md) | Next slice: persist Open Access JATS results in the durable job, review and export model |
+| [89 Open Access source register](89-open-access-source-register.md) | Published access terms/limits for Europe PMC, OpenAlex, Crossref, bioRxiv and the owner decisions before live use |
+| [88 Open Access pipeline](88-open-access-pipeline.md) | Truthful OA discovery/extraction candidate, gates and fixtures |
 | [87 Local sibling integration](87-sibling-integration.md) | Unpublished PR58/61/62 reconciliation and remaining validation |
 | [00 Product charter](00-product-charter.md) | User-approved purpose, boundaries, product principles |
 | [01 Business requirements](01-business-requirements.md) | Buyers, outcomes, business rules, commercial validation |

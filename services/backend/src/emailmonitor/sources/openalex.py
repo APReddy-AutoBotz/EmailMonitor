@@ -35,12 +35,8 @@ class Contract(BaseModel):
 
 class OpenAlexFilter(Contract):
     is_oa: bool = True
-    from_publication_date: str | None = Field(
-        default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"
-    )
-    to_publication_date: str | None = Field(
-        default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"
-    )
+    from_publication_date: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+    to_publication_date: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
     issn: str | None = Field(default=None, pattern=r"^\d{4}-\d{3}[\dX]$")
     concept_id: str | None = Field(default=None, pattern=r"^c\d{4,12}$")
 
@@ -50,9 +46,7 @@ class OpenAlexSearchRequest(Contract):
     filters: OpenAlexFilter = Field(default_factory=OpenAlexFilter)
     page: int = Field(default=1, ge=1, le=100)
     per_page: int = Field(default=25, ge=1, le=MAX_WORKS_PER_PAGE)
-    sort_by: Literal["relevance_score", "publication_date", "cited_by_count"] = (
-        "relevance_score"
-    )
+    sort_by: Literal["relevance_score", "publication_date", "cited_by_count"] = "relevance_score"
 
 
 def build_openalex_query_url(request: OpenAlexSearchRequest) -> str:
@@ -63,17 +57,11 @@ def build_openalex_query_url(request: OpenAlexSearchRequest) -> str:
     if request.filters.is_oa:
         filter_tokens.append("open_access.is_oa:true")
     if request.filters.from_publication_date:
-        filter_tokens.append(
-            f"from_publication_date:{request.filters.from_publication_date}"
-        )
+        filter_tokens.append(f"from_publication_date:{request.filters.from_publication_date}")
     if request.filters.to_publication_date:
-        filter_tokens.append(
-            f"to_publication_date:{request.filters.to_publication_date}"
-        )
+        filter_tokens.append(f"to_publication_date:{request.filters.to_publication_date}")
     if request.filters.issn:
-        filter_tokens.append(
-            f"primary_location.source.issn:{request.filters.issn}"
-        )
+        filter_tokens.append(f"primary_location.source.issn:{request.filters.issn}")
     if request.filters.concept_id:
         filter_tokens.append(f"concepts.id:{request.filters.concept_id}")
 
@@ -90,9 +78,7 @@ def build_openalex_query_url(request: OpenAlexSearchRequest) -> str:
 class OpenAlexAuthor(Contract):
     id: str = Field(max_length=256)
     display_name: str = Field(min_length=1, max_length=300)
-    orcid: str | None = Field(
-        default=None, pattern=r"^[0-9]{4}-[0-9]{4}-[0-9]{4}-[0-9]{3}[0-9X]$"
-    )
+    orcid: str | None = Field(default=None, pattern=r"^[0-9]{4}-[0-9]{4}-[0-9]{4}-[0-9]{3}[0-9X]$")
 
     @field_validator("orcid", mode="before")
     @classmethod
@@ -121,13 +107,9 @@ class OpenAlexWork(Contract):
     issn_l: str | None = Field(default=None, max_length=50)
     is_oa: bool = True
     oa_url: str | None = Field(default=None, max_length=2048)
-    pmcid: str | None = Field(
-        default=None, pattern=r"^PMC\d{3,10}$"
-    )
+    pmcid: str | None = Field(default=None, pattern=r"^PMC\d{3,10}$")
     pmid: str | None = Field(default=None, max_length=50)
-    authorships: list[OpenAlexAuthorship] = Field(
-        default_factory=list, max_length=100
-    )
+    authorships: list[OpenAlexAuthorship] = Field(default_factory=list, max_length=100)
 
     @field_validator("pmcid", mode="before")
     @classmethod

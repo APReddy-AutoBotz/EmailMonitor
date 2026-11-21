@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from emailmonitor.extraction.orcid import (
     OrcidAffiliation,
     OrcidIdentifier,
@@ -55,9 +54,7 @@ def test_author_disambiguation_with_affiliation() -> None:
         orcid=orcid_1,
         given_names="Elena",
         family_name="Rostova",
-        affiliations=(
-            OrcidAffiliation(organization_name="University of Cambridge"),
-        ),
+        affiliations=(OrcidAffiliation(organization_name="University of Cambridge"),),
         verified_email_domains=("cam.ac.uk",),
     )
 
@@ -66,9 +63,7 @@ def test_author_disambiguation_with_affiliation() -> None:
         orcid=orcid_2,
         given_names="Elena",
         family_name="Rostova",
-        affiliations=(
-            OrcidAffiliation(organization_name="Stanford University"),
-        ),
+        affiliations=(OrcidAffiliation(organization_name="Stanford University"),),
         verified_email_domains=("stanford.edu",),
     )
 

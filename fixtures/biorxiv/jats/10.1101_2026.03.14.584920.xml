@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Synthetic authored bioRxiv-shaped JATS fixture: fictional people, reserved .example domains. -->
+<article xmlns:xlink="http://www.w3.org/1999/xlink" article-type="article">
+  <front>
+    <journal-meta>
+      <journal-title-group><journal-title>bioRxiv</journal-title></journal-title-group>
+    </journal-meta>
+    <article-meta>
+      <article-id pub-id-type="doi">10.1101/2026.03.14.584920</article-id>
+      <title-group>
+        <article-title>Precision Base Editing via Modified Cas9 Variants in Hematopoietic Progenitor Cells</article-title>
+      </title-group>
+      <contrib-group>
+        <contrib contrib-type="author">
+          <name><surname>Rostova</surname><given-names>Elena</given-names></name>
+          <xref ref-type="aff" rid="a1">1</xref>
+        </contrib>
+        <contrib contrib-type="author" corresp="yes">
+          <name><surname>Vance</surname><given-names>Marcus</given-names></name>
+          <xref ref-type="aff" rid="a2">2</xref>
+          <xref ref-type="corresp" rid="cor1">*</xref>
+        </contrib>
+        <aff id="a1"><label>1</label>Department of Molecular Genetics, University of Cambridge, Cambridge, United Kingdom</aff>
+        <aff id="a2"><label>2</label>Institute of Biotechnology, ETH Zurich, Zurich, Switzerland</aff>
+      </contrib-group>
+      <author-notes>
+        <corresp id="cor1"><label>*</label>Corresponding author: <email>m.vance@biotech.zurich.example</email></corresp>
+      </author-notes>
+      <pub-date pub-type="epub"><year>2026</year><month>03</month><day>14</day></pub-date>
+      <permissions>
+        <license xlink:href="http://creativecommons.org/licenses/by/4.0/"><license-p>CC BY 4.0</license-p></license>
+      </permissions>
+    </article-meta>
+  </front>
+  <body><p>Synthetic preprint body.</p></body>
+</article>

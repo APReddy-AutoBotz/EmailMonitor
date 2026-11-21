@@ -7,7 +7,6 @@ and excludes authors from specified target journals to prevent contributor spam.
 
 from __future__ import annotations
 
-import re
 from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -29,12 +28,15 @@ class MeshDescriptor(Contract):
     scope_note: str | None = None
 
 
-# Authoritative synthetic reference catalog of high-impact MeSH descriptors
+# Small seed catalog of MeSH descriptors. Unique IDs and tree numbers were checked
+# against the NLM/NCBI MeSH records on 2026-11-14. ``synonyms`` are search-expansion
+# phrases chosen for matching editor requests; they are not all official MeSH entry
+# terms. A production catalog should be loaded from the NLM MeSH release instead.
 COMMON_MESH_CATALOG: dict[str, MeshDescriptor] = {
-    "D000089822": MeshDescriptor(
-        descriptor_id="D000089822",
+    "D064113": MeshDescriptor(
+        descriptor_id="D064113",
         name="CRISPR-Cas Systems",
-        tree_numbers=("G02.111.570.820.709.275", "G05.360.080"),
+        tree_numbers=("G05.308.203.374.394",),
         synonyms=(
             "CRISPR-Cas9",
             "Cas9",
@@ -52,7 +54,7 @@ COMMON_MESH_CATALOG: dict[str, MeshDescriptor] = {
     "D007167": MeshDescriptor(
         descriptor_id="D007167",
         name="Immunotherapy",
-        tree_numbers=("E02.095.465", "E02.631"),
+        tree_numbers=("E02.095.465.425",),
         synonyms=("Immune Therapy", "Immunologic Therapy", "Checkpoint Inhibitor"),
         scope_note=(
             "Treatment of disease by inducing, enhancing, or suppressing an immune response."
@@ -61,14 +63,19 @@ COMMON_MESH_CATALOG: dict[str, MeshDescriptor] = {
     "D009203": MeshDescriptor(
         descriptor_id="D009203",
         name="Myocardial Infarction",
-        tree_numbers=("C14.280.647.500", "C14.907.585.500"),
+        tree_numbers=(
+            "C14.280.647.500",
+            "C14.907.585.500",
+            "C23.550.513.355.750",
+            "C23.550.717.489.750",
+        ),
         synonyms=("Heart Attack", "Cardiac Infarction", "MI"),
         scope_note="Necrosis of the myocardium as a result of interruption of blood supply.",
     ),
     "D014612": MeshDescriptor(
         descriptor_id="D014612",
         name="Vaccines",
-        tree_numbers=("D20.215.894", "D27.505.954.918"),
+        tree_numbers=("D20.215.894",),
         synonyms=("mRNA Vaccines", "Immunization", "Vaccination"),
         scope_note="Suspensions of killed or attenuated microorganisms administered for immunity.",
     ),
@@ -146,7 +153,5 @@ def match_mesh_terms(query_text: str) -> tuple[MeshDescriptor, ...]:
             if clean_q in syn_lower or syn_lower in clean_q:
                 matches.append(desc)
                 break
-
-    return tuple(matches)
 
     return tuple(matches)

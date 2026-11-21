@@ -6,8 +6,9 @@ import { optionalRuntimeProfile, RuntimeProfileNotice, type RuntimeProfile } fro
 import { validatedSession } from './session'
 import type { Membership, Organization, Session, TenantConfiguration } from './models'
 import { Load, useResource, type Context } from './ui'
+import { OpenAccessWorkspace } from './openAccess'
 import { Dashboard, Wizard, Jobs, Contacts, Exports, Sources, UsageView, AuditView, SettingsView, type ContactFilters } from './views'
-const screens = ['Dashboard', 'New extraction', 'Jobs', 'Contacts', 'Review queue', 'Exports', 'Sources', 'Usage', 'Audit', 'Settings'] as const
+const screens = ['Dashboard', 'Open Access', 'New extraction', 'Jobs', 'Contacts', 'Review queue', 'Exports', 'Sources', 'Usage', 'Audit', 'Settings'] as const
 export type Screen = typeof screens[number]
 export default function App() {
   const [session, setSession] = useState<Session>(), [error, setError] = useState<string>(), [loading, setLoading] = useState(true), [attempt, setAttempt] = useState(0), [selected, setSelected] = useState('')
@@ -94,6 +95,7 @@ function Workspace(props: WorkspaceProps) {
   return <div className="shell"><nav aria-label="Workspace">{screens.map(item => <button key={item} aria-current={item === props.screen ? 'page' : undefined} onClick={() => { setExportSelection(undefined); props.setScreen(item); props.setNotice('') }}>{item}</button>)}</nav><main id="main" className="workspace" aria-busy={!!props.busy}><div className="workspace-heading"><div><p className="eyebrow">{props.membership.role.replaceAll('_', ' ')} · {props.scope.organization}</p><Load resource={organization}>{org => <h2>{org.display_name}</h2>}</Load><h3>{props.screen}</h3>{brand.label && <p className="tenant-brand">{brand.label}</p>}</div><button onClick={props.refresh}>Refresh current view</button></div>
     {props.busy && <p role="status">{props.busy}…</p>}{props.notice && <p role="status" className="notice">{props.notice}</p>}
     {props.screen === 'Dashboard' && <Dashboard context={context} navigate={props.setScreen} />}
+    {props.screen === 'Open Access' && <OpenAccessWorkspace context={context} />}
     {props.screen === 'New extraction' && <Wizard context={context} />}
     {props.screen === 'Jobs' && <Jobs context={context} selected={props.job} select={props.setJob} />}
     {(props.screen === 'Contacts' || props.screen === 'Review queue') && <Contacts key={props.screen} context={context} review={props.screen === 'Review queue'} filters={filters[props.screen === 'Review queue' ? 'review' : 'contacts']} setFilters={value => setFilters(previous => ({ ...previous, [props.screen === 'Review queue' ? 'review' : 'contacts']: value }))} />}

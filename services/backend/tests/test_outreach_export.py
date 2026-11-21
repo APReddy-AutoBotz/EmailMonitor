@@ -1,7 +1,5 @@
 """Tests for cold outreach export formatting, recency scoring, and GDPR provenance."""
 
-import pytest
-
 from emailmonitor.results.outreach import (
     ContactExportItem,
     evaluate_contact,
@@ -10,10 +8,9 @@ from emailmonitor.results.outreach import (
     render_smartlead_csv,
     split_author_name,
 )
-from emailmonitor.results.render import RenderDenied
 
 
-def test_split_author_name():
+def test_split_author_name() -> None:
     assert split_author_name("Dr. Marcus Vance") == ("Marcus", "Vance")
     assert split_author_name("Prof. Elena Rostova, Ph.D.") == ("Elena", "Rostova")
     assert split_author_name("Soo-Jin Kim") == ("Soo-Jin", "Kim")
@@ -22,9 +19,9 @@ def test_split_author_name():
     assert split_author_name(None) == ("", "")
 
 
-def test_evaluate_contact_scoring():
+def test_evaluate_contact_scoring() -> None:
     item_recent = ContactExportItem(
-        raw_email="marcus.vance@biotech.ethz.ch",
+        raw_email="marcus.vance@biotech.zurich.example",
         display_name="Marcus Vance",
         paper_title="Advances in CRISPR",
         journal="PLOS Biology",
@@ -71,9 +68,9 @@ def test_evaluate_contact_scoring():
     assert score_inv.rejection_reason == "invalid_email_syntax"
 
 
-def test_gdpr_provenance():
+def test_gdpr_provenance() -> None:
     item = ContactExportItem(
-        raw_email="marcus.vance@biotech.ethz.ch",
+        raw_email="marcus.vance@biotech.zurich.example",
         paper_title="Advances in CRISPR",
         journal="PLOS Biology",
         publication_year=2026,
@@ -87,10 +84,10 @@ def test_gdpr_provenance():
     assert "GDPR Article 6(1)(f) Legitimate Interest" in notice
 
 
-def test_render_instantly_csv():
+def test_render_instantly_csv() -> None:
     items = [
         ContactExportItem(
-            raw_email="marcus.vance@biotech.ethz.ch",
+            raw_email="marcus.vance@biotech.zurich.example",
             display_name="Dr. Marcus Vance",
             affiliation="ETH Zurich",
             paper_title="Advances in CRISPR",
@@ -118,7 +115,7 @@ def test_render_instantly_csv():
     assert "email" in csv_text
     assert "first_name" in csv_text
     assert "custom_gdpr_receipt" in csv_text
-    assert "marcus.vance@biotech.ethz.ch" in csv_text
+    assert "marcus.vance@biotech.zurich.example" in csv_text
     assert "Marcus" in csv_text
     assert "Vance" in csv_text
     assert "ETH Zurich" in csv_text
@@ -126,10 +123,10 @@ def test_render_instantly_csv():
     assert "suppressed.author@example.edu" not in csv_text
 
 
-def test_render_smartlead_csv():
+def test_render_smartlead_csv() -> None:
     items = [
         ContactExportItem(
-            raw_email="kim.soojin@cropgenomics.ac.kr",
+            raw_email="kim.soojin@cropgenomics.suwon.example",
             display_name="Soo-Jin Kim",
             affiliation="National Institute of Crop Science",
             paper_title="Wheat Transcriptomics",
@@ -143,20 +140,38 @@ def test_render_smartlead_csv():
 
     assert "Email" in csv_text
     assert "Custom_Recency_Score" in csv_text
-    assert "kim.soojin@cropgenomics.ac.kr" in csv_text
+    assert "kim.soojin@cropgenomics.suwon.example" in csv_text
     assert "Soo-Jin" in csv_text
     assert "1.0" in csv_text
 
 
-def test_csv_formula_injection_defense():
-    unsafe_item = [
+def test_csv_formula_injection_defense() -> None:
+    items = [
         ContactExportItem(
             raw_email="evil@example.org",
             display_name="=CMD|' /C calc'!A0",
             paper_title="Unsafe Paper",
             journal="Journal",
             publication_year=2026,
-        )
+        ),
+        ContactExportItem(
+            raw_email="safe@lab.example",
+            display_name="Ana Silva",
+            paper_title="-omics of drought tolerance",
+            journal="Journal",
+            publication_year=2026,
+        ),
+        ContactExportItem(
+            raw_email="kept@lab.example",
+            display_name="Ben Ode",
+            paper_title="Safe Paper",
+            journal="Journal",
+            publication_year=2026,
+        ),
     ]
-    with pytest.raises(RenderDenied, match="unsafe_csv_cell"):
-        render_instantly_csv(unsafe_item)
+    for render in (render_instantly_csv, render_smartlead_csv):
+        text = render(items).decode()
+        # Unsafe rows are withheld whole, never rewritten or partially exported.
+        assert "CMD" not in text and "evil@example.org" not in text
+        assert "-omics" not in text and "safe@lab.example" not in text
+        assert "kept@lab.example" in text

@@ -6,6 +6,8 @@
 
 ---
 
+> **Verification note (2026-11-14).** Figures such as "100x faster", "zero IP blocks", "100% legal" and "99.9% correspondence precision" below are goals, not measurements; EM-016 must measure precision on approved held-out articles. OpenAlex now requires an API key for cursor paging and prices usage beyond a daily allowance. Current provider terms and the decisions needed before live use are in [document 89](89-open-access-source-register.md); the implemented, evidence-truthful pipeline is described in [document 88](88-open-access-pipeline.md).
+
 ## 1. Executive Summary & Market Positioning
 
 Open Access (OA) academic publishers face a high-stakes, competitive challenge: discovering, vetting, and inviting qualified researchers to publish manuscripts, edit thematic collections, and review peer submissions. 

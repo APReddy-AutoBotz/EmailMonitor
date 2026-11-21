@@ -1,0 +1,461 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://emailmonitor.invalid/contracts/oa-document-extraction.schema.json",
+  "description": "Single supplied document (PDF, JATS XML or landing page) extraction result.",
+  "$defs": {
+    "ExtractedAcademicContact": {
+      "additionalProperties": false,
+      "description": "One literal address observation from one article, with provenance.",
+      "properties": {
+        "contact_id": {
+          "pattern": "^oa-[0-9a-f]{20}$",
+          "title": "Contact Id",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "europe-pmc",
+            "openalex",
+            "crossref",
+            "biorxiv",
+            "document"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "doi": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Doi"
+        },
+        "pmcid": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pmcid"
+        },
+        "article_title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Article Title"
+        },
+        "journal": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Journal"
+        },
+        "publication_year": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Publication Year"
+        },
+        "author_position": {
+          "anyOf": [
+            {
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Author Position"
+        },
+        "author_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Author Name"
+        },
+        "author_kind": {
+          "default": "unknown",
+          "enum": [
+            "person",
+            "group",
+            "unknown"
+          ],
+          "title": "Author Kind",
+          "type": "string"
+        },
+        "first_name": {
+          "default": "",
+          "title": "First Name",
+          "type": "string"
+        },
+        "last_name": {
+          "default": "",
+          "title": "Last Name",
+          "type": "string"
+        },
+        "email": {
+          "title": "Email",
+          "type": "string"
+        },
+        "comparison_key": {
+          "title": "Comparison Key",
+          "type": "string"
+        },
+        "is_first_author": {
+          "title": "Is First Author",
+          "type": "boolean"
+        },
+        "is_corresponding_author": {
+          "title": "Is Corresponding Author",
+          "type": "boolean"
+        },
+        "association_basis": {
+          "title": "Association Basis",
+          "type": "string"
+        },
+        "association_status": {
+          "enum": [
+            "needs_review",
+            "unmatched"
+          ],
+          "title": "Association Status",
+          "type": "string"
+        },
+        "association_strength": {
+          "default": "none",
+          "enum": [
+            "structural",
+            "labelled",
+            "none"
+          ],
+          "title": "Association Strength",
+          "type": "string"
+        },
+        "affiliations": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Affiliations",
+          "type": "array"
+        },
+        "orcid_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Orcid Id"
+        },
+        "orcid_status": {
+          "enum": [
+            "absent",
+            "declared_valid_checksum",
+            "declared_invalid_checksum"
+          ],
+          "title": "Orcid Status",
+          "type": "string"
+        },
+        "evidence_locator": {
+          "title": "Evidence Locator",
+          "type": "string"
+        },
+        "evidence_excerpt": {
+          "title": "Evidence Excerpt",
+          "type": "string"
+        },
+        "content_digest": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Content Digest",
+          "type": "string"
+        },
+        "full_text_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Full Text Url"
+        },
+        "license_category": {
+          "default": "unknown",
+          "enum": [
+            "cc0",
+            "cc-by",
+            "cc-by-sa",
+            "cc-by-nd",
+            "cc-by-nc",
+            "cc-by-nc-sa",
+            "cc-by-nc-nd",
+            "public-domain",
+            "other",
+            "unknown"
+          ],
+          "title": "License Category",
+          "type": "string"
+        },
+        "domain_type": {
+          "enum": [
+            "institutional",
+            "commercial_free",
+            "disposable"
+          ],
+          "title": "Domain Type",
+          "type": "string"
+        },
+        "recency_level": {
+          "enum": [
+            "active_recent",
+            "moderate",
+            "dormant",
+            "unknown"
+          ],
+          "title": "Recency Level",
+          "type": "string"
+        },
+        "recency_score": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Recency Score",
+          "type": "number"
+        },
+        "technical_status": {
+          "enum": [
+            "syntax_valid_not_mailbox_verified",
+            "syntax_invalid"
+          ],
+          "title": "Technical Status",
+          "type": "string"
+        },
+        "outreach_eligibility": {
+          "enum": [
+            "eligible",
+            "needs_review",
+            "suppressed"
+          ],
+          "title": "Outreach Eligibility",
+          "type": "string"
+        },
+        "eligibility_reasons": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Eligibility Reasons",
+          "type": "array"
+        },
+        "gdpr_notice": {
+          "title": "Gdpr Notice",
+          "type": "string"
+        }
+      },
+      "required": [
+        "contact_id",
+        "source",
+        "email",
+        "comparison_key",
+        "is_first_author",
+        "is_corresponding_author",
+        "association_basis",
+        "association_status",
+        "orcid_status",
+        "evidence_locator",
+        "evidence_excerpt",
+        "content_digest",
+        "domain_type",
+        "recency_level",
+        "recency_score",
+        "technical_status",
+        "outreach_eligibility",
+        "gdpr_notice"
+      ],
+      "title": "ExtractedAcademicContact",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "kind": {
+      "enum": [
+        "pdf",
+        "jats_xml",
+        "html"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "parser_version": {
+      "title": "Parser Version",
+      "type": "string"
+    },
+    "content_digest": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Content Digest",
+      "type": "string"
+    },
+    "status": {
+      "title": "Status",
+      "type": "string"
+    },
+    "reason": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reason"
+    },
+    "title": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Title"
+    },
+    "journal": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Journal"
+    },
+    "doi": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Doi"
+    },
+    "publication_year": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Publication Year"
+    },
+    "authors": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Authors",
+      "type": "array"
+    },
+    "contacts": {
+      "items": {
+        "$ref": "#/$defs/ExtractedAcademicContact"
+      },
+      "title": "Contacts",
+      "type": "array"
+    },
+    "candidates_observed": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Candidates Observed",
+      "type": "integer"
+    },
+    "unmatched_candidates": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Unmatched Candidates",
+      "type": "integer"
+    },
+    "review_notes": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Review Notes",
+      "type": "array"
+    },
+    "linked_pdf_url": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Linked Pdf Url"
+    },
+    "reference_year": {
+      "title": "Reference Year",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "kind",
+    "parser_version",
+    "content_digest",
+    "status",
+    "reference_year"
+  ],
+  "title": "DocumentExtractionResult",
+  "type": "object"
+}

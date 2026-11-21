@@ -8,11 +8,12 @@ import csv
 import io
 import re
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
-from emailmonitor.results.render import safe_csv
+from emailmonitor.results.render import RenderDenied, safe_csv
 
 DISPOSABLE_DOMAINS = frozenset(
     {
@@ -47,9 +48,59 @@ SUFFIXES = re.compile(
     r",?\s+(?:Ph\.?D\.?|M\.?D\.?|FACS|FRCP|M\.?Sc\.?|B\.?Sc\.?|Esq\.?)\.?$",
     re.IGNORECASE,
 )
-EMAIL_SYNTAX = re.compile(
-    r"^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
+# Shared/functional mailboxes: valid addresses, but not a person's own contact.
+ROLE_LOCAL_PARTS = frozenset(
+    {
+        "admin",
+        "administrator",
+        "contact",
+        "contacts",
+        "editor",
+        "editorial",
+        "editors",
+        "enquiries",
+        "enquiry",
+        "help",
+        "helpdesk",
+        "hello",
+        "info",
+        "information",
+        "inquiries",
+        "lab",
+        "mail",
+        "marketing",
+        "no-reply",
+        "noreply",
+        "do-not-reply",
+        "office",
+        "postmaster",
+        "press",
+        "reception",
+        "sales",
+        "secretary",
+        "secretariat",
+        "service",
+        "support",
+        "team",
+        "webmaster",
+        "journal",
+        "submissions",
+        "permissions",
+        "abuse",
+        "hr",
+        "jobs",
+        "careers",
+    }
 )
+
+
+def is_role_account(address: str) -> bool:
+    """True for functional mailboxes such as info@ or noreply@ (plus-tags ignored)."""
+    local = address.rsplit("@", 1)[0].casefold().split("+", 1)[0]
+    return local in ROLE_LOCAL_PARTS or local.endswith(("-office", ".office", "-lab", ".lab"))
+
+
+EMAIL_SYNTAX = re.compile(r"^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
 
 
 class Contract(BaseModel):
@@ -61,12 +112,10 @@ class ContactExportItem(Contract):
     display_name: str | None = None
     orcid: str | None = None
     affiliation: str | None = None
-    role: Literal["corresponding", "first", "senior", "contributor"] = (
-        "corresponding"
-    )
+    role: Literal["corresponding", "first", "senior", "contributor"] = "corresponding"
     paper_title: str
-    journal: str
-    publication_year: int
+    journal: str | None = None
+    publication_year: int | None = Field(default=None, ge=1800, le=2100)
     publication_date: str | None = None
     doi: str | None = None
     content_digest: str | None = None
@@ -76,7 +125,8 @@ class ContactExportItem(Contract):
 class ContactScore:
     is_valid_syntax: bool
     domain_type: Literal["institutional", "commercial_free", "disposable"]
-    recency_level: Literal["active_recent", "moderate", "dormant"]
+    recency_level: Literal["active_recent", "moderate", "dormant", "unknown"]
+    # Heuristic ordering weight in [0, 1]; not a probability of a live mailbox.
     recency_score: float
     outreach_eligible: bool
     rejection_reason: str | None = None
@@ -97,8 +147,17 @@ def split_author_name(full_name: str | None) -> tuple[str, str]:
     return parts[0], " ".join(parts[1:])
 
 
-def evaluate_contact(item: ContactExportItem, reference_year: int = 2026) -> ContactScore:
-    """Assess email syntax, domain classification, and publication recency."""
+def current_year() -> int:
+    return datetime.now(UTC).year
+
+
+def evaluate_contact(item: ContactExportItem, reference_year: int | None = None) -> ContactScore:
+    """Assess email syntax, domain classification, and publication recency.
+
+    Syntax and domain-list checks never prove a live mailbox.
+    """
+    if reference_year is None:
+        reference_year = current_year()
     email = item.raw_email.strip().lower()
     if not EMAIL_SYNTAX.match(email):
         return ContactScore(
@@ -122,17 +181,22 @@ def evaluate_contact(item: ContactExportItem, reference_year: int = 2026) -> Con
         )
 
     if domain in FREE_COMMERCIAL_DOMAINS:
-        domain_type: Literal["institutional", "commercial_free", "disposable"] = (
-            "commercial_free"
-        )
+        domain_type: Literal["institutional", "commercial_free", "disposable"] = "commercial_free"
     else:
         domain_type = "institutional"
 
+    if item.publication_year is None:
+        return ContactScore(
+            is_valid_syntax=True,
+            domain_type=domain_type,
+            recency_level="unknown",
+            recency_score=0.0,
+            outreach_eligible=True,
+            rejection_reason=None,
+        )
     age = max(0, reference_year - item.publication_year)
     if age <= 1:
-        recency_level: Literal["active_recent", "moderate", "dormant"] = (
-            "active_recent"
-        )
+        recency_level: Literal["active_recent", "moderate", "dormant", "unknown"] = "active_recent"
         recency_score = 1.0
     elif age <= 3:
         recency_level = "moderate"
@@ -154,9 +218,11 @@ def evaluate_contact(item: ContactExportItem, reference_year: int = 2026) -> Con
 def generate_gdpr_provenance(item: ContactExportItem) -> str:
     """Generate immutable GDPR Article 6(1)(f) Legitimate Interest provenance."""
     doi_part = f", DOI: {item.doi}" if item.doi else ""
+    venue = item.journal or "an unidentified venue"
+    year_part = f" ({item.publication_year})" if item.publication_year else ""
     return (
         f"Notice: Address observed in published work '{item.paper_title}', "
-        f"published in {item.journal} ({item.publication_year}){doi_part}. "
+        f"published in {venue}{year_part}{doi_part}. "
         "Processed under GDPR Article 6(1)(f) Legitimate Interest."
     )
 
@@ -164,14 +230,10 @@ def generate_gdpr_provenance(item: ContactExportItem) -> str:
 def render_instantly_csv(
     items: list[ContactExportItem],
     suppressed_emails: frozenset[str] | set[str] | None = None,
-    reference_year: int = 2026,
+    reference_year: int | None = None,
 ) -> bytes:
     """Render export matching Instantly.ai lead import CSV format."""
-    suppressed = (
-        {s.lower().strip() for s in suppressed_emails}
-        if suppressed_emails
-        else set()
-    )
+    suppressed = {s.lower().strip() for s in suppressed_emails} if suppressed_emails else set()
 
     rows: list[list[str]] = [
         [
@@ -198,9 +260,7 @@ def render_instantly_csv(
 
         first_name, last_name = split_author_name(item.display_name)
         personalization = (
-            f"Enjoyed your recent paper on {item.paper_title}"
-            if item.paper_title
-            else ""
+            f"Enjoyed your recent paper on {item.paper_title}" if item.paper_title else ""
         )
         provenance = generate_gdpr_provenance(item)
 
@@ -212,8 +272,8 @@ def render_instantly_csv(
                 item.affiliation or "",
                 personalization,
                 item.paper_title,
-                item.journal,
-                str(item.publication_year),
+                item.journal or "",
+                str(item.publication_year) if item.publication_year else "",
                 item.doi or "",
                 provenance,
             ]
@@ -225,14 +285,10 @@ def render_instantly_csv(
 def render_smartlead_csv(
     items: list[ContactExportItem],
     suppressed_emails: frozenset[str] | set[str] | None = None,
-    reference_year: int = 2026,
+    reference_year: int | None = None,
 ) -> bytes:
     """Render export matching Smartlead.ai lead import CSV format."""
-    suppressed = (
-        {s.lower().strip() for s in suppressed_emails}
-        if suppressed_emails
-        else set()
-    )
+    suppressed = {s.lower().strip() for s in suppressed_emails} if suppressed_emails else set()
 
     rows: list[list[str]] = [
         [
@@ -267,8 +323,8 @@ def render_smartlead_csv(
                 last_name,
                 item.affiliation or "",
                 item.paper_title,
-                item.journal,
-                str(item.publication_year),
+                item.journal or "",
+                str(item.publication_year) if item.publication_year else "",
                 item.doi or "",
                 f"{score.recency_score:.1f}",
                 provenance,
@@ -279,9 +335,15 @@ def render_smartlead_csv(
 
 
 def _write_safe_csv(rows: list[list[str]]) -> bytes:
-    """Format and write CSV rows ensuring strict spreadsheet formula safety."""
+    """QUOTE_ALL CSV. A row with an unsafe cell is withheld whole, never rewritten."""
     buffer = io.StringIO(newline="")
     writer = csv.writer(buffer, quoting=csv.QUOTE_ALL, lineterminator="\r\n")
-    for row in rows:
-        writer.writerow([safe_csv(val) for val in row])
+    header, *body = rows
+    writer.writerow([safe_csv(val) for val in header])
+    for row in body:
+        try:
+            cells = [safe_csv(val) for val in row]
+        except RenderDenied:
+            continue
+        writer.writerow(cells)
     return buffer.getvalue().encode("utf-8")
