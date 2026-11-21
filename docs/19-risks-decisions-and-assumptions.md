@@ -122,7 +122,7 @@ ScienceDirect's general quota page lists 200 results per page, while its V2 migr
 
 The OA-006…OA-011 preview orchestrator attached one fixture article's authors and addresses to unrelated Crossref/bioRxiv works, used a fixed PMCID for any keyword, and stamped a fixed ORCID, DOI and year on contacts. Under the evidence-mandatory invariant this is fabricated contact evidence. The safer bounded interpretation was implemented (OA-012): a work yields contacts only from its own full text; unknown metadata stays unknown; ORCID requires an in-article declaration on that author with a valid check digit; a contrib email does not assert correspondence. Tests that encoded the old behavior were replaced. Fixture addresses on real institutional domains were moved to reserved `.example` domains. See [document 88](88-open-access-pipeline.md).
 
-Open decision (owner): which OA APIs may be called live, with what contact identity, rate limits and retention. Safe default: none; fixtures only. Partly decided on 2026-11-19 (see below): Europe PMC approved, OpenAlex deferred; rate limits and retention still open.
+Open decision (owner): which OA APIs may be called live, with what contact identity, rate limits and retention. Safe default: none; fixtures only. Decided 2026-11-19/21 (see below): Europe PMC approved, OpenAlex deferred, Europe PMC limit 1 request/s with concurrency 1, raw full-text retention 0 hours.
 
 ### 2026-11-14 — Service package entry cap
 
@@ -138,11 +138,25 @@ The owner accepted the following on 2026-11-19 (recommendations presented from d
 4. **Licence stance: allow but flag.** Contacts from articles whose licence is not Creative Commons/public domain (`other`) or cannot be determined (`unknown`) are kept, carry an informational eligibility reason (`license_not_creative_commons` / `license_unknown`) and show the licence class in every export. The flag never changes eligibility. Operator-supplied HTML and PDF documents carry no machine-readable licence and are reported `unknown` (OA-026).
 5. **Service package cap of 384 entries** is accepted as recorded above.
 
-bioRxiv/medRxiv received no approval and stays fixture-only. Throttles in document 89 remain proposals; the 5-second source-policy floor still applies to any live path.
+bioRxiv/medRxiv received no approval and stays fixture-only. Throttles in document 89 remained proposals until the 2026-11-21 decision below; the 5-second fixture-policy floor still applies to every source other than Europe PMC.
 
 ### 2026-11-19 — Europe PMC connector boundary (OA-027)
 
 `classify_url` gained a second typed query grammar (after Elsevier `view=FULL`): the Europe PMC search URL produced by `EuropePmcSearchRequest.plan_url()`, on host `www.ebi.ac.uk` and path `/europepmc/webservices/rest/search` only, with the five parameters in fixed order, fixed `format=json`/`resultType=lite`, `pageSize` 1–100, a bounded cursor alphabet, and canonical re-encoding. Queries on any other host or path are still refused (`url_scope_denied`). The grammar is request syntax, not permission; the host must still be in the caller's allowed set.
 
 The connector has no network code; it requires an injected protected transport, and none exists for production. Known limits, recorded rather than worked around: the throttle is process-local (one live worker per source until EM-013); the approval record is in memory (the durable tenant-scoped policy record and per-tenant flag belong to the persistence slice); long keyword queries whose encoded URL exceeds 2 048 bytes are refused rather than truncated; in the Europe-PMC-only composition, a bare DOI routed by `auto` to Crossref is refused (`source_not_enabled`) rather than re-routed.
+
+### 2026-11-21 — Owner-delegated decisions: limits, retention, merge target, database
+
+On 2026-11-21 the owner confirmed raw full-text retention and the Crossref role-mailbox approach, and delegated the merge target and rate limits to engineering judgement (explicitly allowing faster Europe PMC limits). Decisions taken:
+
+1. **Europe PMC rate limit (ADR).** Concurrency 1 and at most **one request per second** (`EUROPE_PMC_MIN_INTERVAL_SECONDS = 1.0`, `sources/europepmc_live.LiveApiLimits`). Europe PMC publishes no per-second figure; the ~10 requests/s cited by third parties is unverified, so 1/s is a tenth of it and below the 2/s proposed in document 89. A 100-article keyword run is about 101 requests, roughly 1.7 minutes. 429/503 back-off and 401/403 stop rules are unchanged. The fixture-policy `Limits` (5 s floor) is deliberately not loosened; it still governs every other source. Raising the Europe PMC rate later needs a new entry here and evidence of the provider's limit.
+2. **Raw full-text retention: 0 hours** (confirmed by the owner). Enforced in the approval record type (`raw_retention_hours: Literal[0]`); only evidence excerpts and SHA-256 digests survive parsing.
+3. **Crossref polite pool:** role mailbox approach confirmed; the address is supplied through configuration when Crossref is enabled. Crossref stays fixture-only until then.
+4. **Merge target.** PR #72 keeps `feat/open-access-connectors` (PR #71) as its base. The branches form a stack (`main` ← #69 staging integration ← #70 ← #71 ← #72); `feat/open-access-connectors` is 310 commits ahead of `main`, so retargeting #72 to `main` or #70 would pull unrelated unreviewed work into its review. Merge order: #72 into #71 after review, then the existing stack. PR #69 currently conflicts with `main`; resolving it is the stack owner's integration task, not part of the Open Access work.
+5. **Database for the persistence slice.** Tests require a dedicated disposable PostgreSQL 17.11 with synthetic data (document 26); CI already uses the pinned `postgres:17.11-bookworm` image. A local disposable container of that image is the preferred development database. A customer or shared database must not be used for tests (the suites create roles, own and drop tables). An owner-provided database is relevant for deployment, with its own runtime non-owner role.
+
+### 2026-11-21 — Production transport is blocked on deployment egress
+
+The Europe PMC connector (OA-027) needs a production protected transport. Document 50 records that a reviewed live DNS/egress composition does not exist (the test resolver refuses recursion/CNAME), and document 11 requires network-level egress enforcement (firewall or egress proxy) in addition to in-process checks. An in-process socket path alone would not meet that control, so none was added. Needed before it can be built: the deployment target (where the worker runs) and its egress mechanism; then a transport that resolves through the approved resolver, pins a public address, verifies TLS, refuses off-host redirects, supports chunked framing, and is tested against a local TLS fixture plus a deployment egress test.
 

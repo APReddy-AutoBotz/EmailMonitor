@@ -10,6 +10,7 @@
 - Independent review fixes: label-decided address attribution (no wrong-person assignment), no absorption of shared-note addresses, no role from contrib emails or plain e-mail lists, linear-time address finding and HTML link handling, per-article failure isolation, correct multi-source group merging, ORCID linking only via structural associations, researchers CSV withholding, host-checked license classes. See document 88.
 - OA-023: association strength per contact and a "markup only" export option for highest-precision outreach lists.
 - OA-024: offline batch command line for a folder of supplied documents.
+- OA-028: Europe PMC live limit of 1 request/s with concurrency 1 (separate from the unchanged 5 s fixture policy) and raw full-text retention fixed at 0 hours in the approval record; merge target, database approach and production-transport blocker recorded.
 - OA-027 (partial): Europe PMC live connector behind an injected protected-transport port, exact search URL grammar, approval record, throttle, back-off/stop, Europe-PMC-only composition; tested over recorded synthetic responses, no network path exists yet.
 - OA-026: per-contact article licence class with non-blocking `license_unknown` / `license_not_creative_commons` reasons and a licence column in every export preset (owner decision: allow but flag).
 - OA-025: seeded parser fuzz invariants and a synthetic association benchmark; it found and fixed a sole-corresponding-author over-attribution and unreported consortium-member addresses.

@@ -19,13 +19,14 @@ from emailmonitor.fetching.europepmc import EuropePmcFixtureGateway, EuropePmcRe
 from emailmonitor.fetching.safety import FetchDenied, SafeURL, classify_url
 from emailmonitor.sources.europepmc_live import (
     EuropePmcLiveGateway,
+    LiveApiLimits,
     LiveSourceApproval,
     SourceThrottle,
     TransportReply,
 )
 from emailmonitor.sources.europepmc_search import EuropePmcSearchRequest, doi_lookup_request
 from emailmonitor.sources.openaccess import PmcIdentifier
-from emailmonitor.sources.policy import Limits, Operation
+from emailmonitor.sources.policy import Operation
 
 ROOT = Path(__file__).resolve().parents[3]
 JATS = ROOT / "fixtures" / "jats"
@@ -39,7 +40,7 @@ def approval(**overrides: object) -> LiveSourceApproval:
         "purpose": "academic_contact_research",
         "permission_reference": "owner-decision-2026-11-19",
         "valid_until": NOW + timedelta(days=30),
-        "limits": Limits(
+        "limits": LiveApiLimits(
             max_concurrent_requests=1, min_request_interval_seconds=5, max_articles_per_job=100
         ),
     }
@@ -244,10 +245,14 @@ def test_throttle_enforces_policy_interval_between_requests() -> None:
 
 def test_throttle_below_policy_floor_is_refused() -> None:
     with pytest.raises(FetchDenied, match="throttle_interval_below_policy_floor"):
-        SourceThrottle(1)
+        SourceThrottle(0.5)
+    with pytest.raises(FetchDenied, match="throttle_interval_below_policy_floor"):
+        SourceThrottle(2, floor_seconds=0.5)
+    with pytest.raises(FetchDenied, match="throttle_interval_below_policy_floor"):
+        SourceThrottle(2, floor_seconds=3)
     clock = FakeClock()
     slow = approval(
-        limits=Limits(
+        limits=LiveApiLimits(
             max_concurrent_requests=1, min_request_interval_seconds=10, max_articles_per_job=10
         )
     )
@@ -389,3 +394,37 @@ def test_live_composition_never_answers_from_fixture_sources() -> None:
 def test_enabled_sources_must_be_known_and_non_empty(enabled: frozenset[str]) -> None:
     with pytest.raises(FetchDenied, match="enabled_sources_invalid"):
         OpenAccessOrchestrator(enabled_sources=enabled)  # type: ignore[arg-type]
+
+
+def test_europe_pmc_one_request_per_second_is_the_approved_minimum() -> None:
+    clock = FakeClock()
+    fast = approval(
+        limits=LiveApiLimits(
+            max_concurrent_requests=1, min_request_interval_seconds=1.0, max_articles_per_job=100
+        )
+    )
+    gw = EuropePmcLiveGateway(
+        fast,
+        ReplayTransport(),
+        throttle=SourceThrottle(1.0, clock=clock, sleep=clock.sleep),
+        now=lambda: NOW,
+        clock=clock,
+    )
+    request = EuropePmcRequest(pmcid=PmcIdentifier(value="PMC10293847"))
+    gw.fetch(request)
+    gw.fetch(request)
+    assert clock.slept == [1.0]
+    with pytest.raises(ValueError):
+        LiveApiLimits(
+            max_concurrent_requests=1, min_request_interval_seconds=0.99, max_articles_per_job=1
+        )
+    with pytest.raises(ValueError):
+        LiveApiLimits(
+            max_concurrent_requests=2, min_request_interval_seconds=1.0, max_articles_per_job=1
+        )
+
+
+def test_raw_full_text_retention_is_fixed_at_zero() -> None:
+    assert approval().raw_retention_hours == 0
+    with pytest.raises(ValueError):
+        approval(raw_retention_hours=24)

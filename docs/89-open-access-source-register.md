@@ -18,7 +18,8 @@
 * Crossref: polite pool will use an owner-chosen **role mailbox** via configuration; none supplied yet, so fixture-only.
 * bioRxiv/medRxiv: no decision; fixture-only.
 * Licence stance: **allow but flag** (item 6 below; implemented as OA-026).
-* Throttles (item 4) and retention (item 5) remain open.
+* Throttles (item 4): Europe PMC **1 request/s, concurrency 1** (decided 2026-11-21); other sources not enabled.
+* Retention (item 5): raw full text **0 hours** (confirmed 2026-11-21).
 
 Details: [document 19](19-risks-decisions-and-assumptions.md).
 
@@ -37,8 +38,8 @@ Note: the current source-policy model enforces concurrency 1 and at least 5 seco
 
 | Source | Requests/s | Concurrency | Page size | Max pages/job |
 |---|---|---|---|---|
-| Europe PMC search | 2 | 1 | 100 | 5 |
-| Europe PMC fullTextXML | 2 | 1 | — | ≤ articles cap |
+| Europe PMC search | 1 (decided) | 1 | 100 | 5 |
+| Europe PMC fullTextXML | 1 (decided, shared with search) | 1 | — | ≤ articles cap |
 | OpenAlex (free key) | 5 | 1 | 100 | 5 |
 | Crossref (polite) | 3 | 1 | 100 | 5 |
 | bioRxiv | 1 | 1 | 30 | 10 |

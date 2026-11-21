@@ -13,8 +13,8 @@ Rules enforced here, independent of the transport:
   :func:`classify_url` with the Europe PMC host set (exact search grammar).
   Response bodies are untrusted data: links inside them are never requested.
 * A valid, unexpired approval record is required at construction and before
-  every request; the approved limits (concurrency 1, at least 5 s between
-  requests) are applied by a per-source throttle.
+  every request; the approved limits (concurrency 1, at least 1 s between
+  requests for Europe PMC) are applied by a per-source throttle.
 * 429/503 put the source into back-off for at least the policy interval (or the
   provider's ``Retry-After``, capped); nothing is retried inside the connector.
   401/403 stop the source for the rest of the run: no retries, no other identity.
@@ -51,9 +51,26 @@ from emailmonitor.sources.europepmc_search import (
     doi_lookup_request,
     parse_search_response,
 )
-from emailmonitor.sources.policy import Limits, Operation
+from emailmonitor.sources.policy import Operation
 
 MAX_BACKOFF_SECONDS = 3600.0
+# Owner-delegated decision 2026-11-21 (document 19): Europe PMC publishes no
+# per-second figure; third-party guides cite about 10 requests/s (unverified).
+# One request at a time, at most one per second, is a tenth of that figure.
+EUROPE_PMC_MIN_INTERVAL_SECONDS = 1.0
+
+
+class LiveApiLimits(BaseModel):
+    """Limits for an approved documented API. Separate from the fixture-policy
+    ``Limits`` (5 s floor), which stays unchanged for every other source."""
+
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
+
+    max_concurrent_requests: int = Field(ge=1, le=1)
+    min_request_interval_seconds: float = Field(
+        ge=EUROPE_PMC_MIN_INTERVAL_SECONDS, le=86400, allow_inf_nan=False
+    )
+    max_articles_per_job: int = Field(ge=1, le=500)
 
 
 class LiveSourceApproval(BaseModel):
@@ -69,7 +86,10 @@ class LiveSourceApproval(BaseModel):
     purpose: Literal["academic_contact_research"]
     permission_reference: str = Field(pattern=r"^[a-zA-Z0-9_-]{1,100}$")
     valid_until: datetime
-    limits: Limits
+    limits: LiveApiLimits
+    # Owner decision 2026-11-21: raw full text is never retained (0 hours); only
+    # evidence excerpts and digests survive parsing.
+    raw_retention_hours: Literal[0] = 0
 
     @field_validator("valid_until")
     @classmethod
@@ -104,6 +124,7 @@ class ProtectedTransport(Protocol):
 class SourceThrottle:
     """Concurrency 1 and a minimum interval between request starts, per source.
 
+    The floor can be raised per source, never lowered below the approved minimum.
     Process-local. The cross-worker, cross-tenant fair throttle is EM-013; until it
     exists a deployment must run one live worker per source.
     """
@@ -111,10 +132,16 @@ class SourceThrottle:
     def __init__(
         self,
         min_interval_seconds: float,
+        *,
+        floor_seconds: float = EUROPE_PMC_MIN_INTERVAL_SECONDS,
         clock: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], None] = time.sleep,
     ) -> None:
-        if not math.isfinite(min_interval_seconds) or min_interval_seconds < 5:
+        if (
+            not math.isfinite(min_interval_seconds)
+            or floor_seconds < EUROPE_PMC_MIN_INTERVAL_SECONDS
+            or min_interval_seconds < floor_seconds
+        ):
             raise FetchDenied("throttle_interval_below_policy_floor")
         self._interval = min_interval_seconds
         self._clock = clock

@@ -38,6 +38,10 @@ Also fixed along the way: the web lockfile had been downgraded from v9 to v6 by 
 
 You accepted: Europe PMC as the first live source; OpenAlex deferred; a role mailbox for Crossref's polite pool (address still to be supplied); licences **allowed but flagged**; the 384-entry service package cap. The licence flag is implemented (OA-026: licence class on every contact and in every export, informational reasons that never block). Recorded in documents 19, 89 and 90. No live network access was built. The Europe PMC connector itself (OA-027, partial) now exists behind a protected-transport port and is tested over recorded synthetic responses; reaching Europe PMC still needs the production protected transport, the shared throttle and the persisted tenant policy (document 90).
 
+## Decisions taken 2026-11-21
+
+You confirmed 0-hour raw full-text retention and the Crossref role-mailbox approach, and delegated the rest. Decided: Europe PMC at 1 request/s, one at a time (in code, OA-028); PR #72 stays on `feat/open-access-connectors` and merges through the existing stack; tests use a disposable PostgreSQL 17.11 (the CI image), not a shared database. The production network transport is blocked on where the service will run and how its outbound traffic is restricted (document 19).
+
 ## Decisions originally waiting for you (status as of 2026-11-19 in document 19)
 
 1. **Live API access** — approve or reject Europe PMC, OpenAlex, Crossref, bioRxiv for this purpose; choose a role mailbox for Crossref's polite pool; decide on an OpenAlex API key and monthly budget (keys are now needed for paging and usage is priced); confirm throttles (proposed in document 89; the current policy model enforces ≥5 s between requests). The engineering path once approved is in document 90.
