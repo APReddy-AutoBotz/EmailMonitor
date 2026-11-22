@@ -196,10 +196,15 @@ def test_open_access_article_persists_waits_for_review_and_exports(scenario: Sce
     assert contacts[0].source_url == PLOS.source_url
     assert contacts[0].technical_status == "not_checked"
     assert contacts[0].outreach_eligibility == "not_assessed"
+    # "Allow but flag": the article licence travels with the reviewed contact.
+    assert contacts[0].license_category == "unknown"
     export = ready(results, org, job, format="csv")
     artifact = results.download(org, export)
     with ZipFile(io.BytesIO(artifact.body)) as archive:
-        assert PLOS_ADDRESS.encode() in archive.read("contacts.csv")
+        sheet = archive.read("contacts.csv")
+        assert PLOS_ADDRESS.encode() in sheet
+        assert b"Article licence" in sheet.splitlines()[0]
+        assert sheet.splitlines()[1].endswith(b',"unknown"')
 
     # Tenant B sees nothing and cannot act on tenant A's rows.
     with scenario.client() as client:
@@ -475,3 +480,28 @@ def test_actual_container_parses_open_access_jats(
     observation = stored(progress, scenario.organizations[0], job)
     assert observation["isolation_profile"] == "network-none-parser-v1"
     assert observation["content_digest"] == USHER.content_digest
+
+
+def test_reviewed_cc_by_contact_keeps_its_licence(scenario: Scenario) -> None:
+    progress, job, work = running(scenario, USHER.source_url)
+    org = scenario.organizations[0]
+    progress.process_fixture(work, jats_parser=host_parser)
+    batch = progress.items(org, job)[0].batch_id
+    assert batch is not None
+    bundle = progress.associations.detail(org, batch)
+    association = next(a for a in bundle.associations if a.author_id is not None)
+    progress.associations.review(
+        org,
+        batch,
+        Review(
+            association_id=association.id,
+            expected_revision=association.revision,
+            action="accept",
+            evidence_ids=association.evidence_ids,
+            reason="Inspected retained JATS author/address evidence",
+        ),
+    )
+    contacts = Results(progress.database, progress.token, SETTINGS).contacts(
+        org, Filters(job_id=job)
+    )
+    assert [c.license_category for c in contacts.items] == ["cc-by"]

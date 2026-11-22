@@ -124,6 +124,12 @@ def contact_rows(snapshot: ExportSnapshot) -> list[list[str]]:
                     str(int(age)) if contact.observation_origin == "reused" and age >= 0 else "",
                 ]
             )
+    if any(contact.license_category is not None for contact in snapshot.contacts):
+        # Only exports containing Open Access rows gain this column, so every
+        # earlier export keeps its exact layout.
+        rows[0].append("Article licence")
+        for row, contact in zip(rows[1:], snapshot.contacts, strict=True):
+            row.append(contact.license_category or "Not recorded")
     excluded = set()
     if "affiliations" not in snapshot.optional_contact_fields:
         excluded.add(6)

@@ -301,6 +301,32 @@ BEGIN
  RETURN 'unresolved';
 END $function$;
 
+CREATE OR REPLACE FUNCTION emailmonitor.result_contact_document(p_org uuid, p_batch uuid, p_association uuid)
+ RETURNS jsonb
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'pg_catalog', 'emailmonitor'
+AS $function$
+ SELECT jsonb_build_object('organization_id',a.organization_id,'job_id',b.job_id,'batch_id',a.batch_id,
+ 'association_id',a.id,'revision',a.revision,'candidate_id',a.candidate_id,'author_id',a.author_id,
+ 'author_name',au.display_name,'first_author',au.first_role,'corresponding_author',au.correspondence_role,
+ 'affiliations',COALESCE(au.record->'affiliations','[]'::jsonb),'raw_address',ca.raw_address,
+ 'normalized_address',ca.normalized_address,'state',a.state,'evidence_strength',a.record->'evidence_strength',
+ 'association_reason',a.record->'reason','evidence_ids',a.record->'evidence_ids','source_id','synthetic-publisher',
+ 'source_url',b.article_url,'policy_version',b.policy_version,'title',b.snapshot->'preferred_metadata'->'title',
+ 'observed_at',obs.observed_at,'syntax_status',ca.syntax_status,'identity_state','article_local_unresolved',
+ 'technical_status','not_checked','delivery_status','unverified','outreach_eligibility','not_assessed') || CASE WHEN obs.reused_from_job IS NOT NULL THEN jsonb_build_object('observation_origin','reused') ELSE '{}'::jsonb END
+ || CASE WHEN obs.observation->>'route'='jats_xml' THEN jsonb_build_object('license_category',obs.observation->'license_category') ELSE '{}'::jsonb END
+ FROM emailmonitor.author_email_associations a JOIN emailmonitor.association_batches b
+ ON b.organization_id=a.organization_id AND b.id=a.batch_id JOIN emailmonitor.association_candidates ca
+ ON ca.organization_id=a.organization_id AND ca.batch_id=a.batch_id AND ca.id=a.candidate_id
+ LEFT JOIN emailmonitor.association_authors au ON au.organization_id=a.organization_id
+ AND au.batch_id=a.batch_id AND au.id=a.author_id JOIN emailmonitor.article_observations obs
+ ON obs.organization_id=b.organization_id AND obs.job_id=b.job_id AND obs.article_url=b.article_url
+ WHERE a.organization_id=p_org AND a.batch_id=p_batch AND a.id=p_association
+ AND a.state<>'suppressed' AND emailmonitor.association_visible(p_org,p_batch)
+$function$;
+
 CREATE OR REPLACE FUNCTION emailmonitor.guard_article_observation()
  RETURNS trigger
  LANGUAGE plpgsql
