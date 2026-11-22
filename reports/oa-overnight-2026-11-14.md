@@ -42,6 +42,12 @@ You accepted: Europe PMC as the first live source; OpenAlex deferred; a role mai
 
 You confirmed 0-hour raw full-text retention and the Crossref role-mailbox approach, and delegated the rest. Decided: Europe PMC at 1 request/s, one at a time (in code, OA-028); PR #72 stays on `feat/open-access-connectors` and merges through the existing stack; tests use a disposable PostgreSQL 17.11 (the CI image), not a shared database. The production network transport is blocked on where the service will run and how its outbound traffic is restricted (document 19).
 
+## Progress 2026-11-22
+
+* **OA-029 (PR [APReddy-AutoBotz/EmailMonitor#73](https://github.com/APReddy-AutoBotz/EmailMonitor/pull/73), draft, based on #72).** Open Access articles are now saved through the durable job, review and export path, with migration 0027 and a sandboxed JATS parse. Every contact waits for human review; reviewed contacts and exports show the article licence. It was tested against a disposable PostgreSQL 17.11 in Docker.
+* **CI.** The real failures on #73 were fixed (packaging probe, migration-head pins, upgrade history check, formatting). The remaining `installed-operator`, `transport` and `operator-ui` failures come from the hosted runners: the last commit that ever passed `installed-operator` fails today too. Evidence and suggested next steps: [reports/ci-runner-failures-2026-11-22.md](ci-runner-failures-2026-11-22.md).
+* **Waiting on you:** where the service will run and how its outbound traffic is restricted (needed before building the live Europe PMC connection); the Crossref mailbox when Crossref is enabled; review and merge of #72 and #73. Docker Desktop on this machine stopped during the last local test run and needs a restart before more local database testing.
+
 ## Decisions originally waiting for you (status as of 2026-11-19 in document 19)
 
 1. **Live API access** — approve or reject Europe PMC, OpenAlex, Crossref, bioRxiv for this purpose; choose a role mailbox for Crossref's polite pool; decide on an OpenAlex API key and monthly budget (keys are now needed for paging and usage is priced); confirm throttles (proposed in document 89; the current policy model enforces ≥5 s between requests). The engineering path once approved is in document 90.
