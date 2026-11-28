@@ -84,9 +84,10 @@ def test_service_callback_releases_sql_locks_then_next_callback_denies(
                 version: int,
                 url: str,
                 search: bool,
+                source: str,
             ) -> dict[str, object]:
                 nonlocal authorization_calls, writer
-                policy = original_authorize(c, actual_org, actual_job, version, url, search)
+                policy = original_authorize(c, actual_org, actual_job, version, url, search, source)
                 authorization_calls += 1
                 # Discovery prepares through this instance as well; article scope
                 # calls the static guard. Start contention at the final fence.

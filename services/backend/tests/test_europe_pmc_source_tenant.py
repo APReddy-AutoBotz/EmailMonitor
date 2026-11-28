@@ -9,6 +9,7 @@ synthetic-labelled Open Access rows are refused while 0027-era rows stay valid.
 from __future__ import annotations
 
 import io
+from typing import Any, Final
 from uuid import UUID, uuid4
 from zipfile import ZipFile
 
@@ -46,8 +47,8 @@ from test_source_foundation import policy_body, source_path
 from test_tenant_foundation import ORIGIN, Scenario
 from test_tenant_foundation import scenario as scenario
 
-EPMC = "europe-pmc"
-SYNTHETIC = "synthetic-publisher"
+EPMC: Final = "europe-pmc"
+SYNTHETIC: Final = "synthetic-publisher"
 HTML_ARTICLE = "https://synthetic.publisher.example/article-a.html"
 DENIED = (AuthorizationDenied, HTTPException, DBAPIError)
 OPERATIONS = {
@@ -102,7 +103,7 @@ def job_for(
     s: Scenario, url: str, source_id: str | None = None, tenant: int = 0
 ) -> tuple[Ledger, UUID]:
     book = ledger(s, "owner" if tenant == 0 else "owner_b")
-    body = request_body()
+    body: dict[str, Any] = request_body()
     body["input"] = {"type": "url", "url": url}
     if source_id is not None:
         body["input"]["source_id"] = source_id
@@ -182,7 +183,7 @@ def admin_scalar(s: Scenario, sql: str, **params: object) -> object:
 
 def test_planning_chooses_the_source_and_refuses_a_contradicting_client_source() -> None:
     def planned(url: str, source_id: str | None = None) -> planning.InputPlan:
-        body = request_body()
+        body: dict[str, Any] = request_body()
         body["input"] = {"type": "url", "url": url}
         if source_id is not None:
             body["input"]["source_id"] = source_id

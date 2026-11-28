@@ -117,6 +117,7 @@ class ProviderJourney:
                 int(str(row["policy_version"])),
                 work.url,
                 work.kind == "discover",
+                str(row["source_id"]),
             )
         registry = catalog.documents(policy["support"], str(row["source_id"]))
         if request is None:
