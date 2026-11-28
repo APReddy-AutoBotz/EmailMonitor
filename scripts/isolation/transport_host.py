@@ -43,6 +43,70 @@ def counted(rows: list[dict[str, Any]]) -> Counter[str]:
     return Counter(json.dumps(row, sort_keys=True) for row in rows)
 
 
+INFINITE_LIFETIME = 4294967295
+LIFETIME_FIELDS = ("valid_life_time", "preferred_life_time")
+
+
+def _same(left: object, right: object) -> bool:
+    """Type-strict JSON equality (``True`` never equals ``1``)."""
+    return json.dumps(left, sort_keys=True) == json.dumps(right, sort_keys=True)
+
+
+def lifetime_countdown_only(before: object, after: object) -> bool:
+    """True only if two ``ip -j address`` row lists differ solely by lifetimes counting down.
+
+    Owner decision 2026-11-28 (reports/ci-runner-failures-2026-11-22.md): hosted
+    runners carry addresses with finite lifetimes, which decrease between any two
+    snapshots. Every interface, address, flag, other field and their order must
+    still be identical. A lifetime may only decrease and stay above zero; it may
+    never increase, reach zero, or become or stop being infinite. Identical input
+    returns False, so callers keep their exact-equality path for that case.
+    """
+    if type(before) is not list or type(after) is not list or len(before) != len(after):
+        return False
+    changed = False
+    for old, new in zip(before, after, strict=True):
+        if type(old) is not dict or type(new) is not dict or list(old) != list(new):
+            return False
+        for key in old:
+            if key != "addr_info":
+                if not _same(old[key], new[key]):
+                    return False
+                continue
+            left, right = old[key], new[key]
+            if type(left) is not list or type(right) is not list or len(left) != len(right):
+                return False
+            for a, b in zip(left, right, strict=True):
+                if type(a) is not dict or type(b) is not dict or list(a) != list(b):
+                    return False
+                for field in a:
+                    if field not in LIFETIME_FIELDS:
+                        if not _same(a[field], b[field]):
+                            return False
+                        continue
+                    was, now = a[field], b[field]
+                    if type(was) is not int or type(now) is not int:
+                        return False
+                    if was == now:
+                        continue
+                    if not 0 < now < was < INFINITE_LIFETIME:
+                        return False
+                    changed = True
+    return changed
+
+
+def host_unchanged(baseline: dict[str, Any], current: dict[str, Any]) -> bool:
+    """Exact equality, or equality apart from address lifetimes counting down."""
+    if _same(baseline, current):
+        return True
+    return (
+        list(baseline) == list(current) == ["addresses", "routes", "rules"]
+        and _same(baseline["routes"], current["routes"])
+        and _same(baseline["rules"], current["rules"])
+        and lifetime_countdown_only(baseline["addresses"], current["addresses"])
+    )
+
+
 class OwnedDadPending(RuntimeError):
     """Precisely validated owned tentative addresses are not ready for transport."""
 
@@ -66,7 +130,7 @@ def _validate_owned_host(
     if len(old_names) != len(before) or bridge in old_names:
         raise RuntimeError("Ambiguous original interfaces")
     preserved = [row for row in current["addresses"] if row["ifname"] in old_names]
-    if preserved != before:
+    if preserved != before and not lifetime_countdown_only(before, preserved):
         raise RuntimeError("Preexisting host interfaces changed")
     added = [row for row in current["addresses"] if row["ifname"] not in old_names]
     masters = [row for row in added if row["ifname"] == bridge]

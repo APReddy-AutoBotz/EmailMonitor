@@ -168,3 +168,9 @@ The Europe PMC connector (OA-027) needs a production protected transport. Docume
 * **Licence flag in reviewed exports.** The owner decision of 2026-11-19 ("allow but flag") now also holds for persisted results: reviewed Open Access contacts carry `license_category`, and exports containing them gain an "Article licence" column. Exports without Open Access rows keep their exact earlier layout. The flag never changes review or eligibility.
 * **No cross-tenant contact identifier.** The in-memory `oa-<sha>` id is a tenant-independent hash of an address and is never stored; persisted records use the existing tenant-scoped identifiers.
 
+### 2026-11-28 — Transport cleanup tolerates address-lifetime countdown (owner decision)
+
+The transport and installed-operator harnesses compared host network snapshots exactly. Hosted runners now carry addresses with finite lifetimes, which count down between the start and end of a test, so cleanup failed on every run (`baseline_cleanup`, "Preexisting host interfaces changed"). Evidence: `reports/ci-runner-failures-2026-11-22.md`.
+
+On 2026-11-28 the owner approved one narrow rule. Two snapshots count as unchanged when every interface, address, flag, field, route, rule and their order are identical, and the only differences are `valid_life_time` / `preferred_life_time` values that decreased while staying above zero. Increases, reaching zero, switching to or from infinite, type changes and every other difference still fail. An error while comparing also fails. Implementation: `scripts/isolation/transport_host.py` (`lifetime_countdown_only`, `host_unchanged`); the diagnostic receipt is still printed for every difference. Tests: `test_transport_cleanup_contract.py`.
+
