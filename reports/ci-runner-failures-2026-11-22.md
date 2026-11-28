@@ -28,3 +28,28 @@ In the failing runs, the cleanup check fails right after its own diagnostic repo
 3. **`operator-ui` capture refusals.** These need their own investigation of the pixel-redaction capture harness. The refusal family predates this work.
 
 Local verification of the Open Access changes used a disposable PostgreSQL 17.11 container (document 26, "Local disposable container").
+
+## Root cause found for `operator-ui` capture refusals (2026-11-28)
+
+**This is a harness race, not the runners and not the Open Access work.** The capture harness was added in `a8be89c` ("Capture bounded synthetic operator review crops", 2026-11-02). The last green `operator-ui` run is `8d3b8f4`, the commit just before it. Every run since `a8be89c`, 24 sampled across `codex/staging-integration-pr68`, `codex/checkpoint-recovered-focus-20261111`, `feat/open-access-connectors`, `feat/oa-truthful-pipeline`, `feat/oa-persistence` and `fix/transport-lifetime-countdown`, failed inside a capture: `capture_session_refused`, `capture_geometry_refused`, `capture_mutated`, `capture_mask_values`, `capture_mask_install_refused` or `capture_state_focus`, at `keyword_plan`, `evidence_review`, `export_preview` or `job_deletion`. The check has never passed with captures enabled.
+
+**Mechanism.** In the web app, every successful `act(...)` ends with `props.refresh()` (`apps/web/src/App.tsx`, `Workspace.act`). That bumps the revision of every `useResource`. While a refetch is in flight, `useResource` returns `{ loading: true }` with no data (`apps/web/src/ui.tsx`). So the workspace heading `<h2>Synthetic tenant 0</h2>` is replaced by "Loading current organization data…", and other `Load` sections re-render. The acceptance script waits only for the region it needs, such as "Server source plan" (set inside `act`'s work) or "Current export preview", and then captures immediately. Depending on when the refetch lands:
+
+- **The refetch is still in flight when `capture()` starts:** the heading check fails with `capture_session_refused`.
+- **It lands between the geometry samples or during the screenshot:** content above the target moves, so `before != after`, or the observer sees DOM churn. The result is `capture_geometry_refused`, or a mutation, mask or focus reason.
+- **It finishes first:** that capture passes, and the run fails at a later one. That is why the failing step moves from run to run.
+
+**Fix (harness timing only, no control changed).** `scripts/isolation/operator_ui_acceptance.py` now calls `settle_for_capture(page)` before each fixed capture. It is a bounded in-page wait, at most 10 s plus a 5 s host bound. It ends when `main#main.workspace` is not `aria-busy`, there is no "Loading current organization data" status, exactly one workspace heading exists, and the DOM has had no mutation for 500 ms. It returns only a Boolean, never moves focus or scroll, and disconnects its observer. If the page never settles, it does not raise: `capture()` runs unchanged and its own checks refuse. `operator_capture.py` (geometry, session, focus, mask and mutation checks) is untouched.
+
+**Regression evidence (local Chromium, synthetic page, `services/backend/tests/test_operator_capture_settle.py`, 7 passed):**
+
+- Reproduces the race: `capture()` during a simulated post-`act` refresh fails with `capture_session_refused`.
+- With the settle step, the same page yields a full redacted `plan` capture.
+- A page whose heading never returns is still refused by `capture()`.
+- Continuous mutation is bounded and returns `False`.
+- A settled page returns promptly with the DOM and focus unchanged.
+- A host-side hang is refused.
+
+Confirmation on the hosted runner comes from this PR's `operator-ui` run.
+
+**Not addressed here.** The `installed-operator` timing failures (`installed_login_deadline`, `TimeoutError` at `export_preview`, `installed_redirect_failure_unarmed`) run in a different harness (`installed_operator_browser.py`) that does not use these captures. They remain open.

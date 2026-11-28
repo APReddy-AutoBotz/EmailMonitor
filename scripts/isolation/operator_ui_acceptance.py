@@ -16,7 +16,7 @@ from typing import Any, Literal, cast
 from urllib.parse import parse_qs, urlsplit
 
 from browser_acceptance import sandbox_status
-from operator_capture import capture as capture_business
+from operator_capture import capture as capture_fixed_crop
 from operator_ui_protocol import (
     ERRORS,
     EVIDENCE_PHASES,
@@ -399,6 +399,58 @@ async def api_headers(incoming: Request, failure: Callable[[str, str], None]) ->
             route_headers_reason(incoming.failure, error),
         )
         raise
+
+
+# Every successful `act` in the web app ends with `refresh()`, which bumps the
+# revision of every `useResource`. While the organization detail is refetched
+# the workspace heading is replaced by "Loading current organization data…",
+# so the page is still re-rendering when the region a step waits for appears.
+# A capture taken then is refused (session, geometry, mutation or focus check).
+# Wait, bounded, for the workspace to settle; the capture checks are unchanged
+# and still decide. Only a Boolean leaves the page; nothing is focused or moved.
+CAPTURE_SETTLE_QUIET_MS = 500
+CAPTURE_SETTLE_TIMEOUT_MS = 10000
+CAPTURE_SETTLE_HOST_MARGIN_S = 5
+CAPTURE_SETTLED = """async ([quietMs, timeoutMs]) => {
+  const now = () => performance.now();
+  const deadline = now() + timeoutMs;
+  let last = now();
+  const observer = new MutationObserver(() => { last = now(); });
+  observer.observe(document.documentElement, {
+    subtree:true, childList:true, characterData:true, attributes:true
+  });
+  try {
+    while (now() < deadline) {
+      await new Promise(resolve => setTimeout(resolve, 50));
+      const main = document.querySelector('main#main.workspace');
+      const loading = Array.from(document.querySelectorAll('[role="status"]')).some(
+        e => e.textContent.startsWith('Loading current organization data')
+      );
+      const ready = !!main && main.getAttribute('aria-busy') !== 'true' && !loading &&
+        document.querySelectorAll('.workspace-heading h2').length === 1;
+      if (ready && now() - last >= quietMs) return true;
+    }
+    return false;
+  } finally { observer.disconnect(); }
+}"""
+
+
+async def settle_for_capture(page: Page) -> bool:
+    """Bounded wait for a quiet, loaded workspace; never decides capture validity."""
+    try:
+        async with asyncio.timeout(CAPTURE_SETTLE_TIMEOUT_MS / 1000 + CAPTURE_SETTLE_HOST_MARGIN_S):
+            settled = await page.evaluate(
+                CAPTURE_SETTLED, [CAPTURE_SETTLE_QUIET_MS, CAPTURE_SETTLE_TIMEOUT_MS]
+            )
+    except TimeoutError:
+        return False
+    return settled is True
+
+
+async def capture_business(page: Page, name: str) -> None:
+    # An unsettled page is not an error here: the fixed capture checks refuse it.
+    await settle_for_capture(page)
+    await capture_fixed_crop(page, name)
 
 
 async def focus(page: Page, target: Locator) -> None:
