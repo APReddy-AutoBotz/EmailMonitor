@@ -23,6 +23,7 @@ from emailmonitor.associations.review import apply_review
 from emailmonitor.config import Settings
 from emailmonitor.discovery.service import Discovery
 from emailmonitor.extraction.html import ArticleObservation
+from emailmonitor.extraction.jats_retained import RetainedJats
 from emailmonitor.extraction.pdf_retained import RetainedPdf
 from emailmonitor.extraction.service import Extraction
 from emailmonitor.extraction.xml_retained import RetainedXml
@@ -49,12 +50,15 @@ def initial_bundle(
     settings: Settings,
     org: UUID,
     job: UUID,
-    observed: ArticleObservation | RetainedPdf | RetainedXml,
+    observed: ArticleObservation | RetainedPdf | RetainedXml | RetainedJats,
     reused_from: UUID | None,
 ) -> Bundle:
     """Rebuild job-local review for reuse without transferring prior decisions."""
     if reused_from is None:
         return map_observation(settings, org, observed)
+    if isinstance(observed, RetainedJats):
+        # Open Access JATS has no reviewed retained-reuse adapter (document 91).
+        raise AuthorizationDenied()
     from emailmonitor.associations.reuse_draft import independent_review_draft
 
     return independent_review_draft(settings, org, org, reused_from, job, observed)
@@ -159,6 +163,8 @@ article_url=:url FOR SHARE
                 if source["observation"].get("route") == "pdf"
                 else RetainedXml.model_validate_json(json.dumps(source["observation"]))
                 if source["observation"].get("route") == "article_xml"
+                else RetainedJats.model_validate_json(json.dumps(source["observation"]))
+                if source["observation"].get("route") == "jats_xml"
                 else ArticleObservation.model_validate(source["observation"])
             )
             if observed.route == "browser_dom":

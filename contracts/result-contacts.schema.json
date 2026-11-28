@@ -194,6 +194,30 @@
           "title": "Syntax Status",
           "type": "string"
         },
+        "license_category": {
+          "anyOf": [
+            {
+              "enum": [
+                "cc0",
+                "cc-by",
+                "cc-by-sa",
+                "cc-by-nd",
+                "cc-by-nc",
+                "cc-by-nc-sa",
+                "cc-by-nc-nd",
+                "public-domain",
+                "other",
+                "unknown"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "License Category"
+        },
         "technical_status": {
           "const": "not_checked",
           "default": "not_checked",

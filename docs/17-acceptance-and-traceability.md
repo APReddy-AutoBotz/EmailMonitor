@@ -24,6 +24,7 @@ The Open Access truthful-pipeline candidate (OA-012…OA-022, [document 88](88-o
 | FR-016, NFR-004 | OA-026 | `test_researchers_and_exports.py::test_license_is_flagged_but_never_blocks`, `::test_every_preset_carries_the_license_class` |
 | FR-016, NFR-004, SEC egress | OA-027 | `test_europepmc_live.py` (document 90 acceptance items 1, 3, 5, 6; items 2, 4, 7 need EM-013, credentials and durable jobs) |
 | NFR-004, SEC egress | OA-028 | `test_europepmc_live.py::test_europe_pmc_one_request_per_second_is_the_approved_minimum`, `::test_raw_full_text_retention_is_fixed_at_zero`, `::test_throttle_below_policy_floor_is_refused` |
+| FR-016, NFR-004, SEC tenancy | OA-029 | `test_oa_persistence_tenant.py` (two tenants, review gate, replay and binding refusals, no-excerpt policy, suppression, cancellation before bytes, database provenance guard, parity with the in-memory pipeline, isolated container in CI) |
 
 These are offline fixture tests. They do not establish production precision (EM-016), tenant persistence (EM-005/009/011) or live-source permission.
 

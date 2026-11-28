@@ -19,7 +19,7 @@ class ContextView(Record):
     source_url: str
     source_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     source_parser_version: str
-    source_route: Literal["html", "browser_dom", "pdf", "article_xml"]
+    source_route: Literal["html", "browser_dom", "pdf", "article_xml", "jats_xml"]
     evidence: Evidence
     attached: Literal[False] = False
     identity_verified: Literal[False] = False

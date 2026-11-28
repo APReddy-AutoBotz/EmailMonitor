@@ -9,6 +9,7 @@ from pydantic import Field, model_validator
 
 from emailmonitor.associations.models import Bundle, Record
 from emailmonitor.extraction.html import ArticleObservation
+from emailmonitor.extraction.jats_retained import RetainedJats
 from emailmonitor.extraction.pdf_retained import RetainedPdf
 from emailmonitor.extraction.sciencedirect import Reason
 from emailmonitor.extraction.xml_retained import RetainedXml
@@ -31,9 +32,12 @@ class ObservationQuality(Record):
     batch_id: UUID
     scope: Literal["article"] = "article"
     parser_version: Literal[
-        "elsevier-xml-head-v1", "synthetic-html-v1", "pypdf-6.20.1-synthetic-v1"
+        "elsevier-xml-head-v1",
+        "synthetic-html-v1",
+        "pypdf-6.20.1-synthetic-v1",
+        "open-access-jats-v2",
     ]
-    observation_route: Literal["article_xml", "html", "browser_dom", "pdf"]
+    observation_route: Literal["article_xml", "html", "browser_dom", "pdf", "jats_xml"]
     observation_status: Literal[
         "observed", "no_contact", "requires_browser", "partial", "unsupported"
     ]
@@ -49,6 +53,7 @@ class ObservationQuality(Record):
             "unsupported_font_or_structure",
             "resource_limit",
             "deadline",
+            "authors_truncated",
         ],
         ...,
     ] = Field(max_length=20)
@@ -65,6 +70,15 @@ class ObservationQuality(Record):
                 or bool(self.reasons) != (self.observation_status in {"partial", "unsupported"})
             ):
                 raise ValueError("Recorded XML quality must retain its original outcome")
+        elif self.observation_route == "jats_xml":
+            if (
+                self.parser_version != "open-access-jats-v2"
+                or any(reason != "authors_truncated" for reason in self.reasons)
+                or self.reason_availability != "recorded"
+                or self.observation_status == "requires_browser"
+                or bool(self.reasons) != (self.observation_status == "partial")
+            ):
+                raise ValueError("Recorded JATS quality must retain its original outcome")
         elif self.observation_route == "pdf":
             if (
                 self.parser_version != "pypdf-6.20.1-synthetic-v1"
@@ -101,11 +115,13 @@ def project_quality(
     bundle = Bundle.model_validate_json(bundle.model_dump_json())
     if bundle.organization_id != org or not isinstance(document, dict):
         raise ValueError("Same-organization retained observation required")
-    observation: RetainedXml | ArticleObservation | RetainedPdf
-    if document.get("route") in {"article_xml", "pdf"}:
+    observation: RetainedXml | ArticleObservation | RetainedPdf | RetainedJats
+    if document.get("route") in {"article_xml", "pdf", "jats_xml"}:
         observation = (
             RetainedPdf.model_validate_json(json.dumps(document))
             if document.get("route") == "pdf"
+            else RetainedJats.model_validate_json(json.dumps(document))
+            if document.get("route") == "jats_xml"
             else RetainedXml.model_validate_json(json.dumps(document))
         )
         if (
@@ -135,10 +151,10 @@ def project_quality(
         observation_route=observation.route,
         observation_status=observation.status,
         reason_availability="recorded"
-        if isinstance(observation, (RetainedXml, RetainedPdf))
+        if isinstance(observation, (RetainedXml, RetainedPdf, RetainedJats))
         else "not_recorded",
         reasons=tuple(observation.reasons)
-        if isinstance(observation, RetainedXml)
+        if isinstance(observation, (RetainedXml, RetainedJats))
         else (
             (cast(PdfQualityReason, observation.reason),)
             if isinstance(observation, RetainedPdf)

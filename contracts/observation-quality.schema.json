@@ -27,7 +27,8 @@
       "enum": [
         "elsevier-xml-head-v1",
         "synthetic-html-v1",
-        "pypdf-6.20.1-synthetic-v1"
+        "pypdf-6.20.1-synthetic-v1",
+        "open-access-jats-v2"
       ],
       "title": "Parser Version",
       "type": "string"
@@ -37,7 +38,8 @@
         "article_xml",
         "html",
         "browser_dom",
-        "pdf"
+        "pdf",
+        "jats_xml"
       ],
       "title": "Observation Route",
       "type": "string"
@@ -87,7 +89,8 @@
               "unsupported_geometry",
               "unsupported_font_or_structure",
               "resource_limit",
-              "deadline"
+              "deadline",
+              "authors_truncated"
             ],
             "type": "string"
           }

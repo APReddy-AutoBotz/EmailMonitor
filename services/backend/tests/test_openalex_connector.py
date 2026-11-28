@@ -55,7 +55,7 @@ def test_parse_openalex_search_fixture() -> None:
     w1 = works[0]
     assert w1.id == "https://openalex.org/W3029182736"
     assert w1.title == "Advances in CRISPR-Cas9 Target Specificity"
-    assert w1.doi == "https://doi.org/10.1371/journal.pbio.3002145"
+    assert w1.doi == "https://doi.org/10.5555/oa.plos.3002145"
     assert w1.pmcid == "PMC10293847"
     assert w1.journal_title == "PLOS Biology"
     assert w1.issn_l == "1545-7885"
@@ -78,7 +78,7 @@ def test_parse_openalex_search_fixture() -> None:
     assert "ETH Zurich" in a2.institutions
 
     w2 = works[1]
-    assert w2.doi == "https://doi.org/10.1186/s12864-026-09123-x"
+    assert w2.doi == "https://doi.org/10.5555/oa.biomed.09123"
     assert w2.pmcid is None
     assert len(w2.authorships) == 1
     assert w2.authorships[0].is_corresponding is True
@@ -96,7 +96,7 @@ def test_work_to_open_access_identifier_routing() -> None:
     # Work 2 has no PMCID but has DOI -> routes to DoiIdentifier!
     id2 = work_to_open_access_identifier(works[1])
     assert isinstance(id2, DoiIdentifier)
-    assert id2.value == "10.1186/s12864-026-09123-x"
+    assert id2.value == "10.5555/oa.biomed.09123"
 
 
 def test_openalex_to_jats_pipeline_integration() -> None:

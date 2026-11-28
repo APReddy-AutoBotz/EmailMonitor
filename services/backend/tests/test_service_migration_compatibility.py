@@ -26,7 +26,7 @@ from sqlalchemy.exc import DBAPIError
 from test_source_foundation import policy_body
 
 ROOT = Path(__file__).resolve().parents[3]
-HEAD = "0026_bound_reuse"
+HEAD = "0027_open_access_fixture"
 FILTER_PREVIOUS = "0015_service_plan_cache"
 SERVICE_PREVIOUS = "0014_service_authority"
 PREVIOUS = "0013_provider_journey"
@@ -274,6 +274,38 @@ def assert_pdf_upgrade_history(
     assert sorted(json.dumps(row, sort_keys=True) for row in actual) == sorted(
         json.dumps(row, sort_keys=True) for row in expected
     )
+
+
+def without_open_access_delta(
+    after: dict[str, list[tuple[object, ...]]],
+) -> dict[str, list[tuple[object, ...]]]:
+    """Remove exactly the 0027 Open Access catalog extension (OA-029), or fail.
+
+    The upgraded catalog must carry the registered documents and their four
+    article paths appended to the routes 0027 extends; what remains is then
+    checked by the unchanged PDF-only history rule.
+    """
+    from emailmonitor.sources.open_access_documents import DOCUMENTS, catalog_entries
+
+    paths = ["/oa/" + document.pmcid + ".xml" for document in DOCUMENTS]
+    rows: list[tuple[object, ...]] = []
+    for row in after["source_catalog"]:
+        assert len(row) == 1 and isinstance(row[0], str)
+        value = json.loads(row[0])
+        if value.get("source_id") == "synthetic-publisher":
+            support = value["support"]
+            assert support.pop("open_access_documents") == catalog_entries()
+            assert support["fixture_routes"][-len(paths) :] == paths
+            support["fixture_routes"] = support["fixture_routes"][: -len(paths)]
+            routes = support["routes_by_operation"]
+            for operation in ("fetch_xml", "extract_contacts", "retain_excerpt", "export_contacts"):
+                assert routes[operation][-len(paths) :] == paths
+                routes[operation] = routes[operation][: -len(paths)]
+            for operation, values in routes.items():
+                assert not set(paths) & set(values), operation
+            row = (json.dumps(value),)
+        rows.append(row)
+    return {**after, "source_catalog": rows}
 
 
 @dataclass(frozen=True)
@@ -596,7 +628,9 @@ def test_actual_fresh_and_populated_upgrade_schema_acl_rls_equivalence(
                     )
                 ).scalar_one()
                 if target is migration_pair.upgraded:
-                    assert_pdf_upgrade_history(migration_pair.before, history(c))
+                    assert_pdf_upgrade_history(
+                        migration_pair.before, without_open_access_delta(history(c))
+                    )
                     for table in ("admission_requests", "source_resource_requests"):
                         assert (
                             c.execute(

@@ -23,9 +23,9 @@ def test_open_access_identifiers() -> None:
         == "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC10293847/fullTextXML"
     )
 
-    doi = DoiIdentifier(value="https://doi.org/10.1371/journal.pbio.3002145")
-    assert doi.value == "10.1371/journal.pbio.3002145"
-    assert open_access_url(doi) == "https://api.crossref.org/works/10.1371%2Fjournal.pbio.3002145"
+    doi = DoiIdentifier(value="https://doi.org/10.5555/oa.plos.3002145")
+    assert doi.value == "10.5555/oa.plos.3002145"
+    assert open_access_url(doi) == "https://api.crossref.org/works/10.5555%2Foa.plos.3002145"
 
     oa = OpenAlexIdentifier(value="w3123456789")
     assert oa.value == "W3123456789"
@@ -42,7 +42,7 @@ def test_plos_sample_extraction() -> None:
     assert obs.status == "observed"
     assert obs.title == "Advances in CRISPR-Cas9 Target Specificity"
     assert obs.journal == "PLOS Biology"
-    assert obs.doi == "10.1371/journal.pbio.3002145"
+    assert obs.doi == "10.5555/oa.plos.3002145"
     assert obs.publication_date == "2026-03-15"
 
     assert len(obs.authors) == 2
@@ -74,14 +74,14 @@ def test_plos_sample_extraction() -> None:
 def test_biomed_direct_email_extraction() -> None:
     xml_path = FIXTURES_DIR / "biomed-sample.xml"
     data = xml_path.read_bytes()
-    identifier = DoiIdentifier(value="10.1186/s12864-026-09123-x")
+    identifier = DoiIdentifier(value="10.5555/oa.biomed.09123")
 
     obs = parse_jats_xml(data, identifier)
 
     assert obs.status == "observed"
     assert obs.title == "High-throughput transcriptomic profiling of drought-tolerant wheat"
     assert obs.journal == "BMC Genomics"
-    assert obs.doi == "10.1186/s12864-026-09123-x"
+    assert obs.doi == "10.5555/oa.biomed.09123"
     assert obs.publication_date == "2026-01"
 
     assert len(obs.authors) == 1
@@ -102,7 +102,7 @@ def test_biomed_direct_email_extraction() -> None:
 def test_no_contact_article() -> None:
     xml_path = FIXTURES_DIR / "no-contact.xml"
     data = xml_path.read_bytes()
-    identifier = DoiIdentifier(value="10.3389/fimmu.2026.887766")
+    identifier = DoiIdentifier(value="10.5555/oa.immuno.887766")
 
     obs = parse_jats_xml(data, identifier)
 

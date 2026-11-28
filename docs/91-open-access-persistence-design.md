@@ -1,6 +1,6 @@
 # 91 — Design: persisting Open Access results in the durable job model
 
-**Status:** design for the next slice (OA-029), 2026-11-21. Not implemented. It turns the "Persistence" row of [document 90](90-open-access-live-transport-design.md) into a concrete plan against the existing tables. Rules: [AGENTS.md](../AGENTS.md); tenancy: [document 05](05-multitenancy-and-access.md); pipeline: [document 88](88-open-access-pipeline.md).
+**Status:** implemented as a local candidate (OA-029, 2026-11-21) on `feat/oa-persistence`; see "Implementation notes" at the end for where the code differs from this design. It turns the "Persistence" row of [document 90](90-open-access-live-transport-design.md) into a concrete plan against the existing tables. Rules: [AGENTS.md](../AGENTS.md); tenancy: [document 05](05-multitenancy-and-access.md); pipeline: [document 88](88-open-access-pipeline.md).
 
 ## Goal
 
@@ -69,3 +69,29 @@ At-least-once redelivery is a no-op at every step.
 * 0027 is forward-only. Rows written under widened CHECKs block any later narrowing.
 
 Local database: [document 26](26-tenant-foundation-runbook.md) "Local disposable container".
+
+## Implementation notes (OA-029)
+
+* **Migration `0027_open_access_fixture`.** It is generated from the live 0026 function definitions with exact, count-checked substitutions, so every existing predicate is unchanged.
+  * Adds `registered_open_access_document` (owner-only, revoked from runtime) and the `open_access_documents` catalog registry, plus the paths in `fixture_routes` and `routes_by_operation` (`fetch_xml`, `extract_contacts`, `retain_excerpt`, `export_contacts`).
+  * Widens the two URL CHECKs, `fixture_acquisition_operation` and `fixture_admission_claim`.
+  * Requires `fetch_xml` for `jats_xml` visibility in `association_visible`, `publication_batch_state` and `retained_article_batch_current`.
+  * Binds `jats_xml` in `retained_article_binding` and classifies it in `retained_observation_presence`.
+  * Adds a `JATS_OBSERVATION_PROVENANCE` block to `guard_article_observation`: registered digest as source, content and acquisition digest; Europe PMC canonical URL; requested PMCID; provider; network-none profile; lease binding; excerpt flag; reasons; licence class; running job; no reuse. A registered Open Access path can no longer satisfy the HTML admission branch.
+* **Sandbox parse.** `parsing/jats_protocol.py`, `parsing/jats_worker.py` and `parsing/jats_channel.py` run the JATS parser in the existing parser image with the identical network-none profile under a separate command. The reviewed `xml_channel.py`, `xml_protocol.py` and `xml_worker.py` are pinned by hash in another workflow and were left unchanged; the JATS channel reuses their helpers. The worker image file list gained the five JATS modules, and the import-closure test now includes the JATS worker.
+* **Retained record.** `extraction/jats_retained.RetainedJats` names the provider `full_text_provider`, because the existing provider block refuses a non-null `provider` on unregistered Elsevier paths. A truncated author list is retained as `partial` with reason `authors_truncated`; addresses without any observed author are refused.
+* **Licence class in reviewed results.** `result_contact_document` adds `license_category` for `jats_xml` rows only, read from the stored observation, so every other contact document stays byte-identical. `Contact.license_category` is optional and omitted when absent. CSV and XLSX exports gain an "Article licence" column only when an export contains such a row. The operator UI shows the licence on the contact row.
+* **Database-level hardening after independent review (2026-11-28).** Rules that had been enforced only in Python are now also enforced in SQL:
+  * The `JATS_OBSERVATION_PROVENANCE` block now also requires:
+    * a licence class from the closed set;
+    * exactly the `RetainedJats` top-level keys, compared in C collation, so no extra free text can be stored outside the excerpt rules;
+    * string-typed excerpts;
+    * keywords that are strings of at most 300 characters (Python truncates to the same bound);
+    * reasons limited to `authors_truncated`;
+    * candidate author positions that exist on the article.
+  * `guard_association_record` (copied from 0021 with one added rule) refuses inserting an `accepted` association into a `jats_xml` batch (`JATS_REVIEW_REQUIRED`). Acceptance is possible only through the human review update path.
+  * The catalog route appends are NULL-safe.
+  * A unit test keeps the SQL key and licence lists equal to the Python model.
+* **Not done in this slice:** keyword-search persistence, and option B (a separate Europe PMC source).
+* **Fixtures.** The JATS fixture DOIs moved to the reserved prefix 10.5555 before their digests were pinned.
+

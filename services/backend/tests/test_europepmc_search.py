@@ -45,8 +45,8 @@ def test_page_size_is_bounded() -> None:
 
 
 def test_doi_lookup_request() -> None:
-    request = doi_lookup_request("https://doi.org/10.1038/S41587-026-01824-X")
-    assert request.query == 'DOI:"10.1038/s41587-026-01824-x"'
+    request = doi_lookup_request("https://doi.org/10.5555/OA.BASE-EDITING.01824")
+    assert request.query == 'DOI:"10.5555/oa.base-editing.01824"'
     assert request.open_access_only is False
     with pytest.raises(FetchDenied, match="invalid_doi_format"):
         doi_lookup_request("not-a-doi")
@@ -108,6 +108,6 @@ def test_fixture_gateway_filters_non_open_access() -> None:
 
 def test_fixture_gateway_resolves_doi() -> None:
     gateway = EuropePmcSearchFixtureGateway()
-    hit = gateway.resolve_doi("10.1186/S12864-026-09123-X")
+    hit = gateway.resolve_doi("10.5555/OA.BIOMED.09123")
     assert hit is not None and hit.pmcid == "PMC1234567"
     assert gateway.resolve_doi("10.9999/unknown") is None

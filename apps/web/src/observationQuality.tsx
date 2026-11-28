@@ -11,6 +11,7 @@ const descriptions: Record<string, string> = {
   unsupported_font_or_structure: 'The PDF font or document structure is unsupported.',
   resource_limit: 'The PDF parser resource limit was reached.',
   deadline: 'The PDF parser deadline was reached.',
+  authors_truncated: 'The article lists more authors than the parser retains. Authors beyond the limit, and their addresses, were not reviewed.',
 
   unsupported_affiliation: 'The parser recorded unsupported affiliation structure or mapping for this article. Some affiliations may be missing; this does not identify which author.',
   unsupported_email: 'Some email material could not be interpreted by this parser.',

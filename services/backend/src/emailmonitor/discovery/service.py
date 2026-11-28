@@ -28,6 +28,7 @@ from emailmonitor.progress.binding import allowed as execution_allowed
 from emailmonitor.progress.binding import matches as execution_matches
 from emailmonitor.runtime.access import WorkAuthority, WorkContext, WorkDatabase
 from emailmonitor.runtime.database import ServiceDatabase
+from emailmonitor.sources import open_access_documents
 from emailmonitor.sources import provider_documents as provider
 from emailmonitor.sources.access import current_policy, policy_decision
 from emailmonitor.sources.policy import Evaluation, Operation, PolicyProposal
@@ -79,7 +80,9 @@ class Discovery:
             Operation.PDF_FIXTURE
             if url in {"https://synthetic.publisher.example/" + name for name in DIGESTS}
             else Operation.XML
-            if safe.path == "/article-xml.xml" or url in provider.ARTICLE_URLS
+            if safe.path == "/article-xml.xml"
+            or url in provider.ARTICLE_URLS
+            or url in open_access_documents.URLS
             else Operation.HTML
         )
         operations = (

@@ -18,6 +18,7 @@ from pydantic import (
 from emailmonitor.associations.api import Identifier
 from emailmonitor.associations.models import Evidence
 from emailmonitor.progress.state import Outcome
+from emailmonitor.sources.openaccess import LicenseCategory
 
 
 class Record(BaseModel):
@@ -117,6 +118,9 @@ class Contact(Record):
         default=None, exclude_if=lambda v: v is None
     )
     syntax_status: Literal["valid", "invalid", "unsupported"]
+    # Article licence class, recorded for Open Access JATS rows only (OA-029;
+    # owner decision 2026-11-19 "allow but flag"). Absent for every other route.
+    license_category: LicenseCategory | None = Field(default=None, exclude_if=lambda v: v is None)
     technical_status: Literal["not_checked"] = "not_checked"
     delivery_status: Literal["unverified"] = "unverified"
     outreach_eligibility: Literal["not_assessed"] = "not_assessed"
