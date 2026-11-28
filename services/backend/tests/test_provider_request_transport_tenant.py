@@ -385,7 +385,12 @@ def test_provider_current_fixed_plans(
     with bound(work.lease):
         journey = ProviderJourney(Progress(case.database, case.scope, SETTINGS), NoDispatch())
         _, row, _ = journey._request(work)
-        params: dict[str, object] = {"org": org, "job": job, "version": row["policy_version"]}
+        params: dict[str, object] = {
+            "org": org,
+            "job": job,
+            "version": row["policy_version"],
+            "source": row["source_id"],
+        }
         with case.database.tenant(case.scope, org, Capability.ACQUIRE_SOURCE) as (connection, _):
             # Roll back only diagnostic fence acquisitions; service_begin/end
             # retain their normal transaction and audit behavior.
