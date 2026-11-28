@@ -505,10 +505,10 @@ def test_protected_cleanup_drift_fails_without_recapturing_baseline(
 
 
 @pytest.mark.parametrize("change", ["countdown", "address"])
-def test_current_cleanup_guard_refuses_countdown_and_material_drift(
+def test_current_cleanup_guard_tolerates_countdown_and_refuses_material_drift(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, change: str
 ) -> None:
-    """Show the final exact-baseline check has the same countdown sensitivity."""
+    """A lifetime countdown alone passes (owner decision 2026-11-28); drift still fails."""
     value = shell(tmp_path)
     original: dict[str, Any] = {
         "addresses": [
@@ -533,8 +533,11 @@ def test_current_cleanup_guard_refuses_countdown_and_material_drift(
         current["addresses"][0]["addr_info"][0]["local"] = "192.0.2.2"
     value.baseline = original
     monkeypatch.setattr(topology_module, "host_baseline", lambda: current)
-    with pytest.raises(RuntimeError, match="baseline_cleanup"):
+    if change == "countdown":
         value.close()
+    else:
+        with pytest.raises(RuntimeError, match="baseline_cleanup"):
+            value.close()
     assert value.baseline == original
 
 
@@ -834,3 +837,120 @@ def test_terminal_held_future_is_collected_once_by_cleanup_after_receipt_failure
     elif outcome == "success":
         assert str(observed.value) == "Synthetic response completed before held receipt"
     assert events == ["future_exception", "release_send", "release_receive", "future_result"]
+
+
+def _snapshot(valid: int = 1800, preferred: int = 900) -> dict[str, Any]:
+    return {
+        "addresses": [
+            {
+                "ifname": "eth0",
+                "flags": ["UP"],
+                "addr_info": [
+                    {
+                        "family": "inet6",
+                        "local": "2001:db8::5",
+                        "prefixlen": 64,
+                        "dynamic": True,
+                        "valid_life_time": valid,
+                        "preferred_life_time": preferred,
+                    }
+                ],
+            }
+        ],
+        "routes": [{"dst": "default", "dev": "eth0"}],
+        "rules": [{"priority": 0, "table": "local"}],
+    }
+
+
+@pytest.mark.parametrize(
+    ("change", "unchanged"),
+    [
+        ("countdown", True),
+        ("equal", True),
+        ("increase", False),
+        ("to_zero", False),
+        ("to_infinite", False),
+        ("from_infinite", False),
+        ("countdown_and_address", False),
+        ("countdown_and_flag", False),
+        ("countdown_and_route", False),
+        ("countdown_and_rule", False),
+        ("countdown_and_extra_interface", False),
+        ("countdown_and_extra_field", False),
+        ("lifetime_as_bool", False),
+        ("lifetime_as_string", False),
+    ],
+)
+def test_only_an_address_lifetime_countdown_counts_as_unchanged(
+    change: str, unchanged: bool
+) -> None:
+    """Owner decision 2026-11-28: lifetimes may count down; nothing else may differ."""
+    import copy
+
+    from transport_host import host_unchanged
+
+    before = _snapshot()
+    after = copy.deepcopy(before)
+    address = after["addresses"][0]["addr_info"][0]
+    if change.startswith("countdown"):
+        address["valid_life_time"] -= 7
+        address["preferred_life_time"] -= 7
+    if change == "increase":
+        address["valid_life_time"] += 1
+    elif change == "to_zero":
+        address["preferred_life_time"] = 0
+    elif change == "to_infinite":
+        address["valid_life_time"] = 4294967295
+    elif change == "from_infinite":
+        before["addresses"][0]["addr_info"][0]["valid_life_time"] = 4294967295
+        address["valid_life_time"] = 1000
+    elif change == "countdown_and_address":
+        address["local"] = "2001:db8::6"
+    elif change == "countdown_and_flag":
+        after["addresses"][0]["flags"] = ["UP", "PROMISC"]
+    elif change == "countdown_and_route":
+        after["routes"].append({"dst": "192.0.2.0/24", "dev": "eth0"})
+    elif change == "countdown_and_rule":
+        after["rules"].append({"priority": 5, "table": "main"})
+    elif change == "countdown_and_extra_interface":
+        after["addresses"].append({"ifname": "veth0", "addr_info": []})
+    elif change == "countdown_and_extra_field":
+        address["tentative"] = True
+    elif change == "lifetime_as_bool":
+        before["addresses"][0]["addr_info"][0]["valid_life_time"] = 1
+        address["valid_life_time"] = True
+    elif change == "lifetime_as_string":
+        address["valid_life_time"] = "1793"
+    assert host_unchanged(before, after) is unchanged
+
+
+def test_cleanup_accepts_a_lifetime_countdown_but_still_prints_the_receipt(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    value = shell(tmp_path)
+    value.baseline = _snapshot()
+    monkeypatch.setattr(topology_module, "host_baseline", lambda: _snapshot(1790, 890))
+    value.close()
+    assert '"lifetime_only"' in capsys.readouterr().out
+
+
+def test_cleanup_still_refuses_a_lifetime_countdown_with_any_other_change(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    value = shell(tmp_path)
+    value.baseline = _snapshot()
+    current = _snapshot(1790, 890)
+    current["routes"].append({"dst": "192.0.2.0/24", "dev": "eth0"})
+    monkeypatch.setattr(topology_module, "host_baseline", lambda: current)
+    with pytest.raises(RuntimeError, match="baseline_cleanup"):
+        value.close()
+
+
+def test_preexisting_interfaces_tolerate_only_a_lifetime_countdown() -> None:
+    from transport_host import lifetime_countdown_only
+
+    before = _snapshot()["addresses"]
+    assert lifetime_countdown_only(before, _snapshot(1790, 890)["addresses"])
+    assert not lifetime_countdown_only(before, _snapshot()["addresses"])
+    assert not lifetime_countdown_only(before, _snapshot(1801, 900)["addresses"])
+    assert not lifetime_countdown_only(before, [])

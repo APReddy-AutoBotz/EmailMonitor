@@ -23,6 +23,7 @@ from run_browser_acceptance import PAGE
 from tls_fixture_server import certificate
 from transport_host import (
     OwnedDadPending,
+    host_unchanged,
     observe_owned_host,
     remaining_read_budget,
     settle_owned_dad,
@@ -900,7 +901,14 @@ class Topology:
         if self.baseline is not None:
             if current != self.baseline:
                 print(baseline_diagnostic(self.baseline, current), flush=True)
-                failures.append("baseline_cleanup")
+                # Only an address-lifetime countdown is tolerated (owner decision
+                # 2026-11-28); every other difference still fails cleanup.
+                try:
+                    tolerated = host_unchanged(self.baseline, current)
+                except Exception:
+                    tolerated = False  # A failing comparison never hides the refusal.
+                if not tolerated:
+                    failures.append("baseline_cleanup")
         elif self.network_created:
             failures.append("missing_baseline_cleanup")
         else:

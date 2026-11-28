@@ -71,9 +71,14 @@ def test_exact_owned_artifacts_preserve_original_baseline() -> None:
     assert len(validate_owned_host(before, current, links, BRIDGE, peers, "1")) == 3
 
 
-@pytest.mark.parametrize("change", ["preferred_countdown", "valid_countdown", "address", "route"])
-def test_current_host_guard_refuses_lifetime_countdown_and_material_changes(change: str) -> None:
-    """Characterize the current exact guard without treating countdown as safe."""
+@pytest.mark.parametrize(
+    "change",
+    ["preferred_countdown", "valid_countdown", "countdown_and_address", "address", "route"],
+)
+def test_current_host_guard_tolerates_only_countdown_and_refuses_material_changes(
+    change: str,
+) -> None:
+    """A lifetime countdown alone passes (owner decision 2026-11-28); any other change fails."""
     before, current, links, peers = states()
     address = {
         "family": "inet",
@@ -90,10 +95,16 @@ def test_current_host_guard_refuses_lifetime_countdown_and_material_changes(chan
         current["addresses"][0]["addr_info"][0]["preferred_life_time"] -= 1
     elif change == "valid_countdown":
         current["addresses"][0]["addr_info"][0]["valid_life_time"] -= 1
+    elif change == "countdown_and_address":
+        current["addresses"][0]["addr_info"][0]["preferred_life_time"] -= 1
+        current["addresses"][0]["addr_info"][0]["local"] = "192.0.2.2"
     elif change == "address":
         current["addresses"][0]["addr_info"][0]["local"] = "192.0.2.2"
     else:
         current["routes"].append({"dst": "default", "gateway": "192.0.2.254"})
+    if change in ("preferred_countdown", "valid_countdown"):
+        assert len(validate_owned_host(before, current, links, BRIDGE, peers, "1")) == 3
+        return
     with pytest.raises(RuntimeError, match="route change|Preexisting host interfaces changed"):
         validate_owned_host(before, current, links, BRIDGE, peers, "1")
 
