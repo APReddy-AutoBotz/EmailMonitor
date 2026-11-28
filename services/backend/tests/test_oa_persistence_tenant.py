@@ -434,6 +434,12 @@ CAST(:document AS jsonb))"""),
         ("parser_version", "synthetic-html-v1"),
         ("requested_identifier", {"kind": "pmcid", "value": "PMC1234567"}),
         ("license_category", None),
+        ("license_category", "cc-by-commercial"),
+        ("license_category", {"class": "cc-by"}),
+        ("reasons", ["deadline"]),
+        ("keywords", ["x" * 301]),
+        ("keywords", [{"text": "nested"}]),
+        ("untrusted_extra_field", "free text kept outside any excerpt rule"),
     ],
 )
 def test_database_guard_refuses_altered_open_access_provenance(
@@ -447,9 +453,75 @@ def test_database_guard_refuses_altered_open_access_provenance(
     observed = parse_jats_xml(registry.fixture_bytes(PLOS), PLOS.identifier)
     document = retain_jats(observed, PLOS, binding, excerpts).model_dump(mode="json")
     document[field] = value
-    with pytest.raises(DBAPIError):
+    with pytest.raises(DBAPIError, match=GUARD_REFUSAL):
         _insert(progress, work, org, job, document)
     assert observation_count(scenario, job) == 0
+
+
+GUARD_REFUSAL = (
+    r"JATS_OBSERVATION_PROVENANCE|ARTICLE_OBSERVATION_FENCE|ARTICLE_OBSERVATION_PROVENANCE"
+)
+
+
+def _retained_document(progress: Progress, work: Work, org: UUID, job: UUID) -> dict[str, object]:
+    service = OaExtraction(progress.database, progress.token, SETTINGS)
+    with bound(work.lease):
+        binding, excerpts = service.binding(org, job, work.discovery_revision, PLOS.source_url)
+    observed = parse_jats_xml(registry.fixture_bytes(PLOS), PLOS.identifier)
+    return retain_jats(observed, PLOS, binding, excerpts).model_dump(mode="json")
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    ["unknown_author_position", "object_excerpt", "unsupported_with_authors", "binding_item"],
+)
+def test_database_guard_refuses_nested_tampering(scenario: Scenario, mutation: str) -> None:
+    progress, job, work = running(scenario)
+    org = scenario.organizations[0]
+    document = _retained_document(progress, work, org, job)
+    candidates = document["candidates"]
+    assert isinstance(candidates, list) and candidates
+    if mutation == "unknown_author_position":
+        candidates[0]["author_positions"] = [99]
+    elif mutation == "object_excerpt":
+        candidates[0]["evidence"]["excerpt"] = {"text": "retained outside the excerpt policy"}
+    elif mutation == "unsupported_with_authors":
+        document.update(status="unsupported", candidates=[])
+    else:
+        binding = document["binding"]
+        assert isinstance(binding, dict)
+        binding["item"] = str(uuid4())
+    with pytest.raises(DBAPIError, match=GUARD_REFUSAL):
+        _insert(progress, work, org, job, document)
+    assert observation_count(scenario, job) == 0
+
+
+def test_database_refuses_an_accepted_jats_association_without_review(
+    scenario: Scenario, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A buggy or compromised derive step cannot pre-accept an Open Access contact."""
+    from emailmonitor.associations.mapping import map_observation as original
+
+    def pre_accepted(*args: object, **kwargs: object) -> object:
+        bundle = original(*args, **kwargs)  # type: ignore[arg-type]
+        forged = tuple(
+            a.model_copy(
+                update={
+                    "state": "accepted",
+                    "evidence_strength": "explicit",
+                    "reason": "explicit_observed_correspondence",
+                }
+            )
+            if a.author_id is not None
+            else a
+            for a in bundle.associations
+        )
+        return bundle.model_copy(update={"associations": forged})
+
+    monkeypatch.setattr("emailmonitor.associations.service.map_observation", pre_accepted)
+    progress, job, work = running(scenario)
+    with pytest.raises(DBAPIError, match="JATS_REVIEW_REQUIRED"):
+        progress.process_fixture(work, jats_parser=host_parser)
 
 
 def test_database_guard_accepts_the_unaltered_record(scenario: Scenario) -> None:
@@ -505,3 +577,26 @@ def test_reviewed_cc_by_contact_keeps_its_licence(scenario: Scenario) -> None:
         org, Filters(job_id=job)
     )
     assert [c.license_category for c in contacts.items] == ["cc-by"]
+
+
+def test_guard_key_and_licence_lists_match_the_python_model() -> None:
+    """The SQL allow-lists in migration 0027 must stay identical to RetainedJats."""
+    import re
+    import typing
+    from pathlib import Path
+
+    from emailmonitor.sources.openaccess import LicenseCategory
+
+    sql = (
+        Path(__file__).resolve().parents[1] / "migrations/versions/0027_open_access_fixture.sql"
+    ).read_text()
+    keys = re.search(
+        r"jsonb_object_keys\(NEW\.observation\) k\) IS DISTINCT FROM ARRAY\[([^\]]+)\]", sql
+    )
+    assert keys is not None
+    assert [k.strip("'") for k in keys.group(1).split(",")] == sorted(RetainedJats.model_fields)
+    licences = re.search(r"license_category' NOT IN \(([^)]+)\)", sql)
+    assert licences is not None
+    assert [k.strip("'") for k in licences.group(1).split(",")] == list(
+        typing.get_args(LicenseCategory)
+    )

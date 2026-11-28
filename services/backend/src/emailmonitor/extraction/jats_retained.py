@@ -10,7 +10,7 @@ can produce a record; the database guard re-checks every one of these fields.
 from __future__ import annotations
 
 import json
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import Field, model_validator
 
@@ -21,6 +21,8 @@ from emailmonitor.sources.open_access_documents import BY_URL, OpenAccessDocumen
 from emailmonitor.sources.openaccess import LicenseCategory, PmcIdentifier, license_category
 
 JatsReason = Literal["authors_truncated"]
+# Keywords are untrusted article text; the database guard enforces the same bound.
+MAX_KEYWORD = 300
 
 
 class RetainedJats(Fact):
@@ -36,7 +38,9 @@ class RetainedJats(Fact):
     status: Literal["observed", "no_contact", "partial", "unsupported"]
     reasons: list[JatsReason] = Field(default_factory=list, max_length=4)
     article_pmcid: str | None = Field(default=None, pattern=r"^PMC\d{1,12}$")
-    keywords: list[str] = Field(default_factory=list, max_length=50)
+    keywords: list[Annotated[str, Field(max_length=MAX_KEYWORD)]] = Field(
+        default_factory=list, max_length=50
+    )
     license_url: str | None = Field(default=None, max_length=2048)
     # Owner decision 2026-11-19 ("allow but flag"): kept with the observation.
     license_category: LicenseCategory
@@ -131,7 +135,7 @@ def retain_jats(
         "status": status,
         "reasons": reasons,
         "article_pmcid": observed.article_pmcid,
-        "keywords": list(observed.keywords),
+        "keywords": [keyword[:MAX_KEYWORD] for keyword in observed.keywords],
         "license_url": observed.license_url,
         "license_category": license_category(observed.license_url),
         "authors": [a.model_dump(mode="json") for a in observed.authors],

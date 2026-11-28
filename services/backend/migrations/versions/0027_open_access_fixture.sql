@@ -16,15 +16,15 @@ REVOKE ALL ON FUNCTION emailmonitor.registered_open_access_document(text,text) F
 
 UPDATE emailmonitor.source_catalog SET support=jsonb_set(support,'{open_access_documents}','[{"source_id":"synthetic-publisher","provider":"europe-pmc","pmcid":"PMC10293847","source_url":"https://synthetic.publisher.example/oa/PMC10293847.xml","canonical_url":"https://www.ebi.ac.uk/europepmc/webservices/rest/PMC10293847/fullTextXML","content_digest":"da8488e0c0e6ec9f55535e4a5761e7ab574ff3d6af3e76b5e6862c6f2da2c603","acquisition_mode":"controlled_fixture"},{"source_id":"synthetic-publisher","provider":"europe-pmc","pmcid":"PMC1234567","source_url":"https://synthetic.publisher.example/oa/PMC1234567.xml","canonical_url":"https://www.ebi.ac.uk/europepmc/webservices/rest/PMC1234567/fullTextXML","content_digest":"7e282973dddd8fa1d101ea66989d8873e0651e9ffe163ed9b905a8309b9ae4cf","acquisition_mode":"controlled_fixture"},{"source_id":"synthetic-publisher","provider":"europe-pmc","pmcid":"PMC887766","source_url":"https://synthetic.publisher.example/oa/PMC887766.xml","canonical_url":"https://www.ebi.ac.uk/europepmc/webservices/rest/PMC887766/fullTextXML","content_digest":"aadc9fa4d5424086271e225e6fd64c3efda367505ed51edf41333d26fa7696be","acquisition_mode":"controlled_fixture"},{"source_id":"synthetic-publisher","provider":"europe-pmc","pmcid":"PMC7700001","source_url":"https://synthetic.publisher.example/oa/PMC7700001.xml","canonical_url":"https://www.ebi.ac.uk/europepmc/webservices/rest/PMC7700001/fullTextXML","content_digest":"76a5fffb223ab16da05d29246c4f80f0def5cff431eecd2ee936d4c2a2fe575d","acquisition_mode":"controlled_fixture"}]'::jsonb) WHERE source_id='synthetic-publisher' AND execution_mode='fixture';
 
-UPDATE emailmonitor.source_catalog SET support=jsonb_set(support,'{fixture_routes}',(support#>'{fixture_routes}')||'["/oa/PMC10293847.xml", "/oa/PMC1234567.xml", "/oa/PMC887766.xml", "/oa/PMC7700001.xml"]'::jsonb) WHERE source_id='synthetic-publisher' AND execution_mode='fixture';
+UPDATE emailmonitor.source_catalog SET support=jsonb_set(support,'{fixture_routes}',COALESCE(support#>'{fixture_routes}','[]'::jsonb)||'["/oa/PMC10293847.xml", "/oa/PMC1234567.xml", "/oa/PMC887766.xml", "/oa/PMC7700001.xml"]'::jsonb) WHERE source_id='synthetic-publisher' AND execution_mode='fixture';
 
-UPDATE emailmonitor.source_catalog SET support=jsonb_set(support,'{routes_by_operation,fetch_xml}',(support#>'{routes_by_operation,fetch_xml}')||'["/oa/PMC10293847.xml", "/oa/PMC1234567.xml", "/oa/PMC887766.xml", "/oa/PMC7700001.xml"]'::jsonb) WHERE source_id='synthetic-publisher' AND execution_mode='fixture';
+UPDATE emailmonitor.source_catalog SET support=jsonb_set(support,'{routes_by_operation,fetch_xml}',COALESCE(support#>'{routes_by_operation,fetch_xml}','[]'::jsonb)||'["/oa/PMC10293847.xml", "/oa/PMC1234567.xml", "/oa/PMC887766.xml", "/oa/PMC7700001.xml"]'::jsonb) WHERE source_id='synthetic-publisher' AND execution_mode='fixture';
 
-UPDATE emailmonitor.source_catalog SET support=jsonb_set(support,'{routes_by_operation,extract_contacts}',(support#>'{routes_by_operation,extract_contacts}')||'["/oa/PMC10293847.xml", "/oa/PMC1234567.xml", "/oa/PMC887766.xml", "/oa/PMC7700001.xml"]'::jsonb) WHERE source_id='synthetic-publisher' AND execution_mode='fixture';
+UPDATE emailmonitor.source_catalog SET support=jsonb_set(support,'{routes_by_operation,extract_contacts}',COALESCE(support#>'{routes_by_operation,extract_contacts}','[]'::jsonb)||'["/oa/PMC10293847.xml", "/oa/PMC1234567.xml", "/oa/PMC887766.xml", "/oa/PMC7700001.xml"]'::jsonb) WHERE source_id='synthetic-publisher' AND execution_mode='fixture';
 
-UPDATE emailmonitor.source_catalog SET support=jsonb_set(support,'{routes_by_operation,retain_excerpt}',(support#>'{routes_by_operation,retain_excerpt}')||'["/oa/PMC10293847.xml", "/oa/PMC1234567.xml", "/oa/PMC887766.xml", "/oa/PMC7700001.xml"]'::jsonb) WHERE source_id='synthetic-publisher' AND execution_mode='fixture';
+UPDATE emailmonitor.source_catalog SET support=jsonb_set(support,'{routes_by_operation,retain_excerpt}',COALESCE(support#>'{routes_by_operation,retain_excerpt}','[]'::jsonb)||'["/oa/PMC10293847.xml", "/oa/PMC1234567.xml", "/oa/PMC887766.xml", "/oa/PMC7700001.xml"]'::jsonb) WHERE source_id='synthetic-publisher' AND execution_mode='fixture';
 
-UPDATE emailmonitor.source_catalog SET support=jsonb_set(support,'{routes_by_operation,export_contacts}',(support#>'{routes_by_operation,export_contacts}')||'["/oa/PMC10293847.xml", "/oa/PMC1234567.xml", "/oa/PMC887766.xml", "/oa/PMC7700001.xml"]'::jsonb) WHERE source_id='synthetic-publisher' AND execution_mode='fixture';
+UPDATE emailmonitor.source_catalog SET support=jsonb_set(support,'{routes_by_operation,export_contacts}',COALESCE(support#>'{routes_by_operation,export_contacts}','[]'::jsonb)||'["/oa/PMC10293847.xml", "/oa/PMC1234567.xml", "/oa/PMC887766.xml", "/oa/PMC7700001.xml"]'::jsonb) WHERE source_id='synthetic-publisher' AND execution_mode='fixture';
 
 ALTER TABLE emailmonitor.article_observations DROP CONSTRAINT article_observations_article_url_check;
 ALTER TABLE emailmonitor.article_observations ADD CONSTRAINT article_observations_article_url_check CHECK ((article_url = ANY (ARRAY['https://synthetic.publisher.example/article-a.html'::text, 'https://synthetic.publisher.example/article-b.html'::text, 'https://synthetic.publisher.example/tooltip.html'::text, 'https://synthetic.publisher.example/no-contact.html'::text, 'https://synthetic.publisher.example/article-xml.xml'::text, 'https://synthetic.publisher.example/provider-doi.xml'::text, 'https://synthetic.publisher.example/provider-pii.xml'::text, 'https://synthetic.publisher.example/ambiguous.pdf'::text, 'https://synthetic.publisher.example/article-a.pdf'::text, 'https://synthetic.publisher.example/article-b.pdf'::text, 'https://synthetic.publisher.example/corrupt.pdf'::text, 'https://synthetic.publisher.example/encrypted.pdf'::text, 'https://synthetic.publisher.example/no-contact.pdf'::text, 'https://synthetic.publisher.example/page-cap.pdf'::text, 'https://synthetic.publisher.example/scanned.pdf'::text, 'https://synthetic.publisher.example/wrapped.pdf'::text, 'https://synthetic.publisher.example/oa/PMC10293847.xml'::text, 'https://synthetic.publisher.example/oa/PMC1234567.xml'::text, 'https://synthetic.publisher.example/oa/PMC887766.xml'::text, 'https://synthetic.publisher.example/oa/PMC7700001.xml'::text])));
@@ -506,7 +506,13 @@ BEGIN
  OR NEW.observation->'requested_identifier' IS DISTINCT FROM jsonb_build_object('kind','pmcid','value',oa->>'pmcid')
  OR NEW.observation->>'full_text_provider' IS DISTINCT FROM 'europe-pmc'
  OR NEW.observation->>'isolation_profile' IS DISTINCT FROM 'network-none-parser-v1'
- OR NEW.observation->>'license_category' IS NULL
+ OR COALESCE(jsonb_typeof(NEW.observation->'license_category'),'')<>'string'
+ OR NEW.observation->>'license_category' NOT IN ('cc0','cc-by','cc-by-sa','cc-by-nd','cc-by-nc','cc-by-nc-sa','cc-by-nc-nd','public-domain','other','unknown')
+ OR (SELECT array_agg(k ORDER BY k COLLATE "C") FROM jsonb_object_keys(NEW.observation) k) IS DISTINCT FROM ARRAY['acquisition_digest','article_pmcid','authors','binding','candidates','canonical_url','content_digest','excerpts_retained','full_text_provider','identity_association_implemented','isolation_profile','keywords','license_category','license_url','parser_version','preferred_metadata','reasons','requested_identifier','route','schema_version','status','url']::text[]
+ OR jsonb_path_exists(NEW.observation,'$.**.excerpt ? (@.type() != "string")')
+ OR COALESCE(jsonb_typeof(NEW.observation->'keywords'),'')<>'array'
+ OR EXISTS(SELECT 1 FROM jsonb_array_elements(NEW.observation->'keywords') kw
+  WHERE jsonb_typeof(kw)<>'string' OR length(kw#>>'{}')>300)
  OR octet_length(NEW.observation::text)>131072
  OR NEW.observation->'binding' IS DISTINCT FROM jsonb_build_object(
  'organization',NEW.organization_id::text,'job',NEW.job_id::text,
@@ -517,6 +523,11 @@ BEGIN
  OR COALESCE(jsonb_typeof(NEW.observation->'reasons'),'')<>'array'
  OR (jsonb_array_length(NEW.observation->'reasons')>0)<>(NEW.observation->>'status'='partial')
  OR (NEW.observation->>'status'='unsupported' AND jsonb_array_length(NEW.observation->'authors')<>0)
+ OR EXISTS(SELECT 1 FROM jsonb_array_elements(NEW.observation->'reasons') r WHERE r IS DISTINCT FROM '"authors_truncated"'::jsonb)
+ OR EXISTS(SELECT 1 FROM jsonb_array_elements(NEW.observation->'candidates') c
+  WHERE COALESCE(jsonb_typeof(c->'author_positions'),'')<>'array'
+  OR EXISTS(SELECT 1 FROM jsonb_array_elements(c->'author_positions') pos
+   WHERE NOT EXISTS(SELECT 1 FROM jsonb_array_elements(NEW.observation->'authors') au WHERE au->'position'=pos)))
  ) THEN RAISE EXCEPTION 'JATS_OBSERVATION_PROVENANCE'; END IF;
  IF registered IS NULL THEN
  IF COALESCE(NEW.observation->'provider','null'::jsonb)<>'null'::jsonb THEN RAISE EXCEPTION 'PROVIDER_OBSERVATION_PROVENANCE'; END IF;
@@ -542,6 +553,55 @@ BEGIN
  END IF;
  RETURN NEW;
 END $function$;
+
+CREATE OR REPLACE FUNCTION emailmonitor.guard_association_record() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER
+ SET search_path=pg_catalog,emailmonitor AS $$
+DECLARE b emailmonitor.association_batches; old_revision bigint; author uuid; candidate uuid; cited uuid[];
+BEGIN
+ SELECT * INTO b FROM emailmonitor.association_batches WHERE organization_id=NEW.organization_id AND id=NEW.batch_id FOR SHARE;
+ PERFORM emailmonitor.association_parent_fence(b.organization_id,b.job_id,b.article_url,b.source_revision,TG_OP='INSERT');
+ IF TG_OP='INSERT' THEN
+ IF b.id IS NULL OR b.sealed OR NOT COALESCE(emailmonitor.job_write_allowed(b.organization_id,b.job_id),false)
+ OR NOT EXISTS(SELECT 1 FROM jsonb_array_elements(b.snapshot->TG_ARGV[0]) item WHERE item=NEW.record)
+ THEN RAISE EXCEPTION 'ASSOCIATION_RECEIPT'; END IF;
+ -- Open Access JATS (OA-029): an accepted state only ever comes from human review.
+ IF TG_TABLE_NAME='author_email_associations' AND NEW.record->>'state'='accepted'
+ AND b.snapshot->>'observation_route'='jats_xml' THEN RAISE EXCEPTION 'JATS_REVIEW_REQUIRED'; END IF;
+ ELSE
+ IF TG_TABLE_NAME<>'author_email_associations' OR NOT b.sealed
+ OR emailmonitor.session_role(b.organization_id) NOT IN ('owner','admin','data_steward','reviewer')
+ OR NEW.organization_id<>OLD.organization_id OR NEW.batch_id<>OLD.batch_id
+ OR (NEW.record-ARRAY['author_id','state','evidence_strength','evidence_ids','reason','revision'])
+ IS DISTINCT FROM (OLD.record-ARRAY['author_id','state','evidence_strength','evidence_ids','reason','revision'])
+ OR (NEW.record->>'revision')::bigint<>(OLD.record->>'revision')::bigint+1
+ OR OLD.record->>'state'='suppressed'
+ OR NOT COALESCE((
+  (NEW.record->>'state' IN ('accepted','rejected') AND NEW.record->>'reason'='reviewed_evidence')
+  OR (NEW.record->>'state'='needs_review' AND NEW.record->>'reason'='reviewed_unlinked'
+   AND OLD.record->>'author_id' IS NOT NULL AND NEW.record->'author_id'='null'::jsonb
+   AND NEW.record->>'evidence_strength'='ambiguous'
+   AND NEW.record->'evidence_ids' IS NOT DISTINCT FROM OLD.record->'evidence_ids')
+ ),false)
+ THEN RAISE EXCEPTION 'ASSOCIATION_REVIEW_FENCE'; END IF;
+ END IF;
+ IF TG_TABLE_NAME='author_email_associations' AND NEW.record->>'state'='accepted' THEN
+ author:=(NEW.record->>'author_id')::uuid; candidate:=(NEW.record->>'candidate_id')::uuid;
+ SELECT array_agg(value::uuid) INTO cited FROM jsonb_array_elements_text(NEW.record->'evidence_ids');
+ IF author IS NULL OR NEW.record->>'evidence_strength' NOT IN ('explicit','supported')
+ OR NOT EXISTS(SELECT 1 FROM emailmonitor.association_candidates c WHERE c.organization_id=NEW.organization_id
+ AND c.batch_id=NEW.batch_id AND c.id=candidate AND c.syntax_status='valid' AND NOT c.normalization_collision)
+ OR NOT EXISTS(SELECT 1 FROM emailmonitor.association_authors a WHERE a.organization_id=NEW.organization_id AND a.batch_id=NEW.batch_id AND a.id=author)
+ OR cited IS NULL OR cardinality(cited)>40
+ OR EXISTS(SELECT 1 FROM unnest(cited) eid WHERE NOT EXISTS(SELECT 1 FROM emailmonitor.association_evidence e
+ WHERE e.organization_id=NEW.organization_id AND e.batch_id=NEW.batch_id AND e.id=eid AND length(e.excerpt)>0))
+ OR NOT EXISTS(SELECT 1 FROM emailmonitor.association_candidates c WHERE c.organization_id=NEW.organization_id AND c.batch_id=NEW.batch_id AND c.id=candidate
+ AND EXISTS(SELECT 1 FROM jsonb_array_elements_text(c.record->'evidence_ids') eid WHERE eid::uuid=ANY(cited)))
+ OR NOT EXISTS(SELECT 1 FROM emailmonitor.association_authors a WHERE a.organization_id=NEW.organization_id AND a.batch_id=NEW.batch_id AND a.id=author
+ AND EXISTS(SELECT 1 FROM jsonb_array_elements_text(a.record->'evidence_ids') eid WHERE eid::uuid=ANY(cited)))
+ THEN RAISE EXCEPTION 'ASSOCIATION_ACCEPTANCE_EVIDENCE'; END IF;
+ END IF;
+ RETURN NEW;
+END $$;
 
 CREATE OR REPLACE FUNCTION emailmonitor.service_schema_ready() RETURNS boolean
  LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog,emailmonitor AS $$
