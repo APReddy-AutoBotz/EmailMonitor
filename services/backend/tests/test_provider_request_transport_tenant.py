@@ -60,7 +60,7 @@ SELECT 1 FROM emailmonitor.jobs j WHERE j.organization_id=:org AND j.id=:job AND
 (j.state='draft' OR EXISTS(SELECT 1 FROM emailmonitor.execution_items i WHERE
  i.organization_id=j.organization_id AND i.job_id=j.id AND i.work_kind=:kind
  AND i.input_url=:url AND i.id::text=current_setting('emailmonitor.execution_item',true))))""",
-    "source_fence": "SELECT emailmonitor.discovery_source_fence(:org,:job,:version)",
+    "source_fence": "SELECT emailmonitor.discovery_source_fence(:org,:job,:version,:source)",
     "policy_read": """SELECT p.*,s.enabled,s.support FROM emailmonitor.source_policies p
 JOIN emailmonitor.source_policy_heads h USING(organization_id,source_id)
 JOIN emailmonitor.source_catalog s USING(source_id)
