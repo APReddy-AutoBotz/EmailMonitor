@@ -151,8 +151,11 @@
           "type": "array"
         },
         "source_id": {
-          "const": "synthetic-publisher",
           "default": "synthetic-publisher",
+          "enum": [
+            "synthetic-publisher",
+            "europe-pmc"
+          ],
           "title": "Source Id",
           "type": "string"
         },

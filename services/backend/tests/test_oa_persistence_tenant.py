@@ -1,4 +1,8 @@
-"""OA-029: Open Access JATS results persist through the durable review/export model.
+"""OA-029/OA-030: Open Access JATS results persist through the durable review/export model.
+
+Since migration 0028 every new Open Access row belongs to the fixture-only
+``europe-pmc`` catalog source, approved by its own tenant policy, and results
+and exports select it by name (the default source stays synthetic-publisher).
 
 Real PostgreSQL (disposable, synthetic). The isolated-container test runs only where
 CI sets ``EM_REQUIRE_XML_ISOLATION``; every other test injects the same JATS parser
@@ -51,6 +55,7 @@ PLOS = registry.BY_URL["https://synthetic.publisher.example/oa/PMC10293847.xml"]
 USHER = registry.BY_URL["https://synthetic.publisher.example/oa/PMC7700001.xml"]
 NO_CONTACT = registry.BY_URL["https://synthetic.publisher.example/oa/PMC887766.xml"]
 PLOS_ADDRESS = "marcus.vance@biotech.zurich.example"
+EPMC = registry.SOURCE
 
 
 def host_parser(settings: Settings, data: bytes, expected: JatsExpectation) -> JatsObservation:
@@ -74,7 +79,7 @@ def planned(
     with s.client() as client:
         csrf = s.login(client, "owner")
         headers = {"Origin": ORIGIN, "X-CSRF-Token": csrf}
-        path = source_path(s)
+        path = source_path(s, source=EPMC)
         policy = policy_body(
             allowed_operations=operations,
             retention={"raw_hours": 0, "excerpt_days": 30 if excerpts else 0, "contact_days": 90},
@@ -174,7 +179,7 @@ def test_open_access_article_persists_waits_for_review_and_exports(scenario: Sce
     assert quality.observation_route == "jats_xml" and quality.reason_availability == "recorded"
 
     results = Results(progress.database, progress.token, SETTINGS)
-    assert results.contacts(org, Filters(job_id=job)).items == ()
+    assert results.contacts(org, Filters(job_id=job, source_id=EPMC)).items == ()
     candidate = next(c for c in bundle.candidates if c.address.raw_address == PLOS_ADDRESS)
     association = next(
         a for a in bundle.associations if a.candidate_id == candidate.id and a.author_id
@@ -191,14 +196,14 @@ def test_open_access_article_persists_waits_for_review_and_exports(scenario: Sce
         ),
     )
     assert next(a for a in reviewed.associations if a.id == association.id).state == "accepted"
-    contacts = results.contacts(org, Filters(job_id=job)).items
+    contacts = results.contacts(org, Filters(job_id=job, source_id=EPMC)).items
     assert len(contacts) == 1
     assert contacts[0].source_url == PLOS.source_url
     assert contacts[0].technical_status == "not_checked"
     assert contacts[0].outreach_eligibility == "not_assessed"
     # "Allow but flag": the article licence travels with the reviewed contact.
     assert contacts[0].license_category == "unknown"
-    export = ready(results, org, job, format="csv")
+    export = ready(results, org, job, format="csv", source_id=EPMC)
     artifact = results.download(org, export)
     with ZipFile(io.BytesIO(artifact.body)) as archive:
         sheet = archive.read("contacts.csv")
@@ -220,7 +225,7 @@ def test_open_access_article_persists_waits_for_review_and_exports(scenario: Sce
         with pytest.raises(AuthorizationDenied):
             other_results.download(org, export)
         with pytest.raises(AuthorizationDenied):
-            other_results.contacts(scenario.organizations[1], Filters(job_id=job))
+            other_results.contacts(scenario.organizations[1], Filters(job_id=job, source_id=EPMC))
 
     # Duplicate delivery of the original event is a no-op; a forged event is denied.
     assert progress.claim(org, job, item, event, generation=generation) is None
@@ -228,7 +233,7 @@ def test_open_access_article_persists_waits_for_review_and_exports(scenario: Sce
         progress.claim(org, job, item, uuid4(), generation=generation)
     assert len(progress.extraction.read(org, job)) == 1
     assert len(progress.associations.batches(org, job)) == 1
-    assert len(results.contacts(org, Filters(job_id=job)).items) == 1
+    assert len(results.contacts(org, Filters(job_id=job, source_id=EPMC)).items) == 1
     with progress.database.tenant(progress.token, org, Capability.READ_ORGANIZATION) as (c, _):
         assert (
             c.execute(
@@ -346,12 +351,43 @@ def test_no_excerpt_policy_strips_excerpts_and_never_accepts(scenario: Scenario)
             ),
         )
     results = Results(progress.database, progress.token, SETTINGS)
-    assert results.contacts(org, Filters(job_id=job)).items == ()
+    assert results.contacts(org, Filters(job_id=job, source_id=EPMC)).items == ()
 
 
 def test_html_only_policy_cannot_plan_open_access(scenario: Scenario) -> None:
-    with pytest.raises(AuthorizationDenied):
-        planned(scenario, operation="fetch_html")
+    with scenario.client() as client:
+        csrf = scenario.login(client, "owner")
+        headers = {"Origin": ORIGIN, "X-CSRF-Token": csrf}
+        html_only = policy_body(
+            allowed_operations=["fetch_html", "extract_contacts"],
+            retention={"raw_hours": 0, "excerpt_days": 0, "contact_days": 90},
+            export_contacts_allowed=False,
+        )
+        # 0028: the europe-pmc catalog offers no HTML route, so no such policy exists.
+        response = client.post(
+            source_path(scenario, source=EPMC) + "/policies",
+            headers=headers,
+            json={"expected_version": 0, "policy": html_only},
+        )
+        assert response.status_code == 409
+        # A synthetic HTML-only approval never authorizes Open Access planning.
+        path = source_path(scenario)
+        response = client.post(
+            path + "/policies", headers=headers, json={"expected_version": 0, "policy": html_only}
+        )
+        assert response.status_code == 201, response.text
+        response = client.post(
+            path + "/policy-state",
+            headers=headers,
+            json={"expected_version": 1, "expected_revision": 1, "state": "approved"},
+        )
+        assert response.status_code == 200, response.text
+        ledger = Ledger(scenario.foundation.database, str(client.cookies[COOKIE]), SETTINGS)
+    body = request_body()
+    body["input"] = {"type": "url", "url": PLOS.source_url}
+    job = ledger.create(scenario.organizations[0], JobRequest.model_validate(body), str(uuid4()))
+    with pytest.raises((AuthorizationDenied, HTTPException)):
+        Discovery(ledger.database, ledger.token, SETTINGS).plan(scenario.organizations[0], job, 1)
 
 
 def test_unregistered_open_access_path_is_not_an_article(scenario: Scenario) -> None:
@@ -396,19 +432,26 @@ def test_cancelled_work_never_reads_fixture_bytes(
 
 
 def _insert(
-    progress: Progress, work: Work, org: UUID, job: UUID, document: dict[str, object]
+    progress: Progress,
+    work: Work,
+    org: UUID,
+    job: UUID,
+    document: dict[str, object],
+    *,
+    source: str = EPMC,
 ) -> None:
     with bound(work.lease):
         with progress.extraction.discovery._tenant(org, Capability.ACQUIRE_SOURCE) as (c, _):
             c.execute(
                 text("""INSERT INTO emailmonitor.article_observations
-(organization_id,job_id,article_url,generation,deletion_generation,policy_version,discovery_revision,source_digest,observation)
-VALUES(:org,:job,:url,:generation,:deletion,:policy,:discovery,:digest,
+(organization_id,job_id,article_url,source_id,generation,deletion_generation,policy_version,discovery_revision,source_digest,observation)
+VALUES(:org,:job,:url,:source,:generation,:deletion,:policy,:discovery,:digest,
 CAST(:document AS jsonb))"""),
                 {
                     "org": org,
                     "job": job,
                     "url": document["url"],
+                    "source": source,
                     "generation": work.lease.generation,
                     "deletion": work.lease.deletion_generation,
                     "policy": 1,
@@ -574,7 +617,7 @@ def test_reviewed_cc_by_contact_keeps_its_licence(scenario: Scenario) -> None:
         ),
     )
     contacts = Results(progress.database, progress.token, SETTINGS).contacts(
-        org, Filters(job_id=job)
+        org, Filters(job_id=job, source_id=EPMC)
     )
     assert [c.license_category for c in contacts.items] == ["cc-by"]
 

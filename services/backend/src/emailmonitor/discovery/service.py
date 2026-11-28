@@ -64,16 +64,22 @@ class Discovery:
 
     @staticmethod
     def _authorize(
-        c: Connection, org: UUID, job: UUID, version: int, url: str, search: bool
+        c: Connection,
+        org: UUID,
+        job: UUID,
+        version: int,
+        url: str,
+        search: bool,
+        source: str,
     ) -> dict[str, object]:
         safe = classify_url(url, HOSTS)
         # Runtime has no catalog write privilege. A fixed-source authorized
         # definer fence acquires current row locks without granting table writes.
         c.execute(
-            text("SELECT emailmonitor.discovery_source_fence(:org,:job,:version)"),
-            {"org": org, "job": job, "version": version},
+            text("SELECT emailmonitor.discovery_source_fence(:org,:job,:version,:source)"),
+            {"org": org, "job": job, "version": version, "source": source},
         )
-        policy = current_policy(c, org, "synthetic-publisher")
+        policy = current_policy(c, org, source)
         from emailmonitor.extraction.pdf_fixture import DIGESTS
 
         operation = (
@@ -163,12 +169,22 @@ WHERE organization_id=:org AND job_id=:job"""),
                 .mappings()
                 .first()
             )
-            policy = current_policy(c, org, "synthetic-publisher")
+            # The server-chosen source (OA-030): only its own approved policy governs.
+            source = plan.source_id
+            policy = current_policy(c, org, source)
             version = int(str(policy["version"]))
             self._authorize(
-                c, org, job, version, plan.start_url, plan.classification == "search_results"
+                c,
+                org,
+                job,
+                version,
+                plan.start_url,
+                plan.classification == "search_results",
+                source,
             )
             if existing is not None:
+                if existing["source_id"] != source:
+                    raise HTTPException(409, "Plan source conflict; create a new job")
                 if existing["policy_version"] != version:
                     raise HTTPException(409, "Plan policy version conflict; create a new job")
                 return dict(existing)
@@ -200,13 +216,14 @@ WHERE organization_id=:org AND job_id=:job"""),
                 text("""INSERT INTO emailmonitor.discovery
 (organization_id,job_id,generation,deletion_generation,source_id,policy_version,plan,checkpoint,
 max_pages,max_articles)
-VALUES(:org,:job,:generation,:deletion,'synthetic-publisher',:version,CAST(:plan AS jsonb),
+VALUES(:org,:job,:generation,:deletion,:source,:version,CAST(:plan AS jsonb),
 CAST(:checkpoint AS jsonb),:pages,:articles)"""),
                 {
                     "org": org,
                     "job": job,
                     "generation": parent["generation"],
                     "deletion": parent["deletion_generation"],
+                    "source": source,
                     "version": version,
                     "plan": canonical(asdict(plan)),
                     "checkpoint": state.model_dump_json(),
@@ -247,7 +264,15 @@ CAST(:checkpoint AS jsonb),:pages,:articles)"""),
             raise HTTPException(409, "Discovery has stopped")
         if not execution_matches(c, org, job, "discover", state.next_url):
             raise AuthorizationDenied()
-        self._authorize(c, org, job, int(str(row["policy_version"])), state.next_url, True)
+        self._authorize(
+            c,
+            org,
+            job,
+            int(str(row["policy_version"])),
+            state.next_url,
+            True,
+            str(row["source_id"]),
+        )
         return row
 
     def commit(
@@ -278,7 +303,8 @@ CAST(:checkpoint AS jsonb),:pages,:articles)"""),
             ):
                 raise AuthorizationDenied()
             version = int(str(row["policy_version"]))
-            authorized = self._authorize(c, org, job, version, page.url, True)
+            source = str(row["source_id"])
+            authorized = self._authorize(c, org, job, version, page.url, True, source)
             state = DiscoveryState.model_validate(row["checkpoint"])
             if not execution_matches(c, org, job, "discover", page.url):
                 raise AuthorizationDenied()
@@ -296,9 +322,9 @@ CAST(:checkpoint AS jsonb),:pages,:articles)"""),
                     and article not in provider.ARTICLE_URLS
                 ):
                     raise AuthorizationDenied()
-                self._authorize(c, org, job, version, article, False)
+                self._authorize(c, org, job, version, article, False, source)
             if page.next_url is not None:
-                self._authorize(c, org, job, version, page.next_url, True)
+                self._authorize(c, org, job, version, page.next_url, True, source)
             updated = advance(
                 state, page, int(str(row["max_pages"])), int(str(row["max_articles"]))
             )

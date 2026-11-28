@@ -22,6 +22,7 @@ describe('existing registered source selection', () => {
     const html = renderToStaticMarkup(<SourceFilter value={syntheticSource} change={() => {}} />)
     expect(html).toContain('All currently authorized sources')
     expect(html).toContain('value="synthetic-publisher" selected=""')
+    expect(html).toContain('value="europe-pmc"')
     expect(html).not.toContain('elsevier')
   })
   it('carries provenance into accepted selection and explicit export without cursor or preview', () => {
@@ -36,6 +37,7 @@ describe('existing registered source selection', () => {
     expect(selectionSummary(request)).toContain(syntheticSource)
     expect(selectionExport({ ...accepted, source: undefined })).not.toHaveProperty('source_id')
     expect(acceptedSelection({ ...filters, source: 'elsevier_sciencedirect_v2' })).toBeUndefined()
+    expect(selectionExport({ ...accepted, source: 'europe-pmc' })!.source_id).toBe('europe-pmc')
   })
   it('invalidates late plans for source A to empty to A and fresh session owners', () => {
     const owner = new PlanInputGeneration(), first = owner.observe('source=A;query=fixture')

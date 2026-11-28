@@ -13,6 +13,8 @@ ARTICLE_PATHS = frozenset(
     {"/article-a.html", "/article-b.html", "/tooltip.html", "/no-contact.html"}
 )
 DEFAULT_TOPIC = "Myocardial Infarction"
+DEFAULT_SOURCE = "synthetic-publisher"
+OPEN_ACCESS_SOURCE = "europe-pmc"
 
 
 @dataclass(frozen=True)
@@ -24,6 +26,15 @@ class InputPlan:
     effective_query: str | None = None
     spelling_suggestion: str | None = None
     api_fallback: str = "unavailable_not_attempted"
+
+    @property
+    def source_id(self) -> str:
+        """Server-chosen catalog source for this plan (OA-030, document 92).
+
+        Derived from the validated input only, never from a client field, and kept
+        out of the persisted plan document so existing plans stay byte-identical.
+        """
+        return OPEN_ACCESS_SOURCE if self.reason == "open_access_fixture" else DEFAULT_SOURCE
 
 
 def staged_bound_reuse_input(request: JobRequest) -> InputPlan:
@@ -52,7 +63,7 @@ def plan_input(request: JobRequest) -> InputPlan:
     if isinstance(value, KeywordInput):
         effective = value.effective_query or value.original_query
         suggestion = DEFAULT_TOPIC if value.original_query == "Myocardial Infraction" else None
-        if value.source_id != "synthetic-publisher":
+        if value.source_id != DEFAULT_SOURCE:
             return InputPlan("unsupported", "source_onboarding_required")
         if effective == provider.QUERY:
             return InputPlan(
@@ -82,7 +93,7 @@ def plan_input(request: JobRequest) -> InputPlan:
             effective,
             suggestion,
         )
-    if value.source_id not in (None, "synthetic-publisher"):
+    if value.source_id not in (None, DEFAULT_SOURCE, OPEN_ACCESS_SOURCE):
         return InputPlan("unsupported", "source_onboarding_required")
     try:
         url = classify_url(value.url, HOSTS)
@@ -91,8 +102,14 @@ def plan_input(request: JobRequest) -> InputPlan:
     from emailmonitor.sources import open_access_documents
 
     if url.normalized in open_access_documents.URLS:
-        # Registered synthetic Open Access JATS fixture (OA-029); offline only.
+        # Registered Open Access JATS fixture: always the fixture-only europe-pmc
+        # source (OA-030). A client source_id naming another source is refused.
+        if value.source_id not in (None, OPEN_ACCESS_SOURCE):
+            return InputPlan("unsupported", "source_onboarding_required")
         return InputPlan("article", "open_access_fixture", url.normalized)
+    if value.source_id == OPEN_ACCESS_SOURCE:
+        # Europe PMC admits only its registered Open Access documents.
+        return InputPlan("unsupported", "source_onboarding_required")
     if url.normalized in provider.URLS:
         return InputPlan(
             "search_results" if url.normalized == provider.SEARCH_URL else "article",

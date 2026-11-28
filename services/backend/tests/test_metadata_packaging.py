@@ -24,7 +24,7 @@ def test_actual_migration_chain_has_matching_packaging_companions() -> None:
         for path in versions.iterdir()
         if path.suffix in {".py", ".sql"} and path.name[:4].isdigit()
     }
-    assert migration_head(files) == "0027_open_access_fixture"
+    assert migration_head(files) == "0028_europe_pmc_source"
 
 
 @pytest.fixture

@@ -54,7 +54,7 @@ class Extraction:
         ):
             raise AuthorizationDenied()
         version = int(str(row["policy_version"]))
-        policy = Discovery._authorize(c, org, job, version, url, False)
+        policy = Discovery._authorize(c, org, job, version, url, False, str(row["source_id"]))
         safe = classify_url(url, frozenset({"synthetic.publisher.example"}))
         if not policy_decision(
             policy,
@@ -177,7 +177,13 @@ class Extraction:
                 raise AuthorizationDenied()
             for link in observation.follow_up:
                 Discovery._authorize(
-                    c, org, job, int(str(context["policy_version"])), link.url, False
+                    c,
+                    org,
+                    job,
+                    int(str(context["policy_version"])),
+                    link.url,
+                    False,
+                    str(context["source_id"]),
                 )
             if context["revision"] != expected_revision:
                 raise HTTPException(409, "Discovery revision conflict")
@@ -274,7 +280,7 @@ WHERE organization_id=:org AND job_id=:job AND article_url=:url"""),
                 self.database,
                 self.token,
                 org,
-                "synthetic-publisher",
+                str(context["source_id"]),
                 int(str(context["policy_version"])),
             )
             transport = FixtureByteTransport(

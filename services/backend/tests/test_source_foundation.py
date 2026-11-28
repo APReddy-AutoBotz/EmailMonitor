@@ -37,8 +37,8 @@ def policy_body(**overrides: object) -> dict[str, object]:
     return body
 
 
-def source_path(scenario: Scenario, tenant: int = 0) -> str:
-    return f"/api/v1/organizations/{scenario.organizations[tenant]}/sources/synthetic-publisher"
+def source_path(scenario: Scenario, tenant: int = 0, source: str = "synthetic-publisher") -> str:
+    return f"/api/v1/organizations/{scenario.organizations[tenant]}/sources/{source}"
 
 
 def test_source_policy_versions_approval_and_current_revocation(scenario: Scenario) -> None:
@@ -47,8 +47,10 @@ def test_source_policy_versions_approval_and_current_revocation(scenario: Scenar
         headers = {"Origin": ORIGIN, "X-CSRF-Token": csrf}
         path = source_path(scenario)
         catalog = client.get(f"/api/v1/organizations/{scenario.organizations[0]}/sources").json()
-        assert len(catalog) == 1 and catalog[0]["execution_mode"] == "fixture"
-        assert catalog[0]["support"]["extraction_implemented"] is False
+        # OA-030: two fixture-only sources, each approved separately; nothing live.
+        assert [row["source_id"] for row in catalog] == ["europe-pmc", "synthetic-publisher"]
+        assert all(row["execution_mode"] == "fixture" for row in catalog)
+        assert all(row["support"]["extraction_implemented"] is False for row in catalog)
         evaluation = {
             "expected_version": 1,
             "operation": "search",
@@ -366,7 +368,10 @@ def test_source_policy_contract_catalog_fixture_parity(scenario: Scenario) -> No
             json={"expected_version": 1, "expected_revision": 1, "state": "approved"},
         )
         Draft202012Validator(schema, format_checker=FormatChecker()).validate(response.json())
-        catalog = client.get(f"/api/v1/organizations/{scenario.organizations[0]}/sources").json()[0]
+        sources = client.get(f"/api/v1/organizations/{scenario.organizations[0]}/sources").json()
+        by_id = {row["source_id"]: row for row in sources}
+        assert set(by_id) == {"synthetic-publisher", "europe-pmc"}
+        catalog = by_id["synthetic-publisher"]
         html_routes = {"/" + path.name for path in (root / "fixtures/html").glob("*.html")}
         xml_route = "/article-xml.xml"
         provider_routes = {"/provider-search-0.json", "/provider-doi.xml", "/provider-pii.xml"}
@@ -376,7 +381,21 @@ def test_source_policy_contract_catalog_fixture_parity(scenario: Scenario) -> No
         assert set(catalog["support"]["fixture_routes"]) == (
             html_routes | {xml_route} | provider_routes | oa_routes
         )
-        assert catalog["support"]["open_access_documents"] == catalog_entries()
+        # 0028 moved the registry; the synthetic routes stay for 0027-era history.
+        assert "open_access_documents" not in catalog["support"]
+        europe = by_id["europe-pmc"]
+        assert europe["execution_mode"] == "fixture" and europe["enabled"] is True
+        assert europe["allowed_hosts"] == ["synthetic.publisher.example"]
+        assert europe["support"]["open_access_documents"] == catalog_entries()
+        assert set(europe["support"]["fixture_routes"]) == oa_routes
+        assert set(europe["support"]["routes_by_operation"]) == {
+            "fetch_xml",
+            "extract_contacts",
+            "retain_excerpt",
+            "export_contacts",
+        }
+        assert all(set(v) == oa_routes for v in europe["support"]["routes_by_operation"].values())
+        assert "www.ebi.ac.uk" not in json.dumps(europe["allowed_hosts"])
         operations = catalog["support"]["routes_by_operation"]
         assert (
             set(operations["fetch_xml"])

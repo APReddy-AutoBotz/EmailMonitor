@@ -1,6 +1,7 @@
 """Authorized Open Access JATS fixture acquisition -> isolated parse -> retained facts.
 
-OA-029 (document 91). Offline only: the bytes are committed synthetic fixtures
+OA-029 (document 91), under the fixture-only ``europe-pmc`` catalog source since
+OA-030 (document 92). Offline only: the bytes are committed synthetic fixtures
 served through the fixture gateway for a registered synthetic article path. The
 Europe PMC URL is recorded as provenance and never requested.
 """
@@ -94,6 +95,10 @@ class OaExtraction(XmlExtraction):
         with self.discovery._tenant(org, Capability.ACQUIRE_SOURCE) as (connection, _):
             fence(connection, org, job, value.url)
             context = self._scope(connection, org, job, value.url, browser=False)
+            # New Open Access work is only ever recorded under its own source; a job
+            # planned under another source (for example before 0028) is refused.
+            if context["source_id"] != registry.SOURCE:
+                raise AuthorizationDenied()
             from emailmonitor.sources.access import current_policy
 
             policy = current_policy(connection, org, str(context["source_id"]))
@@ -142,13 +147,14 @@ WHERE organization_id=:org AND job_id=:job AND article_url=:url FOR UPDATE"""),
                 return dict(old)
             connection.execute(
                 text("""INSERT INTO emailmonitor.article_observations
-(organization_id,job_id,article_url,generation,deletion_generation,policy_version,discovery_revision,source_digest,observation)
-VALUES(:org,:job,:url,:generation,:deletion,:policy,:discovery,:digest,
+(organization_id,job_id,article_url,source_id,generation,deletion_generation,policy_version,discovery_revision,source_digest,observation)
+VALUES(:org,:job,:url,:source,:generation,:deletion,:policy,:discovery,:digest,
 CAST(:document AS jsonb))"""),
                 {
                     "org": org,
                     "job": job,
                     "url": value.url,
+                    "source": registry.SOURCE,
                     "generation": expected.generation,
                     "deletion": expected.deletion_generation,
                     "policy": expected.policy_version,

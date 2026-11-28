@@ -42,7 +42,7 @@ def canonical_privacy(kind: str, value: str) -> str:
     value = value.lower()
     domain = r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+"
     local = r"[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*"
-    if kind == "source" and value == "synthetic-publisher":
+    if kind == "source" and value in ("synthetic-publisher", "europe-pmc"):
         return value
     if kind == "domain" and re.fullmatch(domain, value):
         return value

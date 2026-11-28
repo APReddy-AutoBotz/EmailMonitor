@@ -168,6 +168,16 @@ The Europe PMC connector (OA-027) needs a production protected transport. Docume
 * **Licence flag in reviewed exports.** The owner decision of 2026-11-19 ("allow but flag") now also holds for persisted results: reviewed Open Access contacts carry `license_category`, and exports containing them gain an "Article licence" column. Exports without Open Access rows keep their exact earlier layout. The flag never changes review or eligibility.
 * **No cross-tenant contact identifier.** The in-memory `oa-<sha>` id is a tenant-independent hash of an address and is never stored; persisted records use the existing tenant-scoped identifiers.
 
+### 2026-11-28 — Europe PMC as its own fixture-only source (OA-030)
+
+Implements document 92 (owner-approved option B). Decisions taken during implementation, all the safer bounded reading:
+
+* **Scope wider than the document 92 inventory.** That inventory listed the 16 functions containing the `'synthetic-publisher'` literal. Twenty-one more carried the source implicitly (`results_fence(p_org)`, `export_entitlement_fence(p_org)`, `privacy_source_allowed(p_org)`, the `execution_runs.source_id` default, and `lifecycle_suppress`, which tombstoned every job for any source suppression). Leaving them would have let a synthetic policy gate Europe PMC exports and made Europe PMC rows unreadable for a Europe-PMC-only tenant, contradicting decision 2. They were changed with the same count-checked method; the list is in document 92.
+* **Null results/export source means the default source.** `result_contacts` and `result_outcomes_filtered` used to treat a null `source_id` as "no filter". They now treat it as `synthetic-publisher`, so no request mixes sources. With only synthetic rows (every database before 0028) the output is identical.
+* **Suppression.** A `europe-pmc` source suppression fences and hides Europe PMC jobs, results and exports only (it still invalidates every existing export, as every suppression kind does). A `synthetic-publisher` suppression stays tenant-wide, as before 0028: the one-argument checks in `guard_job`, `privacy_payload_allowed`, `network_entitlement_allowed` and `service_read_source` were not changed. That is over-restrictive, never permissive; narrowing it is a follow-up.
+* **UI label.** The results/export source filter keeps the label "All currently authorized sources" for an empty selection, which now means the default synthetic source. Changing the text would move the operator-UI pixel baselines; it needs a product decision.
+* **Rollback.** `0028_europe_pmc_source` is forward-only (downgrade raises). Rows written with `source_id='europe-pmc'` under the widened CHECKs block narrowing them again, and the moved registry means a code rollback to 0027-era Python would plan Open Access under a source whose registry is empty (refused, not mislabelled). Repair is a later forward migration or a controlled restore.
+
 ### 2026-11-28 — Transport cleanup tolerates address-lifetime countdown (owner decision)
 
 The transport and installed-operator harnesses compared host network snapshots exactly. Hosted runners now carry addresses with finite lifetimes, which count down between the start and end of a test, so cleanup failed on every run (`baseline_cleanup`, "Preexisting host interfaces changed"). Evidence: `reports/ci-runner-failures-2026-11-22.md`.

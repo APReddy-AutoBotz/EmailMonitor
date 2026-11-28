@@ -255,7 +255,10 @@
       "if": {
         "properties": {
           "source_id": {
-            "const": "synthetic-publisher"
+            "enum": [
+              "synthetic-publisher",
+              "europe-pmc"
+            ]
           }
         },
         "required": [

@@ -5,7 +5,7 @@ import json
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Literal, NoReturn
+from typing import NoReturn
 from uuid import UUID, uuid4
 
 from sqlalchemy import Connection, text
@@ -28,6 +28,7 @@ from emailmonitor.results.models import (
     ExportState,
     Filters,
     OutcomePage,
+    ResultSource,
 )
 from emailmonitor.results.render import Artifact, RenderDenied, render
 from emailmonitor.runtime.access import WorkAuthority, WorkDatabase
@@ -130,7 +131,7 @@ class Results:
         *,
         item_id: UUID | None = None,
         paper_doi: str | None = None,
-        source_id: Literal["synthetic-publisher"] | None = None,
+        source_id: ResultSource | None = None,
         article_outcome_presence: ArticleOutcomePresence = "all",
     ) -> OutcomePage:
         if not 1 <= limit <= 200:

@@ -3,8 +3,10 @@
 Each entry binds a durable synthetic article path to one committed synthetic JATS
 file, its exact SHA-256 and the Europe PMC full-text URL it stands in for. The
 canonical URL is provenance only: nothing in this module or its callers fetches
-it. The same entries are pinned by migration 0027 and checked by the database
-guard, so code and SQL cannot drift apart silently.
+it. The same entries are pinned by migration 0028 under the fixture-only
+``europe-pmc`` catalog source (OA-030, document 92) and checked by the database
+guard, so code and SQL cannot drift apart silently. Migration 0027 had stored
+them under ``synthetic-publisher``; rows written then keep that source as history.
 """
 
 from __future__ import annotations
@@ -17,7 +19,8 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from emailmonitor.fetching.safety import FetchDenied
 from emailmonitor.sources.openaccess import PmcIdentifier, open_access_url
 
-SOURCE: Literal["synthetic-publisher"] = "synthetic-publisher"
+SOURCE: Literal["europe-pmc"] = "europe-pmc"
+LEGACY_SOURCE: Literal["synthetic-publisher"] = "synthetic-publisher"
 ORIGIN = "https://synthetic.publisher.example"
 PROVIDER: Literal["europe-pmc"] = "europe-pmc"
 FIXTURES = Path(__file__).resolve().parents[5] / "fixtures" / "jats"
@@ -26,7 +29,7 @@ FIXTURES = Path(__file__).resolve().parents[5] / "fixtures" / "jats"
 class OpenAccessDocument(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
 
-    source_id: Literal["synthetic-publisher"] = SOURCE
+    source_id: Literal["europe-pmc"] = SOURCE
     provider: Literal["europe-pmc"] = PROVIDER
     pmcid: str = Field(pattern=r"^PMC\d{3,10}$")
     source_url: str = Field(max_length=2048)
@@ -100,10 +103,16 @@ def fixture_bytes(document: OpenAccessDocument) -> bytes:
     return data
 
 
-def catalog_entries() -> list[dict[str, str]]:
-    """The exact JSON migration 0027 stores in ``source_catalog.support``."""
+def catalog_entries(source: str = SOURCE) -> list[dict[str, str]]:
+    """The exact JSON a migration stores in ``source_catalog.support``.
+
+    The default is the 0028 ``europe-pmc`` registry; ``LEGACY_SOURCE`` gives the
+    entries migration 0027 stored under ``synthetic-publisher``.
+    """
+    if source not in (SOURCE, LEGACY_SOURCE):
+        raise ValueError("Unknown Open Access registry source")
     return [
         d.model_dump(mode="json", exclude={"fixture", "acquisition_mode"})
-        | {"acquisition_mode": d.acquisition_mode}
+        | {"source_id": source, "acquisition_mode": d.acquisition_mode}
         for d in DOCUMENTS
     ]
