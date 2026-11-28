@@ -119,9 +119,10 @@
     "source_id": {
       "enum": [
         "synthetic-publisher",
+        "europe-pmc",
         null
       ],
-      "description": "Exact existing registered provenance identity; omitted or null preserves the legacy unfiltered selection."
+      "description": "Exact registered catalog source; one source per export. Omitted or null selects the historical default synthetic-publisher, so legacy requests are unchanged. Europe PMC rows require europe-pmc."
     }
   },
   "required": [

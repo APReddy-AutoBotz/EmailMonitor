@@ -123,9 +123,15 @@ def test_keyword_plan_has_no_implicit_dispatch_and_no_live_policy(scenario: Scen
         assert len(values) == 2
     with progress.database.tenant(progress.token, org, Capability.READ_ORGANIZATION) as (c, _):
         sources = c.execute(
-            text("SELECT source_id,allowed_hosts FROM emailmonitor.source_catalog")
+            text(
+                "SELECT source_id,allowed_hosts FROM emailmonitor.source_catalog ORDER BY source_id"
+            )
         ).all()
-        assert sources == [(catalog.SOURCE, ["synthetic.publisher.example"])]
+        # OA-030 adds the fixture-only europe-pmc row; neither source has a live host.
+        assert sources == [
+            ("europe-pmc", ["synthetic.publisher.example"]),
+            (catalog.SOURCE, ["synthetic.publisher.example"]),
+        ]
 
 
 @pytest.mark.parametrize(

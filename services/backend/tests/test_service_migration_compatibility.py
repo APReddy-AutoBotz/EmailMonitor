@@ -26,7 +26,7 @@ from sqlalchemy.exc import DBAPIError
 from test_source_foundation import policy_body
 
 ROOT = Path(__file__).resolve().parents[3]
-HEAD = "0027_open_access_fixture"
+HEAD = "0028_europe_pmc_source"
 FILTER_PREVIOUS = "0015_service_plan_cache"
 SERVICE_PREVIOUS = "0014_service_authority"
 PREVIOUS = "0013_provider_journey"
@@ -279,22 +279,51 @@ def assert_pdf_upgrade_history(
 def without_open_access_delta(
     after: dict[str, list[tuple[object, ...]]],
 ) -> dict[str, list[tuple[object, ...]]]:
-    """Remove exactly the 0027 Open Access catalog extension (OA-029), or fail.
+    """Remove exactly the 0027/0028 Open Access catalog deltas (OA-029, OA-030), or fail.
 
-    The upgraded catalog must carry the registered documents and their four
-    article paths appended to the routes 0027 extends; what remains is then
-    checked by the unchanged PDF-only history rule.
+    0027 appended the four article paths to the synthetic routes (kept so retained
+    0027-era rows stay valid); 0028 moved the registry to a new fixture-only
+    ``europe-pmc`` row. What remains is checked by the unchanged PDF-only history rule.
     """
     from emailmonitor.sources.open_access_documents import DOCUMENTS, catalog_entries
 
     paths = ["/oa/" + document.pmcid + ".xml" for document in DOCUMENTS]
     rows: list[tuple[object, ...]] = []
+    europe = 0
     for row in after["source_catalog"]:
         assert len(row) == 1 and isinstance(row[0], str)
         value = json.loads(row[0])
+        if value.get("source_id") == "europe-pmc":
+            europe += 1
+            assert value == {
+                "source_id": "europe-pmc",
+                "manifest_version": "1.0.0",
+                "enabled": True,
+                "execution_mode": "fixture",
+                "allowed_hosts": ["synthetic.publisher.example"],
+                "allowed_operations": [
+                    "fetch_xml",
+                    "extract_contacts",
+                    "retain_excerpt",
+                    "export_contacts",
+                ],
+                "support": value["support"],
+            }
+            assert value["support"]["open_access_documents"] == catalog_entries()
+            assert value["support"]["fixture_routes"] == paths
+            assert value["support"]["routes_by_operation"] == {
+                operation: paths
+                for operation in (
+                    "fetch_xml",
+                    "extract_contacts",
+                    "retain_excerpt",
+                    "export_contacts",
+                )
+            }
+            continue
         if value.get("source_id") == "synthetic-publisher":
             support = value["support"]
-            assert support.pop("open_access_documents") == catalog_entries()
+            assert "open_access_documents" not in support
             assert support["fixture_routes"][-len(paths) :] == paths
             support["fixture_routes"] = support["fixture_routes"][: -len(paths)]
             routes = support["routes_by_operation"]
@@ -305,6 +334,7 @@ def without_open_access_delta(
                 assert not set(paths) & set(values), operation
             row = (json.dumps(value),)
         rows.append(row)
+    assert europe == 1
     return {**after, "source_catalog": rows}
 
 

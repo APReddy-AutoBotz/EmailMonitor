@@ -60,7 +60,7 @@ SELECT 1 FROM emailmonitor.jobs j WHERE j.organization_id=:org AND j.id=:job AND
 (j.state='draft' OR EXISTS(SELECT 1 FROM emailmonitor.execution_items i WHERE
  i.organization_id=j.organization_id AND i.job_id=j.id AND i.work_kind=:kind
  AND i.input_url=:url AND i.id::text=current_setting('emailmonitor.execution_item',true))))""",
-    "source_fence": "SELECT emailmonitor.discovery_source_fence(:org,:job,:version)",
+    "source_fence": "SELECT emailmonitor.discovery_source_fence(:org,:job,:version,:source)",
     "policy_read": """SELECT p.*,s.enabled,s.support FROM emailmonitor.source_policies p
 JOIN emailmonitor.source_policy_heads h USING(organization_id,source_id)
 JOIN emailmonitor.source_catalog s USING(source_id)
@@ -385,7 +385,12 @@ def test_provider_current_fixed_plans(
     with bound(work.lease):
         journey = ProviderJourney(Progress(case.database, case.scope, SETTINGS), NoDispatch())
         _, row, _ = journey._request(work)
-        params: dict[str, object] = {"org": org, "job": job, "version": row["policy_version"]}
+        params: dict[str, object] = {
+            "org": org,
+            "job": job,
+            "version": row["policy_version"],
+            "source": row["source_id"],
+        }
         with case.database.tenant(case.scope, org, Capability.ACQUIRE_SOURCE) as (connection, _):
             # Roll back only diagnostic fence acquisitions; service_begin/end
             # retain their normal transaction and audit behavior.

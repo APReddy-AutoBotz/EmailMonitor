@@ -82,8 +82,10 @@ def test_request_one_fresh_transaction_preserves_checks_and_exit_failure(
         version: int,
         actual_url: str,
         search: bool,
+        source: str,
     ) -> dict[str, object]:
         assert active == [connection]
+        assert source == catalog.SOURCE  # the job's own discovery source (OA-030)
         assert (actual_org, actual_job, version, actual_url, search) == (
             org,
             job,
@@ -166,7 +168,8 @@ def test_discovery_preparation_preserves_every_original_guard() -> None:
     assert isinstance(method, ast.FunctionDef)
     body = ast.Module(body=method.body[1:], type_ignores=[])
     # Frozen pre-refactor body, excluding only the new private helper docstring.
+    # OA-030 changed exactly one call: the final _authorize also passes the row's source.
     assert (
         hashlib.sha256(ast.dump(body, include_attributes=False).encode()).hexdigest()
-        == "1c8e26289ffb533e6b3f7af8f4743003b31df3ae1a0c4add310f98acda0a1d13"
+        == "99e1dc6d6354071ced57d284f7c8adfec55a4c72b174c3f71287ec794a3d028c"
     )

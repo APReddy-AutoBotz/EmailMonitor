@@ -145,7 +145,10 @@ class TenantFixtureAuthorization:
         source: str,
         version: int,
     ) -> None:
-        if source != "synthetic-publisher" or type(version) is not int or version < 1:
+        # Fixture-mode catalog sources only; each is checked against its own policy.
+        if source not in ("synthetic-publisher", "europe-pmc") or (
+            type(version) is not int or version < 1
+        ):
             raise FetchDenied("fixture_source_scope_denied")
         self._database, self._token = database, token
         self._organization, self._source, self._version = organization, source, version

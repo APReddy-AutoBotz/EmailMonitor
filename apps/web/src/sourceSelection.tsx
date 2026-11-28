@@ -1,11 +1,14 @@
-import type { Source } from './models'
+import type { ResultSource, Source } from './models'
 
 export const syntheticSource = 'synthetic-publisher' as const
-export type RetainedSource = typeof syntheticSource
-export const validSourceSelection = (value?: string) => value === undefined || value === '' || value === syntheticSource
+// Fixture-only Europe PMC catalog source (OA-030): its rows are selected only by name.
+export const europePmcSource = 'europe-pmc' as const
+export type RetainedSource = ResultSource
+const retainedSources: readonly string[] = [syntheticSource, europePmcSource]
+export const validSourceSelection = (value?: string) => value === undefined || value === '' || retainedSources.includes(value)
 export function SourceFilter({ value, change }: { value?: string; change: (value: RetainedSource | undefined) => void }) {
-  return <label>Retained source<select value={value ?? ''} onChange={event => { if (event.target.value === '' || event.target.value === syntheticSource) change(event.target.value || undefined) }}>
-    <option value="">All currently authorized sources</option><option value={syntheticSource}>Synthetic Publisher · registered provenance</option>
+  return <label>Retained source<select value={value ?? ''} onChange={event => { if (validSourceSelection(event.target.value)) change((event.target.value || undefined) as RetainedSource | undefined) }}>
+    <option value="">All currently authorized sources</option><option value={syntheticSource}>Synthetic Publisher · registered provenance</option><option value={europePmcSource}>Europe PMC · fixture Open Access</option>
   </select></label>
 }
 export function sourceState(source: Source): string {

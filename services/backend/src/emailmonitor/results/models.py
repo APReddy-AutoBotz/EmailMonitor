@@ -30,10 +30,15 @@ ArticleOutcomePresence = Literal[
 ]
 
 
+# One catalog source per results or export request (OA-030). Absent means the
+# historical default, synthetic-publisher; Europe PMC rows need it named.
+ResultSource = Literal["synthetic-publisher", "europe-pmc"]
+
+
 class ArticleSelection(BaseModel):
     """New default keys are omitted so legacy cursor/request identities stay stable."""
 
-    source_id: Literal["synthetic-publisher"] | None = None
+    source_id: ResultSource | None = None
     paper_doi: str | None = Field(default=None, max_length=256, strict=True)
 
     @field_validator("paper_doi")
@@ -109,7 +114,7 @@ class Contact(Record):
     evidence_strength: Literal["explicit", "supported", "ambiguous", "none"]
     association_reason: str = Field(min_length=1, max_length=64)
     evidence_ids: tuple[UUID, ...] = Field(min_length=1, max_length=40)
-    source_id: Literal["synthetic-publisher"] = "synthetic-publisher"
+    source_id: ResultSource = "synthetic-publisher"
     source_url: str = Field(min_length=1, max_length=2048)
     policy_version: int = Field(ge=1)
     title: str | None = Field(default=None, max_length=1000)

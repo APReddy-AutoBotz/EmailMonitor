@@ -76,7 +76,9 @@ def test_staged_plan_uses_existing_policy_and_budget_without_fresh_transport(
 ) -> None:
     discovery, connection, _ = setup(monkeypatch, url)
     assert Discovery._plan_bound_reuse(discovery, ORG, JOB, 1) == {"job_id": JOB, "revision": 1}
-    discovery._authorize.assert_called_once_with(connection, ORG, JOB, 1, url, False)
+    discovery._authorize.assert_called_once_with(
+        connection, ORG, JOB, 1, url, False, "synthetic-publisher"
+    )
     insert = next(
         call
         for call in connection.execute.call_args_list
@@ -204,7 +206,9 @@ def test_staged_planner_and_materializer_share_the_checked_scope(
     plan, source = reuse_materialization._stage_bound_reuse(discovery, service, ORG, JOB, 1)
     assert plan["plan"]["start_url"] == url  # type: ignore[index]
     assert source == UUID(int=8)
-    discovery._authorize.assert_called_once_with(connection, ORG, JOB, 1, url, False)
+    discovery._authorize.assert_called_once_with(
+        connection, ORG, JOB, 1, url, False, "synthetic-publisher"
+    )
     discovery._schedule.assert_not_called()
     materialize.assert_called_once_with(service, ORG, JOB, url, adapter)
 
